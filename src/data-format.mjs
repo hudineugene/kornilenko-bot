@@ -600,6 +600,8 @@ function normalizeLoadedData(parsed) {
     normalized.config.viewingSlots = normalizeViewingSlots(normalized.config.viewingSlots);
     normalized.config.telegramBackup = normalizeTelegramBackup(normalized.config.telegramBackup);
     normalized.config.adminName = cleanText(normalized.config.adminName, 60);
+    // Messages about the bot itself (started, stopped, connection): on unless switched off.
+    normalized.config.statusNotices = normalized.config.statusNotices !== false;
     normalized.config.managers = normalizeManagers(normalized.config.managers, normalized.config.adminChatId);
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;

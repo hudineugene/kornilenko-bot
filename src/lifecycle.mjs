@@ -12,6 +12,7 @@ import { sendMessage } from './telegram.mjs';
 import { restartPolling } from './updates.mjs';
 import { startTunnel, stopTunnel } from './remote.mjs';
 import { server } from './server.mjs';
+import { announceError, announceStart, rememberShutdown, sendStatusNotice, statusNoticesOn, stopNoticeText } from './status.mjs';
 
 const RUN_MARKER_FILE = path.join(path.dirname(DATA_FILE), 'bot-running.json');
 const RUN_HEARTBEAT_MS = 60 * 1000;
@@ -91,7 +92,8 @@ let shuttingDown = false;
 
 // Closing the console window (SIGHUP on Windows) gives the process about ten
 // seconds: enough to save, and to tell the admin that the bot is no longer
-// running, since nobody may notice otherwise.
+// running, since nobody may notice otherwise. Ctrl+C and a system shutdown
+// are reported the same way.
 const WINDOW_CLOSED_NOTICE_TIMEOUT_MS = 4000;
 
 function shutdown(signal) {
@@ -101,15 +103,12 @@ function shutdown(signal) {
   runtime.generation += 1;
   if (runtime.abortController) runtime.abortController.abort();
   clearTimeout(saveTimer);
+  rememberShutdown(signal);
   try { saveDataNow(); } catch (error) { console.error('Не удалось сохранить данные:', error.message); }
   clearRunMarker();
   stopTunnel();
-  const adminChatId = cleanText(data.config.adminChatId, 40);
-  const notice = signal === 'SIGHUP' && adminChatId && data.config.botToken
-    ? Promise.race([
-      sendMessage(adminChatId, '⚠️ Окно бота закрыто — бот остановлен в ' + clockTime(new Date()) + '. Клиенты не получат ответов, пока бот не запущен снова (start-bot.ps1).', data.config.botToken, { track: false }).catch(() => {}),
-      delay(WINDOW_CLOSED_NOTICE_TIMEOUT_MS),
-    ])
+  const notice = statusNoticesOn()
+    ? Promise.race([sendStatusNotice(stopNoticeText(signal)), delay(WINDOW_CLOSED_NOTICE_TIMEOUT_MS)])
     : Promise.resolve();
   notice.finally(() => {
     server.close(() => process.exit(0));
@@ -142,6 +141,9 @@ function start() {
       console.log('  Пароль передаётся открытым текстом. Используйте только в доверенной сети.');
     }
     console.log('');
+    // The start message waits for Telegram; after a crash the admin gets the
+    // crash notice instead, which already says the bot is running again.
+    if (!previousRun) announceStart();
     restartPolling();
     if (previousRun) void reportAbruptStop(previousRun).catch(() => {});
     if (data.config.remoteAccess) startTunnel();
@@ -174,6 +176,7 @@ function start() {
     console.error('Необработанная ошибка:', error);
     try {
       recordError('Необработанная ошибка', error);
+      announceError('необработанная ошибка', error);
       if (!shuttingDown) restartPolling();
     } catch {
       // Nothing more can be done safely here.
@@ -183,6 +186,7 @@ function start() {
     console.error('Необработанная ошибка:', error);
     try {
       recordError('Необработанная ошибка', error);
+      announceError('необработанная ошибка', error);
     } catch {
       // Nothing more can be done safely here.
     }

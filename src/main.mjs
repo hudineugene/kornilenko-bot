@@ -28,6 +28,7 @@ import { offHoursNote } from './hours.mjs';
 import { monthlyPayment, purchaseEstimate } from './calculator.mjs';
 import { decryptBackup, encryptBackup, runTelegramBackup, setBackupPassword } from './offsite.mjs';
 import { applyImport, parseXml, planImport, planSummary, propertyTypeOf, publicAddress, readFeed, runDailyFeedImport } from './feed-import.mjs';
+import { announceError, announceStart, sendStatusNotice, startNoticeText, stopNoticeText, telegramContactLost, telegramContactRestored } from './status.mjs';
 import { hostAllowed, loginAttempts, requestIsRemote, sessions } from './admin-http.mjs';
 import './admin-input.mjs';
 import { xlsxWorkbook } from './excel.mjs';
@@ -58,6 +59,8 @@ const text = {
 
 export {
   abruptStopNotice,
+  announceError,
+  announceStart,
   applyImport,
   broadcastUsers,
   budgetLimit,
@@ -115,14 +118,19 @@ export {
   runtime,
   saveDataNow,
   selectionMatches,
+  sendStatusNotice,
   server,
   sessions,
   setBackupPassword,
   setData,
   splitTelegramText,
+  startNoticeText,
   startTunnel,
+  stopNoticeText,
   subscriptionPanel,
   stopTunnel,
+  telegramContactLost,
+  telegramContactRestored,
   telegramRequest,
   text,
   tunnelErrorFrom,

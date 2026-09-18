@@ -425,6 +425,7 @@ function safeState(session) {
       tunnelHostname: data.config.tunnelHostname || '',
       reminderHours: Number.isFinite(Number(data.config.reminderHours)) ? Number(data.config.reminderHours) : 2,
       workingHours: normalizeWorkingHours(data.config.workingHours),
+      statusNotices: data.config.statusNotices !== false,
       calculator: normalizeCalculator(data.config.calculator),
       viewingSlots: normalizeViewingSlots(data.config.viewingSlots),
       adminName: data.config.adminName || '',

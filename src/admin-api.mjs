@@ -20,6 +20,7 @@ import { loginAllowed, menuInput, messagesInput, parseBroadcast, parseContentRec
 import { INQUIRY_EXPORT_COLUMNS, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { queuePropertyAlerts } from './alerts.mjs';
 import { confirmViewing } from './viewings.mjs';
+import { announceActiveChange } from './status.mjs';
 import { MIN_BACKUP_PASSWORD_LENGTH, sendTelegramBackup, setBackupPassword, telegramBackupSettings } from './offsite.mjs';
 import { applyImport, feedSettings, fetchFeed, planImport, planSummary, readFeed } from './feed-import.mjs';
 
@@ -865,6 +866,7 @@ async function handleApi(req, res, url) {
     data.config.adminChatId = adminChatId;
     if (body.notifyMode != null) data.config.notifyMode = body.notifyMode;
     if (body.reminderHours != null) data.config.reminderHours = Number(body.reminderHours);
+    if (typeof body.statusNotices === 'boolean') data.config.statusNotices = body.statusNotices;
     if (adminChatId !== previousAdminChatId) {
       data.config.adminNotificationVerifiedAt = '';
       // Plain keys are message numbers in the old admin chat; in the new chat
@@ -878,6 +880,7 @@ async function handleApi(req, res, url) {
     data.config.active = Boolean(body.active);
     saveDataNow();
     if (activeChanged || tokenChanged) restartPolling();
+    if (activeChanged) announceActiveChange(data.config.active);
     if (passwordData) {
       for (const id of sessions.keys()) if (id !== session.id) sessions.delete(id);
     }

@@ -269,6 +269,9 @@ const runtime = {
   pollingStartedAt: null,
   broadcastRunning: false,
   tunnel: { status: 'off', url: '', host: '', error: '' },
+  // Status messages to the admin (see status.mjs).
+  pendingStartNotice: '',
+  outageSince: null,
 };
 
 data.interfaceText = applyInterfaceText(data.interfaceText);

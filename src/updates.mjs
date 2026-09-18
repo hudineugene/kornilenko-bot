@@ -19,6 +19,7 @@ import { handleMyRequestsCallback, sendMyRequests } from './requests.mjs';
 import { handleSubscriptionCallback } from './subscriptions.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { handleCalculatorCallback } from './calculator.mjs';
+import { telegramContactLost, telegramContactRestored } from './status.mjs';
 
 function findRule(text, language) {
   const input = text.toLocaleLowerCase('ru-RU').trim();
@@ -471,6 +472,7 @@ async function pollingLoop(generation, token) {
     data.bot = { id: me.id, username: me.username || '', firstName: me.first_name || '' };
     data.stats.startedAt = data.stats.startedAt || new Date().toISOString();
     markTelegramSuccess();
+    telegramContactRestored();
     scheduleSave();
     try {
       await configureBotCommands(token);
@@ -481,6 +483,7 @@ async function pollingLoop(generation, token) {
   } catch (error) {
     if (generation !== runtime.generation || error.name === 'AbortError') return;
     markTelegramFailure(error, 'error');
+    telegramContactLost();
     recordError('Подключение к Telegram', error);
     console.error('Ошибка подключения к Telegram:', telegramErrorMessage(error));
   }
@@ -500,6 +503,7 @@ async function pollingLoop(generation, token) {
       }, controller.signal);
       if (generation !== runtime.generation) break;
       markTelegramSuccess();
+      telegramContactRestored();
       backoff = 1000;
       await processUpdates(updates, token);
       if (generation !== runtime.generation) break;
@@ -507,6 +511,7 @@ async function pollingLoop(generation, token) {
     } catch (error) {
       if (error.name === 'AbortError' || generation !== runtime.generation) break;
       const firstFailure = markTelegramFailure(error, 'reconnecting');
+      telegramContactLost();
       if (firstFailure) recordError('Связь с Telegram', error);
       runtime.nextRetryAt = new Date(Date.now() + backoff).toISOString();
       console.error('Связь с Telegram потеряна, повтор подключения:', telegramErrorMessage(error));
