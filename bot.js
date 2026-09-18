@@ -3,14 +3,15 @@
 
 /**
  * Telegram bot + web admin panel in one file.
- * Requirements: Node.js 18+ (no npm packages are needed).
- * Start: node bot.js
+ * Requirements: Node.js 20.3+ (no npm packages are needed).
+ * Start: node bot.js    Tests: npm test    Build bot.exe: npm run build
  */
 
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const net = require('node:net');
 const zlib = require('node:zlib');
 const { spawn } = require('node:child_process');
 const { URL } = require('node:url');
@@ -28,6 +29,12 @@ const MAX_BODY_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_BODY_BYTES = 256 * 1024 * 1024;
 const MAX_BACKUP_OUTPUT_BYTES = 512 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// Extra host names the panel may be opened by (comma-separated), for example
+// when ADMIN_HOST=0.0.0.0 and the computer is reached by its network name.
+const ADMIN_ALLOWED_HOSTS = new Set(String(process.env.ADMIN_ALLOWED_HOSTS || '')
+  .split(',')
+  .map((name) => name.trim().toLowerCase())
+  .filter(Boolean));
 
 const LOGIN_ASSET_DIRECTORY = path.join(__dirname, 'Kornilenko_Login_Codex_Assets');
 const ADMIN_ASSET_DIRECTORY = path.join(__dirname, 'Kornilenko_Admin_Codex_Assets');
@@ -64,8 +71,10 @@ const ADMIN_ASSETS = {
   sidebarLogo: loadBundledAsset(ADMIN_ASSET_DIRECTORY, 'admin-sidebar-logo', 'kornilenko_logo_sidebar_320.png', 'image/png'),
 };
 
+const DATA_VERSION = 14;
+
 const defaultData = {
-  version: 13,
+  version: DATA_VERSION,
   config: {
     botToken: '',
     adminChatId: '',
@@ -220,48 +229,89 @@ function containsEmbeddedImages(root) {
   return found;
 }
 
-function persistImage(image) {
-  if (!image || typeof image !== 'object' || typeof image.dataBase64 !== 'string' || !image.dataBase64.length) return;
-  const bytes = Buffer.from(image.dataBase64, 'base64');
-  const extension = image.mimeType === 'image/png' ? 'png' : 'jpg';
-  const safeId = String(image.id || crypto.randomUUID()).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80) || crypto.randomUUID();
-  const fileName = safeId + '.' + extension;
+// Files are named by the SHA-256 of their bytes, so the same photo uploaded
+// for several languages (or several records) is stored on disk only once.
+function contentAddressedName(bytes, mimeType) {
+  return crypto.createHash('sha256').update(bytes).digest('hex') + '.' + (mimeType === 'image/png' ? 'png' : 'jpg');
+}
+
+function writeMediaFile(fileName, bytes) {
   const target = path.join(MEDIA_DIRECTORY, fileName);
-  const temporary = target + '.tmp';
+  if (fs.existsSync(target)) return;
+  const temporary = target + '.' + crypto.randomBytes(4).toString('hex') + '.tmp';
   fs.mkdirSync(MEDIA_DIRECTORY, { recursive: true });
   fs.writeFileSync(temporary, bytes, { mode: 0o600 });
   fs.renameSync(temporary, target);
+}
+
+function persistImage(image) {
+  if (!image || typeof image !== 'object' || typeof image.dataBase64 !== 'string' || !image.dataBase64.length) return;
+  const bytes = Buffer.from(image.dataBase64, 'base64');
+  const safeId = String(image.id || crypto.randomUUID()).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80) || crypto.randomUUID();
+  const fileName = contentAddressedName(bytes, image.mimeType);
+  writeMediaFile(fileName, bytes);
   image.id = safeId;
   image.storageFile = fileName;
   image.size = bytes.length;
   delete image.dataBase64;
 }
 
+const CONTENT_ADDRESSED_FILE = /^[0-9a-f]{64}\.(?:jpg|png)$/;
+
+function needsContentAddressing(root) {
+  let found = false;
+  forEachStoredImage(root, (image) => {
+    const fileName = storedImageFile(image);
+    if (fileName && !CONTENT_ADDRESSED_FILE.test(fileName)) found = true;
+  });
+  return found;
+}
+
+// Moves images saved by older versions (one file per upload) to
+// content-addressed names. Duplicates collapse into one file; the old files
+// become unreferenced and are removed by cleanupOrphanImages.
+function contentAddressImages(root) {
+  forEachStoredImage(root, (image) => {
+    const fileName = storedImageFile(image);
+    if (!fileName || CONTENT_ADDRESSED_FILE.test(fileName)) return;
+    const source = path.join(MEDIA_DIRECTORY, fileName);
+    if (!fs.existsSync(source)) return;
+    const bytes = fs.readFileSync(source);
+    const nextName = contentAddressedName(bytes, image.mimeType);
+    writeMediaFile(nextName, bytes);
+    image.storageFile = nextName;
+  });
+}
+
 function externalizeImages(root) {
   forEachStoredImage(root, persistImage);
 }
 
-function cleanupOrphanImages(root) {
-  if (!fs.existsSync(MEDIA_DIRECTORY)) return;
+function referencedImageFiles(root) {
   const referenced = new Set();
   forEachStoredImage(root, (image) => {
     const fileName = storedImageFile(image);
     if (fileName) referenced.add(fileName.toLocaleLowerCase('en-US'));
   });
+  return referenced;
+}
+
+function cleanupOrphanImages(root, referenced = referencedImageFiles(root)) {
+  if (!fs.existsSync(MEDIA_DIRECTORY)) return;
   for (const entry of fs.readdirSync(MEDIA_DIRECTORY, { withFileTypes: true })) {
     if (!entry.isFile() || !/^[A-Za-z0-9_-]+\.(?:jpg|png)$/i.test(entry.name)) continue;
     if (!referenced.has(entry.name.toLocaleLowerCase('en-US'))) fs.unlinkSync(path.join(MEDIA_DIRECTORY, entry.name));
   }
 }
 
-function ensureMigrationBackup() {
+function ensureMigrationBackup(prefix = 'pre-media-migration') {
   if (!fs.existsSync(DATA_FILE)) return '';
   const backupDirectory = path.join(path.dirname(DATA_FILE), 'backups');
   fs.mkdirSync(backupDirectory, { recursive: true });
-  const existing = fs.readdirSync(backupDirectory).find((name) => /^pre-media-migration-.*\.json$/i.test(name));
+  const existing = fs.readdirSync(backupDirectory).find((name) => name.startsWith(prefix + '-') && name.endsWith('.json'));
   if (existing) return path.join(backupDirectory, existing);
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
-  const target = path.join(backupDirectory, 'pre-media-migration-' + stamp + '.json');
+  const target = path.join(backupDirectory, prefix + '-' + stamp + '.json');
   fs.copyFileSync(DATA_FILE, target, fs.constants.COPYFILE_EXCL);
   return target;
 }
@@ -308,20 +358,65 @@ function managerTerminology(value, language) {
     text = text.replace(/\bun agente\b/gi, (match) => match[0] === 'U' ? 'Un gestor' : 'un gestor');
     text = text.replace(/\bagente\b/gi, (match) => match[0] === 'A' ? 'Gestor' : 'gestor');
   } else {
+    // \b does not treat Cyrillic letters as word characters, hence the
+    // explicit Unicode-aware boundaries.
+    const word = (stem) => new RegExp(String.raw`(?<![\p{L}\p{N}_])` + stem + String.raw`(?![\p{L}\p{N}_])`, 'gu');
     text = text
-      .replace(/\bАгент\b/g, 'Менеджер')
-      .replace(/\bагент\b/g, 'менеджер')
-      .replace(/\bагента\b/g, 'менеджера')
-      .replace(/\bагенту\b/g, 'менеджеру')
-      .replace(/\bагентом\b/g, 'менеджером');
+      .replace(word('Агент'), 'Менеджер')
+      .replace(word('агент'), 'менеджер')
+      .replace(word('агента'), 'менеджера')
+      .replace(word('агенту'), 'менеджеру')
+      .replace(word('агентом'), 'менеджером');
   }
   return text;
+}
+
+// One-time upgrade of texts that still equal defaults from older versions.
+function migrateDefaultTexts(messages) {
+  if (messages.ru.help === 'Отправьте сообщение, и я постараюсь подобрать ответ.' || messages.ru.help.startsWith('Отправьте сообщение, и я постараюсь подобрать ответ. Чтобы сменить язык')) {
+    messages.ru.help = defaultData.config.messages.ru.help;
+  }
+  if (messages.en.help.includes('Use the main menu buttons:') && !messages.en.help.includes('❤️ Favorites')) {
+    messages.en.help = defaultData.config.messages.en.help;
+  }
+  if (messages.es.help.includes('Utiliza los botones del menú principal:') && !messages.es.help.includes('❤️ Favoritos')) {
+    messages.es.help = defaultData.config.messages.es.help;
+  }
+  if (messages.ru.help.includes('Оставить заявку') || messages.ru.help.includes('☎️ Контакты')) messages.ru.help = defaultData.config.messages.ru.help;
+  if (messages.en.help.includes('Contact a manager — request a call') || messages.en.help.includes('☎️ Contacts')) messages.en.help = defaultData.config.messages.en.help;
+  if (messages.es.help.includes('Contactar con un gestor — solicitar una llamada') || messages.es.help.includes('☎️ Contactos')) messages.es.help = defaultData.config.messages.es.help;
+  if (messages.ru.help.includes('🏘 Наши объекты —') && messages.ru.help.includes('❤️ Избранное —') && !messages.ru.help.includes('✨ Помогите подобрать объект')) messages.ru.help = defaultData.config.messages.ru.help;
+  if (messages.en.help.includes('🏘 Our properties —') && messages.en.help.includes('❤️ Favorites —') && !messages.en.help.includes('✨ Help me find a property')) messages.en.help = defaultData.config.messages.en.help;
+  if (messages.es.help.includes('🏘 Nuestros inmuebles —') && messages.es.help.includes('❤️ Favoritos —') && !messages.es.help.includes('✨ Ayúdame a elegir')) messages.es.help = defaultData.config.messages.es.help;
+  if (!messages.ru.help.includes('☰ Ещё') && messages.ru.help.includes('ℹ️ О компании —') && messages.ru.help.includes('❓ Помощь —')) messages.ru.help = defaultData.config.messages.ru.help;
+  if (!messages.en.help.includes('☰ More') && messages.en.help.includes('ℹ️ About —') && messages.en.help.includes('❓ Help —')) messages.en.help = defaultData.config.messages.en.help;
+  if (!messages.es.help.includes('☰ Más') && messages.es.help.includes('ℹ️ La empresa —') && messages.es.help.includes('❓ Ayuda —')) messages.es.help = defaultData.config.messages.es.help;
+  if (messages.ru.fallback === 'Спасибо за сообщение! Я передал его администратору.') messages.ru.fallback = defaultData.config.messages.ru.fallback;
+  if (messages.en.fallback === 'Thank you for your message! I have passed it on to the administrator.') messages.en.fallback = defaultData.config.messages.en.fallback;
+  if (messages.es.fallback === '¡Gracias por tu mensaje! Se lo he enviado al administrador.') messages.es.fallback = defaultData.config.messages.es.fallback;
+}
+
+// Analytics buckets for deleted properties are never shown, so drop them.
+function pruneOrphanPropertyAnalytics(root) {
+  const properties = root && root.analytics && root.analytics.properties;
+  if (!properties || typeof properties !== 'object') return;
+  const existing = new Set((Array.isArray(root.objects) ? root.objects : []).map((record) => String(record.id)));
+  for (const id of Object.keys(properties)) if (!existing.has(id)) delete properties[id];
+}
+
+function legacyConfigRemoved(config) {
+  const { greeting, help, fallback, ...rest } = config;
+  return rest;
 }
 
 function normalizeLoadedData(parsed) {
     const parsedConfig = parsed.config || {};
     const parsedMessages = parsedConfig.messages || {};
     const parsedMenu = parsedConfig.menu || {};
+    // Text migrations below rewrite stored texts, so they must run only once:
+    // for files written before DATA_VERSION. Running them on every load used
+    // to silently discard the administrator's own edits after each restart.
+    const legacyFormat = !(Number(parsed.version) >= DATA_VERSION);
     const messages = {};
     const menu = {};
     for (const language of ['ru', 'en', 'es']) {
@@ -329,39 +424,24 @@ function normalizeLoadedData(parsed) {
         ...defaultData.config.messages[language],
         ...(parsedMessages[language] || {}),
       };
-      messages[language].greeting = managerTerminology(messages[language].greeting, language);
-      messages[language].help = managerTerminology(messages[language].help, language);
-      messages[language].fallback = managerTerminology(messages[language].fallback, language);
+      if (legacyFormat) {
+        messages[language].greeting = managerTerminology(messages[language].greeting, language);
+        messages[language].help = managerTerminology(messages[language].help, language);
+        messages[language].fallback = managerTerminology(messages[language].fallback, language);
+      }
       menu[language] = {
         ...defaultData.config.menu[language],
         ...(parsedMenu[language] || {}),
       };
     }
-    // Migrate data created by the previous one-language version.
-    if (typeof parsedConfig.greeting === 'string') messages.ru.greeting = parsedConfig.greeting;
-    if (typeof parsedConfig.help === 'string') messages.ru.help = parsedConfig.help;
-    if (typeof parsedConfig.fallback === 'string') messages.ru.fallback = parsedConfig.fallback;
-    if (messages.ru.help === 'Отправьте сообщение, и я постараюсь подобрать ответ.' || messages.ru.help.startsWith('Отправьте сообщение, и я постараюсь подобрать ответ. Чтобы сменить язык')) {
-      messages.ru.help = defaultData.config.messages.ru.help;
+    // Migrate data created by the previous one-language version. These fields
+    // only matter when the file has no multilingual texts yet.
+    if (!parsedMessages.ru) {
+      if (typeof parsedConfig.greeting === 'string') messages.ru.greeting = parsedConfig.greeting;
+      if (typeof parsedConfig.help === 'string') messages.ru.help = parsedConfig.help;
+      if (typeof parsedConfig.fallback === 'string') messages.ru.fallback = parsedConfig.fallback;
     }
-    if (messages.en.help.includes('Use the main menu buttons:') && !messages.en.help.includes('❤️ Favorites')) {
-      messages.en.help = defaultData.config.messages.en.help;
-    }
-    if (messages.es.help.includes('Utiliza los botones del menú principal:') && !messages.es.help.includes('❤️ Favoritos')) {
-      messages.es.help = defaultData.config.messages.es.help;
-    }
-    if (messages.ru.help.includes('Оставить заявку') || messages.ru.help.includes('☎️ Контакты')) messages.ru.help = defaultData.config.messages.ru.help;
-    if (messages.en.help.includes('Contact a manager — request a call') || messages.en.help.includes('☎️ Contacts')) messages.en.help = defaultData.config.messages.en.help;
-    if (messages.es.help.includes('Contactar con un gestor — solicitar una llamada') || messages.es.help.includes('☎️ Contactos')) messages.es.help = defaultData.config.messages.es.help;
-    if (messages.ru.help.includes('🏘 Наши объекты —') && messages.ru.help.includes('❤️ Избранное —') && !messages.ru.help.includes('✨ Помогите подобрать объект')) messages.ru.help = defaultData.config.messages.ru.help;
-    if (messages.en.help.includes('🏘 Our properties —') && messages.en.help.includes('❤️ Favorites —') && !messages.en.help.includes('✨ Help me find a property')) messages.en.help = defaultData.config.messages.en.help;
-    if (messages.es.help.includes('🏘 Nuestros inmuebles —') && messages.es.help.includes('❤️ Favoritos —') && !messages.es.help.includes('✨ Ayúdame a elegir')) messages.es.help = defaultData.config.messages.es.help;
-    if (!messages.ru.help.includes('☰ Ещё') && messages.ru.help.includes('ℹ️ О компании —') && messages.ru.help.includes('❓ Помощь —')) messages.ru.help = defaultData.config.messages.ru.help;
-    if (!messages.en.help.includes('☰ More') && messages.en.help.includes('ℹ️ About —') && messages.en.help.includes('❓ Help —')) messages.en.help = defaultData.config.messages.en.help;
-    if (!messages.es.help.includes('☰ Más') && messages.es.help.includes('ℹ️ La empresa —') && messages.es.help.includes('❓ Ayuda —')) messages.es.help = defaultData.config.messages.es.help;
-    if (messages.ru.fallback === 'Спасибо за сообщение! Я передал его администратору.') messages.ru.fallback = defaultData.config.messages.ru.fallback;
-    if (messages.en.fallback === 'Thank you for your message! I have passed it on to the administrator.') messages.en.fallback = defaultData.config.messages.en.fallback;
-    if (messages.es.fallback === '¡Gracias por tu mensaje! Se lo he enviado al administrador.') messages.es.fallback = defaultData.config.messages.es.fallback;
+    if (legacyFormat) migrateDefaultTexts(messages);
     const users = parsed.users && typeof parsed.users === 'object' ? parsed.users : {};
     for (const [id, user] of Object.entries(users)) {
       users[id] = {
@@ -452,11 +532,11 @@ function normalizeLoadedData(parsed) {
       createdAt: item.createdAt || new Date().toISOString(),
       updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
     })).slice(0, 5000) : [];
-    return {
+    const normalized = {
       ...clone(defaultData),
       ...parsed,
-      version: 13,
-      config: { ...defaultData.config, ...parsedConfig, messages, menu },
+      version: DATA_VERSION,
+      config: { ...defaultData.config, ...legacyConfigRemoved(parsedConfig), messages, menu },
       bot: { ...defaultData.bot, ...(parsed.bot || {}) },
       stats: { ...defaultData.stats, ...(parsed.stats || {}) },
       rules,
@@ -508,21 +588,82 @@ function normalizeLoadedData(parsed) {
       inquiries,
       telegramOffset: Number.isFinite(Number(parsed.telegramOffset)) ? Math.max(0, Number(parsed.telegramOffset)) : 0,
     };
+    pruneOrphanPropertyAnalytics(normalized);
+    return normalized;
+}
+
+const DATA_BACKUP_FILE = DATA_FILE + '.bak';
+const DATA_BACKUP_INTERVAL_MS = 60 * 60 * 1000;
+
+function fileStamp(value = new Date()) {
+  return value.toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
+}
+
+function readDataFile(filePath) {
+  return normalizeLoadedData(JSON.parse(fs.readFileSync(filePath, 'utf8')));
+}
+
+// The hourly .bak copy first, then the snapshots in backups/, newest first.
+function recoveryCandidates() {
+  const candidates = [DATA_BACKUP_FILE];
+  const backupDirectory = path.join(path.dirname(DATA_FILE), 'backups');
+  try {
+    candidates.push(...fs.readdirSync(backupDirectory)
+      .filter((name) => name.toLowerCase().endsWith('.json'))
+      .map((name) => path.join(backupDirectory, name))
+      .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs));
+  } catch {
+    // No backups folder yet.
+  }
+  return candidates.filter((candidate) => fs.existsSync(candidate));
 }
 
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) return clone(defaultData);
   try {
-    return normalizeLoadedData(JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')));
+    return readDataFile(DATA_FILE);
   } catch (error) {
     console.error('Не удалось прочитать файл данных:', error.message);
-    console.error('Исправьте или удалите файл:', DATA_FILE);
-    process.exit(1);
   }
+  for (const candidate of recoveryCandidates()) {
+    let recovered;
+    try {
+      recovered = readDataFile(candidate);
+    } catch {
+      continue;
+    }
+    const corruptCopy = DATA_FILE + '.corrupt-' + fileStamp();
+    fs.copyFileSync(DATA_FILE, corruptCopy);
+    console.error('Данные восстановлены из копии:', candidate);
+    console.error('Повреждённый файл сохранён как:', corruptCopy);
+    recovered.errors.unshift({
+      id: crypto.randomUUID(),
+      area: 'Загрузка данных',
+      message: 'Файл данных был повреждён. Данные восстановлены из копии ' + path.basename(candidate) + ', последние изменения могли потеряться. Повреждённый файл: ' + path.basename(corruptCopy),
+      createdAt: new Date().toISOString(),
+    });
+    return recovered;
+  }
+  console.error('Подходящая резервная копия не найдена. Исправьте или удалите файл:', DATA_FILE);
+  process.exit(1);
 }
 
 let data = loadData();
 let saveTimer = null;
+let lastReferencedImages = null;
+let lastDataBackupAt = 0;
+
+// Keeps a known-good copy of the data file that loadData can fall back to.
+function rotateDataBackup() {
+  if (Date.now() - lastDataBackupAt < DATA_BACKUP_INTERVAL_MS || !fs.existsSync(DATA_FILE)) return;
+  try {
+    JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  } catch {
+    return;
+  }
+  fs.copyFileSync(DATA_FILE, DATA_BACKUP_FILE);
+  lastDataBackupAt = Date.now();
+}
 
 function saveDataNow() {
   const directory = path.dirname(DATA_FILE);
@@ -531,14 +672,24 @@ function saveDataNow() {
     ensureMigrationBackup();
     externalizeImages(data);
   }
+  if (needsContentAddressing(data)) contentAddressImages(data);
+  rotateDataBackup();
   const temporary = DATA_FILE + '.tmp';
   fs.writeFileSync(temporary, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 });
   fs.renameSync(temporary, DATA_FILE);
-  cleanupOrphanImages(data);
+  // Scanning the media folder is only needed when the set of referenced files changed.
+  const referenced = referencedImageFiles(data);
+  const signature = Array.from(referenced).sort().join('|');
+  if (signature !== lastReferencedImages) {
+    cleanupOrphanImages(data, referenced);
+    lastReferencedImages = signature;
+  }
 }
 
+// Throttled rather than debounced: a steady stream of updates must not
+// postpone the write indefinitely.
 function scheduleSave() {
-  clearTimeout(saveTimer);
+  if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
     try {
@@ -556,6 +707,16 @@ if (containsEmbeddedImages(data)) {
   } catch (error) {
     console.error('Не удалось перенести фотографии в локальное хранилище:', error.message);
     process.exit(1);
+  }
+}
+
+if (needsContentAddressing(data)) {
+  try {
+    ensureMigrationBackup('pre-media-dedupe');
+    saveDataNow();
+    console.log('Одинаковые фотографии объединены в хранилище:', MEDIA_DIRECTORY);
+  } catch (error) {
+    console.error('Не удалось объединить одинаковые фотографии:', error.message);
   }
 }
 
@@ -674,8 +835,33 @@ function recordActivity(user, direction, text, kind = 'message', metadata = {}) 
   return entry;
 }
 
+// data.users is a plain object, so ids such as "__proto__" must not reach it
+// directly: that would return Object.prototype and let a PATCH pollute it.
+function userById(id) {
+  const key = String(id);
+  return Object.hasOwn(data.users, key) ? data.users[key] : undefined;
+}
+
+// userByChatId runs for every outgoing message, so it uses an index instead
+// of scanning all users. normalizeUser keeps the index current.
+const usersByChatId = new Map();
+
+function indexUser(user) {
+  if (user && user.chatId != null && user.chatId !== '') usersByChatId.set(String(user.chatId), user);
+}
+
+function rebuildUserIndex() {
+  usersByChatId.clear();
+  for (const user of Object.values(data.users)) indexUser(user);
+}
+
 function userByChatId(chatId) {
-  return Object.values(data.users).find((user) => String(user.chatId) === String(chatId));
+  const key = String(chatId);
+  const indexed = usersByChatId.get(key);
+  if (indexed && userById(indexed.id) === indexed && String(indexed.chatId) === key) return indexed;
+  const found = Object.values(data.users).find((user) => String(user.chatId) === key);
+  if (found) indexUser(found);
+  return found;
 }
 
 function telegramErrorCode(error) {
@@ -691,6 +877,7 @@ function telegramErrorCode(error) {
 
 function telegramErrorMessage(error) {
   if (error && error.name === 'AbortError') return 'Запрос к Telegram отменён.';
+  if (error && error.name === 'TimeoutError') return 'Telegram не ответил вовремя. Бот повторит подключение автоматически.';
   const status = Number(error && error.status);
   const telegramCode = Number(error && error.telegramCode);
   const code = telegramErrorCode(error);
@@ -738,77 +925,104 @@ function normalizeTelegramError(error, status, telegramCode) {
   return normalized;
 }
 
-async function telegramRequest(token, method, payload, signal) {
-  let response;
-  try {
-    response = await fetch('https://api.telegram.org/bot' + token + '/' + method, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload || {}),
-      signal,
-    });
-  } catch (error) {
-    throw normalizeTelegramError(error);
-  }
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    body = null;
-  }
-  if (!response.ok || !body || !body.ok) {
+const TELEGRAM_REQUEST_TIMEOUT_MS = 30 * 1000;
+const TELEGRAM_UPLOAD_TIMEOUT_MS = 2 * 60 * 1000;
+const TELEGRAM_RATE_LIMIT_RETRIES = 3;
+const TELEGRAM_MAX_RETRY_AFTER_SECONDS = 60;
+
+// Every call gets its own timeout, so one hung request cannot stall the bot.
+// A 429 answer is retried after the pause Telegram asks for (retry_after).
+async function telegramCall(token, method, init, { signal, timeoutMs }) {
+  for (let attempt = 0; ; attempt += 1) {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    let response;
+    try {
+      response = await fetch('https://api.telegram.org/bot' + token + '/' + method, {
+        method: 'POST',
+        ...init(),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      });
+    } catch (error) {
+      throw normalizeTelegramError(error);
+    }
+    let body;
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+    if (response.ok && body && body.ok) return body.result;
+    const rateLimited = response.status === 429 || (body && body.error_code === 429);
+    const retryAfter = Number(body && body.parameters && body.parameters.retry_after);
+    if (rateLimited && attempt < TELEGRAM_RATE_LIMIT_RETRIES && retryAfter > 0 && retryAfter <= TELEGRAM_MAX_RETRY_AFTER_SECONDS) {
+      await delay(retryAfter * 1000 + 250);
+      if (signal && signal.aborted) throw signal.reason;
+      continue;
+    }
     throw normalizeTelegramError(
       new Error((body && body.description) || 'Telegram API error'),
       response.status,
       body && body.error_code
     );
   }
-  return body.result;
+}
+
+async function telegramRequest(token, method, payload, signal) {
+  // Long polling holds the request open for payload.timeout seconds.
+  const timeoutMs = TELEGRAM_REQUEST_TIMEOUT_MS + (Number(payload && payload.timeout) || 0) * 1000;
+  return telegramCall(token, method, () => ({
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  }), { signal, timeoutMs });
 }
 
 async function telegramMultipartRequest(token, method, fields) {
-  const form = new FormData();
-  for (const [key, value] of Object.entries(fields)) {
-    if (value == null || value === '') continue;
-    form.append(key, typeof value === 'string' || value instanceof Blob ? value : JSON.stringify(value));
-  }
-  let response;
-  try {
-    response = await fetch('https://api.telegram.org/bot' + token + '/' + method, {
-      method: 'POST',
-      body: form,
-    });
-  } catch (error) {
-    throw normalizeTelegramError(error);
-  }
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    body = null;
-  }
-  if (!response.ok || !body || !body.ok) {
-    throw normalizeTelegramError(
-      new Error((body && body.description) || 'Telegram API error'),
-      response.status,
-      body && body.error_code
-    );
-  }
-  return body.result;
+  return telegramCall(token, method, () => {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) {
+      if (value == null || value === '') continue;
+      form.append(key, typeof value === 'string' || value instanceof Blob ? value : JSON.stringify(value));
+    }
+    return { body: form };
+  }, { timeoutMs: TELEGRAM_UPLOAD_TIMEOUT_MS });
+}
+
+// Telegram file_id values are bound to the bot token. Images that share a
+// stored file (the same photo in several languages) share one upload.
+const telegramFileIds = new Map();
+
+function knownFileId(image) {
+  return image.telegramFileId || telegramFileIds.get(storedImageFile(image)) || '';
+}
+
+function rememberFileId(image, fileId) {
+  image.telegramFileId = fileId || '';
+  const fileName = storedImageFile(image);
+  if (!fileName) return;
+  if (fileId) telegramFileIds.set(fileName, fileId);
+  else telegramFileIds.delete(fileName);
+}
+
+function forgetTelegramFileIds(root) {
+  telegramFileIds.clear();
+  forEachStoredImage(root, (image) => {
+    if (image) image.telegramFileId = '';
+  });
 }
 
 async function sendPhotoMessage(chatId, image, caption, token, replyMarkup) {
   let result;
-  if (image.telegramFileId) {
+  const fileId = knownFileId(image);
+  if (fileId) {
     try {
       result = await telegramRequest(token, 'sendPhoto', {
         chat_id: chatId,
-        photo: image.telegramFileId,
+        photo: fileId,
         caption: caption || undefined,
         reply_markup: replyMarkup,
       });
     } catch {
-      image.telegramFileId = '';
+      rememberFileId(image, '');
     }
   }
   if (!result) {
@@ -820,7 +1034,7 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup) {
       reply_markup: replyMarkup,
     });
     if (result && Array.isArray(result.photo) && result.photo.length) {
-      image.telegramFileId = result.photo[result.photo.length - 1].file_id || '';
+      rememberFileId(image, result.photo[result.photo.length - 1].file_id);
     }
   }
   data.stats.messagesSent += 1;
@@ -842,18 +1056,18 @@ async function sendPhotoAlbum(chatId, images, token, caption = '') {
 
   const firstCaption = cleanText(caption, 1000);
   let result;
-  if (album.every((image) => image.telegramFileId)) {
+  if (album.every((image) => knownFileId(image))) {
     try {
       result = await telegramRequest(token, 'sendMediaGroup', {
         chat_id: chatId,
         media: album.map((image, index) => ({
           type: 'photo',
-          media: image.telegramFileId,
+          media: knownFileId(image),
           ...(index === 0 && firstCaption ? { caption: firstCaption } : {}),
         })),
       });
     } catch {
-      for (const image of album) image.telegramFileId = '';
+      for (const image of album) rememberFileId(image, '');
     }
   }
 
@@ -874,7 +1088,7 @@ async function sendPhotoAlbum(chatId, images, token, caption = '') {
     if (Array.isArray(result)) {
       result.forEach((message, index) => {
         if (message && Array.isArray(message.photo) && message.photo.length && album[index]) {
-          album[index].telegramFileId = message.photo[message.photo.length - 1].file_id || '';
+          rememberFileId(album[index], message.photo[message.photo.length - 1].file_id);
         }
       });
     }
@@ -2140,7 +2354,7 @@ function publicRuntime() {
 
 function normalizeUser(from, chatId, countMessage = true) {
   const id = String(from.id);
-  const previous = data.users[id] || {};
+  const previous = userById(id) || {};
   const user = {
     id,
     chatId,
@@ -2174,6 +2388,7 @@ function normalizeUser(from, chatId, countMessage = true) {
     activity: Array.isArray(previous.activity) ? previous.activity : [],
   };
   data.users[id] = user;
+  indexUser(user);
   return user;
 }
 
@@ -2211,7 +2426,8 @@ function createInquiry(user, text, context = {}) {
   scheduleSave();
   if (context.sourceMessage && !context.sourceMessage.text) {
     void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken)
-      .then(() => notifyAdministrator(inquiry, user));
+      .then(() => notifyAdministrator(inquiry, user))
+      .catch((error) => recordError('Уведомление администратору', error));
   } else {
     void notifyAdministrator(inquiry, user);
   }
@@ -2252,7 +2468,9 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
     }
     return true;
   } catch (error) {
-    data.config.adminNotificationVerifiedAt = '';
+    // Only a refusal from Telegram (wrong chat, bot blocked) means the admin
+    // chat is misconfigured; a network hiccup says nothing about it.
+    if ([400, 403].includes(Number(error && error.telegramCode))) data.config.adminNotificationVerifiedAt = '';
     recordError('Уведомление администратору', error);
     return false;
   }
@@ -2753,16 +2971,17 @@ async function editPropertyCard(chatId, user, token, message, record, catalog) {
     if (images.length && Array.isArray(message.photo) && message.photo.length) {
       const image = images[0];
       let result;
-      if (image.telegramFileId) {
+      const fileId = knownFileId(image);
+      if (fileId) {
         try {
           result = await telegramRequest(token, 'editMessageMedia', {
             chat_id: chatId,
             message_id: messageId,
-            media: { type: 'photo', media: image.telegramFileId, caption },
+            media: { type: 'photo', media: fileId, caption },
             reply_markup: markup,
           });
         } catch {
-          image.telegramFileId = '';
+          rememberFileId(image, '');
         }
       }
       if (!result) {
@@ -2775,7 +2994,7 @@ async function editPropertyCard(chatId, user, token, message, record, catalog) {
           photo: new Blob([bytes], { type: image.mimeType }),
         });
         if (result && Array.isArray(result.photo) && result.photo.length) {
-          image.telegramFileId = result.photo[result.photo.length - 1].file_id || '';
+          rememberFileId(image, result.photo[result.photo.length - 1].file_id);
         }
       }
     } else if (!images.length && message.text) {
@@ -3744,6 +3963,44 @@ async function handleUpdate(update, token) {
   }
 }
 
+function updateChatKey(update) {
+  const source = update.message || update.message_reaction || (update.callback_query && update.callback_query.message);
+  if (source && source.chat) return 'chat:' + source.chat.id;
+  if (update.callback_query && update.callback_query.from) return 'chat:' + update.callback_query.from.id;
+  return 'update:' + update.update_id;
+}
+
+// Updates from one chat are handled in order; different chats run in
+// parallel, so one slow conversation does not hold up everyone else.
+// A failing update is logged and skipped: the offset always moves past it,
+// otherwise Telegram would return the same update forever.
+async function processUpdates(updates, token, handler = handleUpdate) {
+  const generation = runtime.generation;
+  const queues = new Map();
+  for (const update of updates) {
+    const key = updateChatKey(update);
+    if (!queues.has(key)) queues.set(key, []);
+    queues.get(key).push(update);
+  }
+  await Promise.all(Array.from(queues.values(), async (queue) => {
+    for (const update of queue) {
+      try {
+        await handler(update, token);
+      } catch (error) {
+        runtime.lastError = error.message;
+        recordError('Обработка сообщения', error);
+        console.error('Не удалось обработать обновление ' + update.update_id + ':', error.message);
+      }
+    }
+  }));
+  // After a token change or restart the offset belongs to the new session.
+  if (generation !== runtime.generation) return;
+  for (const update of updates) {
+    runtime.offset = Math.max(runtime.offset, Number(update.update_id) + 1);
+  }
+  data.telegramOffset = runtime.offset;
+}
+
 async function pollingLoop(generation, token) {
   let backoff = 1000;
   runtime.status = 'connecting';
@@ -3790,11 +4047,8 @@ async function pollingLoop(generation, token) {
       if (generation !== runtime.generation) break;
       markTelegramSuccess();
       backoff = 1000;
-      for (const update of updates) {
-        await handleUpdate(update, token);
-        runtime.offset = Math.max(runtime.offset, Number(update.update_id) + 1);
-        data.telegramOffset = runtime.offset;
-      }
+      await processUpdates(updates, token);
+      if (generation !== runtime.generation) break;
       if (updates.length) saveDataNow();
     } catch (error) {
       if (error.name === 'AbortError' || generation !== runtime.generation) break;
@@ -3882,6 +4136,7 @@ async function runBroadcast(entry) {
   const users = broadcastUsers(entry);
   entry.total = Math.max(Number(entry.total || 0), users.length);
   saveDataNow();
+  let lastProgressSaveAt = Date.now();
 
   try {
     for (const user of users) {
@@ -3901,9 +4156,15 @@ async function runBroadcast(entry) {
         recordError('Рассылка', error);
       }
       processed.add(String(user.id));
-      entry.processedUserIds = Array.from(processed);
-      if (entry.processedUserIds.length % 20 === 0) saveDataNow();
-      else scheduleSave();
+      entry.processedUserIds.push(String(user.id));
+      // Progress is written at most every few seconds; the full file write is
+      // too expensive to repeat for every recipient of a large broadcast.
+      if (Date.now() - lastProgressSaveAt >= 5000) {
+        saveDataNow();
+        lastProgressSaveAt = Date.now();
+      } else {
+        scheduleSave();
+      }
       await delay(45);
     }
     entry.status = 'done';
@@ -3964,6 +4225,19 @@ function createSession(res) {
   sessions.set(id, session);
   res.setHeader('set-cookie', 'admin_session=' + id + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
   return session;
+}
+
+// Blocks DNS rebinding: a foreign site's domain that resolves to this
+// computer must not be able to talk to the panel from the user's browser.
+function hostAllowed(req) {
+  let hostname;
+  try {
+    hostname = new URL('http://' + String(req.headers.host || '')).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  hostname = hostname.replace(/^\[|\]$/g, '');
+  return hostname === 'localhost' || net.isIP(hostname) !== 0 || ADMIN_ALLOWED_HOSTS.has(hostname);
 }
 
 function isLocalRequest(req) {
@@ -4531,7 +4805,15 @@ async function handleApi(req, res, url) {
   if (url.pathname === '/api/state' && req.method === 'GET') {
     const session = requireAuth(req, res);
     if (!session) return;
-    return json(res, 200, safeState(session));
+    // The panel polls every few seconds. When nothing changed since the
+    // version it already has, answer with a tiny body and let it skip
+    // re-rendering.
+    const serialized = JSON.stringify(safeState(session));
+    const stateVersion = crypto.createHash('sha256').update(serialized).digest('hex').slice(0, 24);
+    if (url.searchParams.get('since') === stateVersion) return json(res, 200, { unchanged: true, stateVersion });
+    securityHeaders(res);
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+    return res.end(serialized.slice(0, -1) + ',"stateVersion":"' + stateVersion + '"}');
   }
 
   if (url.pathname === '/api/welcome' && req.method === 'PUT') {
@@ -4579,6 +4861,8 @@ async function handleApi(req, res, url) {
       validateBackupPayload(backup);
       const restored = normalizeLoadedData(backup);
       data = restored;
+      rebuildUserIndex();
+      telegramFileIds.clear();
       applyInterfaceText();
       saveDataNow();
       restartPolling();
@@ -4690,6 +4974,7 @@ async function handleApi(req, res, url) {
     const before = data[kind].length;
     data[kind] = data[kind].filter((item) => item.id !== decodeURIComponent(contentMatch[2]));
     if (data[kind].length === before) return json(res, 404, { error: 'Запись не найдена' });
+    pruneOrphanPropertyAnalytics(data);
     saveDataNow();
     return json(res, 200, { ok: true });
   }
@@ -4765,7 +5050,7 @@ async function handleApi(req, res, url) {
   if (directMessageMatch && req.method === 'POST') {
     const session = requireAuth(req, res, true);
     if (!session) return;
-    const user = data.users[decodeURIComponent(directMessageMatch[1])];
+    const user = userById(decodeURIComponent(directMessageMatch[1]));
     if (!user) return json(res, 404, { error: 'Пользователь не найден' });
     if (!user.chatId || user.blocked) return json(res, 400, { error: 'Пользователь сейчас недоступен для сообщений' });
     try {
@@ -4801,7 +5086,7 @@ async function handleApi(req, res, url) {
   if (userMatch && req.method === 'PATCH') {
     const session = requireAuth(req, res, true);
     if (!session) return;
-    const user = data.users[decodeURIComponent(userMatch[1])];
+    const user = userById(decodeURIComponent(userMatch[1]));
     if (!user) return json(res, 404, { error: 'Пользователь не найден' });
     const body = await readJson(req);
     if (body.note != null) user.note = cleanText(body.note, 2000);
@@ -4838,7 +5123,7 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     const text = cleanText(body.text, 4000);
     if (!text) return json(res, 400, { error: 'Введите ответ пользователю' });
-    const user = data.users[inquiry.userId] || userByChatId(inquiry.chatId);
+    const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
     if (!user || !user.chatId) return json(res, 400, { error: 'У пользователя нет доступного чата' });
     try {
       const language = user.preferredLanguage || inquiry.language || 'ru';
@@ -5007,6 +5292,17 @@ async function handleApi(req, res, url) {
     let tokenChanged = false;
     let nextBot = data.bot;
     const newToken = cleanText(body.token, 256);
+    const newPassword = String(body.password || '');
+    // A session alone must not be enough to take over the panel or the bot.
+    if (newToken || newPassword) {
+      const ip = req.socket.remoteAddress || 'unknown';
+      if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
+      if (!verifyPassword(String(body.currentPassword || ''))) {
+        await delay(250);
+        return json(res, 403, { error: 'Для смены пароля или токена введите текущий пароль' });
+      }
+      loginAttempts.delete(ip);
+    }
     if (newToken) {
       try {
         const me = await telegramRequest(newToken, 'getMe', {});
@@ -5017,7 +5313,6 @@ async function handleApi(req, res, url) {
       tokenChanged = true;
     }
 
-    const newPassword = String(body.password || '');
     let passwordData = null;
     if (newPassword) {
       if (newPassword.length < 8) return json(res, 400, { error: 'Новый пароль должен содержать минимум 8 символов' });
@@ -5032,12 +5327,7 @@ async function handleApi(req, res, url) {
       data.bot = nextBot;
       data.config.botToken = newToken;
       data.telegramOffset = 0;
-      for (const language of ['ru', 'en', 'es']) {
-        if (data.welcomeImages[language]) data.welcomeImages[language].telegramFileId = '';
-      }
-      for (const collection of [data.objects, data.promotions, data.broadcasts]) {
-        for (const record of collection) if (record.image) record.image.telegramFileId = '';
-      }
+      forgetTelegramFileIds(data);
     }
     if (passwordData) {
       data.config.passwordSalt = passwordData.salt;
@@ -5071,7 +5361,7 @@ async function handleApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const body = await readJson(req);
-    const user = body.userId ? data.users[String(body.userId)] : null;
+    const user = body.userId ? userById(body.userId) : null;
     if (!user || !user.chatId) return json(res, 400, { error: 'Выберите получателя тестового сообщения' });
     try {
       await deliverBroadcast(user, parseBroadcast(body));
@@ -5156,389 +5446,6 @@ async function handleApi(req, res, url) {
 }
 
 const ADMIN_HTML = String.raw`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>Пульт бота</title>
-  <style>
-    :root{--bg:#07111f;--panel:#0d1b2b;--panel2:#102338;--line:#1d3852;--text:#f2f7fb;--muted:#8fa9bd;--blue:#2aabee;--blue2:#168bd0;--green:#35d49a;--red:#ff6b7a;--amber:#ffca68;--shadow:0 20px 55px rgba(0,0,0,.28)}
-    *{box-sizing:border-box}html{font-size:16px}body{margin:0;background:radial-gradient(circle at 88% -10%,#123555 0,transparent 30%),var(--bg);color:var(--text);font:16px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh}button,input,textarea,select{font:inherit}button{cursor:pointer}a{color:inherit}.hidden{display:none!important}
-    .auth{min-height:100vh;display:grid;place-items:center;padding:24px}.auth-card{width:min(460px,100%);background:linear-gradient(160deg,rgba(16,35,56,.97),rgba(9,24,39,.97));border:1px solid var(--line);border-radius:28px;padding:34px;box-shadow:var(--shadow)}.brandmark{width:52px;height:52px;border-radius:17px;background:linear-gradient(135deg,var(--blue),#2075e8);display:grid;place-items:center;font-weight:850;font-size:23px;box-shadow:0 12px 28px rgba(42,171,238,.25);transform:rotate(-4deg)}h1{font-size:28px;line-height:1.15;margin:22px 0 8px;letter-spacing:-.04em}h2{font-size:22px;letter-spacing:-.03em;margin:0}.lead{color:var(--muted);margin:0 0 26px}.field{display:grid;gap:8px;margin:16px 0}.field label{font-size:14px;color:#b8cad8;font-weight:650}.input,.select,.textarea{width:100%;color:var(--text);background:#091725;border:1px solid var(--line);border-radius:13px;padding:12px 14px;outline:none;transition:.18s border,.18s box-shadow}.textarea{min-height:110px;resize:vertical}.input:focus,.select:focus,.textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(42,171,238,.13)}.hint{font-size:13px;color:var(--muted)}
-    .btn{border:0;border-radius:12px;padding:11px 16px;color:white;background:var(--blue2);font-weight:750;transition:.16s transform,.16s filter}.btn:hover{filter:brightness(1.1)}.btn:active{transform:translateY(1px)}.btn:disabled{opacity:.5;cursor:not-allowed}.btn.secondary{background:#18324b;color:#d7e7f2;border:1px solid #284a67}.btn.danger{background:rgba(255,107,122,.12);color:#ff9daa;border:1px solid rgba(255,107,122,.25)}.btn.wide{width:100%;padding:13px}.error{color:#ffadb6;background:rgba(255,107,122,.1);border:1px solid rgba(255,107,122,.2);padding:10px 12px;border-radius:11px;margin-top:14px;font-size:14px}.success{color:#82e9c2;background:rgba(53,212,154,.09);border:1px solid rgba(53,212,154,.2);padding:10px 12px;border-radius:11px;margin-top:14px;font-size:14px}
-    .shell{min-height:100vh;display:grid;grid-template-columns:245px 1fr}.sidebar{border-right:1px solid var(--line);padding:24px 18px;display:flex;flex-direction:column;background:rgba(7,17,31,.72);backdrop-filter:blur(16px);position:sticky;top:0;height:100vh}.side-brand{display:flex;gap:13px;align-items:center;padding:0 9px 24px}.side-brand .brandmark{width:42px;height:42px;border-radius:14px;font-size:18px}.brand-title{font-weight:800}.brand-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:145px}.nav{display:grid;gap:6px}.nav button{border:0;background:transparent;color:#9bb2c5;border-radius:12px;padding:11px 13px;text-align:left;font-weight:680;display:flex;gap:11px;align-items:center}.nav button:hover{background:#0f2337;color:white}.nav button.active{background:linear-gradient(90deg,rgba(42,171,238,.18),rgba(42,171,238,.05));color:#dff4ff;box-shadow:inset 3px 0 var(--blue)}.nav-icon{width:22px;text-align:center}.side-foot{margin-top:auto;border-top:1px solid var(--line);padding:18px 8px 0}.status-line{display:flex;align-items:center;gap:9px;color:#c6d8e5;font-size:14px}.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 4px rgba(143,169,189,.08)}.dot.online{background:var(--green);box-shadow:0 0 0 4px rgba(53,212,154,.1)}.dot.error,.dot.reconnecting{background:var(--amber)}
-    .main{min-width:0;padding:28px 32px 48px}.topbar{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:30px}.eyebrow{text-transform:uppercase;letter-spacing:.13em;color:var(--blue);font-size:12px;font-weight:800}.page-title{font-size:30px;line-height:1.2;letter-spacing:-.045em;margin:3px 0}.top-actions{display:flex;gap:10px;align-items:center}.content{max-width:1180px}.view{display:none}.view.active{display:block}.grid{display:grid;gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:16px}.card{background:linear-gradient(155deg,rgba(16,35,56,.95),rgba(11,27,44,.95));border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 12px 34px rgba(0,0,0,.12)}.stat-label{font-size:13px;color:var(--muted);font-weight:650}.stat-value{font-size:31px;font-weight:850;letter-spacing:-.05em;margin:8px 0 2px}.stat-note{font-size:12px;color:#718fa7}.split{grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr)}.card-head{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:18px}.card-title{font-size:17px;font-weight:800}.card-note{font-size:13px;color:var(--muted);margin-top:2px}.signal{height:120px;display:flex;align-items:end;gap:7px;padding-top:15px}.signal i{display:block;flex:1;min-width:4px;border-radius:5px 5px 2px 2px;background:linear-gradient(to top,#177dc2,var(--blue));opacity:.5}.signal i:nth-child(3n){opacity:.95}.signal i:nth-child(4n){opacity:.72}.activity-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid rgba(29,56,82,.72)}.activity-item:last-child{border:0}.avatar{width:38px;height:38px;flex:0 0 38px;border-radius:12px;background:#173651;color:#a8ddfa;display:grid;place-items:center;font-weight:800}.activity-main{min-width:0}.activity-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.activity-meta{font-size:12px;color:var(--muted)}
-    .section-head{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:18px}.section-copy{color:var(--muted);margin:5px 0 0}.form-row{display:grid;grid-template-columns:minmax(0,1fr) 180px 180px;gap:12px}.rules{display:grid;gap:10px;margin-top:18px}.rule{display:grid;grid-template-columns:auto minmax(150px,.7fr) 150px minmax(220px,1.3fr) auto;align-items:center;gap:14px;background:#0b1b2b;border:1px solid var(--line);border-radius:14px;padding:14px}.rule.off{opacity:.55}.rule-trigger{font-weight:760}.rule-answer{color:#b7cad8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badge{display:inline-flex;align-items:center;border-radius:999px;padding:4px 9px;background:rgba(42,171,238,.1);color:#8cd8ff;font-size:12px;font-weight:750}.toggle{appearance:none;width:40px;height:23px;border-radius:99px;background:#26425a;position:relative;transition:.2s}.toggle:after{content:"";position:absolute;width:17px;height:17px;border-radius:50%;background:white;top:3px;left:3px;transition:.2s}.toggle:checked{background:var(--blue2)}.toggle:checked:after{left:20px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px}.table{width:100%;border-collapse:collapse;min-width:680px;background:#0b1b2b}.table th,.table td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--line)}.table th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.table tr:last-child td{border:0}.user-name{font-weight:750}.muted{color:var(--muted)}.empty{text-align:center;color:var(--muted);padding:38px 20px}.broadcast-layout{grid-template-columns:minmax(0,1fr) minmax(320px,.75fr)}.history{display:grid;gap:10px}.history-item{background:#0b1b2b;border:1px solid var(--line);border-radius:13px;padding:14px}.history-top{display:flex;justify-content:space-between;gap:12px}.progress{height:6px;border-radius:99px;background:#1b344a;margin-top:12px;overflow:hidden}.progress span{display:block;height:100%;background:var(--green)}.settings-grid{grid-template-columns:minmax(0,1fr) minmax(300px,.7fr)}.switch-row{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:16px;background:#0b1b2b;border:1px solid var(--line);border-radius:14px}.template-vars{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.template-vars code{background:#122b43;color:#9bdcff;border-radius:7px;padding:3px 7px;font-size:12px}.lang-tabs{display:flex;gap:7px;padding:5px;background:#091725;border:1px solid var(--line);border-radius:13px;margin-bottom:18px}.lang-tab{flex:1;border:0;border-radius:9px;padding:9px;background:transparent;color:var(--muted);font-weight:750}.lang-tab.active{background:#173a57;color:#dff4ff}.lang-pane,.menu-lang-pane{display:none}.lang-pane.active,.menu-lang-pane.active{display:block}.menu-editor{grid-template-columns:minmax(280px,.7fr) minmax(0,1.3fr)}.image-preview{aspect-ratio:16/10;margin:18px 0 12px;border:1px dashed #31536d;border-radius:15px;background:#091725;display:grid;place-items:center;overflow:hidden;color:var(--muted);text-align:center;padding:12px}.image-preview img{width:100%;height:100%;object-fit:cover;border-radius:10px}.upload-actions{display:flex;gap:9px}.toast{position:fixed;right:22px;bottom:22px;max-width:380px;background:#102b40;border:1px solid #2c5775;color:white;padding:13px 16px;border-radius:13px;box-shadow:var(--shadow);z-index:5}.mobile-menu{display:none}
-    @media(max-width:900px){.shell{grid-template-columns:1fr}.sidebar{position:fixed;z-index:4;left:0;right:0;bottom:0;top:auto;height:auto;border-right:0;border-top:1px solid var(--line);padding:8px;background:#091725}.side-brand,.side-foot{display:none}.nav{display:flex;overflow:auto}.nav button{flex:1;min-width:92px;display:grid;justify-items:center;gap:2px;padding:7px 5px;font-size:11px}.nav-icon{font-size:17px}.main{padding:24px 18px 100px}.stats{grid-template-columns:repeat(2,1fr)}.split,.broadcast-layout,.settings-grid,.menu-editor{grid-template-columns:1fr}.top-actions .secondary{display:none}}
-    @media(max-width:620px){.auth-card{padding:25px;border-radius:22px}.topbar{align-items:flex-start}.page-title{font-size:25px}.stats{grid-template-columns:1fr 1fr}.stat-value{font-size:25px}.form-row{grid-template-columns:1fr}.rule{grid-template-columns:auto 1fr auto}.rule .badge{display:none}.rule-answer{grid-column:2/4}.main{padding-left:13px;padding-right:13px}.card{padding:16px}.section-head{align-items:flex-start;flex-direction:column}.section-head .btn{width:100%}}
-  </style>
-</head>
-<body>
-  <section id="setupScreen" class="auth hidden">
-    <form id="setupForm" class="auth-card">
-      <div class="brandmark">TG</div>
-      <h1>Подключите бота</h1>
-      <p class="lead">Один раз укажите токен из BotFather и придумайте пароль для панели.</p>
-      <div class="field"><label for="setupToken">Токен Telegram-бота</label><input class="input" id="setupToken" name="token" autocomplete="off" placeholder="123456789:AA..." required><span class="hint">Токен проверяется напрямую через Telegram.</span></div>
-      <div class="field"><label for="setupPassword">Пароль администратора</label><input class="input" id="setupPassword" name="password" type="password" minlength="8" autocomplete="new-password" required><span class="hint">Минимум 8 символов.</span></div>
-      <button class="btn wide" type="submit">Подключить и запустить</button>
-      <div id="setupMessage"></div>
-    </form>
-  </section>
-
-  <section id="loginScreen" class="auth hidden">
-    <form id="loginForm" class="auth-card">
-      <div class="brandmark">TG</div>
-      <h1>Пульт бота</h1>
-      <p class="lead">Введите пароль администратора.</p>
-      <div class="field"><label for="loginPassword">Пароль</label><input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" required autofocus></div>
-      <button class="btn wide" type="submit">Войти</button>
-      <div id="loginMessage"></div>
-    </form>
-  </section>
-
-  <div id="app" class="shell hidden">
-    <aside class="sidebar">
-      <div class="side-brand"><div class="brandmark">TG</div><div><div class="brand-title">Пульт бота</div><div id="botUsername" class="brand-sub">Telegram</div></div></div>
-      <nav class="nav" id="nav">
-        <button class="active" data-view="dashboard"><span class="nav-icon">⌁</span>Обзор</button>
-        <button data-view="menu"><span class="nav-icon">▦</span>Меню</button>
-        <button data-view="rules"><span class="nav-icon">≡</span>Ответы</button>
-        <button data-view="users"><span class="nav-icon">◉</span>Люди</button>
-        <button data-view="broadcast"><span class="nav-icon">↗</span>Рассылка</button>
-        <button data-view="settings"><span class="nav-icon">⚙</span>Настройки</button>
-      </nav>
-      <div class="side-foot"><div class="status-line"><span id="sideDot" class="dot"></span><span id="sideStatus">Проверка связи</span></div></div>
-    </aside>
-
-    <main class="main">
-      <header class="topbar"><div><div class="eyebrow" id="eyebrow">Центр управления</div><div class="page-title" id="pageTitle">Обзор</div></div><div class="top-actions"><button id="refreshBtn" class="btn secondary">Обновить</button><button id="logoutBtn" class="btn danger">Выйти</button></div></header>
-      <div class="content">
-        <section class="view active" id="view-dashboard">
-          <div class="grid stats">
-            <div class="card"><div class="stat-label">Пользователи</div><div class="stat-value" id="statUsers">0</div><div class="stat-note" id="statActiveUsers">0 доступны</div></div>
-            <div class="card"><div class="stat-label">Получено сообщений</div><div class="stat-value" id="statReceived">0</div><div class="stat-note">за всё время</div></div>
-            <div class="card"><div class="stat-label">Отправлено</div><div class="stat-value" id="statSent">0</div><div class="stat-note">ответы и рассылки</div></div>
-            <div class="card"><div class="stat-label">Правила ответов</div><div class="stat-value" id="statRules">0</div><div class="stat-note" id="statRulesEnabled">0 включено</div></div>
-          </div>
-          <div class="grid split">
-            <div class="card"><div class="card-head"><div><div class="card-title">Пульс общения</div><div class="card-note">Визуальный ритм активности бота</div></div><span id="dashboardStatus" class="badge">—</span></div><div class="signal" aria-hidden="true"><i style="height:24%"></i><i style="height:42%"></i><i style="height:31%"></i><i style="height:66%"></i><i style="height:48%"></i><i style="height:84%"></i><i style="height:55%"></i><i style="height:73%"></i><i style="height:44%"></i><i style="height:91%"></i><i style="height:62%"></i><i style="height:78%"></i><i style="height:50%"></i><i style="height:69%"></i><i style="height:96%"></i><i style="height:72%"></i><i style="height:88%"></i><i style="height:57%"></i></div></div>
-            <div class="card"><div class="card-head"><div><div class="card-title">Недавние пользователи</div><div class="card-note">Последние диалоги</div></div></div><div id="recentUsers"></div></div>
-          </div>
-        </section>
-
-        <section class="view" id="view-menu">
-          <div class="section-head"><div><h2>Приветствие и меню</h2><p class="section-copy">Изображение и содержание четырех разделов для каждого языка.</p></div></div>
-          <form id="menuForm">
-            <div id="menuLanguageTabs" class="lang-tabs" style="max-width:520px"><button type="button" class="lang-tab active" data-language="ru">Русский</button><button type="button" class="lang-tab" data-language="en">English</button><button type="button" class="lang-tab" data-language="es">Español</button></div>
-            <div class="menu-lang-pane active" data-menu-language-pane="ru"><div class="grid menu-editor"><div class="card"><div class="card-title">Приветственное изображение</div><div class="card-note">JPG или PNG, не более 5 МБ</div><div id="welcomeImagePreviewRu" class="image-preview"><span>Изображение не загружено</span></div><div class="field"><input id="welcomeImageFileRu" class="input" type="file" accept="image/jpeg,image/png"></div><div class="upload-actions"><button type="button" class="btn upload-welcome" data-language="ru">Загрузить</button><button type="button" class="btn danger remove-welcome" data-language="ru">Удалить</button></div></div><div class="card"><div class="field"><label for="menuObjectsRu">Наши объекты</label><textarea id="menuObjectsRu" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuContactsRu">Контакты</label><textarea id="menuContactsRu" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuPromotionsRu">Акции</label><textarea id="menuPromotionsRu" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuAboutRu">О нас</label><textarea id="menuAboutRu" class="textarea" maxlength="4000" required></textarea></div></div></div></div>
-            <div class="menu-lang-pane" data-menu-language-pane="en"><div class="grid menu-editor"><div class="card"><div class="card-title">Welcome image</div><div class="card-note">JPG or PNG, up to 5 MB</div><div id="welcomeImagePreviewEn" class="image-preview"><span>No image uploaded</span></div><div class="field"><input id="welcomeImageFileEn" class="input" type="file" accept="image/jpeg,image/png"></div><div class="upload-actions"><button type="button" class="btn upload-welcome" data-language="en">Upload</button><button type="button" class="btn danger remove-welcome" data-language="en">Remove</button></div></div><div class="card"><div class="field"><label for="menuObjectsEn">Our properties</label><textarea id="menuObjectsEn" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuContactsEn">Contacts</label><textarea id="menuContactsEn" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuPromotionsEn">Special offers</label><textarea id="menuPromotionsEn" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuAboutEn">About us</label><textarea id="menuAboutEn" class="textarea" maxlength="4000" required></textarea></div></div></div></div>
-            <div class="menu-lang-pane" data-menu-language-pane="es"><div class="grid menu-editor"><div class="card"><div class="card-title">Imagen de bienvenida</div><div class="card-note">JPG o PNG, hasta 5 MB</div><div id="welcomeImagePreviewEs" class="image-preview"><span>No se ha cargado ninguna imagen</span></div><div class="field"><input id="welcomeImageFileEs" class="input" type="file" accept="image/jpeg,image/png"></div><div class="upload-actions"><button type="button" class="btn upload-welcome" data-language="es">Subir</button><button type="button" class="btn danger remove-welcome" data-language="es">Eliminar</button></div></div><div class="card"><div class="field"><label for="menuObjectsEs">Nuestros inmuebles</label><textarea id="menuObjectsEs" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuContactsEs">Contactos</label><textarea id="menuContactsEs" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuPromotionsEs">Promociones</label><textarea id="menuPromotionsEs" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuAboutEs">Sobre nosotros</label><textarea id="menuAboutEs" class="textarea" maxlength="4000" required></textarea></div></div></div></div>
-            <div style="margin-top:16px"><button class="btn" type="submit">Сохранить тексты меню</button></div>
-          </form>
-        </section>
-
-        <section class="view" id="view-rules">
-          <div class="section-head"><div><h2>Автоматические ответы</h2><p class="section-copy">Бот проверяет включенные правила сверху вниз.</p></div></div>
-          <div class="card">
-            <form id="ruleForm"><div class="form-row"><div class="field"><label for="ruleTrigger">Что пишет пользователь</label><input id="ruleTrigger" class="input" maxlength="200" placeholder="Например: цена" required></div><div class="field"><label for="ruleType">Условие</label><select id="ruleType" class="select"><option value="contains">Содержит</option><option value="exact">Точное совпадение</option><option value="starts">Начинается с</option></select></div><div class="field"><label for="ruleLanguage">Язык ответа</label><select id="ruleLanguage" class="select"><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option><option value="all">Все языки</option></select></div></div><div class="field"><label for="ruleAnswer">Ответ бота</label><textarea id="ruleAnswer" class="textarea" maxlength="4000" placeholder="Напишите ответ..." required></textarea></div><button class="btn" type="submit">Добавить ответ</button></form>
-            <div id="rulesList" class="rules"></div>
-          </div>
-        </section>
-
-        <section class="view" id="view-users">
-          <div class="section-head"><div><h2>Пользователи</h2><p class="section-copy">Люди, которые хотя бы раз написали боту.</p></div><input id="userSearch" class="input" style="max-width:280px" placeholder="Найти пользователя"></div>
-          <div class="table-wrap"><table class="table"><thead><tr><th>Пользователь</th><th>Username</th><th>Сообщения</th><th>Последняя активность</th><th>Статус</th></tr></thead><tbody id="usersBody"></tbody></table></div>
-        </section>
-
-        <section class="view" id="view-broadcast">
-          <div class="section-head"><div><h2>Рассылка</h2><p class="section-copy">Одно сообщение всем доступным пользователям.</p></div></div>
-          <div class="grid broadcast-layout"><div class="card"><form id="broadcastForm"><div class="field"><label for="broadcastText">Текст сообщения</label><textarea id="broadcastText" class="textarea" style="min-height:190px" maxlength="4000" placeholder="Напишите сообщение для рассылки..." required></textarea><div class="template-vars"><code>{first_name}</code><code>{last_name}</code><code>{username}</code></div></div><button id="broadcastBtn" class="btn" type="submit">Начать рассылку</button></form></div><div class="card"><div class="card-head"><div><div class="card-title">История</div><div class="card-note">Последние отправки</div></div></div><div id="broadcastHistory" class="history"></div></div></div>
-        </section>
-
-        <section class="view" id="view-settings">
-          <div class="section-head"><div><h2>Настройки</h2><p class="section-copy">Основные тексты, подключение и состояние бота.</p></div></div>
-          <form id="settingsForm" class="grid settings-grid"><div class="card"><div id="languageTabs" class="lang-tabs"><button type="button" class="lang-tab active" data-language="ru">Русский</button><button type="button" class="lang-tab" data-language="en">English</button><button type="button" class="lang-tab" data-language="es">Español</button></div><div class="lang-pane active" data-language-pane="ru"><div class="field"><label for="settingGreetingRu">Приветствие /start</label><textarea id="settingGreetingRu" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="settingHelpRu">Ответ /help</label><textarea id="settingHelpRu" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="settingFallbackRu">Если правило не найдено</label><textarea id="settingFallbackRu" class="textarea" maxlength="4000"></textarea></div></div><div class="lang-pane" data-language-pane="en"><div class="field"><label for="settingGreetingEn">Greeting /start</label><textarea id="settingGreetingEn" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="settingHelpEn">Reply /help</label><textarea id="settingHelpEn" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="settingFallbackEn">When no rule matches</label><textarea id="settingFallbackEn" class="textarea" maxlength="4000"></textarea></div></div><div class="lang-pane" data-language-pane="es"><div class="field"><label for="settingGreetingEs">Saludo /start</label><textarea id="settingGreetingEs" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="settingHelpEs">Respuesta /help</label><textarea id="settingHelpEs" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="settingFallbackEs">Si ninguna regla coincide</label><textarea id="settingFallbackEs" class="textarea" maxlength="4000"></textarea></div></div><div class="template-vars"><code>{first_name}</code><code>{last_name}</code><code>{username}</code></div></div><div class="card"><div class="switch-row"><div><div class="card-title">Бот включен</div><div class="card-note">При выключении сообщения не обрабатываются</div></div><input id="settingActive" class="toggle" type="checkbox"></div><div class="field"><label for="settingToken">Новый токен</label><input id="settingToken" class="input" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"><span class="hint">Текущий токен никогда не показывается.</span></div><div class="field"><label for="settingPassword">Новый пароль панели</label><input id="settingPassword" class="input" type="password" minlength="8" autocomplete="new-password" placeholder="Оставьте пустым, чтобы не менять"></div><button class="btn wide" type="submit">Сохранить настройки</button></div></form>
-        </section>
-      </div>
-    </main>
-  </div>
-  <div id="toast" class="toast hidden" role="status"></div>
-
-  <script>
-    (function(){
-      'use strict';
-      var state = null;
-      var csrf = '';
-      var currentView = 'dashboard';
-      var refreshTimer = null;
-      var titles = {dashboard:'Обзор',menu:'Приветствие и меню',rules:'Ответы',users:'Пользователи',broadcast:'Рассылка',settings:'Настройки'};
-      function el(id){return document.getElementById(id)}
-      function esc(value){return String(value == null ? '' : value).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-      function fmtNumber(value){return new Intl.NumberFormat('ru-RU').format(Number(value||0))}
-      function fmtDate(value){if(!value)return '—';try{return new Intl.DateTimeFormat('ru-RU',{dateStyle:'short',timeStyle:'short'}).format(new Date(value))}catch{return '—'}}
-      function api(url,options){options=options||{};options.headers=Object.assign({'content-type':'application/json'},options.headers||{});if(options.method&&options.method!=='GET')options.headers['x-csrf-token']=csrf;return fetch(url,options).then(async function(r){var body={};try{body=await r.json()}catch{}if(!r.ok){var e=new Error(body.error||'Ошибка запроса');e.status=r.status;throw e}return body})}
-      function message(target,text,ok){target.innerHTML='<div class="'+(ok?'success':'error')+'">'+esc(text)+'</div>'}
-      function toast(text){var box=el('toast');box.textContent=text;box.classList.remove('hidden');clearTimeout(box._timer);box._timer=setTimeout(function(){box.classList.add('hidden')},3200)}
-      function setScreen(name){['setupScreen','loginScreen','app'].forEach(function(id){el(id).classList.toggle('hidden',id!==name)})}
-      async function boot(){
-        try{
-          var status=await api('/api/status');
-          if(!status.configured){setScreen('setupScreen');return}
-          try{await loadState();setScreen('app');startRefresh()}catch(e){setScreen('loginScreen')}
-        }catch(e){setScreen('loginScreen');message(el('loginMessage'),'Не удалось связаться с сервером',false)}
-      }
-      function startRefresh(){clearInterval(refreshTimer);refreshTimer=setInterval(function(){loadState(true)},5000)}
-      async function loadState(silent){
-        try{state=await api('/api/state');csrf=state.csrf;render();return state}catch(e){if(e.status===401){clearInterval(refreshTimer);setScreen('loginScreen')}else if(!silent)throw e}
-      }
-      function runtimeLabel(status){return {online:'На связи',connecting:'Подключение',reconnecting:'Восстановление связи',stopped:'Остановлен',error:'Ошибка'}[status]||status}
-      function userName(user){return [user.firstName,user.lastName].filter(Boolean).join(' ')||'Без имени'}
-      function initials(user){var parts=[user.firstName,user.lastName].filter(Boolean);return (parts.map(function(x){return x[0]}).join('').slice(0,2)||'?').toUpperCase()}
-      function render(){
-        if(!state)return;
-        el('botUsername').textContent=state.bot.username?'@'+state.bot.username:(state.bot.firstName||'Telegram');
-        var status=state.runtime.status;el('sideStatus').textContent=runtimeLabel(status);el('sideDot').className='dot '+status;el('dashboardStatus').textContent=runtimeLabel(status);
-        el('statUsers').textContent=fmtNumber(state.userCount);el('statActiveUsers').textContent=fmtNumber(state.activeUserCount)+' доступны';el('statReceived').textContent=fmtNumber(state.stats.messagesReceived);el('statSent').textContent=fmtNumber(state.stats.messagesSent);el('statRules').textContent=fmtNumber(state.rules.length);el('statRulesEnabled').textContent=fmtNumber(state.rules.filter(function(x){return x.enabled}).length)+' включено';
-        renderRecent();renderMenu();renderRules();renderUsers();renderBroadcasts();renderSettings();
-      }
-      function renderRecent(){var users=state.users.slice(0,4);el('recentUsers').innerHTML=users.length?users.map(function(u){return '<div class="activity-item"><div class="avatar">'+esc(initials(u))+'</div><div class="activity-main"><div class="activity-name">'+esc(userName(u))+'</div><div class="activity-meta">'+fmtNumber(u.messages)+' сообщ. · '+esc(fmtDate(u.lastSeenAt))+'</div></div></div>'}).join(''):'<div class="empty">Пока никто не написал</div>'}
-      function renderMenu(){var active=document.activeElement;var editing=active&&el('menuForm').contains(active)&&!active.classList.contains('upload-welcome')&&!active.classList.contains('remove-welcome');['ru','en','es'].forEach(function(language){var suffix=language[0].toUpperCase()+language.slice(1);if(!editing){var menu=state.config.menu[language];el('menuObjects'+suffix).value=menu.objects;el('menuContacts'+suffix).value=menu.contacts;el('menuPromotions'+suffix).value=menu.promotions;el('menuAbout'+suffix).value=menu.about}var meta=state.welcomeImages[language];var preview=el('welcomeImagePreview'+suffix);if(meta&&meta.exists){preview.innerHTML='<img src="/api/images/'+language+'/welcome?rev='+encodeURIComponent(meta.updatedAt||'')+'" alt="Приветственное изображение">'}else{preview.innerHTML='<span>'+(language==='en'?'No image uploaded':language==='es'?'No se ha cargado ninguna imagen':'Изображение не загружено')+'</span>'}var remove=document.querySelector('.remove-welcome[data-language="'+language+'"]');if(remove)remove.disabled=!(meta&&meta.exists)})}
-      function typeLabel(type){return {contains:'содержит',exact:'точно',starts:'начинается'}[type]||type}
-      function languageLabel(language){return {ru:'Русский',en:'English',es:'Español',all:'Все языки'}[language]||'Русский'}
-      function renderRules(){el('rulesList').innerHTML=state.rules.length?state.rules.map(function(r){return '<div class="rule '+(r.enabled?'':'off')+'"><input class="toggle rule-toggle" data-id="'+esc(r.id)+'" type="checkbox" '+(r.enabled?'checked':'')+' aria-label="Включить правило"><div class="rule-trigger">'+esc(r.trigger)+'</div><span class="badge">'+esc(typeLabel(r.type)+' · '+languageLabel(r.language))+'</span><div class="rule-answer" title="'+esc(r.answer)+'">'+esc(r.answer)+'</div><button class="btn danger delete-rule" data-id="'+esc(r.id)+'">Удалить</button></div>'}).join(''):'<div class="empty">Добавьте первый автоматический ответ</div>'}
-      function filteredUsers(){var q=el('userSearch').value.toLocaleLowerCase('ru-RU').trim();if(!q)return state.users;return state.users.filter(function(u){return (userName(u)+' '+u.username+' '+u.id).toLocaleLowerCase('ru-RU').includes(q)})}
-      function renderUsers(){var users=filteredUsers();el('usersBody').innerHTML=users.length?users.map(function(u){return '<tr><td><div class="user-name">'+esc(userName(u))+'</div><div class="muted">ID '+esc(u.id)+'</div></td><td>'+(u.username?'@'+esc(u.username):'—')+'</td><td>'+fmtNumber(u.messages)+'</td><td>'+esc(fmtDate(u.lastSeenAt))+'</td><td><span class="badge">'+(u.blocked?'Недоступен':esc(u.preferredLanguage?languageLabel(u.preferredLanguage):'Язык не выбран'))+'</span></td></tr>'}).join(''):'<tr><td colspan="5" class="empty">Ничего не найдено</td></tr>'}
-      function renderBroadcasts(){el('broadcastBtn').disabled=state.runtime.broadcastRunning;el('broadcastBtn').textContent=state.runtime.broadcastRunning?'Рассылка выполняется…':'Начать рассылку';var list=state.broadcasts;el('broadcastHistory').innerHTML=list.length?list.slice(0,6).map(function(b){var progress=b.total?Math.round((b.sent+b.failed)/b.total*100):100;return '<div class="history-item"><div class="history-top"><strong>'+esc(b.text.slice(0,44))+(b.text.length>44?'…':'')+'</strong><span class="muted">'+esc(fmtDate(b.createdAt))+'</span></div><div class="card-note">Отправлено '+fmtNumber(b.sent)+' из '+fmtNumber(b.total)+(b.failed?' · ошибок '+fmtNumber(b.failed):'')+'</div><div class="progress"><span style="width:'+progress+'%"></span></div></div>'}).join(''):'<div class="empty">Рассылок еще не было</div>'}
-      function renderSettings(){var active=document.activeElement;var editing=active&&el('settingsForm').contains(active);if(editing)return;['ru','en','es'].forEach(function(language){var suffix=language[0].toUpperCase()+language.slice(1);var messages=state.config.messages[language];el('settingGreeting'+suffix).value=messages.greeting;el('settingHelp'+suffix).value=messages.help;el('settingFallback'+suffix).value=messages.fallback});el('settingActive').checked=state.config.active}
-      function switchView(name){currentView=name;document.querySelectorAll('.view').forEach(function(node){node.classList.toggle('active',node.id==='view-'+name)});document.querySelectorAll('#nav button').forEach(function(node){node.classList.toggle('active',node.dataset.view===name)});el('pageTitle').textContent=titles[name]||name;if(name==='users')renderUsers();window.scrollTo({top:0,behavior:'smooth'})}
-      el('setupForm').addEventListener('submit',async function(e){e.preventDefault();var btn=e.submitter;btn.disabled=true;btn.textContent='Проверяю токен…';el('setupMessage').innerHTML='';try{var result=await api('/api/setup',{method:'POST',body:JSON.stringify({token:el('setupToken').value,password:el('setupPassword').value})});csrf=result.csrf;await loadState();setScreen('app');startRefresh();toast('Бот подключен и запущен')}catch(err){message(el('setupMessage'),err.message,false)}finally{btn.disabled=false;btn.textContent='Подключить и запустить'}});
-      el('loginForm').addEventListener('submit',async function(e){e.preventDefault();var btn=e.submitter;btn.disabled=true;el('loginMessage').innerHTML='';try{var result=await api('/api/login',{method:'POST',body:JSON.stringify({password:el('loginPassword').value})});csrf=result.csrf;el('loginPassword').value='';await loadState();setScreen('app');startRefresh()}catch(err){message(el('loginMessage'),err.message,false)}finally{btn.disabled=false}});
-      el('logoutBtn').addEventListener('click',async function(){try{await api('/api/logout',{method:'POST',body:'{}'})}catch{}csrf='';state=null;clearInterval(refreshTimer);setScreen('loginScreen')});
-      el('refreshBtn').addEventListener('click',function(){loadState().then(function(){toast('Данные обновлены')})});
-      el('nav').addEventListener('click',function(e){var button=e.target.closest('button[data-view]');if(button)switchView(button.dataset.view)});
-      el('ruleForm').addEventListener('submit',async function(e){e.preventDefault();var btn=e.submitter;btn.disabled=true;try{await api('/api/rules',{method:'POST',body:JSON.stringify({trigger:el('ruleTrigger').value,type:el('ruleType').value,language:el('ruleLanguage').value,answer:el('ruleAnswer').value})});e.target.reset();await loadState();toast('Ответ добавлен')}catch(err){toast(err.message)}finally{btn.disabled=false}});
-      el('rulesList').addEventListener('change',async function(e){if(!e.target.classList.contains('rule-toggle'))return;try{await api('/api/rules/'+encodeURIComponent(e.target.dataset.id),{method:'PATCH',body:JSON.stringify({enabled:e.target.checked})});await loadState(true)}catch(err){toast(err.message);await loadState(true)}});
-      el('rulesList').addEventListener('click',async function(e){var btn=e.target.closest('.delete-rule');if(!btn)return;if(!confirm('Удалить этот автоматический ответ?'))return;try{await api('/api/rules/'+encodeURIComponent(btn.dataset.id),{method:'DELETE',body:'{}'});await loadState();toast('Ответ удален')}catch(err){toast(err.message)}});
-      el('userSearch').addEventListener('input',renderUsers);
-      el('broadcastForm').addEventListener('submit',async function(e){e.preventDefault();if(!confirm('Начать рассылку всем доступным пользователям?'))return;var btn=e.submitter;btn.disabled=true;try{await api('/api/broadcast',{method:'POST',body:JSON.stringify({text:el('broadcastText').value})});el('broadcastText').value='';await loadState();toast('Рассылка началась')}catch(err){toast(err.message)}finally{btn.disabled=false}});
-      el('menuLanguageTabs').addEventListener('click',function(e){var button=e.target.closest('.lang-tab');if(!button)return;el('menuLanguageTabs').querySelectorAll('.lang-tab').forEach(function(node){node.classList.toggle('active',node===button)});document.querySelectorAll('.menu-lang-pane').forEach(function(node){node.classList.toggle('active',node.dataset.menuLanguagePane===button.dataset.language)})});
-      document.querySelectorAll('.upload-welcome').forEach(function(button){button.addEventListener('click',async function(){var language=button.dataset.language;var suffix=language[0].toUpperCase()+language.slice(1);var input=el('welcomeImageFile'+suffix);var file=input.files&&input.files[0];if(!file){toast('Сначала выберите изображение');return}if(file.size>5*1024*1024){toast('Размер изображения не должен превышать 5 МБ');return}button.disabled=true;try{var dataUrl=await new Promise(function(resolve,reject){var reader=new FileReader();reader.onload=function(){resolve(reader.result)};reader.onerror=function(){reject(new Error('Не удалось прочитать файл'))};reader.readAsDataURL(file)});await api('/api/images/'+language+'/welcome',{method:'POST',body:JSON.stringify({dataUrl:dataUrl,name:file.name})});input.value='';await loadState();toast('Изображение сохранено')}catch(err){toast(err.message)}finally{button.disabled=false}})});
-      document.querySelectorAll('.remove-welcome').forEach(function(button){button.addEventListener('click',async function(){if(!confirm('Удалить приветственное изображение для этого языка?'))return;button.disabled=true;try{await api('/api/images/'+button.dataset.language+'/welcome',{method:'DELETE',body:'{}'});await loadState();toast('Изображение удалено')}catch(err){toast(err.message)}finally{button.disabled=false}})});
-      el('menuForm').addEventListener('submit',async function(e){e.preventDefault();var btn=e.submitter;btn.disabled=true;var menu={};['ru','en','es'].forEach(function(language){var suffix=language[0].toUpperCase()+language.slice(1);menu[language]={objects:el('menuObjects'+suffix).value,contacts:el('menuContacts'+suffix).value,promotions:el('menuPromotions'+suffix).value,about:el('menuAbout'+suffix).value}});try{await api('/api/menu',{method:'PUT',body:JSON.stringify({menu:menu})});await loadState();toast('Тексты меню сохранены')}catch(err){toast(err.message)}finally{btn.disabled=false}});
-      el('languageTabs').addEventListener('click',function(e){var button=e.target.closest('.lang-tab');if(!button)return;el('languageTabs').querySelectorAll('.lang-tab').forEach(function(node){node.classList.toggle('active',node===button)});document.querySelectorAll('.lang-pane').forEach(function(node){node.classList.toggle('active',node.dataset.languagePane===button.dataset.language)})});
-      el('settingsForm').addEventListener('submit',async function(e){e.preventDefault();var btn=e.submitter;btn.disabled=true;var messages={};['ru','en','es'].forEach(function(language){var suffix=language[0].toUpperCase()+language.slice(1);messages[language]={greeting:el('settingGreeting'+suffix).value,help:el('settingHelp'+suffix).value,fallback:el('settingFallback'+suffix).value}});try{await api('/api/settings',{method:'PUT',body:JSON.stringify({messages:messages,active:el('settingActive').checked,token:el('settingToken').value,password:el('settingPassword').value})});el('settingToken').value='';el('settingPassword').value='';await loadState();toast('Настройки сохранены')}catch(err){toast(err.message)}finally{btn.disabled=false}});
-      boot();
-    })();
-  </script>
-</body>
-</html>`;
-
-const ADMIN_HTML_V2 = String.raw`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>Пульт Telegram-бота</title>
-  <style>
-    :root{--bg:#07111f;--panel:#0d1c2c;--panel2:#10263b;--line:#1d3b56;--text:#f3f8fc;--muted:#91aabd;--blue:#2aabee;--blue2:#168bd0;--green:#36d39a;--red:#ff7280;--amber:#ffc85f;--shadow:0 20px 55px rgba(0,0,0,.3)}
-    *{box-sizing:border-box}html{font-size:16px;scroll-behavior:smooth}body{margin:0;min-height:100vh;overflow-x:hidden;background:radial-gradient(circle at 88% -10%,#123858 0,transparent 30%),var(--bg);color:var(--text);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}button,input,textarea,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid rgba(42,171,238,.5);outline-offset:2px}.hidden{display:none!important}h1,h2,h3,p{margin-top:0}h1{font-size:29px;line-height:1.15;letter-spacing:-.04em;margin-bottom:8px}h2{font-size:23px;letter-spacing:-.03em;margin-bottom:4px}h3{font-size:17px;margin-bottom:4px}.muted{color:var(--muted)}.small{font-size:12px}.danger-text{color:#ff9ca7}.success-text{color:#7ae7bc}
-    .auth{min-height:100vh;display:grid;place-items:center;padding:22px}.auth-card{width:min(470px,100%);background:linear-gradient(160deg,rgba(16,38,59,.98),rgba(8,23,38,.98));border:1px solid var(--line);border-radius:26px;padding:32px;box-shadow:var(--shadow)}.brandmark{width:50px;height:50px;border-radius:16px;background:linear-gradient(135deg,var(--blue),#2075e8);display:grid;place-items:center;font-weight:900;font-size:20px;box-shadow:0 12px 28px rgba(42,171,238,.25)}.lead{color:var(--muted);margin-bottom:24px}
-    .field{display:grid;gap:7px;margin:14px 0}.field label,.label{font-size:13px;color:#bdd0df;font-weight:700}.input,.select,.textarea{width:100%;min-width:0;color:var(--text);background:#081725;border:1px solid var(--line);border-radius:12px;padding:11px 13px;transition:.18s;border-color:.18s;outline:0}.textarea{min-height:105px;resize:vertical}.input:focus,.select:focus,.textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(42,171,238,.12)}.hint,.counter{font-size:12px;color:var(--muted)}.counter{text-align:right;margin-top:-4px}
-    .btn{border:0;border-radius:11px;padding:10px 15px;background:var(--blue2);color:white;font-weight:760;transition:.15s}.btn:hover{filter:brightness(1.1)}.btn:active{transform:translateY(1px)}.btn:disabled{opacity:.5;cursor:not-allowed}.btn.secondary{background:#17334c;border:1px solid #2a4e69;color:#dbeaf3}.btn.ghost{background:transparent;border:1px solid var(--line);color:#c1d3df}.btn.danger{background:rgba(255,114,128,.1);border:1px solid rgba(255,114,128,.28);color:#ff9da7}.btn.wide{width:100%;padding:13px}.btn.tiny{padding:7px 9px;font-size:12px}.actions{display:flex;gap:8px;flex-wrap:wrap}.error,.success,.notice{padding:10px 12px;border-radius:11px;margin-top:12px;font-size:13px}.error{color:#ffadb6;background:rgba(255,107,122,.1);border:1px solid rgba(255,107,122,.2)}.success{color:#82e9c2;background:rgba(53,212,154,.09);border:1px solid rgba(53,212,154,.2)}.notice{color:#ffe2a2;background:rgba(255,200,95,.08);border:1px solid rgba(255,200,95,.2)}
-    .shell{min-height:100vh;display:grid;grid-template-columns:244px minmax(0,1fr)}.sidebar{position:sticky;top:0;height:100vh;padding:22px 17px;display:flex;flex-direction:column;border-right:1px solid var(--line);background:rgba(6,17,30,.76);backdrop-filter:blur(16px);z-index:20}.side-brand{display:flex;gap:12px;align-items:center;padding:0 8px 22px}.side-brand .brandmark{width:41px;height:41px;border-radius:13px;font-size:17px}.brand-title{font-weight:850}.brand-sub{max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px}.nav{display:grid;gap:5px}.nav button,.more-panel button{border:0;background:transparent;color:#9eb5c7;border-radius:11px;padding:10px 12px;text-align:left;font-weight:700;display:flex;gap:10px;align-items:center}.nav button:hover,.more-panel button:hover{background:#10253a;color:white}.nav button.active,.more-panel button.active{background:linear-gradient(90deg,rgba(42,171,238,.2),rgba(42,171,238,.05));color:#e0f5ff;box-shadow:inset 3px 0 var(--blue)}.nav-icon{width:22px;text-align:center;font-size:17px}.side-foot{margin-top:auto;border-top:1px solid var(--line);padding:17px 8px 0}.status-line{display:flex;align-items:center;gap:9px}.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}.dot.online{background:var(--green);box-shadow:0 0 0 4px rgba(54,211,154,.1)}.dot.error,.dot.reconnecting{background:var(--amber)}#moreBtn{display:none}.more-panel{display:none}
-    .main{min-width:0;padding:27px 31px 70px}.content{max-width:1200px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:27px}.eyebrow{text-transform:uppercase;letter-spacing:.13em;color:var(--blue);font-size:11px;font-weight:850}.page-title{font-size:29px;font-weight:850;line-height:1.2;letter-spacing:-.04em}.top-actions{display:flex;gap:8px}.view{display:none}.view.active{display:block}.grid{display:grid;gap:15px}.stats{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:15px}.card{min-width:0;background:linear-gradient(155deg,rgba(16,38,59,.96),rgba(10,26,42,.96));border:1px solid var(--line);border-radius:17px;padding:19px;box-shadow:0 12px 34px rgba(0,0,0,.12)}.stat-label{font-size:12px;color:var(--muted);font-weight:700}.stat-value{font-size:30px;font-weight:880;letter-spacing:-.05em;margin:6px 0 1px}.stat-note,.card-note{font-size:12px;color:var(--muted)}.card-head,.section-head,.row-between{display:flex;align-items:center;justify-content:space-between;gap:14px}.card-head{margin-bottom:15px}.section-head{align-items:end;margin-bottom:17px}.section-copy{color:var(--muted);margin:3px 0 0}.split{grid-template-columns:minmax(0,1.35fr) minmax(290px,.65fr)}.dashboard-grid{grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr)}.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:15px}.quick button{text-align:left;padding:14px}.badge{display:inline-flex;max-width:100%;align-items:center;border-radius:999px;padding:4px 9px;background:rgba(42,171,238,.11);color:#93dcff;font-size:11px;font-weight:780}.badge.warn{background:rgba(255,200,95,.1);color:#ffdc8c}.badge.ok{background:rgba(54,211,154,.1);color:#77e7bd}.activity-item{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid rgba(29,59,86,.72)}.activity-item:last-child{border:0}.avatar{width:38px;height:38px;flex:0 0 38px;border-radius:12px;background:#173853;color:#a9dff9;display:grid;place-items:center;font-weight:850}.activity-main{min-width:0}.activity-name{font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.activity-meta{font-size:11px;color:var(--muted)}.chart{height:170px;display:flex;align-items:end;gap:7px;padding-top:18px}.bar-wrap{height:100%;flex:1;min-width:5px;display:flex;flex-direction:column;justify-content:end;align-items:center;gap:6px}.bar{width:100%;max-width:34px;min-height:4px;border-radius:6px 6px 2px 2px;background:linear-gradient(to top,#157bbd,var(--blue))}.bar-label{font-size:9px;color:#7893a8;transform:rotate(-35deg);white-space:nowrap}.error-list,.record-list,.history,.timeline{display:grid;gap:9px}.error-item,.record,.history-item,.timeline-item{background:#081a2a;border:1px solid var(--line);border-radius:13px;padding:13px}.error-item strong{display:block;margin-bottom:2px}
-    .tabs{display:flex;gap:6px;padding:5px;background:#071725;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:auto}.tabs button{flex:1;white-space:nowrap;border:0;border-radius:8px;padding:8px 11px;background:transparent;color:var(--muted);font-weight:750}.tabs button.active{background:#173a57;color:#e4f6ff}.pane{display:none}.pane.active{display:block}.form-grid{grid-template-columns:minmax(270px,.72fr) minmax(0,1.28fr)}.editor-grid{grid-template-columns:minmax(0,.85fr) minmax(320px,1.15fr)}.image-preview{aspect-ratio:16/10;margin:13px 0;border:1px dashed #315670;border-radius:14px;background:#071725;display:grid;place-items:center;overflow:hidden;color:var(--muted);text-align:center;padding:10px}.image-preview img{width:100%;height:100%;object-fit:cover;border-radius:9px}.record{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:12px;align-items:center}.record-thumb{width:76px;height:62px;border-radius:10px;background:#122c43;display:grid;place-items:center;color:#7898ae;overflow:hidden}.record-thumb img{width:100%;height:100%;object-fit:cover}.record-title{font-weight:790;overflow-wrap:anywhere}.record-meta{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.record-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.subsection{margin-top:19px}.check-row{display:flex;align-items:center;gap:9px;padding:9px 0}.toggle{appearance:none;width:41px;height:23px;border-radius:99px;background:#29455b;position:relative;flex:none}.toggle:after{content:"";position:absolute;width:17px;height:17px;border-radius:50%;background:white;top:3px;left:3px;transition:.18s}.toggle:checked{background:var(--blue2)}.toggle:checked:after{left:21px}.rule-tools{display:grid;grid-template-columns:minmax(0,1fr) 180px auto;gap:9px;margin-bottom:13px}.rule{display:grid;grid-template-columns:auto minmax(120px,.65fr) minmax(150px,1.35fr) auto;align-items:center;gap:11px}.rule.off{opacity:.55}.rule-answer{color:#b8cbd8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rule-order{display:flex;gap:4px}.users-layout{grid-template-columns:minmax(0,1.15fr) minmax(310px,.85fr)}.user-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.user-card{text-align:left;color:inherit;width:100%;border:1px solid var(--line);background:#081a2a;border-radius:13px;padding:13px}.user-card:hover,.user-card.active{border-color:#34739b;background:#0c2236}.tag-list{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.tag{font-size:10px;background:#17354e;color:#acd8ef;border-radius:99px;padding:3px 7px}.timeline-item.in{border-left:3px solid var(--blue)}.timeline-item.out{border-left:3px solid var(--green)}.timeline-text{overflow-wrap:anywhere}.broadcast-layout{grid-template-columns:minmax(0,1.1fr) minmax(310px,.9fr)}.language-checks{display:flex;gap:13px;flex-wrap:wrap}.preview{background:#eaf2f8;color:#172633;border-radius:18px;padding:14px;min-height:130px}.preview-bubble{background:white;border-radius:14px 14px 14px 4px;padding:11px 13px;box-shadow:0 4px 14px rgba(0,0,0,.1);white-space:pre-wrap;overflow-wrap:anywhere}.preview-button{margin-top:6px;background:#d7ecf7;color:#147db7;border-radius:9px;padding:8px;text-align:center;font-weight:700}.progress{height:6px;border-radius:99px;background:#1b3a51;margin-top:9px;overflow:hidden}.progress span{display:block;height:100%;background:var(--green)}.settings-grid{grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr)}.switch-row{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:14px;background:#081a2a;border:1px solid var(--line);border-radius:13px}.sticky-actions{position:sticky;bottom:10px;z-index:8;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;padding:10px 12px;background:rgba(8,24,39,.94);backdrop-filter:blur(10px);border:1px solid #2c5975;border-radius:13px;box-shadow:var(--shadow)}.empty{text-align:center;color:var(--muted);padding:30px 14px}.toast{position:fixed;right:20px;bottom:20px;z-index:60;max-width:min(390px,calc(100vw - 26px));background:#102d43;border:1px solid #31627e;padding:12px 15px;border-radius:12px;box-shadow:var(--shadow)}.dirty-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:55;width:min(620px,calc(100vw - 28px));display:flex;align-items:center;justify-content:space-between;gap:12px;background:#132f45;border:1px solid #3a7191;border-radius:14px;padding:10px 12px;box-shadow:var(--shadow)}
-    @media(max-width:1000px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.split,.dashboard-grid,.form-grid,.editor-grid,.broadcast-layout,.settings-grid,.users-layout{grid-template-columns:1fr}.user-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    @media(max-width:900px){.shell{display:block}.sidebar{position:fixed;left:0;right:0;top:auto;bottom:0;width:auto;height:auto;border:0;border-top:1px solid var(--line);padding:7px 8px;background:#071725}.side-brand,.side-foot{display:none}.nav{display:grid;grid-template-columns:repeat(4,1fr);gap:3px}.nav button{min-width:0;justify-content:center;display:grid;text-align:center;gap:1px;padding:6px 3px;font-size:10px}.nav-icon{width:auto;font-size:17px}.nav .secondary-nav{display:none}#moreBtn{display:grid}.main{padding:22px 17px 110px}.more-panel{position:fixed;display:grid;right:10px;bottom:76px;width:210px;z-index:45;background:#0c2134;border:1px solid var(--line);border-radius:14px;padding:7px;box-shadow:var(--shadow)}.more-panel.hidden{display:none!important}.top-actions .refresh-label{display:none}.dirty-bar{bottom:82px}}
-    @media(max-width:620px){.auth-card{padding:24px;border-radius:21px}.topbar{align-items:flex-start}.page-title{font-size:25px}.main{padding-left:12px;padding-right:12px}.card{padding:15px}.stats{grid-template-columns:1fr 1fr}.stat-value{font-size:25px}.quick{grid-template-columns:1fr}.section-head{align-items:flex-start;flex-direction:column}.rule-tools{grid-template-columns:1fr}.rule{grid-template-columns:auto 1fr}.rule-answer{grid-column:2}.rule .badge{grid-column:2}.rule-actions{grid-column:1/3}.record{grid-template-columns:58px minmax(0,1fr)}.record-thumb{width:58px;height:54px}.record-actions{grid-column:1/3;justify-content:stretch}.record-actions .btn{flex:1}.user-cards{grid-template-columns:1fr}.actions>.btn{flex:1}.dirty-bar{font-size:12px}.dirty-bar .actions{flex-wrap:nowrap}.dirty-bar .btn{padding:8px 9px}}
-  </style>
-</head>
-<body>
-  <section id="setupScreen" class="auth hidden"><form id="setupForm" class="auth-card"><div class="brandmark">TG</div><h1>Подключите бота</h1><p class="lead">Укажите токен из BotFather и придумайте пароль для панели. Это потребуется только один раз.</p><div class="field"><label for="setupToken">Токен Telegram-бота</label><input id="setupToken" class="input" autocomplete="off" placeholder="123456789:AA..." required><span class="hint">Токен проверяется напрямую через Telegram.</span></div><div class="field"><label for="setupPassword">Пароль администратора</label><input id="setupPassword" class="input" type="password" minlength="8" autocomplete="new-password" required><span class="hint">Минимум 8 символов.</span></div><button class="btn wide" type="submit">Подключить и запустить</button><div id="setupMessage"></div></form></section>
-  <section id="loginScreen" class="auth hidden"><form id="loginForm" class="auth-card"><div class="brandmark">TG</div><h1>Пульт бота</h1><p class="lead">Введите пароль администратора.</p><div class="field"><label for="loginPassword">Пароль</label><input id="loginPassword" class="input" type="password" autocomplete="current-password" required autofocus></div><button class="btn wide" type="submit">Войти</button><div id="loginMessage"></div></form></section>
-
-  <div id="app" class="shell hidden">
-    <aside class="sidebar">
-      <div class="side-brand"><div class="brandmark">TG</div><div><div class="brand-title">Пульт бота</div><div id="botUsername" class="brand-sub">Telegram</div></div></div>
-      <nav id="nav" class="nav" aria-label="Основная навигация">
-        <button class="active" data-view="dashboard"><span class="nav-icon">⌁</span><span>Обзор</span></button>
-        <button data-view="content"><span class="nav-icon">▦</span><span>Контент</span></button>
-        <button class="secondary-nav" data-view="rules"><span class="nav-icon">≡</span><span>Ответы</span></button>
-        <button data-view="users"><span class="nav-icon">◉</span><span>Пользователи</span></button>
-        <button class="secondary-nav" data-view="broadcast"><span class="nav-icon">↗</span><span>Рассылки</span></button>
-        <button class="secondary-nav" data-view="settings"><span class="nav-icon">⚙</span><span>Настройки</span></button>
-        <button id="moreBtn" type="button"><span class="nav-icon">•••</span><span>Ещё</span></button>
-      </nav>
-      <div class="side-foot"><div class="status-line"><span id="sideDot" class="dot"></span><span id="sideStatus">Проверка связи</span></div></div>
-    </aside>
-    <div id="morePanel" class="more-panel hidden"><button data-view="rules"><span class="nav-icon">≡</span>Ответы</button><button data-view="broadcast"><span class="nav-icon">↗</span>Рассылки</button><button data-view="settings"><span class="nav-icon">⚙</span>Настройки</button></div>
-
-    <main class="main">
-      <header class="topbar"><div><div class="eyebrow">Центр управления</div><div id="pageTitle" class="page-title">Обзор</div></div><div class="top-actions"><button id="refreshBtn" class="btn secondary"><span class="refresh-label">Обновить</span><span aria-hidden="true"> ↻</span></button><button id="logoutBtn" class="btn danger">Выйти</button></div></header>
-      <div class="content">
-        <section id="view-dashboard" class="view active">
-          <div class="grid stats"><div class="card"><div class="stat-label">Пользователи</div><div id="statUsers" class="stat-value">0</div><div id="statActiveUsers" class="stat-note">0 доступны</div></div><div class="card"><div class="stat-label">Получено сообщений</div><div id="statReceived" class="stat-value">0</div><div class="stat-note">за всё время</div></div><div class="card"><div class="stat-label">Отправлено</div><div id="statSent" class="stat-value">0</div><div class="stat-note">ответы и рассылки</div></div><div class="card"><div class="stat-label">Активные правила</div><div id="statRules" class="stat-value">0</div><div id="statRulesEnabled" class="stat-note">0 всего</div></div></div>
-          <div class="quick"><button class="btn secondary quick-link" data-view="content">＋ Добавить объект</button><button class="btn secondary quick-link" data-view="broadcast">↗ Создать рассылку</button><button class="btn secondary quick-link" data-view="rules">≡ Добавить ответ</button></div>
-          <div class="grid dashboard-grid"><div class="card"><div class="card-head"><div><h3>Активность за 14 дней</h3><div class="card-note">Реальные входящие и исходящие сообщения</div></div><span id="dashboardStatus" class="badge">—</span></div><div id="activityChart" class="chart" aria-label="График активности"></div></div><div class="card"><div class="card-head"><div><h3>Недавние пользователи</h3><div class="card-note">Последние диалоги</div></div></div><div id="recentUsers"></div></div></div>
-          <div class="card subsection"><div class="card-head"><div><h3>Журнал ошибок</h3><div class="card-note">Последние проблемы подключения и отправки</div></div><button id="clearErrorsBtn" class="btn ghost tiny">Очистить</button></div><div id="errorList" class="error-list"></div></div>
-        </section>
-
-        <section id="view-content" class="view">
-          <div class="section-head"><div><h2>Контент бота</h2><p class="section-copy">Приветствие, каталог объектов, акции и контакты в одном месте.</p></div></div>
-          <div id="contentTabs" class="tabs" role="tablist"><button class="active" data-content-tab="intro" role="tab" aria-selected="true">Приветствие</button><button data-content-tab="objects" role="tab">Объекты</button><button data-content-tab="promotions" role="tab">Акции</button><button data-content-tab="contacts" role="tab">Контакты</button></div>
-          <div id="content-intro" class="pane active">
-            <form id="introForm" data-saveable>
-              <div id="introLangTabs" class="tabs" data-tabs="intro"><button class="active" data-language="ru">Русский</button><button data-language="en">English</button><button data-language="es">Español</button></div>
-              <div class="pane active" data-pane-group="intro" data-language="ru"><div class="grid form-grid"><div class="card"><h3>Приветственное изображение</h3><div class="card-note">JPG или PNG до 5 МБ</div><div id="welcomePreviewRu" class="image-preview">Изображение не загружено</div><input id="welcomeFileRu" class="input" type="file" accept="image/jpeg,image/png"><button class="btn danger tiny stage-remove-welcome" data-language="ru" type="button">Удалить изображение</button></div><div class="card intro-fields" data-language="ru"></div></div></div>
-              <div class="pane" data-pane-group="intro" data-language="en"><div class="grid form-grid"><div class="card"><h3>Welcome image</h3><div class="card-note">JPG or PNG up to 5 MB</div><div id="welcomePreviewEn" class="image-preview">No image uploaded</div><input id="welcomeFileEn" class="input" type="file" accept="image/jpeg,image/png"><button class="btn danger tiny stage-remove-welcome" data-language="en" type="button">Remove image</button></div><div class="card intro-fields" data-language="en"></div></div></div>
-              <div class="pane" data-pane-group="intro" data-language="es"><div class="grid form-grid"><div class="card"><h3>Imagen de bienvenida</h3><div class="card-note">JPG o PNG hasta 5 MB</div><div id="welcomePreviewEs" class="image-preview">No hay imagen</div><input id="welcomeFileEs" class="input" type="file" accept="image/jpeg,image/png"><button class="btn danger tiny stage-remove-welcome" data-language="es" type="button">Eliminar imagen</button></div><div class="card intro-fields" data-language="es"></div></div></div>
-              <div class="sticky-actions"><span class="muted">Сохраните тексты и изображение одной кнопкой</span><button class="btn" type="submit">Сохранить приветствие</button></div>
-            </form>
-          </div>
-          <div id="content-objects" class="pane"><div class="grid editor-grid"><div class="card"><div class="card-head"><div><h3>Каталог объектов</h3><div class="card-note">Активные карточки показываются пользователю по порядку</div></div><button id="newObjectBtn" class="btn tiny">＋ Новый</button></div><div id="objectList" class="record-list"></div></div><form id="objectForm" class="card" data-saveable><input id="objectId" type="hidden"><div class="row-between"><h3 id="objectFormTitle">Новый объект</h3><span id="objectImageNote" class="badge">Без изображения</span></div><div class="field"><label for="objectStatus">Статус</label><select id="objectStatus" class="select"><option value="active">Показывать</option><option value="hidden">Скрыт</option><option value="sold">Продан</option></select></div><div id="objectLangTabs" class="tabs" data-tabs="object"><button class="active" data-language="ru">RU</button><button data-language="en">EN</button><button data-language="es">ES</button></div><div class="entity-panes" data-entity="object"></div><div class="field"><label for="objectPrice">Цена или подпись к цене</label><input id="objectPrice" class="input" maxlength="120" placeholder="от 120 000 €"></div><div class="field"><label for="objectUrl">Ссылка «Подробнее»</label><input id="objectUrl" class="input" type="url" placeholder="https://..."></div><div class="field"><label for="objectImage">Изображение</label><input id="objectImage" class="input" type="file" accept="image/jpeg,image/png"></div><label class="check-row"><input id="objectRemoveImage" type="checkbox"> Удалить текущее изображение</label><div class="actions"><button class="btn" type="submit">Сохранить объект</button><button id="cancelObjectBtn" class="btn ghost" type="button">Очистить</button></div></form></div></div>
-          <div id="content-promotions" class="pane"><div class="grid editor-grid"><div class="card"><div class="card-head"><div><h3>Акции</h3><div class="card-note">Период действия включается и завершается автоматически</div></div><button id="newPromotionBtn" class="btn tiny">＋ Новая</button></div><div id="promotionList" class="record-list"></div></div><form id="promotionForm" class="card" data-saveable><input id="promotionId" type="hidden"><div class="row-between"><h3 id="promotionFormTitle">Новая акция</h3><span id="promotionImageNote" class="badge">Без изображения</span></div><label class="check-row"><input id="promotionEnabled" class="toggle" type="checkbox" checked> Акция включена</label><div id="promotionLangTabs" class="tabs" data-tabs="promotion"><button class="active" data-language="ru">RU</button><button data-language="en">EN</button><button data-language="es">ES</button></div><div class="entity-panes" data-entity="promotion"></div><div class="grid" style="grid-template-columns:1fr 1fr"><div class="field"><label for="promotionStart">Начало</label><input id="promotionStart" class="input" type="datetime-local"></div><div class="field"><label for="promotionEnd">Окончание</label><input id="promotionEnd" class="input" type="datetime-local"></div></div><div class="field"><label for="promotionUrl">Ссылка «Подробнее»</label><input id="promotionUrl" class="input" type="url" placeholder="https://..."></div><div class="field"><label for="promotionImage">Изображение</label><input id="promotionImage" class="input" type="file" accept="image/jpeg,image/png"></div><label class="check-row"><input id="promotionRemoveImage" type="checkbox"> Удалить текущее изображение</label><div class="actions"><button class="btn" type="submit">Сохранить акцию</button><button id="cancelPromotionBtn" class="btn ghost" type="button">Очистить</button></div></form></div></div>
-          <div id="content-contacts" class="pane"><form id="contactsForm" data-saveable><div class="grid form-grid"><div class="card"><h3>Каналы связи</h3><div class="field"><label for="contactPhone">Телефон</label><input id="contactPhone" class="input" maxlength="80" placeholder="+34 ..."></div><div class="field"><label for="contactTelegram">Telegram</label><input id="contactTelegram" class="input" maxlength="500" placeholder="@username или https://t.me/..."></div><div class="field"><label for="contactWebsite">Сайт</label><input id="contactWebsite" class="input" type="url" placeholder="https://..."></div><div class="field"><label for="contactMap">Ссылка на карту</label><input id="contactMap" class="input" type="url" placeholder="https://maps.google.com/..."></div></div><div class="card"><h3>Вводный текст</h3><div class="field"><label for="contactTextRu">Русский</label><textarea id="contactTextRu" class="textarea" maxlength="2000"></textarea></div><div class="field"><label for="contactTextEn">English</label><textarea id="contactTextEn" class="textarea" maxlength="2000"></textarea></div><div class="field"><label for="contactTextEs">Español</label><textarea id="contactTextEs" class="textarea" maxlength="2000"></textarea></div><button class="btn" type="submit">Сохранить контакты</button></div></div></form></div>
-        </section>
-
-        <section id="view-rules" class="view">
-          <div class="section-head"><div><h2>Автоматические ответы</h2><p class="section-copy">Порядок важен: бот применяет первое подходящее правило.</p></div></div>
-          <div class="grid split"><form id="ruleForm" class="card" data-saveable><input id="ruleId" type="hidden"><h3 id="ruleFormTitle">Новое правило</h3><div class="field"><label for="ruleTrigger">Фраза пользователя</label><input id="ruleTrigger" class="input" maxlength="200" required></div><div class="grid" style="grid-template-columns:1fr 1fr"><div class="field"><label for="ruleType">Условие</label><select id="ruleType" class="select"><option value="contains">Содержит</option><option value="exact">Точное совпадение</option><option value="starts">Начинается с</option></select></div><div class="field"><label for="ruleLanguage">Язык</label><select id="ruleLanguage" class="select"><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option><option value="all">Все языки</option></select></div></div><div class="field"><label for="ruleAnswer">Ответ</label><textarea id="ruleAnswer" class="textarea" maxlength="4000" required></textarea></div><div class="actions"><button class="btn" type="submit">Сохранить</button><button id="cancelRuleBtn" class="btn ghost" type="button">Очистить</button></div></form><form id="ruleTestForm" class="card"><h3>Проверить сообщение</h3><div class="card-note">Покажет правило, которое сработает первым</div><div class="field"><label for="ruleTestText">Сообщение</label><input id="ruleTestText" class="input" required placeholder="Например: здравствуйте"></div><div class="field"><label for="ruleTestLanguage">Язык</label><select id="ruleTestLanguage" class="select"><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option></select></div><button class="btn secondary" type="submit">Проверить</button><div id="ruleTestResult"></div></form></div>
-          <div class="card subsection"><div class="rule-tools"><input id="ruleSearch" class="input" placeholder="Поиск по фразе или ответу"><select id="ruleFilterLanguage" class="select"><option value="">Все языки</option><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option><option value="all">Все языки</option></select><span id="ruleCount" class="badge">0</span></div><div id="rulesList" class="record-list"></div></div>
-        </section>
-
-        <section id="view-users" class="view">
-          <div class="section-head"><div><h2>Пользователи</h2><p class="section-copy">Поиск, язык, теги, заметки и последние сообщения.</p></div></div>
-          <div class="grid users-layout"><div class="card"><div class="grid" style="grid-template-columns:minmax(0,1fr) 170px"><input id="userSearch" class="input" placeholder="Имя, username, ID или тег"><select id="userLanguageFilter" class="select"><option value="">Все языки</option><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option><option value="unknown">Не выбран</option></select></div><div id="userCards" class="user-cards subsection"></div></div><div id="userDetail" class="card"><div class="empty">Выберите пользователя</div></div></div>
-        </section>
-
-        <section id="view-broadcast" class="view">
-          <div class="section-head"><div><h2>Рассылки</h2><p class="section-copy">Выберите аудиторию, проверьте сообщение и отправьте сейчас или по расписанию.</p></div></div>
-          <div class="grid broadcast-layout"><form id="broadcastForm" class="card" data-saveable><input id="broadcastId" type="hidden"><div class="row-between"><h3 id="broadcastFormTitle">Новая рассылка</h3><span id="recipientEstimate" class="badge">0 получателей</span></div><div class="field"><span class="label">Языки аудитории</span><div class="language-checks"><label><input class="broadcast-language" type="checkbox" value="ru" checked> Русский</label><label><input class="broadcast-language" type="checkbox" value="en" checked> English</label><label><input class="broadcast-language" type="checkbox" value="es" checked> Español</label></div></div><div class="field"><label for="broadcastTags">Теги аудитории</label><input id="broadcastTags" class="input" placeholder="vip, investor"><span class="hint">Пусто — все пользователи выбранных языков.</span></div><div id="broadcastLangTabs" class="tabs" data-tabs="broadcast"><button class="active" data-language="ru">RU</button><button data-language="en">EN</button><button data-language="es">ES</button></div><div class="entity-panes" data-entity="broadcast"></div><div class="field"><label for="broadcastImage">Изображение</label><input id="broadcastImage" class="input" type="file" accept="image/jpeg,image/png"></div><label class="check-row"><input id="broadcastRemoveImage" type="checkbox"> Удалить текущее изображение</label><div class="field"><label for="broadcastButtonUrl">Ссылка кнопки</label><input id="broadcastButtonUrl" class="input" type="url" placeholder="https://..."></div><div class="grid" style="grid-template-columns:repeat(3,1fr)"><div class="field"><label for="broadcastButtonRu">Кнопка RU</label><input id="broadcastButtonRu" class="input" maxlength="80"></div><div class="field"><label for="broadcastButtonEn">Button EN</label><input id="broadcastButtonEn" class="input" maxlength="80"></div><div class="field"><label for="broadcastButtonEs">Botón ES</label><input id="broadcastButtonEs" class="input" maxlength="80"></div></div><div class="field"><label for="broadcastSchedule">Дата и время отправки</label><input id="broadcastSchedule" class="input" type="datetime-local"></div><div class="field"><label for="broadcastTestUser">Получатель теста</label><select id="broadcastTestUser" class="select"><option value="">Выберите пользователя</option></select></div><div class="actions"><button class="btn ghost" data-mode="draft" type="submit">Сохранить черновик</button><button class="btn secondary" data-mode="test" type="submit">Тест</button><button class="btn secondary" data-mode="schedule" type="submit">Запланировать</button><button id="broadcastSendBtn" class="btn" data-mode="send" type="submit">Отправить сейчас</button></div></form><div><div class="card"><div class="card-head"><div><h3>Предпросмотр</h3><div class="card-note">Подстановка данных показана на примере</div></div><select id="previewLanguage" class="select" style="width:auto"><option value="ru">RU</option><option value="en">EN</option><option value="es">ES</option></select></div><div class="preview"><div id="broadcastPreview" class="preview-bubble">Введите текст сообщения</div></div></div><div class="card subsection"><h3>История и черновики</h3><div id="broadcastHistory" class="history subsection"></div></div></div></div>
-        </section>
-
-        <section id="view-settings" class="view">
-          <div class="section-head"><div><h2>Настройки</h2><p class="section-copy">Тексты отделены от технических параметров и резервных копий.</p></div></div>
-          <div class="grid settings-grid"><form id="messagesForm" class="card" data-saveable><h3>Системные сообщения</h3><div id="messageLangTabs" class="tabs" data-tabs="messages"><button class="active" data-language="ru">Русский</button><button data-language="en">English</button><button data-language="es">Español</button></div><div class="entity-panes" data-entity="messages"></div><div class="hint">Можно использовать {first_name}, {last_name}, {username}</div><button class="btn subsection" type="submit">Сохранить тексты</button></form><div><form id="technicalForm" class="card" data-saveable><h3>Подключение и безопасность</h3><div class="switch-row"><div><strong>Бот включен</strong><div class="card-note">При выключении новые сообщения не обрабатываются</div></div><input id="settingActive" class="toggle" type="checkbox" aria-label="Бот включен"></div><div class="field"><label for="settingToken">Новый токен</label><input id="settingToken" class="input" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"><span class="hint">Текущий токен не показывается.</span></div><button id="tokenTestBtn" class="btn secondary tiny" type="button">Проверить токен</button><div class="field"><label for="settingPassword">Новый пароль</label><input id="settingPassword" class="input" type="password" minlength="8" autocomplete="new-password"></div><div class="field"><label for="settingPasswordConfirm">Повторите пароль</label><input id="settingPasswordConfirm" class="input" type="password" minlength="8" autocomplete="new-password"></div><button class="btn" type="submit">Сохранить технические настройки</button></form><div class="card subsection"><h3>Резервная копия</h3><p class="card-note">Копия содержит настройки, контент и пользователей. Храните файл в безопасном месте.</p><div class="actions"><a class="btn secondary" href="/api/backup">Скачать копию</a><label class="btn ghost">Восстановить<input id="restoreFile" type="file" accept="application/json" hidden></label></div></div></div></div>
-        </section>
-      </div>
-    </main>
-  </div>
-  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-  <div id="dirtyBar" class="dirty-bar hidden"><span>Есть несохранённые изменения</span><div class="actions"><button id="discardChangesBtn" class="btn ghost tiny">Отменить</button><button id="saveChangesBtn" class="btn tiny">Сохранить</button></div></div>
-
-  <script>
-  (function(){
-    "use strict";
-    var state=null,csrf="",currentView="dashboard",refreshTimer=null,selectedUserId="",dirty=new Set(),activeDirty=null,ignoreDirty=false;
-    var welcomeRemove={ru:false,en:false,es:false};
-    var titles={dashboard:"Обзор",content:"Контент",rules:"Автоматические ответы",users:"Пользователи",broadcast:"Рассылки",settings:"Настройки"};
-    var languages=["ru","en","es"];
-    function el(id){return document.getElementById(id)}
-    function esc(value){return String(value==null?"":value).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
-    function fmtNumber(value){return new Intl.NumberFormat("ru-RU").format(Number(value||0))}
-    function fmtDate(value){if(!value)return "—";try{return new Intl.DateTimeFormat("ru-RU",{dateStyle:"short",timeStyle:"short"}).format(new Date(value))}catch(e){return "—"}}
-    function localDate(value){if(!value)return "";var date=new Date(value);if(!Number.isFinite(date.getTime()))return "";var local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,16)}
-    function api(url,options){options=options||{};options.headers=Object.assign({"content-type":"application/json"},options.headers||{});if(options.method&&options.method!=="GET")options.headers["x-csrf-token"]=csrf;return fetch(url,options).then(async function(response){var body={};try{body=await response.json()}catch(e){}if(!response.ok){var error=new Error(body.error||"Ошибка запроса");error.status=response.status;throw error}return body})}
-    function message(target,text,ok){target.innerHTML='<div class="'+(ok?"success":"error")+'">'+esc(text)+"</div>"}
-    function toast(text){var box=el("toast");box.textContent=text;box.classList.remove("hidden");clearTimeout(box._timer);box._timer=setTimeout(function(){box.classList.add("hidden")},3600)}
-    function setScreen(name){["setupScreen","loginScreen","app"].forEach(function(id){el(id).classList.toggle("hidden",id!==name)})}
-    function userName(user){return [user.firstName,user.lastName].filter(Boolean).join(" ")||"Без имени"}
-    function initials(user){return ([user.firstName,user.lastName].filter(Boolean).map(function(x){return x[0]}).join("").slice(0,2)||"?").toUpperCase()}
-    function languageLabel(value){return {ru:"Русский",en:"English",es:"Español",all:"Все языки"}[value]||"Не выбран"}
-    function statusLabel(value){return {online:"На связи",connecting:"Подключение",reconnecting:"Восстановление связи",stopped:"Остановлен",error:"Ошибка"}[value]||value}
-    function localized(value,language){return value&&typeof value==="object"?(value[language]||value.ru||value.en||value.es||""):""}
-    function fileData(file){return new Promise(function(resolve,reject){if(!file)return resolve("");if(file.size>5*1024*1024)return reject(new Error("Изображение больше 5 МБ"));var reader=new FileReader();reader.onload=function(){resolve(reader.result)};reader.onerror=function(){reject(new Error("Не удалось прочитать файл"))};reader.readAsDataURL(file)})}
-    function markDirty(form){if(ignoreDirty||!form)return;dirty.add(form);activeDirty=form;refreshDirty()}
-    function clearDirty(form){dirty.delete(form);if(activeDirty===form)activeDirty=Array.from(dirty).pop()||null;refreshDirty()}
-    function refreshDirty(){el("dirtyBar").classList.toggle("hidden",dirty.size===0)}
-    function discardAll(){dirty.clear();activeDirty=null;welcomeRemove={ru:false,en:false,es:false};refreshDirty();loadState()}
-    function safeNavigate(view){if(dirty.size&&!confirm("Есть несохранённые изменения. Покинуть раздел и отменить их?"))return;discardAll();switchView(view)}
-    async function boot(){try{var status=await api("/api/status");if(!status.configured){setScreen("setupScreen");return}try{await loadState();setScreen("app");startRefresh()}catch(e){setScreen("loginScreen")}}catch(e){setScreen("loginScreen");message(el("loginMessage"),"Не удалось связаться с сервером",false)}}
-    function startRefresh(){clearInterval(refreshTimer);refreshTimer=setInterval(function(){loadState(true)},7000)}
-    async function loadState(silent){try{state=await api("/api/state");csrf=state.csrf;render();return state}catch(e){if(e.status===401){clearInterval(refreshTimer);setScreen("loginScreen");if(!silent)throw e}else if(!silent)throw e}}
-    function render(){if(!state)return;ignoreDirty=true;el("botUsername").textContent=state.bot.username?"@"+state.bot.username:(state.bot.firstName||"Telegram");var status=state.runtime.status;el("sideStatus").textContent=statusLabel(status);el("sideDot").className="dot "+status;el("dashboardStatus").textContent=statusLabel(status);el("dashboardStatus").className="badge "+(status==="online"?"ok":"warn");el("statUsers").textContent=fmtNumber(state.userCount);el("statActiveUsers").textContent=fmtNumber(state.activeUserCount)+" доступны";el("statReceived").textContent=fmtNumber(state.stats.messagesReceived);el("statSent").textContent=fmtNumber(state.stats.messagesSent);el("statRules").textContent=fmtNumber(state.rules.filter(function(x){return x.enabled}).length);el("statRulesEnabled").textContent=fmtNumber(state.rules.length)+" всего";renderDashboard();renderIntro();renderObjects();renderPromotions();renderContacts();renderRules();renderUsers();renderBroadcasts();renderSettings();addCounters();ignoreDirty=false}
-    function renderDashboard(){var users=state.users.slice(0,4);el("recentUsers").innerHTML=users.length?users.map(function(u){return '<div class="activity-item"><div class="avatar">'+esc(initials(u))+'</div><div class="activity-main"><div class="activity-name">'+esc(userName(u))+'</div><div class="activity-meta">'+fmtNumber(u.messages)+" сообщ. · "+esc(fmtDate(u.lastSeenAt))+"</div></div></div>"}).join(""):'<div class="empty">Пока никто не написал</div>';var points=[],max=1;for(var i=13;i>=0;i--){var d=new Date();d.setUTCDate(d.getUTCDate()-i);var key=d.toISOString().slice(0,10),v=state.analytics.daily[key]||{},total=Number(v.received||0)+Number(v.sent||0);max=Math.max(max,total);points.push({key:key,total:total})}el("activityChart").innerHTML=points.map(function(p){return '<div class="bar-wrap" title="'+esc(p.key+": "+p.total)+'"><div class="bar" style="height:'+Math.max(4,Math.round(p.total/max*100))+'%"></div><span class="bar-label">'+esc(p.key.slice(5))+"</span></div>"}).join("");el("errorList").innerHTML=state.errors.length?state.errors.slice(0,8).map(function(item){return '<div class="error-item"><strong>'+esc(item.area||"Ошибка")+'</strong><div class="danger-text">'+esc(item.message)+'</div><div class="small muted">'+esc(fmtDate(item.createdAt))+"</div></div>"}).join(""):'<div class="empty">Ошибок не зафиксировано</div>';el("clearErrorsBtn").disabled=!state.errors.length}
-    function introFields(language){var labels={ru:["Наши объекты — резервный текст","Контакты — резервный текст","Акции — резервный текст","О нас"],en:["Our properties — fallback","Contacts — fallback","Special offers — fallback","About us"],es:["Inmuebles — texto alternativo","Contactos — texto alternativo","Promociones — texto alternativo","Sobre nosotros"]}[language];var keys=["objects","contacts","promotions","about"],suffix=language[0].toUpperCase()+language.slice(1);return keys.map(function(key,index){return '<div class="field"><label for="menu'+key+suffix+'">'+esc(labels[index])+'</label><textarea id="menu'+key+suffix+'" class="textarea" maxlength="4000" required></textarea></div>'}).join("")}
-    function renderIntro(){document.querySelectorAll(".intro-fields").forEach(function(node){if(!node.children.length)node.innerHTML=introFields(node.dataset.language)});if(dirty.has(el("introForm")))return;languages.forEach(function(language){var suffix=language[0].toUpperCase()+language.slice(1),menu=state.config.menu[language];["objects","contacts","promotions","about"].forEach(function(key){el("menu"+key+suffix).value=menu[key]});var meta=state.welcomeImages[language],preview=el("welcomePreview"+suffix);preview.innerHTML=meta&&meta.exists?'<img src="/api/images/'+language+'/welcome?rev='+encodeURIComponent(meta.updatedAt||"")+'" alt="Приветственное изображение">':"<span>Изображение не загружено</span>";welcomeRemove[language]=false})}
-    function entityFields(kind,language){var suffix=language[0].toUpperCase()+language.slice(1),titleLabel=language==="ru"?"Название":language==="en"?"Title":"Título";if(kind==="object")return '<div class="pane '+(language==="ru"?"active":"")+'" data-pane-group="object" data-language="'+language+'"><div class="field"><label for="objectTitle'+suffix+'">'+titleLabel+'</label><input id="objectTitle'+suffix+'" class="input" maxlength="160"></div><div class="field"><label for="objectAddress'+suffix+'">'+(language==="ru"?"Адрес":language==="en"?"Address":"Dirección")+'</label><input id="objectAddress'+suffix+'" class="input" maxlength="500"></div><div class="field"><label for="objectDescription'+suffix+'">'+(language==="ru"?"Описание":language==="en"?"Description":"Descripción")+'</label><textarea id="objectDescription'+suffix+'" class="textarea" maxlength="3000"></textarea></div></div>';if(kind==="promotion")return '<div class="pane '+(language==="ru"?"active":"")+'" data-pane-group="promotion" data-language="'+language+'"><div class="field"><label for="promotionTitle'+suffix+'">'+titleLabel+'</label><input id="promotionTitle'+suffix+'" class="input" maxlength="160"></div><div class="field"><label for="promotionText'+suffix+'">'+(language==="ru"?"Описание":language==="en"?"Description":"Descripción")+'</label><textarea id="promotionText'+suffix+'" class="textarea" maxlength="3000"></textarea></div></div>';if(kind==="broadcast")return '<div class="pane '+(language==="ru"?"active":"")+'" data-pane-group="broadcast" data-language="'+language+'"><div class="field"><label for="broadcastText'+suffix+'">'+(language==="ru"?"Сообщение":language==="en"?"Message":"Mensaje")+'</label><textarea id="broadcastText'+suffix+'" class="textarea broadcast-text" maxlength="4000" placeholder="{first_name}, ..."></textarea></div></div>';return '<div class="pane '+(language==="ru"?"active":"")+'" data-pane-group="messages" data-language="'+language+'"><div class="field"><label for="settingGreeting'+suffix+'">Приветствие</label><textarea id="settingGreeting'+suffix+'" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="settingHelp'+suffix+'">Ответ /help</label><textarea id="settingHelp'+suffix+'" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="settingFallback'+suffix+'">Если ответ не найден</label><textarea id="settingFallback'+suffix+'" class="textarea" maxlength="4000"></textarea></div></div>'}
-    function ensureEntityFields(){document.querySelectorAll(".entity-panes").forEach(function(container){if(container.children.length)return;container.innerHTML=languages.map(function(language){return entityFields(container.dataset.entity,language)}).join("")})}
-    function recordThumb(collection,item){return item.image&&item.image.exists?'<img src="/api/media/'+collection+"/"+encodeURIComponent(item.id)+"?rev="+encodeURIComponent(item.image.updatedAt||"")+'" alt="">':"▧"}
-    function renderObjects(){ensureEntityFields();el("objectList").innerHTML=state.objects.length?state.objects.map(function(item){var status={active:"Показывается",hidden:"Скрыт",sold:"Продан"}[item.status]||item.status;return '<div class="record"><div class="record-thumb">'+recordThumb("objects",item)+'</div><div><div class="record-title">'+esc(localized(item.title,"ru")||"Без названия")+'</div><div class="record-meta">'+esc(status)+(item.price?" · "+esc(item.price):"")+"</div></div><div class=\"record-actions\"><button class=\"btn secondary tiny edit-object\" data-id=\""+esc(item.id)+"\">Изменить</button><button class=\"btn danger tiny delete-object\" data-id=\""+esc(item.id)+"\">Удалить</button></div></div>"}).join(""):'<div class="empty">Добавьте первый объект</div>'}
-    function renderPromotions(){ensureEntityFields();el("promotionList").innerHTML=state.promotions.length?state.promotions.map(function(item){var active=item.enabled&&(!item.startAt||Date.parse(item.startAt)<=Date.now())&&(!item.endAt||Date.parse(item.endAt)>=Date.now());return '<div class="record"><div class="record-thumb">'+recordThumb("promotions",item)+'</div><div><div class="record-title">'+esc(localized(item.title,"ru")||"Без названия")+'</div><div class="record-meta">'+(active?"Активна":item.enabled?"Вне периода":"Выключена")+(item.endAt?" · до "+esc(fmtDate(item.endAt)):"")+"</div></div><div class=\"record-actions\"><button class=\"btn secondary tiny edit-promotion\" data-id=\""+esc(item.id)+"\">Изменить</button><button class=\"btn danger tiny delete-promotion\" data-id=\""+esc(item.id)+"\">Удалить</button></div></div>"}).join(""):'<div class="empty">Акций пока нет</div>'}
-    function renderContacts(){if(dirty.has(el("contactsForm")))return;el("contactPhone").value=state.contacts.phone||"";el("contactTelegram").value=state.contacts.telegram||"";el("contactWebsite").value=state.contacts.website||"";el("contactMap").value=state.contacts.mapUrl||"";languages.forEach(function(language){var suffix=language[0].toUpperCase()+language.slice(1);el("contactText"+suffix).value=state.contacts.text[language]||""})}
-    function resetObject(){ignoreDirty=true;el("objectForm").reset();el("objectId").value="";el("objectFormTitle").textContent="Новый объект";el("objectImageNote").textContent="Без изображения";languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);el("objectTitle"+s).value="";el("objectAddress"+s).value="";el("objectDescription"+s).value=""});clearDirty(el("objectForm"));ignoreDirty=false}
-    function editObject(id){var item=state.objects.find(function(x){return x.id===id});if(!item)return;ignoreDirty=true;el("objectId").value=id;el("objectFormTitle").textContent="Редактирование объекта";el("objectStatus").value=item.status;el("objectPrice").value=item.price||"";el("objectUrl").value=item.url||"";el("objectImageNote").textContent=item.image&&item.image.exists?item.image.name:"Без изображения";languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);el("objectTitle"+s).value=item.title[language]||"";el("objectAddress"+s).value=item.address[language]||"";el("objectDescription"+s).value=item.description[language]||""});clearDirty(el("objectForm"));ignoreDirty=false;el("objectForm").scrollIntoView({behavior:"smooth",block:"start"})}
-    function resetPromotion(){ignoreDirty=true;el("promotionForm").reset();el("promotionId").value="";el("promotionEnabled").checked=true;el("promotionFormTitle").textContent="Новая акция";el("promotionImageNote").textContent="Без изображения";languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);el("promotionTitle"+s).value="";el("promotionText"+s).value=""});clearDirty(el("promotionForm"));ignoreDirty=false}
-    function editPromotion(id){var item=state.promotions.find(function(x){return x.id===id});if(!item)return;ignoreDirty=true;el("promotionId").value=id;el("promotionEnabled").checked=item.enabled;el("promotionStart").value=localDate(item.startAt);el("promotionEnd").value=localDate(item.endAt);el("promotionUrl").value=item.url||"";el("promotionFormTitle").textContent="Редактирование акции";el("promotionImageNote").textContent=item.image&&item.image.exists?item.image.name:"Без изображения";languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);el("promotionTitle"+s).value=item.title[language]||"";el("promotionText"+s).value=item.text[language]||""});clearDirty(el("promotionForm"));ignoreDirty=false;el("promotionForm").scrollIntoView({behavior:"smooth",block:"start"})}
-    function typeLabel(type){return {contains:"содержит",exact:"точно",starts:"начинается"}[type]||type}
-    function filteredRules(){var q=el("ruleSearch").value.toLocaleLowerCase("ru-RU").trim(),lang=el("ruleFilterLanguage").value;return state.rules.slice().sort(function(a,b){return Number(a.order||0)-Number(b.order||0)}).filter(function(rule){return (!lang||rule.language===lang)&&(!q||(rule.trigger+" "+rule.answer).toLocaleLowerCase("ru-RU").includes(q))})}
-    function renderRules(){var rules=filteredRules();el("ruleCount").textContent=rules.length+" правил";el("rulesList").innerHTML=rules.length?rules.map(function(r,index){return '<div class="record rule '+(r.enabled?"":"off")+'"><input class="toggle rule-toggle" data-id="'+esc(r.id)+'" type="checkbox" '+(r.enabled?"checked":"")+' aria-label="Правило включено"><div><div class="record-title">'+esc(r.trigger)+'</div><span class="badge">'+esc(typeLabel(r.type)+" · "+languageLabel(r.language))+'</span></div><div class="rule-answer" title="'+esc(r.answer)+'">'+esc(r.answer)+'</div><div class="record-actions rule-actions"><span class="rule-order"><button class="btn ghost tiny move-rule" data-id="'+esc(r.id)+'" data-step="-1" aria-label="Поднять">↑</button><button class="btn ghost tiny move-rule" data-id="'+esc(r.id)+'" data-step="1" aria-label="Опустить">↓</button></span><button class="btn secondary tiny edit-rule" data-id="'+esc(r.id)+'">Изменить</button><button class="btn ghost tiny duplicate-rule" data-id="'+esc(r.id)+'">Копия</button><button class="btn danger tiny delete-rule" data-id="'+esc(r.id)+'">Удалить</button></div></div>'}).join(""):'<div class="empty">Правила не найдены</div>'}
-    function editRule(id,duplicate){var r=state.rules.find(function(x){return x.id===id});if(!r)return;ignoreDirty=true;el("ruleId").value=duplicate?"":id;el("ruleTrigger").value=r.trigger;el("ruleType").value=r.type;el("ruleLanguage").value=r.language;el("ruleAnswer").value=r.answer;el("ruleFormTitle").textContent=duplicate?"Копия правила":"Редактирование правила";ignoreDirty=false;if(duplicate)markDirty(el("ruleForm"));el("ruleForm").scrollIntoView({behavior:"smooth"})}
-    function filteredUsers(){var q=el("userSearch").value.toLocaleLowerCase("ru-RU").trim(),lang=el("userLanguageFilter").value;return state.users.filter(function(user){var actual=user.preferredLanguage||"unknown",hay=(userName(user)+" "+user.username+" "+user.id+" "+(user.tags||[]).join(" ")).toLocaleLowerCase("ru-RU");return (!lang||lang===actual)&&(!q||hay.includes(q))})}
-    function renderUsers(){var users=filteredUsers();el("userCards").innerHTML=users.length?users.map(function(u){return '<button class="user-card '+(selectedUserId===u.id?"active":"")+'" data-user-id="'+esc(u.id)+'"><div class="row-between"><strong>'+esc(userName(u))+'</strong><span class="badge">'+esc(languageLabel(u.preferredLanguage))+'</span></div><div class="small muted">'+(u.username?"@"+esc(u.username)+" · ":"")+"ID "+esc(u.id)+"</div><div class=\"small muted\">"+fmtNumber(u.messages)+" сообщ. · "+esc(fmtDate(u.lastSeenAt))+'</div><div class="tag-list">'+(u.tags||[]).map(function(tag){return '<span class="tag">'+esc(tag)+"</span>"}).join("")+"</div></button>"}).join(""):'<div class="empty">Пользователи не найдены</div>';if(selectedUserId)renderUserDetail(selectedUserId);var select=el("broadcastTestUser"),current=select.value;select.innerHTML='<option value="">Выберите пользователя</option>'+state.users.filter(function(u){return !u.blocked&&u.chatId}).map(function(u){return '<option value="'+esc(u.id)+'">'+esc(userName(u))+" · "+esc(languageLabel(u.preferredLanguage))+"</option>"}).join("");select.value=current}
-    function renderUserDetail(id){var currentForm=el("userForm");if(currentForm&&dirty.has(currentForm)&&selectedUserId===id)return;var u=state.users.find(function(x){return x.id===id});if(!u){el("userDetail").innerHTML='<div class="empty">Пользователь не найден</div>';return}el("userDetail").innerHTML='<div class="row-between"><div><h3>'+esc(userName(u))+'</h3><div class="small muted">'+(u.username?"@"+esc(u.username)+" · ":"")+"ID "+esc(u.id)+'</div></div><div class="avatar">'+esc(initials(u))+'</div></div><form id="userForm" data-saveable><div class="field"><label for="userPreferredLanguage">Язык</label><select id="userPreferredLanguage" class="select"><option value="">Не выбран</option><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option></select></div><div class="field"><label for="userTags">Теги через запятую</label><input id="userTags" class="input" maxlength="500" value="'+esc((u.tags||[]).join(", "))+'"></div><div class="field"><label for="userNote">Заметка администратора</label><textarea id="userNote" class="textarea" maxlength="2000">'+esc(u.note||"")+'</textarea></div><button class="btn" type="submit">Сохранить карточку</button></form><div class="subsection"><h3>Последние сообщения</h3><div class="timeline">'+((u.activity||[]).length?(u.activity||[]).slice().reverse().slice(0,20).map(function(a){return '<div class="timeline-item '+esc(a.direction)+'"><div class="small muted">'+(a.direction==="in"?"Пользователь":"Бот")+" · "+esc(fmtDate(a.createdAt))+'</div><div class="timeline-text">'+esc(a.text)+"</div></div>"}).join(""):'<div class="empty">История пока пуста</div>')+"</div></div>";el("userPreferredLanguage").value=u.preferredLanguage||"";el("userForm").addEventListener("submit",saveUser)}
-    function broadcastStatus(status){return {draft:"Черновик",scheduled:"Запланирована",queued:"В очереди",running:"Выполняется",done:"Завершена",failed:"Ошибка"}[status]||status}
-    function renderBroadcasts(){el("broadcastSendBtn").disabled=state.runtime.broadcastRunning;var list=state.broadcasts;el("broadcastHistory").innerHTML=list.length?list.slice(0,20).map(function(b){var text=localized(b.messages,"ru"),progress=b.total?Math.round((Number(b.sent||0)+Number(b.failed||0))/b.total*100):0;return '<div class="history-item"><div class="row-between"><strong>'+esc(text.slice(0,52)||(broadcastStatus(b.status)))+(text.length>52?"…":"")+'</strong><span class="badge '+(b.status==="done"?"ok":b.status==="failed"?"warn":"")+'">'+esc(broadcastStatus(b.status))+'</span></div><div class="small muted">'+esc(fmtDate(b.scheduledAt||b.createdAt))+" · "+fmtNumber(b.sent)+" из "+fmtNumber(b.total)+(b.failed?" · ошибок "+fmtNumber(b.failed):"")+'</div><div class="progress"><span style="width:'+progress+'%"></span></div><div class="actions subsection"><button class="btn ghost tiny duplicate-broadcast" data-id="'+esc(b.id)+'">Копия</button>'+(['draft','scheduled'].includes(b.status)?'<button class="btn secondary tiny edit-broadcast" data-id="'+esc(b.id)+'">Изменить</button><button class="btn danger tiny delete-broadcast" data-id="'+esc(b.id)+'">Удалить</button>':"")+"</div></div>"}).join(""):'<div class="empty">Рассылок ещё не было</div>';updateBroadcastPreview();updateRecipientEstimate()}
-    function renderSettings(){ensureEntityFields();if(!dirty.has(el("messagesForm")))languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1),m=state.config.messages[language];el("settingGreeting"+s).value=m.greeting;el("settingHelp"+s).value=m.help;el("settingFallback"+s).value=m.fallback});if(!dirty.has(el("technicalForm")))el("settingActive").checked=state.config.active}
-    function addCounters(){document.querySelectorAll("textarea[maxlength],input[maxlength]").forEach(function(node){if(node.nextElementSibling&&node.nextElementSibling.classList.contains("counter"))return;var counter=document.createElement("span");counter.className="counter";node.insertAdjacentElement("afterend",counter);var update=function(){counter.textContent=node.value.length+" / "+node.maxLength};node.addEventListener("input",update);update()})}
-    function switchView(name){currentView=name;document.querySelectorAll(".view").forEach(function(node){node.classList.toggle("active",node.id==="view-"+name)});document.querySelectorAll("[data-view]").forEach(function(node){node.classList.toggle("active",node.dataset.view===name)});el("pageTitle").textContent=titles[name]||name;el("morePanel").classList.add("hidden");window.scrollTo({top:0,behavior:"smooth"})}
-    function switchContentTab(name){document.querySelectorAll("[data-content-tab]").forEach(function(node){var on=node.dataset.contentTab===name;node.classList.toggle("active",on);node.setAttribute("aria-selected",on?"true":"false")});document.querySelectorAll('[id^="content-"]').forEach(function(node){node.classList.toggle("active",node.id==="content-"+name)})}
-    function translated(prefix,keys){var result={};languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);result[language]={};keys.forEach(function(key){result[language][key]=el(prefix+key+s).value})});return result}
-    async function saveIntro(event){event.preventDefault();var button=event.submitter;button.disabled=true;try{var menu={};languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);menu[language]={objects:el("menuobjects"+s).value,contacts:el("menucontacts"+s).value,promotions:el("menupromotions"+s).value,about:el("menuabout"+s).value}});await api("/api/menu",{method:"PUT",body:JSON.stringify({menu:menu})});for(var i=0;i<languages.length;i++){var language=languages[i],s=language[0].toUpperCase()+language.slice(1),file=el("welcomeFile"+s).files[0];if(file){await api("/api/images/"+language+"/welcome",{method:"POST",body:JSON.stringify({dataUrl:await fileData(file),name:file.name})})}else if(welcomeRemove[language])await api("/api/images/"+language+"/welcome",{method:"DELETE",body:"{}"})}clearDirty(el("introForm"));await loadState();toast("Приветствие сохранено")}catch(e){toast(e.message)}finally{button.disabled=false}}
-    function collectTranslations(prefix,fields){var result={};fields.forEach(function(field){result[field]={};languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);result[field][language]=el(prefix+field[0].toUpperCase()+field.slice(1)+s).value})});return result}
-    async function saveObject(event){event.preventDefault();var button=event.submitter;button.disabled=true;try{var values=collectTranslations("object",["title","address","description"]),file=el("objectImage").files[0],body={title:values.title,address:values.address,description:values.description,price:el("objectPrice").value,url:el("objectUrl").value,status:el("objectStatus").value,removeImage:el("objectRemoveImage").checked};if(file){body.imageDataUrl=await fileData(file);body.imageName=file.name}var id=el("objectId").value;await api(id?"/api/objects/"+encodeURIComponent(id):"/api/objects",{method:id?"PATCH":"POST",body:JSON.stringify(body)});clearDirty(el("objectForm"));resetObject();await loadState();toast("Объект сохранён")}catch(e){toast(e.message)}finally{button.disabled=false}}
-    async function savePromotion(event){event.preventDefault();var button=event.submitter;button.disabled=true;try{var values=collectTranslations("promotion",["title","text"]),file=el("promotionImage").files[0],body={title:values.title,text:values.text,url:el("promotionUrl").value,startAt:el("promotionStart").value?new Date(el("promotionStart").value).toISOString():"",endAt:el("promotionEnd").value?new Date(el("promotionEnd").value).toISOString():"",enabled:el("promotionEnabled").checked,removeImage:el("promotionRemoveImage").checked};if(file){body.imageDataUrl=await fileData(file);body.imageName=file.name}var id=el("promotionId").value;await api(id?"/api/promotions/"+encodeURIComponent(id):"/api/promotions",{method:id?"PATCH":"POST",body:JSON.stringify(body)});clearDirty(el("promotionForm"));resetPromotion();await loadState();toast("Акция сохранена")}catch(e){toast(e.message)}finally{button.disabled=false}}
-    async function saveContacts(event){event.preventDefault();var button=event.submitter;button.disabled=true;try{var text={};languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);text[language]=el("contactText"+s).value});await api("/api/contacts",{method:"PUT",body:JSON.stringify({phone:el("contactPhone").value,telegram:el("contactTelegram").value,website:el("contactWebsite").value,mapUrl:el("contactMap").value,text:text})});clearDirty(el("contactsForm"));await loadState();toast("Контакты сохранены")}catch(e){toast(e.message)}finally{button.disabled=false}}
-    async function saveRule(event){event.preventDefault();var button=event.submitter,id=el("ruleId").value;button.disabled=true;try{var result=await api(id?"/api/rules/"+encodeURIComponent(id):"/api/rules",{method:id?"PATCH":"POST",body:JSON.stringify({trigger:el("ruleTrigger").value,type:el("ruleType").value,language:el("ruleLanguage").value,answer:el("ruleAnswer").value})});clearDirty(el("ruleForm"));el("ruleForm").reset();el("ruleId").value="";el("ruleFormTitle").textContent="Новое правило";await loadState();toast(result.conflicts&&result.conflicts.length?"Сохранено. Внимание: найдено похожее правило":"Правило сохранено")}catch(e){toast(e.message)}finally{button.disabled=false}}
-    async function saveUser(event){event.preventDefault();var button=event.submitter;button.disabled=true;try{await api("/api/users/"+encodeURIComponent(selectedUserId),{method:"PATCH",body:JSON.stringify({preferredLanguage:el("userPreferredLanguage").value,tags:el("userTags").value.split(",").map(function(x){return x.trim()}).filter(Boolean),note:el("userNote").value})});clearDirty(el("userForm"));await loadState();toast("Карточка пользователя сохранена")}catch(e){toast(e.message)}finally{button.disabled=false}}
-    function collectBroadcast(){return (async function(){var messages={},buttonText={};languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);messages[language]=el("broadcastText"+s).value;buttonText[language]=el("broadcastButton"+s).value});var file=el("broadcastImage").files[0],body={messages:messages,languages:Array.from(document.querySelectorAll(".broadcast-language:checked")).map(function(x){return x.value}),tags:el("broadcastTags").value.split(",").map(function(x){return x.trim()}).filter(Boolean),buttonText:buttonText,buttonUrl:el("broadcastButtonUrl").value,scheduledAt:el("broadcastSchedule").value?new Date(el("broadcastSchedule").value).toISOString():"",removeImage:el("broadcastRemoveImage").checked};if(file){body.imageDataUrl=await fileData(file);body.imageName=file.name}return body})()}
-    function resetBroadcast(){ignoreDirty=true;el("broadcastForm").reset();el("broadcastId").value="";document.querySelectorAll(".broadcast-language").forEach(function(x){x.checked=true});languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);el("broadcastText"+s).value="";el("broadcastButton"+s).value=""});el("broadcastFormTitle").textContent="Новая рассылка";clearDirty(el("broadcastForm"));ignoreDirty=false;updateBroadcastPreview();updateRecipientEstimate()}
-    function editBroadcast(id,duplicate){var b=state.broadcasts.find(function(x){return x.id===id});if(!b)return;ignoreDirty=true;el("broadcastId").value=duplicate?"":id;el("broadcastTags").value=(b.tags||[]).join(", ");el("broadcastButtonUrl").value=b.buttonUrl||"";el("broadcastSchedule").value=localDate(b.scheduledAt);document.querySelectorAll(".broadcast-language").forEach(function(x){x.checked=!(b.languages||[]).length||(b.languages||[]).includes(x.value)});languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);el("broadcastText"+s).value=(b.messages&&b.messages[language])||"";el("broadcastButton"+s).value=(b.buttonText&&b.buttonText[language])||""});el("broadcastFormTitle").textContent=duplicate?"Копия рассылки":"Редактирование рассылки";ignoreDirty=false;if(duplicate)markDirty(el("broadcastForm"));updateBroadcastPreview();updateRecipientEstimate();el("broadcastForm").scrollIntoView({behavior:"smooth"})}
-    async function submitBroadcast(event){event.preventDefault();var button=event.submitter,mode=button.dataset.mode||"draft";button.disabled=true;try{var body=await collectBroadcast();body.mode=mode;if(mode==="test"){body.userId=el("broadcastTestUser").value;await api("/api/broadcast/test",{method:"POST",body:JSON.stringify(body)});toast("Тестовое сообщение отправлено");return}if(mode==="send"&&!confirm("Отправить сообщение "+el("recipientEstimate").textContent+"?"))return;var id=el("broadcastId").value,url=id&&mode!=="send"?"/api/broadcasts/"+encodeURIComponent(id):"/api/broadcasts";await api(url,{method:id&&mode!=="send"?"PATCH":"POST",body:JSON.stringify(body)});if(id&&mode==="send")await api("/api/broadcasts/"+encodeURIComponent(id),{method:"DELETE",body:"{}"});clearDirty(el("broadcastForm"));resetBroadcast();await loadState();toast(mode==="send"?"Рассылка началась":mode==="schedule"?"Рассылка запланирована":"Черновик сохранён")}catch(e){toast(e.message)}finally{button.disabled=false}}
-    function updateRecipientEstimate(){if(!state)return;var langs=Array.from(document.querySelectorAll(".broadcast-language:checked")).map(function(x){return x.value}),tags=el("broadcastTags").value.split(",").map(function(x){return x.trim().toLocaleLowerCase("ru-RU")}).filter(Boolean),total=state.users.filter(function(u){if(u.blocked||!u.chatId)return false;if(langs.length&&!langs.includes(u.preferredLanguage||"ru"))return false;if(tags.length){var own=(u.tags||[]).map(function(x){return x.toLocaleLowerCase("ru-RU")});if(!tags.some(function(tag){return own.includes(tag)}))return false}return true}).length;el("recipientEstimate").textContent=total+" получателей"}
-    function updateBroadcastPreview(){var language=el("previewLanguage").value,s=language[0].toUpperCase()+language.slice(1),text=(el("broadcastText"+s)&&el("broadcastText"+s).value)||"";text=text.replaceAll("{first_name}","Анна").replaceAll("{last_name}","Иванова").replaceAll("{username}","@anna");var button=(el("broadcastButton"+s)&&el("broadcastButton"+s).value)||"";el("broadcastPreview").innerHTML=esc(text||"Введите текст сообщения")+(button?'<div class="preview-button">'+esc(button)+"</div>":"")}
-    async function saveMessages(event){event.preventDefault();var button=event.submitter,messages={};languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);messages[language]={greeting:el("settingGreeting"+s).value,help:el("settingHelp"+s).value,fallback:el("settingFallback"+s).value}});button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:messages,active:state.config.active,token:"",password:"",passwordConfirm:""})});clearDirty(el("messagesForm"));await loadState();toast("Системные тексты сохранены")}catch(e){toast(e.message)}finally{button.disabled=false}}
-    async function saveTechnical(event){event.preventDefault();var button=event.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:el("settingActive").checked,token:el("settingToken").value,password:el("settingPassword").value,passwordConfirm:el("settingPasswordConfirm").value})});el("settingToken").value="";el("settingPassword").value="";el("settingPasswordConfirm").value="";clearDirty(el("technicalForm"));await loadState();toast("Технические настройки сохранены")}catch(e){toast(e.message)}finally{button.disabled=false}}
-    el("setupForm").addEventListener("submit",async function(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{var result=await api("/api/setup",{method:"POST",body:JSON.stringify({token:el("setupToken").value,password:el("setupPassword").value})});csrf=result.csrf;await loadState();setScreen("app");startRefresh();toast("Бот подключён")}catch(err){message(el("setupMessage"),err.message,false)}finally{button.disabled=false}});
-    el("loginForm").addEventListener("submit",async function(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{var result=await api("/api/login",{method:"POST",body:JSON.stringify({password:el("loginPassword").value})});csrf=result.csrf;el("loginPassword").value="";await loadState();setScreen("app");startRefresh()}catch(err){message(el("loginMessage"),err.message,false)}finally{button.disabled=false}});
-    el("logoutBtn").addEventListener("click",async function(){if(dirty.size&&!confirm("Несохранённые изменения будут потеряны. Выйти?"))return;try{await api("/api/logout",{method:"POST",body:"{}"})}catch(e){}csrf="";state=null;clearInterval(refreshTimer);setScreen("loginScreen")});
-    el("refreshBtn").addEventListener("click",function(){if(dirty.size)return toast("Сначала сохраните или отмените изменения");loadState().then(function(){toast("Данные обновлены")})});
-    el("nav").addEventListener("click",function(e){var button=e.target.closest("button");if(!button)return;if(button.id==="moreBtn"){el("morePanel").classList.toggle("hidden");return}if(button.dataset.view)safeNavigate(button.dataset.view)});
-    el("morePanel").addEventListener("click",function(e){var button=e.target.closest("[data-view]");if(button)safeNavigate(button.dataset.view)});
-    document.querySelectorAll(".quick-link").forEach(function(button){button.addEventListener("click",function(){safeNavigate(button.dataset.view);if(button.dataset.view==="content")switchContentTab("objects")})});
-    el("contentTabs").addEventListener("click",function(e){var button=e.target.closest("[data-content-tab]");if(button)switchContentTab(button.dataset.contentTab)});
-    document.addEventListener("click",function(e){var button=e.target.closest("[data-tabs] button");if(!button)return;var group=button.parentElement.dataset.tabs,language=button.dataset.language;button.parentElement.querySelectorAll("button").forEach(function(x){var on=x===button;x.classList.toggle("active",on);x.setAttribute("aria-selected",on?"true":"false")});document.querySelectorAll('[data-pane-group="'+group+'"]').forEach(function(x){x.classList.toggle("active",x.dataset.language===language)})});
-    document.addEventListener("input",function(e){var form=e.target.closest("form[data-saveable]");if(form)markDirty(form);if(e.target.closest("#broadcastForm")){updateBroadcastPreview();updateRecipientEstimate()}});
-    document.addEventListener("change",function(e){var form=e.target.closest("form[data-saveable]");if(form)markDirty(form);if(e.target.closest("#broadcastForm")){updateBroadcastPreview();updateRecipientEstimate()}});
-    document.querySelectorAll(".stage-remove-welcome").forEach(function(button){button.addEventListener("click",function(){var language=button.dataset.language,s=language[0].toUpperCase()+language.slice(1);welcomeRemove[language]=true;el("welcomeFile"+s).value="";el("welcomePreview"+s).innerHTML="<span>Изображение будет удалено после сохранения</span>";markDirty(el("introForm"))})});
-    languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);el("welcomeFile"+s).addEventListener("change",function(){var file=this.files[0];if(!file)return;welcomeRemove[language]=false;el("welcomePreview"+s).innerHTML='<img src="'+URL.createObjectURL(file)+'" alt="Предпросмотр изображения">'})});
-    el("objectImage").addEventListener("change",function(){if(this.files[0])el("objectImageNote").textContent=this.files[0].name});el("promotionImage").addEventListener("change",function(){if(this.files[0])el("promotionImageNote").textContent=this.files[0].name});
-    el("introForm").addEventListener("submit",saveIntro);el("objectForm").addEventListener("submit",saveObject);el("promotionForm").addEventListener("submit",savePromotion);el("contactsForm").addEventListener("submit",saveContacts);el("ruleForm").addEventListener("submit",saveRule);el("broadcastForm").addEventListener("submit",submitBroadcast);el("messagesForm").addEventListener("submit",saveMessages);el("technicalForm").addEventListener("submit",saveTechnical);
-    el("newObjectBtn").addEventListener("click",resetObject);el("cancelObjectBtn").addEventListener("click",resetObject);el("newPromotionBtn").addEventListener("click",resetPromotion);el("cancelPromotionBtn").addEventListener("click",resetPromotion);
-    el("objectList").addEventListener("click",async function(e){var edit=e.target.closest(".edit-object"),del=e.target.closest(".delete-object");if(edit)return editObject(edit.dataset.id);if(del&&confirm("Удалить объект?")){try{await api("/api/objects/"+encodeURIComponent(del.dataset.id),{method:"DELETE",body:"{}"});await loadState();toast("Объект удалён")}catch(err){toast(err.message)}}});
-    el("promotionList").addEventListener("click",async function(e){var edit=e.target.closest(".edit-promotion"),del=e.target.closest(".delete-promotion");if(edit)return editPromotion(edit.dataset.id);if(del&&confirm("Удалить акцию?")){try{await api("/api/promotions/"+encodeURIComponent(del.dataset.id),{method:"DELETE",body:"{}"});await loadState();toast("Акция удалена")}catch(err){toast(err.message)}}});
-    el("ruleSearch").addEventListener("input",renderRules);el("ruleFilterLanguage").addEventListener("change",renderRules);el("cancelRuleBtn").addEventListener("click",function(){ignoreDirty=true;el("ruleForm").reset();el("ruleId").value="";el("ruleFormTitle").textContent="Новое правило";clearDirty(el("ruleForm"));ignoreDirty=false});
-    el("rulesList").addEventListener("change",async function(e){if(!e.target.classList.contains("rule-toggle"))return;try{await api("/api/rules/"+encodeURIComponent(e.target.dataset.id),{method:"PATCH",body:JSON.stringify({enabled:e.target.checked})});await loadState(true)}catch(err){toast(err.message);await loadState(true)}});
-    el("rulesList").addEventListener("click",async function(e){var edit=e.target.closest(".edit-rule"),copy=e.target.closest(".duplicate-rule"),del=e.target.closest(".delete-rule"),move=e.target.closest(".move-rule");if(edit)return editRule(edit.dataset.id,false);if(copy)return editRule(copy.dataset.id,true);if(del&&confirm("Удалить правило?")){try{await api("/api/rules/"+encodeURIComponent(del.dataset.id),{method:"DELETE",body:"{}"});await loadState();toast("Правило удалено")}catch(err){toast(err.message)}return}if(move){var ordered=state.rules.slice().sort(function(a,b){return Number(a.order||0)-Number(b.order||0)}),index=ordered.findIndex(function(x){return x.id===move.dataset.id}),next=index+Number(move.dataset.step);if(next<0||next>=ordered.length)return;var temp=ordered[index];ordered[index]=ordered[next];ordered[next]=temp;try{await api("/api/rules/reorder",{method:"POST",body:JSON.stringify({ids:ordered.map(function(x){return x.id})})});await loadState();toast("Порядок изменён")}catch(err){toast(err.message)}}});
-    el("ruleTestForm").addEventListener("submit",async function(e){e.preventDefault();try{var result=await api("/api/rules/test",{method:"POST",body:JSON.stringify({text:el("ruleTestText").value,language:el("ruleTestLanguage").value})});message(el("ruleTestResult"),result.matched?"Сработает: «"+result.matched.trigger+"» → "+result.matched.answer:"Ни одно правило не сработает",Boolean(result.matched))}catch(err){message(el("ruleTestResult"),err.message,false)}});
-    el("userSearch").addEventListener("input",renderUsers);el("userLanguageFilter").addEventListener("change",renderUsers);el("userCards").addEventListener("click",function(e){var card=e.target.closest("[data-user-id]");if(!card)return;var userForm=el("userForm");if(userForm&&dirty.has(userForm)&&card.dataset.userId!==selectedUserId&&!confirm("Отменить несохранённые изменения в карточке пользователя?"))return;if(userForm)clearDirty(userForm);selectedUserId=card.dataset.userId;renderUsers()});
-    el("broadcastHistory").addEventListener("click",async function(e){var edit=e.target.closest(".edit-broadcast"),copy=e.target.closest(".duplicate-broadcast"),del=e.target.closest(".delete-broadcast");if(edit)return editBroadcast(edit.dataset.id,false);if(copy)return editBroadcast(copy.dataset.id,true);if(del&&confirm("Удалить рассылку?")){try{await api("/api/broadcasts/"+encodeURIComponent(del.dataset.id),{method:"DELETE",body:"{}"});await loadState();toast("Рассылка удалена")}catch(err){toast(err.message)}}});
-    el("previewLanguage").addEventListener("change",updateBroadcastPreview);
-    el("tokenTestBtn").addEventListener("click",async function(){var button=this;button.disabled=true;try{var result=await api("/api/token-test",{method:"POST",body:JSON.stringify({token:el("settingToken").value})});toast("Токен работает: "+(result.username?"@"+result.username:result.firstName))}catch(e){toast(e.message)}finally{button.disabled=false}});
-    el("clearErrorsBtn").addEventListener("click",async function(){if(!confirm("Очистить журнал ошибок?"))return;try{await api("/api/errors",{method:"DELETE",body:"{}"});await loadState();toast("Журнал очищен")}catch(e){toast(e.message)}});
-    el("restoreFile").addEventListener("change",async function(){var file=this.files[0];if(!file)return;if(!confirm("Восстановить данные из выбранной копии? Текущие данные будут заменены.")){this.value="";return}try{var backup=JSON.parse(await file.text());await api("/api/restore",{method:"POST",body:JSON.stringify({backup:backup})});dirty.clear();refreshDirty();await loadState();toast("Резервная копия восстановлена")}catch(e){toast(e.message)}finally{this.value=""}});
-    el("saveChangesBtn").addEventListener("click",function(){if(activeDirty)activeDirty.requestSubmit()});el("discardChangesBtn").addEventListener("click",function(){if(confirm("Отменить все несохранённые изменения?"))discardAll()});
-    window.addEventListener("beforeunload",function(e){if(!dirty.size)return;e.preventDefault();e.returnValue=""});
-    ensureEntityFields();document.querySelectorAll("[data-tabs]").forEach(function(tabs){tabs.setAttribute("role","tablist");tabs.querySelectorAll("button").forEach(function(button,index){button.setAttribute("role","tab");button.setAttribute("aria-selected",index===0?"true":"false")})});document.querySelectorAll("[data-pane-group]").forEach(function(pane){pane.setAttribute("role","tabpanel")});boot();
-  })();
-  </script>
-</body>
-</html>`;
-
-const ADMIN_HTML_V3 = String.raw`<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
@@ -5790,7 +5697,7 @@ const ADMIN_HTML_V3 = String.raw`<!doctype html>
 
         <section id="view-settings" class="view">
           <div class="page-head"><div><h1>Настройки</h1><p class="page-copy">Подключение к Telegram, доступ к панели и резервное копирование.</p></div></div>
-          <div class="grid settings-layout"><form id="technicalForm3" class="card" data-saveable><h3>Telegram и безопасность</h3><div class="switch-row"><div><strong>Бот включён</strong><div class="card-note">Обрабатывает новые сообщения и запланированные рассылки</div></div><input id="settingActive3" class="toggle" type="checkbox" aria-label="Бот включён"></div><div class="form-section"><div class="form-section-title">Токен бота</div><div class="card-note">Текущий токен скрыт. Введите новый только для замены.</div><div class="field"><label for="settingToken3">Новый токен</label><input id="settingToken3" class="input" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"></div><button id="tokenTestBtn3" class="btn secondary small" type="button">Проверить токен</button></div><div class="form-section"><div class="form-section-title">Пароль администратора</div><div class="grid two-col"><div class="field"><label for="settingPassword3">Новый пароль</label><input id="settingPassword3" class="input" type="password" minlength="8" autocomplete="new-password"></div><div class="field"><label for="settingPasswordConfirm3">Повторите пароль</label><input id="settingPasswordConfirm3" class="input" type="password" minlength="8" autocomplete="new-password"></div></div></div><button class="btn" type="submit">Сохранить настройки</button></form><div class="section-stack"><div class="card"><h3>Резервная копия</h3><p class="card-note">Содержит настройки, фотографии, контент и пользователей. Копия скачивается в сжатом формате .json.gz.</p><div class="actions" style="margin-top:14px"><a class="btn secondary" href="/api/backup">Скачать копию</a><label class="btn soft">Восстановить<input id="restoreFile3" type="file" accept=".gz,.json,application/gzip,application/json" hidden></label></div></div><div class="card"><h3>Данные</h3><div class="data-row"><span>Пользователи</span><strong id="dataUsers3">0</strong></div><div class="data-row"><span>Объекты</span><strong id="dataProperties3">0</strong></div><div class="data-row"><span>Акции</span><strong id="dataOffers3">0</strong></div><div class="data-row"><span>Автоответы</span><strong id="dataReplies3">0</strong></div></div></div></div>
+          <div class="grid settings-layout"><form id="technicalForm3" class="card" data-saveable><h3>Telegram и безопасность</h3><div class="switch-row"><div><strong>Бот включён</strong><div class="card-note">Обрабатывает новые сообщения и запланированные рассылки</div></div><input id="settingActive3" class="toggle" type="checkbox" aria-label="Бот включён"></div><div class="form-section"><div class="form-section-title">Токен бота</div><div class="card-note">Текущий токен скрыт. Введите новый только для замены.</div><div class="field"><label for="settingToken3">Новый токен</label><input id="settingToken3" class="input" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"></div><button id="tokenTestBtn3" class="btn secondary small" type="button">Проверить токен</button></div><div class="form-section"><div class="form-section-title">Пароль администратора</div><div class="field"><label for="settingCurrentPassword3">Текущий пароль</label><input id="settingCurrentPassword3" class="input" type="password" autocomplete="current-password"><span class="hint">Нужен для смены пароля или токена бота.</span></div><div class="grid two-col"><div class="field"><label for="settingPassword3">Новый пароль</label><input id="settingPassword3" class="input" type="password" minlength="8" autocomplete="new-password"></div><div class="field"><label for="settingPasswordConfirm3">Повторите пароль</label><input id="settingPasswordConfirm3" class="input" type="password" minlength="8" autocomplete="new-password"></div></div></div><button class="btn" type="submit">Сохранить настройки</button></form><div class="section-stack"><div class="card"><h3>Резервная копия</h3><p class="card-note">Содержит настройки, фотографии, контент и пользователей. Копия скачивается в сжатом формате .json.gz.</p><div class="actions" style="margin-top:14px"><a class="btn secondary" href="/api/backup">Скачать копию</a><label class="btn soft">Восстановить<input id="restoreFile3" type="file" accept=".gz,.json,application/gzip,application/json" hidden></label></div></div><div class="card"><h3>Данные</h3><div class="data-row"><span>Пользователи</span><strong id="dataUsers3">0</strong></div><div class="data-row"><span>Объекты</span><strong id="dataProperties3">0</strong></div><div class="data-row"><span>Акции</span><strong id="dataOffers3">0</strong></div><div class="data-row"><span>Автоответы</span><strong id="dataReplies3">0</strong></div></div></div></div>
           <div class="card" style="margin-top:16px"><div class="card-head"><div><h3>Статистика и история активности</h3><div class="card-note">Пользователи, их языки, теги, заметки и обращения при очистке сохраняются</div></div></div><div class="grid two-col"><div class="data-action"><div><strong>Обнулить статистику</strong><div class="card-note">Сбросить сообщения, график и показатели эффективности объектов</div></div><button id="resetStatisticsBtn3" class="btn danger small" type="button">Обнулить</button></div><div class="data-action"><div><strong>Очистить историю активности</strong><div class="card-note">Удалить историю сообщений и даты последних посещений, не удаляя пользователей</div></div><button id="clearActivityBtn3" class="btn danger small" type="button">Очистить историю</button></div></div></div>
         </section>
       </div>
@@ -5854,13 +5761,13 @@ const ADMIN_HTML_V3 = String.raw`<!doctype html>
     function markDirty(form){if(!form)return;dirty.add(form);refreshDirtyNotice()}
     function clearDirty(form){dirty.delete(form);refreshDirtyNotice()}
     function clearAllDirty(){dirty.clear();welcomeRemove={ru:false,en:false,es:false};el("unsavedBar3").classList.add("hidden")}
-    function discardChanges(){clearAllDirty();resetProperty();resetOffer();resetReply();resetCampaign();el("settingToken3").value="";el("settingPassword3").value="";el("settingPasswordConfirm3").value="";document.querySelectorAll("dialog[open]").forEach(function(dialog){dialog.close()});if(state){renderWelcome();renderInterfaceText();renderMenuSections();renderContacts();renderSettings();if(selectedInquiry)renderInquiryDetail(selectedInquiry);if(selectedUser)renderUserDetail(selectedUser)}}
+    function discardChanges(){clearAllDirty();resetProperty();resetOffer();resetReply();resetCampaign();el("settingToken3").value="";el("settingPassword3").value="";el("settingPasswordConfirm3").value="";el("settingCurrentPassword3").value="";document.querySelectorAll("dialog[open]").forEach(function(dialog){dialog.close()});if(state){renderWelcome();renderInterfaceText();renderMenuSections();renderContacts();renderSettings();if(selectedInquiry)renderInquiryDetail(selectedInquiry);if(selectedUser)renderUserDetail(selectedUser)}}
     function canLeave(){if(!dirty.size)return true;if(!confirm("Отменить несохранённые изменения и перейти в другой раздел?"))return false;discardChanges();return true}
     function closeSidebar(){el("sidebar3").classList.remove("open");el("sidebarOverlay3").classList.add("hidden");el("mobileMenuBtn3").setAttribute("aria-expanded","false");document.querySelectorAll("#nav3 details[open]").forEach(function(group){group.removeAttribute("open")})}
     function openView(name){if(name===view){closeSidebar();return}if(!canLeave())return;view=name;el("app3").classList.toggle("dashboard-home",name==="home");document.querySelectorAll(".view").forEach(function(node){node.classList.toggle("active",node.id==="view-"+name)});document.querySelectorAll("#nav3 .nav-item").forEach(function(node){node.classList.toggle("active",node.dataset.view===name)});el("breadcrumb3").textContent=meta[name][0];el("topTitle3").textContent=meta[name][1];el("mobileTitle3").textContent=meta[name][1];closeSidebar();window.scrollTo({top:0,behavior:"smooth"});renderView(name)}
     async function boot(){try{var status=await api("/api/status");if(!status.configured){showScreen("setupScreen3");return}try{await loadState();showScreen("app3");startRefresh()}catch(e){showScreen("loginScreen3")}}catch(e){showScreen("loginScreen3");message(el("loginMessage3"),"Не удалось связаться с панелью",false)}}
-    function startRefresh(){clearInterval(refreshTimer);refreshTimer=setInterval(function(){loadState(true)},8000)}
-    async function loadState(silent){try{state=await api("/api/state");csrf=state.csrf;renderAll();return state}catch(e){if(e.status===401){clearInterval(refreshTimer);showScreen("loginScreen3");if(!silent)throw e}else if(!silent)throw e}}
+    function startRefresh(){clearInterval(refreshTimer);refreshTimer=setInterval(function(){if(!document.hidden)loadState(true)},8000)}document.addEventListener("visibilitychange",function(){if(!document.hidden&&state)loadState(true)});
+    async function loadState(silent){try{var next=await api("/api/state"+(silent&&state&&state.stateVersion?"?since="+encodeURIComponent(state.stateVersion):""));if(next.unchanged)return state;state=next;csrf=state.csrf;renderAll();return state}catch(e){if(e.status===401){clearInterval(refreshTimer);showScreen("loginScreen3");if(!silent)throw e}else if(!silent)throw e}}
     function renderAll(){if(!state)return;renderShell();renderHome();renderRecentReactions();renderConnectionPresentation();renderErrorContext();renderSalesHome();renderInquiryAttention();renderAdminNotificationAttention();renderTranslationAttention();renderBrandDashboard();renderWelcome();renderInterfaceText();renderMenuSections();renderProperties();renderOffers();renderContacts();renderInquiries();renderReplies();renderCampaigns();renderAudience();renderSettings();addCounters()}
     function renderView(name){if(!state)return;({home:function(){renderHome();renderRecentReactions();renderConnectionPresentation();renderErrorContext();renderSalesHome();renderInquiryAttention();renderAdminNotificationAttention();renderTranslationAttention();renderBrandDashboard()},welcome:renderWelcome,interface:renderInterfaceText,properties:function(){renderMenuSections();renderProperties()},offers:function(){renderMenuSections();renderOffers()},about:renderMenuSections,contacts:renderContacts,inquiries:renderInquiries,replies:renderReplies,campaigns:renderCampaigns,audience:renderAudience,settings:renderSettings}[name]||function(){})()}
     function renderShell(){var status=state.runtime.status,activeObjects=state.objects.filter(function(item){return item.status==="active"}).length,activeOffers=state.promotions.filter(function(item){return item.enabled}).length,newInquiries=state.newInquiryCount||0,topCount=el("topInquiryCount3");el("botUsername3").textContent=state.bot.username?"@"+state.bot.username:(state.bot.firstName||"Telegram");el("sideStatus3").textContent=statusName(status);el("sideStatusNote3").textContent=status==="online"?"Бот принимает сообщения":status==="stopped"?"Выключен в настройках":"Проверьте подключение";el("sideDot3").className="status-dot "+status;el("navPropertyCount").textContent=activeObjects+"/"+state.objects.length;el("navOfferCount").textContent=activeOffers+"/"+state.promotions.length;el("navInquiryCount").textContent=newInquiries;el("navReplyCount").textContent=state.rules.length;el("navUserCount").textContent=state.userCount;topCount.textContent=newInquiries;topCount.classList.toggle("hidden",!newInquiries)}
@@ -5969,7 +5876,7 @@ const ADMIN_HTML_V3 = String.raw`<!doctype html>
     async function submitCampaign(e){e.preventDefault();var button=e.submitter,mode=button.dataset.mode||"draft";button.disabled=true;try{var body=await collectCampaign();body.mode=mode;if(mode!=="draft"){var readiness=campaignReadiness();if(!readiness.valid)throw new Error("Заполните текст и кнопки для всех выбранных языков");if(!body.languages.length)throw new Error("Выберите хотя бы один язык аудитории")}if(mode==="test"){body.userId=el("campaignTestUser3").value;if(!body.userId)throw new Error("Выберите получателя тестового сообщения");await api("/api/broadcast/test",{method:"POST",body:JSON.stringify(body)});toast("Тестовое сообщение отправлено");return}var languagesText=body.languages.map(function(language){return language.toUpperCase()}).join(", "),timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||"локальное время";if(mode==="send"&&!await confirmAction("Начать рассылку","Получатели: "+el("campaignEstimate3").textContent+". Языки: "+languagesText+". Отменить отправку после запуска нельзя.","Отправить"))return;if(mode==="schedule"&&!await confirmAction("Запланировать рассылку","Отправка: "+new Date(body.scheduledAt).toLocaleString("ru-RU")+" ("+timezone+"). Получатели: "+el("campaignEstimate3").textContent+". Языки: "+languagesText+".","Запланировать"))return;var id=el("campaignId3").value,url=id&&mode!=="send"?"/api/broadcasts/"+encodeURIComponent(id):"/api/broadcasts";await api(url,{method:id&&mode!=="send"?"PATCH":"POST",body:JSON.stringify(body)});if(id&&mode==="send")await api("/api/broadcasts/"+encodeURIComponent(id),{method:"DELETE",body:"{}"});clearDirty(el("campaignForm3"));resetCampaign();await loadState();toast(mode==="send"?"Рассылка началась":mode==="schedule"?"Рассылка запланирована":"Черновик сохранён")}catch(error){toast(error.message)}finally{button.disabled=false;updateCampaignSafety()}}
     async function saveUser(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/users/"+encodeURIComponent(selectedUser),{method:"PATCH",body:JSON.stringify({preferredLanguage:el("userLanguage3").value,tags:el("userTags3").value.split(",").map(function(x){return x.trim()}).filter(Boolean),note:el("userNote3").value})});clearDirty(el("userForm3"));await loadState();toast("Карточка пользователя сохранена")}catch(error){toast(error.message)}finally{button.disabled=false}}
     async function sendDirectMessage(e,userId){e.preventDefault();var form=e.currentTarget,button=e.submitter,file=el("directMessageImage3").files[0];button.disabled=true;try{var body={text:el("directMessageText3").value,buttonText:el("directMessageButtonText3").value,buttonUrl:el("directMessageButtonUrl3").value};if(file){body.imageDataUrl=await fileData(file);body.imageName=file.name}await api("/api/users/"+encodeURIComponent(userId)+"/message",{method:"POST",body:JSON.stringify(body)});clearDirty(form);form.reset();await loadState();toast("Личное сообщение отправлено")}catch(error){toast(error.message)}finally{button.disabled=false}}
-    async function saveSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:el("settingActive3").checked,adminChatId:el("adminChatId3")?el("adminChatId3").value:state.config.adminChatId,token:el("settingToken3").value,password:el("settingPassword3").value,passwordConfirm:el("settingPasswordConfirm3").value})});el("settingToken3").value="";el("settingPassword3").value="";el("settingPasswordConfirm3").value="";clearDirty(el("technicalForm3"));await loadState();toast("Настройки сохранены")}catch(error){toast(error.message)}finally{button.disabled=false}}
+    async function saveSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:el("settingActive3").checked,adminChatId:el("adminChatId3")?el("adminChatId3").value:state.config.adminChatId,token:el("settingToken3").value,password:el("settingPassword3").value,passwordConfirm:el("settingPasswordConfirm3").value,currentPassword:el("settingCurrentPassword3").value})});el("settingToken3").value="";el("settingPassword3").value="";el("settingPasswordConfirm3").value="";el("settingCurrentPassword3").value="";clearDirty(el("technicalForm3"));await loadState();toast("Настройки сохранены")}catch(error){toast(error.message)}finally{button.disabled=false}}
     async function saveNotificationSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:state.config.active,adminChatId:el("adminChatId3").value,token:"",password:"",passwordConfirm:""})});clearDirty(el("notificationForm3"));await loadState();toast("Chat ID сохранён. Теперь отправьте тест") }catch(error){toast(error.message)}finally{button.disabled=false}}
     async function testAdminNotification(){var button=el("testAdminNotificationBtn3");if(dirty.has(el("notificationForm3")))return toast("Сначала сохраните Chat ID");button.disabled=true;try{await api("/api/admin-notification/test",{method:"POST",body:"{}"});await loadState();toast("Тестовое уведомление отправлено в Telegram")}catch(error){await loadState().catch(function(){});toast(error.message)}finally{button.disabled=false}}
     el("setupForm3").addEventListener("submit",async function(e){e.preventDefault();var b=e.submitter;b.disabled=true;try{var result=await api("/api/setup",{method:"POST",body:JSON.stringify({token:el("setupToken3").value,password:el("setupPassword3").value})});csrf=result.csrf;await loadState();showScreen("app3");startRefresh();toast("Бот подключён")}catch(error){message(el("setupMessage3"),error.message,false)}finally{b.disabled=false}});
@@ -6009,14 +5916,19 @@ const ADMIN_HTML_V3 = String.raw`<!doctype html>
 
 const server = http.createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
+    if (!hostAllowed(req)) {
+      securityHeaders(res);
+      res.writeHead(421, { 'content-type': 'text/plain; charset=utf-8' });
+      return res.end('Недопустимый адрес панели');
+    }
+    const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/login-assets/background.png' && req.method === 'GET') return binaryLoginAsset(req, res, LOGIN_ASSETS.background);
     if (url.pathname === '/login-assets/logo.png' && req.method === 'GET') return binaryLoginAsset(req, res, LOGIN_ASSETS.logo);
     if (url.pathname === '/admin-assets/header.webp' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.header);
     if (url.pathname === '/admin-assets/header-mobile.webp' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.headerMobile);
     if (url.pathname === '/admin-assets/sidebar-logo.png' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.sidebarLogo);
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
-    if (url.pathname === '/' && req.method === 'GET') return html(res, ADMIN_HTML_V3);
+    if (url.pathname === '/' && req.method === 'GET') return html(res, ADMIN_HTML);
     securityHeaders(res);
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('Не найдено');
@@ -6041,37 +5953,11 @@ const broadcastScheduleTimer = setInterval(() => {
 }, 30000);
 broadcastScheduleTimer.unref();
 
-server.listen(PORT, HOST, () => {
-  const visibleHost = HOST === '0.0.0.0' ? '127.0.0.1' : HOST;
-  const adminUrl = 'http://' + visibleHost + ':' + PORT;
-  console.log('');
-  console.log('  Пульт Telegram-бота запущен');
-  console.log('  Откройте: ' + adminUrl);
-  console.log(!configured()
-    ? '  Требуется первичная настройка в браузере.'
-    : data.config.active
-      ? '  Бот подключается к Telegram…'
-      : '  Бот остановлен в настройках панели.');
-  console.log('  Для остановки нажмите Ctrl+C.');
-  console.log('');
-  restartPolling();
-  if (process.platform === 'win32' && process.env.NO_AUTO_OPEN !== '1') {
-    setTimeout(() => {
-      try {
-        const opener = spawn('rundll32.exe', ['url.dll,FileProtocolHandler', adminUrl], {
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true,
-        });
-        opener.unref();
-      } catch {
-        // The URL remains visible in the console if automatic opening is unavailable.
-      }
-    }, 500).unref();
-  }
-});
+let shuttingDown = false;
 
 function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log('\nЗавершение работы…');
   runtime.generation += 1;
   if (runtime.abortController) runtime.abortController.abort();
@@ -6081,7 +5967,90 @@ function shutdown() {
   setTimeout(() => process.exit(0), 2000).unref();
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
-process.on('uncaughtException', (error) => console.error('Необработанная ошибка:', error));
-process.on('unhandledRejection', (error) => console.error('Необработанная ошибка:', error));
+function start() {
+  server.listen(PORT, HOST, () => {
+    const visibleHost = HOST === '0.0.0.0' ? '127.0.0.1' : HOST;
+    const adminUrl = 'http://' + visibleHost + ':' + PORT;
+    console.log('');
+    console.log('  Пульт Telegram-бота запущен');
+    console.log('  Откройте: ' + adminUrl);
+    console.log(!configured()
+      ? '  Требуется первичная настройка в браузере.'
+      : data.config.active
+        ? '  Бот подключается к Telegram…'
+        : '  Бот остановлен в настройках панели.');
+    console.log('  Для остановки нажмите Ctrl+C.');
+    if (!['127.0.0.1', '::1', 'localhost'].includes(HOST)) {
+      console.log('');
+      console.log('  ВНИМАНИЕ: панель доступна из сети (' + HOST + ') по HTTP без шифрования.');
+      console.log('  Пароль передаётся открытым текстом. Используйте только в доверенной сети.');
+    }
+    console.log('');
+    restartPolling();
+    if (process.platform === 'win32' && process.env.NO_AUTO_OPEN !== '1') {
+      setTimeout(() => {
+        try {
+          const opener = spawn('rundll32.exe', ['url.dll,FileProtocolHandler', adminUrl], {
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: true,
+          });
+          opener.unref();
+        } catch {
+          // The URL remains visible in the console if automatic opening is unavailable.
+        }
+      }, 500).unref();
+    }
+  });
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  // The app usually runs without a supervisor that would restart it, so it
+  // keeps running: the error is shown in the panel and the Telegram
+  // connection, the part most likely left in a broken state, is restarted.
+  process.on('uncaughtException', (error) => {
+    console.error('Необработанная ошибка:', error);
+    try {
+      recordError('Необработанная ошибка', error);
+      if (!shuttingDown) restartPolling();
+    } catch {
+      // Nothing more can be done safely here.
+    }
+  });
+  process.on('unhandledRejection', (error) => {
+    console.error('Необработанная ошибка:', error);
+    try {
+      recordError('Необработанная ошибка', error);
+    } catch {
+      // Nothing more can be done safely here.
+    }
+  });
+}
+
+// Tests load this file with BOT_NO_START=1 to reach the functions below
+// without opening the panel port or connecting to Telegram.
+if (process.env.BOT_NO_START !== '1') start();
+
+module.exports = {
+  getData: () => data,
+  setData: (next) => { data = next; rebuildUserIndex(); },
+  normalizeLoadedData,
+  loadData,
+  saveDataNow,
+  persistImage,
+  contentAddressImages,
+  referencedImageFiles,
+  telegramRequest,
+  processUpdates,
+  runtime,
+  userById,
+  userByChatId,
+  normalizeUser,
+  hostAllowed,
+  hashPassword,
+  handleApi,
+  server,
+  sessions,
+  loginAttempts,
+  splitTelegramText,
+};

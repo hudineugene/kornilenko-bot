@@ -1,0 +1,12 @@
+{
+  "main": "bot.js",
+  "output": "dist/sea-prep.blob",
+  "disableExperimentalSEAWarning": true,
+  "assets": {
+    "login-background": "Kornilenko_Login_Codex_Assets/login_background_codex_1920x1080.png",
+    "login-logo": "Kornilenko_Login_Codex_Assets/kornilenko_logo_exact.png",
+    "admin-header": "Kornilenko_Admin_Codex_Assets/admin_header_background_1920x480.webp",
+    "admin-header-mobile": "Kornilenko_Admin_Codex_Assets/admin_header_background_mobile_960x480.webp",
+    "admin-sidebar-logo": "Kornilenko_Admin_Codex_Assets/kornilenko_logo_sidebar_320.png"
+  }
+}
