@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
-import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, normalizeCalculator, normalizeLoadedData, normalizeViewingSlots, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
+import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, MAX_MANAGERS, normalizeCalculator, normalizeLoadedData, normalizeManagers, normalizeViewingSlots, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { forEachStoredImage, imageBytes, imageExists } from './media.mjs';
 import { MANAGER_CONTACT_TEXT, applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
 import { configured, data, replaceData, runtime, saveDataNow, verifyPassword } from './store.mjs';
@@ -870,6 +870,54 @@ async function handleApi(req, res, url) {
       for (const id of sessions.keys()) if (id !== session.id) sessions.delete(id);
     }
     return json(res, 200, { ok: true });
+  }
+
+  if (url.pathname === '/api/managers' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const list = Array.isArray(body.managers) ? body.managers.slice(0, 20) : [];
+    const adminChatId = cleanText(data.config.adminChatId, 40);
+    const seen = new Set();
+    for (const item of list) {
+      const name = cleanText(item && item.name, 60);
+      const chatId = cleanText(item && item.chatId, 40);
+      if (!name) return json(res, 400, { error: 'Укажите имя каждого менеджера' });
+      if (!/^-?\d{4,20}$/.test(chatId)) return json(res, 400, { error: 'Chat ID менеджера «' + name + '» должен состоять из цифр' });
+      if (chatId === adminChatId) return json(res, 400, { error: 'Chat ID менеджера «' + name + '» совпадает с чатом главного администратора' });
+      if (seen.has(chatId)) return json(res, 400, { error: 'Chat ID ' + chatId + ' указан дважды' });
+      seen.add(chatId);
+    }
+    if (list.length > MAX_MANAGERS) return json(res, 400, { error: 'Можно добавить не больше ' + MAX_MANAGERS + ' менеджеров' });
+    const previous = new Map((data.config.managers || []).map((manager) => [manager.chatId, manager]));
+    data.config.adminName = cleanText(body.adminName, 60);
+    // A chat that stays the same keeps its checked state.
+    data.config.managers = normalizeManagers(list.map((item) => {
+      const chatId = cleanText(item.chatId, 40);
+      const old = previous.get(chatId);
+      return { id: old ? old.id : '', name: item.name, chatId, verifiedAt: old ? old.verifiedAt : '' };
+    }), adminChatId);
+    saveDataNow();
+    return json(res, 200, { ok: true });
+  }
+
+  const managerTestMatch = url.pathname.match(/^\/api\/managers\/([^/]+)\/test$/);
+  if (managerTestMatch && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const manager = (data.config.managers || []).find((item) => item.id === decodeURIComponent(managerTestMatch[1]));
+    if (!manager) return json(res, 404, { error: 'Менеджер не найден — сначала сохраните список' });
+    try {
+      await sendMessage(manager.chatId, '✅ ' + manager.name + ', уведомления работают. Сюда будут приходить заявки клиентов: отвечайте на уведомление — ответ получит клиент; «⏳ В работу» закрепит заявку за вами.', data.config.botToken, { track: false });
+      manager.verifiedAt = new Date().toISOString();
+      saveDataNow();
+      return json(res, 200, { ok: true });
+    } catch (error) {
+      manager.verifiedAt = '';
+      saveDataNow();
+      const notFound = /chat not found/i.test(String(error && error.message));
+      return json(res, 400, { error: notFound ? 'Telegram не нашёл этот чат. Менеджер должен открыть бота, отправить /start, затем /myid — и прислать вам полученный номер.' : 'Не удалось отправить: ' + error.message });
+    }
   }
 
   if (url.pathname === '/api/telegram-backup' && req.method === 'PUT') {

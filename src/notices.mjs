@@ -6,7 +6,7 @@ import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { userByChatId, userById } from './users.mjs';
 import { sendMessage } from './telegram.mjs';
-import { inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
+import { inquiryChats, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
 import { localized, shortenedText } from './catalog.mjs';
 import { runViewingNotices } from './viewings.mjs';
 import { adminMessagesAllowed, adminMorningHour } from './hours.mjs';
@@ -85,7 +85,7 @@ function inquiryNeedsReminder(inquiry, now, thresholdMs) {
 // An inquiry brought back to the admin chat (a reminder, a planned follow-up):
 // the admin can reply to it or press a status button, as under the first
 // notification.
-async function sendInquiryToAdministrator(adminChatId, inquiry, heading, extraLines = []) {
+async function sendInquiryToAdministrator(inquiry, heading, extraLines = [], options = {}) {
   const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
   const name = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Пользователь удалён';
   const username = user && user.username ? ' (@' + user.username + ')' : '';
@@ -99,9 +99,20 @@ async function sendInquiryToAdministrator(adminChatId, inquiry, heading, extraLi
     ...extraLines,
     ...(user ? ['', '↩️ Ответьте на это сообщение — ответ получит клиент.'] : []),
   ].join('\n');
-  const messageIds = [];
-  await sendMessage(adminChatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry) });
-  if (user) rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId: inquiry.id, sourceMessageId: inquiry.sourceMessageId });
+  // The main admin and every manager: whoever is free can answer. A planned
+  // follow-up goes to the one who took the inquiry.
+  const assigned = options.onlyAssignee && inquiry.assignee ? inquiryChats().filter((chat) => chat.name === inquiry.assignee) : [];
+  for (const chat of assigned.length ? assigned : inquiryChats()) {
+    const messageIds = [];
+    try {
+      await sendMessage(chat.chatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry) });
+    } catch (error) {
+      if (chat.main) throw error;
+      recordError('Напоминание менеджеру ' + chat.name, error);
+      continue;
+    }
+    if (user) rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId: inquiry.id, sourceMessageId: inquiry.sourceMessageId }, chat.chatId);
+  }
 }
 
 // A follow-up is due on its day: at the time the admin chose, otherwise at
@@ -126,7 +137,7 @@ async function runFollowUpReminders(now = new Date()) {
   for (const inquiry of due) {
     inquiry.followUpNotifiedAt = now.toISOString();
     const planned = inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + (inquiry.followUpTime ? ' ' + inquiry.followUpTime : '');
-    await sendInquiryToAdministrator(adminChatId, inquiry, '📌 Пора связаться с клиентом (' + planned + '): ' + inquiryTypeLabel(inquiry), inquiry.note ? ['', '📝 ' + shortenedText(inquiry.note, 300)] : []);
+    await sendInquiryToAdministrator(inquiry, '📌 Пора связаться с клиентом (' + planned + '): ' + inquiryTypeLabel(inquiry), inquiry.note ? ['', '📝 ' + shortenedText(inquiry.note, 300)] : [], { onlyAssignee: true });
     sent.push(inquiry.id);
   }
   if (sent.length) saveDataNow();
@@ -148,7 +159,7 @@ async function runInquiryReminders(now = new Date()) {
   if (!due.length) return [];
   const sent = [];
   for (const inquiry of due.slice(0, REMINDERS_PER_RUN)) {
-    await sendInquiryToAdministrator(adminChatId, inquiry, '⏰ Нет ответа ' + hoursAgoText(now.getTime() - Date.parse(inquiry.createdAt)) + ': ' + inquiryTypeLabel(inquiry));
+    await sendInquiryToAdministrator(inquiry, '⏰ Нет ответа ' + hoursAgoText(now.getTime() - Date.parse(inquiry.createdAt)) + ': ' + inquiryTypeLabel(inquiry));
     inquiry.remindedAt = now.toISOString();
     sent.push(inquiry.id);
   }

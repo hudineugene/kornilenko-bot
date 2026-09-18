@@ -427,6 +427,8 @@ function safeState(session) {
       workingHours: normalizeWorkingHours(data.config.workingHours),
       calculator: normalizeCalculator(data.config.calculator),
       viewingSlots: normalizeViewingSlots(data.config.viewingSlots),
+      adminName: data.config.adminName || '',
+      managers: Array.isArray(data.config.managers) ? data.config.managers : [],
       // The key stays on this computer; the panel only learns the state.
       telegramBackup: (({ enabled, key, lastSentAt, lastError }) => ({ enabled, passwordSet: Boolean(key), lastSentAt, lastError }))(normalizeTelegramBackup(data.config.telegramBackup)),
     },

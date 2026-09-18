@@ -218,7 +218,8 @@ function normalizeAdminReplyTargets(value) {
   const result = {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
   for (const [messageId, target] of Object.entries(value)) {
-    if (!/^\d{1,20}$/.test(messageId) || !target || typeof target !== 'object') continue;
+    // "123" in the main admin chat, "<chat id>:123" in a manager's chat.
+    if (!/^(-?\d{4,20}:)?\d{1,20}$/.test(messageId) || !target || typeof target !== 'object') continue;
     const chatId = cleanText(target.chatId, 40);
     if (!/^-?\d{1,20}$/.test(chatId)) continue;
     result[messageId] = {
@@ -316,6 +317,25 @@ function normalizeTelegramBackup(value) {
     lastSentAt: cleanText(source.lastSentAt, 40),
     lastError: cleanText(source.lastError, 300),
   };
+}
+
+// Managers besides the main admin: each gets client inquiries in their own
+// chat with the bot and can answer them.
+const MAX_MANAGERS = 10;
+
+function normalizeManagers(value, adminChatId = '') {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set([String(adminChatId || '')]);
+  const managers = [];
+  for (const item of value) {
+    const chatId = cleanText(item && item.chatId, 40);
+    const name = cleanText(item && item.name, 60);
+    if (!/^-?\d{4,20}$/.test(chatId) || !name || seen.has(chatId)) continue;
+    seen.add(chatId);
+    managers.push({ id: cleanText(item.id, 100) || crypto.randomUUID(), name, chatId, verifiedAt: cleanText(item.verifiedAt, 40) });
+    if (managers.length >= MAX_MANAGERS) break;
+  }
+  return managers;
 }
 
 function normalizeWorkingHours(value) {
@@ -501,6 +521,8 @@ function normalizeLoadedData(parsed) {
       followUpDate: DAY_KEY_PATTERN.test(String(item.followUpDate || '')) ? String(item.followUpDate) : '',
       followUpTime: CLOCK_TIME_PATTERN.test(String(item.followUpTime || '')) ? String(item.followUpTime) : '',
       followUpNotifiedAt: cleanText(item.followUpNotifiedAt, 40),
+      // Who took the inquiry: the admin or one of the managers.
+      assignee: cleanText(item.assignee, 60),
       createdAt: item.createdAt || new Date().toISOString(),
       updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
     })).slice(0, 5000) : [];
@@ -577,6 +599,8 @@ function normalizeLoadedData(parsed) {
     normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
     normalized.config.viewingSlots = normalizeViewingSlots(normalized.config.viewingSlots);
     normalized.config.telegramBackup = normalizeTelegramBackup(normalized.config.telegramBackup);
+    normalized.config.adminName = cleanText(normalized.config.adminName, 60);
+    normalized.config.managers = normalizeManagers(normalized.config.managers, normalized.config.adminChatId);
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;
 }
@@ -588,6 +612,7 @@ export {
   DEFAULT_CALCULATOR,
   DEFAULT_VIEWING_SLOTS,
   DEFAULT_WORKING_HOURS,
+  MAX_MANAGERS,
   MAX_REPLY_TEMPLATES,
   REMINDER_HOUR_OPTIONS,
   defaultData,
@@ -597,6 +622,7 @@ export {
   migrateSelectionSteps,
   normalizeAdminReplyTargets,
   normalizeCalculator,
+  normalizeManagers,
   normalizeLoadedData,
   normalizeLocalizedField,
   normalizePropertyImages,

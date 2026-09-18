@@ -195,11 +195,32 @@ function nextFollowUpDate(now = new Date()) {
   return localDayKey(opening || tomorrow);
 }
 
-// Only buttons in the admin chat may act on inquiries.
+// The chats that get client inquiries: the main admin first, then the
+// managers. Digests, reports, login codes and backups go to the main admin
+// only.
+function inquiryChats() {
+  const main = cleanText(data.config.adminChatId, 40);
+  const chats = main ? [{ chatId: main, name: cleanText(data.config.adminName, 60) || 'Администратор', main: true }] : [];
+  for (const manager of Array.isArray(data.config.managers) ? data.config.managers : []) {
+    if (manager && manager.chatId && manager.chatId !== main) chats.push({ chatId: String(manager.chatId), name: manager.name, main: false, manager });
+  }
+  return chats;
+}
+
+function adminChatFor(chatId) {
+  return inquiryChats().find((chat) => chat.chatId === String(chatId)) || null;
+}
+
+// Message ids are counted per chat: the main admin's keys stay plain numbers
+// (as before managers existed), a manager's are "<chat id>:<message id>".
+function replyTargetKey(chatId, messageId) {
+  return String(chatId) === cleanText(data.config.adminChatId, 40) ? String(messageId) : String(chatId) + ':' + String(messageId);
+}
+
+// Only buttons in the admin's or a manager's chat may act on inquiries.
 function adminCallbackAllowed(query) {
-  const adminChatId = cleanText(data.config.adminChatId, 40);
   const chatId = query && query.message && query.message.chat ? String(query.message.chat.id) : '';
-  return Boolean(adminChatId && chatId === adminChatId);
+  return Boolean(chatId && adminChatFor(chatId));
 }
 
 async function handleInquiryStatusCallback(query, token) {
@@ -208,6 +229,7 @@ async function handleInquiryStatusCallback(query, token) {
     await acknowledgeCallback(query, token, INTERACTION_TEXT.ru.stale);
     return;
   }
+  const pressedBy = adminChatFor(chatId);
   const [, status, ...rest] = String(query.data || '').split(':');
   const inquiry = data.inquiries.find((item) => item.id === rest.join(':'));
   if (!inquiry || (!Object.hasOwn(INQUIRY_STATUS_LABELS, status) && status !== 'follow')) {
@@ -219,14 +241,18 @@ async function handleInquiryStatusCallback(query, token) {
     inquiry.followUpTime = '';
     inquiry.followUpNotifiedAt = '';
     if (inquiry.status === 'new') inquiry.status = 'in_progress';
+    if (!inquiry.assignee) inquiry.assignee = pressedBy.name;
   } else {
     inquiry.status = status;
+    // "In progress" means "I take it".
+    if (status === 'in_progress') inquiry.assignee = pressedBy.name;
   }
   inquiry.updatedAt = new Date().toISOString();
   saveDataNow();
+  const taken = inquiryChats().length > 1 && inquiry.assignee ? ' · взял(а): ' + inquiry.assignee : '';
   await acknowledgeCallback(query, token, status === 'follow'
     ? 'Напомню ' + inquiry.followUpDate.split('-').reverse().join('.') + ' в начале рабочего дня'
-    : 'Статус: ' + INQUIRY_STATUS_LABELS[status]);
+    : 'Статус: ' + INQUIRY_STATUS_LABELS[status] + (status === 'in_progress' ? taken : ''));
   try {
     await telegramRequest(token, 'editMessageReplyMarkup', {
       chat_id: chatId,
@@ -264,7 +290,7 @@ function adminNotificationDecision(user, important) {
 
 async function notifyAdministratorAction(user, title, details = '', inquiryId = '', sourceMessageId = null, options = {}) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
-  if (!adminChatId || !data.config.botToken || !user || !user.chatId || String(user.chatId) === adminChatId) return false;
+  if (!adminChatId || !data.config.botToken || !user || !user.chatId || adminChatFor(user.chatId)) return false;
   if (data.config.notifyMode === 'inquiries' && !options.important) return false;
   const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени';
   const username = user.username ? ' (@' + user.username + ')' : '';
@@ -282,24 +308,39 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   const notification = options.important
     ? ['📩 ' + cleanText(title, 160), who, '', cleanDetails, '', '↩️ Ответьте на это сообщение — ответ получит клиент.']
     : ['👀 ' + cleanText(title, 160), who, ...(detailsWorthShowing(title, cleanDetails) ? ['', cleanDetails] : [])];
-  try {
-    const messageIds = [];
-    const inquiry = options.important && inquiryId ? data.inquiries.find((item) => item.id === inquiryId) : null;
-    const markup = inquiryStatusMarkup(inquiry);
-    await sendMessage(adminChatId, notification.filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n').trim(), data.config.botToken, { track: false, messageIds, ...(markup ? { reply_markup: markup } : {}) });
-    rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId });
-    if (!data.config.adminNotificationVerifiedAt) {
-      data.config.adminNotificationVerifiedAt = new Date().toISOString();
-      scheduleSave();
+  const text = notification.filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n').trim();
+  const inquiry = options.important && inquiryId ? data.inquiries.find((item) => item.id === inquiryId) : null;
+  // Inquiries go to every manager; navigation only to the main admin.
+  const chats = options.important ? inquiryChats() : inquiryChats().filter((chat) => chat.main);
+  let delivered = false;
+  for (const chat of chats) {
+    try {
+      const messageIds = [];
+      const markup = inquiryStatusMarkup(inquiry);
+      await sendMessage(chat.chatId, text, data.config.botToken, { track: false, messageIds, ...(markup ? { reply_markup: markup } : {}) });
+      rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId }, chat.chatId);
+      delivered = true;
+      markAdminChatVerified(chat, true);
+    } catch (error) {
+      // Only a refusal from Telegram (wrong chat, bot blocked) means the chat
+      // is misconfigured; a network hiccup says nothing about it.
+      if ([400, 403].includes(Number(error && error.telegramCode))) markAdminChatVerified(chat, false);
+      recordError(chat.main ? 'Уведомление администратору' : 'Уведомление менеджеру ' + chat.name, error);
     }
-    return true;
-  } catch (error) {
-    // Only a refusal from Telegram (wrong chat, bot blocked) means the admin
-    // chat is misconfigured; a network hiccup says nothing about it.
-    if ([400, 403].includes(Number(error && error.telegramCode))) data.config.adminNotificationVerifiedAt = '';
-    recordError('Уведомление администратору', error);
-    return false;
   }
+  return delivered;
+}
+
+function markAdminChatVerified(chat, verified) {
+  const now = new Date().toISOString();
+  if (chat.main) {
+    if (verified && data.config.adminNotificationVerifiedAt) return;
+    data.config.adminNotificationVerifiedAt = verified ? now : '';
+  } else {
+    if (verified && chat.manager.verifiedAt) return;
+    chat.manager.verifiedAt = verified ? now : '';
+  }
+  scheduleSave();
 }
 
 async function notifyAdministrator(inquiry, user, options = {}) {
@@ -322,27 +363,29 @@ async function notifyAdministrator(inquiry, user, options = {}) {
 }
 
 async function copyUserMessageToAdministrator(message, token, inquiry = null) {
-  const adminChatId = cleanText(data.config.adminChatId, 40);
-  if (!adminChatId || !message || !message.chat || String(message.chat.id) === adminChatId) return false;
-  try {
-    const copied = await telegramRequest(token, 'copyMessage', {
-      chat_id: adminChatId,
-      from_chat_id: message.chat.id,
-      message_id: message.message_id,
-    });
-    // Replying directly to the copied photo or voice message works too.
-    if (copied && Number.isFinite(Number(copied.message_id))) {
-      rememberAdminReplyTarget([Number(copied.message_id)], {
-        chatId: message.chat.id,
-        inquiryId: inquiry ? inquiry.id : '',
-        sourceMessageId: message.message_id,
+  if (!message || !message.chat || adminChatFor(message.chat.id)) return false;
+  let copiedAny = false;
+  for (const chat of inquiryChats()) {
+    try {
+      const copied = await telegramRequest(token, 'copyMessage', {
+        chat_id: chat.chatId,
+        from_chat_id: message.chat.id,
+        message_id: message.message_id,
       });
+      // Replying directly to the copied photo or voice message works too.
+      if (copied && Number.isFinite(Number(copied.message_id))) {
+        rememberAdminReplyTarget([Number(copied.message_id)], {
+          chatId: message.chat.id,
+          inquiryId: inquiry ? inquiry.id : '',
+          sourceMessageId: message.message_id,
+        }, chat.chatId);
+      }
+      copiedAny = true;
+    } catch (error) {
+      recordError('Копирование сообщения ' + (chat.main ? 'администратору' : 'менеджеру ' + chat.name), error);
     }
-    return true;
-  } catch (error) {
-    recordError('Копирование сообщения администратору', error);
-    return false;
   }
+  return copiedAny;
 }
 
 function messageSummary(message) {
@@ -427,11 +470,11 @@ const LEGACY_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 // recorded here: admin chat message id -> the user it belongs to. Replies are
 // routed only by this map, never by the message text, because the text
 // contains the user's own name and message and can be forged.
-function rememberAdminReplyTarget(messageIds, target) {
+function rememberAdminReplyTarget(messageIds, target, adminChatId = data.config.adminChatId) {
   if (!target || target.chatId == null || !messageIds.length) return;
   if (!data.adminReplyTargets || typeof data.adminReplyTargets !== 'object') data.adminReplyTargets = {};
   for (const messageId of messageIds) {
-    data.adminReplyTargets[String(messageId)] = {
+    data.adminReplyTargets[replyTargetKey(adminChatId, messageId)] = {
       chatId: String(target.chatId),
       inquiryId: cleanText(target.inquiryId, 100),
       sourceMessageId: Number.isFinite(Number(target.sourceMessageId)) && target.sourceMessageId != null ? Number(target.sourceMessageId) : null,
@@ -440,7 +483,8 @@ function rememberAdminReplyTarget(messageIds, target) {
   }
   const keys = Object.keys(data.adminReplyTargets);
   if (keys.length > ADMIN_REPLY_TARGET_LIMIT) {
-    keys.sort((a, b) => Number(a) - Number(b));
+    const createdAt = (key) => Date.parse(data.adminReplyTargets[key].createdAt) || 0;
+    keys.sort((a, b) => createdAt(a) - createdAt(b) || Number(a.split(':').pop()) - Number(b.split(':').pop()));
     for (const key of keys.slice(0, keys.length - ADMIN_REPLY_TARGET_LIMIT)) delete data.adminReplyTargets[key];
   }
   scheduleSave();
@@ -472,13 +516,13 @@ function administratorReplyTarget(message) {
   const replied = message && message.reply_to_message;
   if (!replied) return null;
   if (data.bot.id && replied.from && Number(replied.from.id) !== Number(data.bot.id)) return null;
-  const key = String(replied.message_id);
+  const key = replyTargetKey(message.chat.id, replied.message_id);
   const targets = data.adminReplyTargets || {};
   if (Object.hasOwn(targets, key)) {
     const stored = targets[key];
     return { chatId: stored.chatId, inquiryId: stored.inquiryId || '', sourceMessageId: stored.sourceMessageId };
   }
-  return legacyAdministratorReplyTarget(replied);
+  return adminChatFor(message.chat.id) && adminChatFor(message.chat.id).main ? legacyAdministratorReplyTarget(replied) : null;
 }
 
 function looksLikeUserNotification(message) {
@@ -489,8 +533,9 @@ function looksLikeUserNotification(message) {
 }
 
 async function handleAdministratorReply(message, token) {
-  const adminChatId = cleanText(data.config.adminChatId, 40);
-  if (!adminChatId || !message || !message.chat || String(message.chat.id) !== adminChatId) return false;
+  const adminChat = message && message.chat ? adminChatFor(message.chat.id) : null;
+  if (!adminChat) return false;
+  const adminChatId = adminChat.chatId;
   const target = administratorReplyTarget(message);
   if (!target) {
     // A reply to an old notification must not fall through and be treated
@@ -532,9 +577,10 @@ async function handleAdministratorReply(message, token) {
       const inquiry = data.inquiries.find((item) => item.id === target.inquiryId);
       if (inquiry) {
         inquiry.replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
-        inquiry.replies.push({ id: crypto.randomUUID(), text: messageSummary(message), source: 'telegram', createdAt: new Date().toISOString() });
+        inquiry.replies.push({ id: crypto.randomUUID(), text: messageSummary(message), source: 'telegram', by: adminChat.name, createdAt: new Date().toISOString() });
         inquiry.replies = inquiry.replies.slice(-50);
         if (inquiry.status === 'new') inquiry.status = 'in_progress';
+        if (!inquiry.assignee) inquiry.assignee = adminChat.name;
         inquiry.updatedAt = new Date().toISOString();
       }
     }
@@ -560,6 +606,7 @@ export {
   MAX_INQUIRIES,
   MERGEABLE_INQUIRY_TYPES,
   adminCallbackAllowed,
+  adminChatFor,
   adminMuteNotices,
   adminNotificationDecision,
   adminNotifyTimes,
@@ -570,6 +617,7 @@ export {
   handleAdministratorReply,
   handleInquiryStatusCallback,
   handleMessageReaction,
+  inquiryChats,
   inquiryStatusMarkup,
   inquiryTimes,
   inquiryTypeLabel,
