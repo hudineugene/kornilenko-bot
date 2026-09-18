@@ -56,6 +56,35 @@ function forEachStoredImage(root, callback) {
   }
 }
 
+// A copy without photos (the weekly Telegram copy) restored on another
+// computer points at files that are not there. Those references are removed
+// so the rest of the data can be restored; returns how many were missing.
+function dropMissingImages(root) {
+  if (!root || typeof root !== 'object') return 0;
+  let missing = 0;
+  const keep = (image) => {
+    if (!image || imageExists(image)) return true;
+    missing += 1;
+    return false;
+  };
+  for (const language of ['ru', 'en', 'es']) {
+    if (root.welcomeImages && root.welcomeImages[language] && !keep(root.welcomeImages[language])) root.welcomeImages[language] = null;
+  }
+  for (const key of ['objects', 'promotions', 'broadcasts']) {
+    for (const record of Array.isArray(root[key]) ? root[key] : []) {
+      if (!record || typeof record !== 'object') continue;
+      if (record.image && !keep(record.image)) record.image = null;
+      if (Array.isArray(record.images)) record.images = record.images.filter(keep);
+      if (record.imagesByLanguage && typeof record.imagesByLanguage === 'object') {
+        for (const language of ['ru', 'en', 'es']) {
+          if (Array.isArray(record.imagesByLanguage[language])) record.imagesByLanguage[language] = record.imagesByLanguage[language].filter(keep);
+        }
+      }
+    }
+  }
+  return missing;
+}
+
 function containsEmbeddedImages(root) {
   let found = false;
   forEachStoredImage(root, (image) => {
@@ -157,6 +186,7 @@ export {
   containsEmbeddedImages,
   contentAddressImages,
   contentAddressedName,
+  dropMissingImages,
   ensureMigrationBackup,
   externalizeImages,
   forEachStoredImage,

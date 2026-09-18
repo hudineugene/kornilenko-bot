@@ -99,6 +99,30 @@ test('the file goes to the admin chat and restores the data with its password', 
   assert.equal(bot.getData().config.telegramBackup.enabled, false, 'after a restore the copy is set up again');
 });
 
+test('on a new computer the copy restores without the photos, and the panel says how many are missing', async () => {
+  assert.equal((await put(ENABLE)).status, 200);
+  bot.getData().objects.push({ id: 'villa', status: 'active', reference: 'V1', title: { ru: 'Вилла', en: '', es: '' }, imagesByLanguage: { ru: [{ id: 'p1', storageFile: 'not-on-this-computer.jpg', mimeType: 'image/jpeg' }], en: [], es: [] } });
+  await realFetch(base + '/api/telegram-backup/send', { method: 'POST', headers, body: '{}' });
+  const response = await realFetch(base + '/api/restore', {
+    method: 'POST',
+    headers: { 'content-type': 'application/octet-stream', cookie: headers.cookie, 'x-csrf-token': headers['x-csrf-token'], 'x-backup-password': Buffer.from('copy-password-2026').toString('base64') },
+    body: documents[0].bytes,
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).missingPhotos, 1);
+  const villa = bot.getData().objects.find((item) => item.id === 'villa');
+  assert.deepEqual(villa.imagesByLanguage.ru, []);
+  assert.equal(villa.title.ru, 'Вилла');
+});
+
+test('the panel backup file does not carry the key of the Telegram copy', async () => {
+  assert.equal((await put(ENABLE)).status, 200);
+  const response = await realFetch(base + '/api/backup', { headers });
+  const backup = JSON.parse(zlib.gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8'));
+  assert.deepEqual(backup.config.telegramBackup, { enabled: false });
+  assert.ok(bot.getData().config.telegramBackup.key, 'the bot itself keeps it');
+});
+
 test('the copy is sent once a week, during the admin\'s hours', async () => {
   assert.equal((await put(ENABLE)).status, 200);
   const data = bot.getData();

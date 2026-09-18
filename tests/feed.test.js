@@ -74,11 +74,12 @@ test('Kyero fields become the bot\'s property fields', () => {
 
 test('new properties are added hidden with their photos; the admin\'s texts are kept', async () => {
   const data = bot.getData();
-  data.objects.push({ id: 'mine', status: 'active', reference: 'kb 202', title: { ru: 'Моя квартира', en: '', es: '' }, description: { ru: '', en: '', es: '' }, priceValue: 1100, dealType: 'rent', imagesByLanguage: { ru: [], en: [], es: [] } });
+  data.objects.push({ id: 'manual-a1', status: 'active', reference: 'KB101', title: { ru: 'Другой объект', en: '', es: '' }, propertyType: 'house', imagesByLanguage: { ru: [], en: [], es: [] } });
+  data.objects.push({ id: 'mine', status: 'active', reference: 'kb-202 ', title: { ru: 'Моя квартира', en: '', es: '' }, description: { ru: '', en: '', es: '' }, priceValue: 1100, dealType: 'rent', imagesByLanguage: { ru: [], en: [], es: [] } });
   const preview = bot.planSummary(bot.planImport(bot.readFeed(FEED)));
   assert.deepEqual([preview.create, preview.update, preview.unchanged], [1, 1, 0]);
   assert.deepEqual(preview.skipped.map((item) => item.reason), ['нет номера объекта (<ref>)', 'номер повторяется в выгрузке']);
-  assert.equal(data.objects.length, 1, 'the preview changes nothing');
+  assert.equal(data.objects.length, 2, 'the preview changes nothing');
 
   const result = await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher });
   assert.deepEqual([result.create, result.update, result.images, result.imageErrors], [1, 1, 1, 1]);
@@ -93,6 +94,45 @@ test('new properties are added hidden with their photos; the admin\'s texts are 
   assert.equal(mine.priceValue, 1200, 'the price comes from the site');
   assert.equal(mine.title.ru, 'Моя квартира', 'the admin\'s title stays');
   assert.equal(mine.city.ru, 'Benidorm', 'an empty city is filled');
+  assert.equal(data.objects.find((record) => record.id === 'manual-a1').propertyType, 'house', '"KB101" is not "KB-101"');
+});
+
+test('a feed that leaves fields out does not overwrite them', async () => {
+  const data = bot.getData();
+  data.objects.push({ id: 'rented', status: 'active', reference: 'R-1', dealType: 'rent', pricePeriod: 'month', currency: 'GBP', propertyType: 'villa', priceValue: 2000, title: { ru: 'Вилла', en: '', es: '' }, imagesByLanguage: { ru: [], en: [], es: [] } });
+  await bot.applyImport(bot.readFeed('<root><property><ref>R-1</ref><price>2200</price></property></root>'), { fetcher: imageFetcher });
+  const record = data.objects.find((item) => item.id === 'rented');
+  assert.deepEqual([record.priceValue, record.dealType, record.pricePeriod, record.currency, record.propertyType], [2200, 'rent', 'month', 'GBP', 'villa']);
+});
+
+test('a broken file is read quickly; photos from local addresses are refused; one import at a time', async () => {
+  const started = Date.now();
+  bot.parseXml('<root>' + '<!-- x'.repeat(200000));
+  bot.parseXml('<root><![CDATA[' + 'a'.repeat(3000000));
+  assert.ok(Date.now() - started < 2000, 'linear, not quadratic');
+  assert.equal(bot.publicAddress('https://img.example.com/a.jpg'), true);
+  for (const address of ['http://127.0.0.1/a.jpg', 'http://localhost:3000/api/state', 'http://192.168.1.10/a.png', 'http://10.0.0.5/x', 'http://[::1]/x', 'file:///C:/a.jpg']) {
+    assert.equal(bot.publicAddress(address), false, address);
+  }
+  let release;
+  const slow = () => new Promise((resolve) => { release = () => resolve(new Response(PNG, { status: 200, headers: { 'content-type': 'image/png' } })); });
+  const first = bot.applyImport(bot.readFeed(FEED), { fetcher: slow });
+  await assert.rejects(bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher }), /уже идёт/);
+  while (!release) await new Promise((resolve) => setTimeout(resolve, 5));
+  release();
+  release = null;
+  const waitAndRelease = setInterval(() => { if (release) { release(); release = null; } }, 5);
+  await first;
+  clearInterval(waitAndRelease);
+});
+
+test('an import sends each client at most one alert', async () => {
+  const data = bot.getData();
+  data.config.active = true;
+  data.users.fan = { id: 'fan', chatId: 777001, firstName: 'Fan', preferredLanguage: 'ru', activity: [] };
+  data.inquiries.push({ id: 'sel', userId: 'fan', type: 'selection', language: 'ru', selection: { deal: '', type: '', location: '', budget: '', bedrooms: '' }, status: 'new', text: '', replies: [], createdAt: new Date().toISOString() });
+  const result = await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher, publishNew: true });
+  assert.equal(result.alerts, 1);
 });
 
 test('with "show at once" new properties with photos are published', async () => {

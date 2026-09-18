@@ -124,8 +124,10 @@ function eraseUserData(user) {
   delete data.users[id];
   usersByChatId.delete(chatId);
   inquiryTimes.delete(id);
-  adminNotifyTimes.delete(id);
-  adminMuteNotices.delete(id);
+  for (const key of [id, id + ':messages', id + ':activity']) {
+    adminNotifyTimes.delete(key);
+    adminMuteNotices.delete(key);
+  }
   const inquiriesBefore = data.inquiries.length;
   data.inquiries = data.inquiries.filter((item) => item.userId !== id && String(item.chatId) !== chatId);
   for (const entry of data.broadcasts) {

@@ -102,18 +102,27 @@ async function sendInquiryToAdministrator(inquiry, heading, extraLines = [], opt
   ].join('\n');
   // The main admin and every manager: whoever is free can answer. A planned
   // follow-up goes to the one who took the inquiry.
-  const assigned = options.onlyAssignee && inquiry.assignee ? inquiryChats().filter((chat) => chat.name === inquiry.assignee) : [];
-  for (const chat of assigned.length ? assigned : inquiryChats()) {
-    const messageIds = [];
-    try {
-      await sendMessage(chat.chatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry) });
-    } catch (error) {
-      if (chat.main) throw error;
-      recordError('Напоминание менеджеру ' + chat.name, error);
-      continue;
+  // Returns how many chats got it: a reminder nobody received is tried again.
+  const sendTo = async (chats) => {
+    let delivered = 0;
+    for (const chat of chats) {
+      const messageIds = [];
+      try {
+        await sendMessage(chat.chatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry) });
+      } catch (error) {
+        recordError(chat.main ? 'Напоминание администратору' : 'Напоминание менеджеру ' + chat.name, error);
+        continue;
+      }
+      delivered += 1;
+      if (user) rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId: inquiry.id, sourceMessageId: inquiry.sourceMessageId }, chat.chatId);
     }
-    if (user) rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId: inquiry.id, sourceMessageId: inquiry.sourceMessageId }, chat.chatId);
-  }
+    return delivered;
+  };
+  const assigned = options.onlyAssignee && inquiry.assignee ? inquiryChats().filter((chat) => chat.name === inquiry.assignee) : [];
+  let delivered = await sendTo(assigned.length ? assigned : inquiryChats());
+  // The one who took the inquiry did not get it: the others hear about it.
+  if (!delivered && assigned.length) delivered = await sendTo(inquiryChats().filter((chat) => !assigned.includes(chat)));
+  return delivered;
 }
 
 // A follow-up is due on its day: at the time the admin chose, otherwise at
@@ -136,9 +145,10 @@ async function runFollowUpReminders(now = new Date()) {
   const due = data.inquiries.filter((inquiry) => followUpDue(inquiry, now)).slice(0, REMINDERS_PER_RUN);
   const sent = [];
   for (const inquiry of due) {
-    inquiry.followUpNotifiedAt = now.toISOString();
     const planned = inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + (inquiry.followUpTime ? ' ' + inquiry.followUpTime : '');
-    await sendInquiryToAdministrator(inquiry, '📌 Пора связаться с клиентом (' + planned + '): ' + inquiryTypeLabel(inquiry), inquiry.note ? ['', '📝 ' + shortenedText(inquiry.note, 300)] : [], { onlyAssignee: true });
+    const delivered = await sendInquiryToAdministrator(inquiry, '📌 Пора связаться с клиентом (' + planned + '): ' + inquiryTypeLabel(inquiry), inquiry.note ? ['', '📝 ' + shortenedText(inquiry.note, 300)] : [], { onlyAssignee: true });
+    if (!delivered) continue;
+    inquiry.followUpNotifiedAt = now.toISOString();
     sent.push(inquiry.id);
   }
   if (sent.length) saveDataNow();
@@ -160,7 +170,8 @@ async function runInquiryReminders(now = new Date()) {
   if (!due.length) return [];
   const sent = [];
   for (const inquiry of due.slice(0, REMINDERS_PER_RUN)) {
-    await sendInquiryToAdministrator(inquiry, '⏰ Нет ответа ' + hoursAgoText(now.getTime() - Date.parse(inquiry.createdAt)) + ': ' + inquiryTypeLabel(inquiry));
+    const delivered = await sendInquiryToAdministrator(inquiry, '⏰ Нет ответа ' + hoursAgoText(now.getTime() - Date.parse(inquiry.createdAt)) + ': ' + inquiryTypeLabel(inquiry));
+    if (!delivered) continue;
     inquiry.remindedAt = now.toISOString();
     sent.push(inquiry.id);
   }

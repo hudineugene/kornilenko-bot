@@ -35,15 +35,22 @@ function viewingDayForOption(optionIndex, now = new Date()) {
   return localDayKey(date);
 }
 
-const MONTH_PATTERNS = [
-  /^(янв|jan|ene)/, /^(фев|feb)/, /^(мар|mar)/, /^(апр|apr|abr)/, /^(ма[йя]|may)/, /^(июн|jun)/,
-  /^(июл|jul)/, /^(авг|aug|ago)/, /^(сен|sep|set)/, /^(окт|oct)/, /^(ноя|nov)/, /^(дек|dec|dic)/,
+// Russian months by their stem ("сентября", "сент."); English and Spanish
+// only as whole words or abbreviations, so that "martes" (Tuesday) is not
+// taken for March.
+const RUSSIAN_MONTHS = [/^янв/, /^фев/, /^март/, /^апр/, /^ма[йя]$/, /^июн/, /^июл/, /^авг/, /^сент?/, /^окт/, /^ноя/, /^дек/];
+const LATIN_MONTHS = [
+  ['january', 'jan', 'enero', 'ene'], ['february', 'feb', 'febrero'], ['march', 'mar', 'marzo'], ['april', 'apr', 'abril', 'abr'],
+  ['may', 'mayo'], ['june', 'jun', 'junio'], ['july', 'jul', 'julio'], ['august', 'aug', 'agosto', 'ago'],
+  ['september', 'sep', 'sept', 'septiembre', 'setiembre', 'set'], ['october', 'oct', 'octubre'], ['november', 'nov', 'noviembre'], ['december', 'dec', 'diciembre', 'dic'],
 ];
 
 function monthFromWord(word) {
-  const lower = String(word || '').toLowerCase();
-  const index = MONTH_PATTERNS.findIndex((pattern) => pattern.test(lower));
-  return index >= 0 ? index + 1 : 0;
+  const lower = String(word || '').toLowerCase().replace(/\.$/, '');
+  const russian = RUSSIAN_MONTHS.findIndex((pattern) => pattern.test(lower));
+  if (russian >= 0 && /[а-яё]/.test(lower)) return russian + 1;
+  const latin = LATIN_MONTHS.findIndex((names) => names.includes(lower));
+  return latin >= 0 ? latin + 1 : 0;
 }
 
 // A calendar date from a free-text answer: "25.09", "25/09/2026",
@@ -178,6 +185,7 @@ async function confirmViewing(inquiry, options = {}, token = data.config.botToke
   if (date && !DAY_KEY_PATTERN.test(date)) throw new Error('Некорректная дата просмотра');
   if (time && !CLOCK_TIME_PATTERN.test(time)) throw new Error('Время укажите в формате ЧЧ:ММ');
   if (date && date < localDayKey()) throw new Error('Дата просмотра уже прошла');
+  if (viewing.cancelledAt && inquiry.status === 'closed') throw new Error('Клиент отменил этот просмотр');
   if (date !== viewing.confirmedDate || time !== viewing.confirmedTime) {
     viewing.remindedAt = '';
     viewing.feedbackAskedAt = '';
@@ -187,8 +195,10 @@ async function confirmViewing(inquiry, options = {}, token = data.config.botToke
   viewing.confirmedTime = time;
   viewing.confirmedAt = new Date().toISOString();
   viewing.cancelledAt = '';
+  // Saved only once the client has the message: a failed send must not
+  // leave a "confirmed" viewing the client knows nothing about.
+  const message = await sendViewingConfirmation({ ...inquiry, viewing }, user, token);
   inquiry.viewing = viewing;
-  const message = await sendViewingConfirmation(inquiry, user, token);
   const when = viewingWhen(inquiry, 'ru');
   inquiry.replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
   inquiry.replies.push({
@@ -215,6 +225,17 @@ async function handleViewingConfirmCallback(query, token) {
   const inquiry = data.inquiries.find((item) => item.id === id);
   if (!inquiry || inquiry.type !== 'viewing') {
     await acknowledgeCallback(query, token, 'Обращение не найдено — возможно, оно удалено.');
+    return;
+  }
+  // An old button (another manager's chat, or a notification sent before the
+  // panel confirmed or the client cancelled) must not change the viewing.
+  const viewing = inquiry.viewing || {};
+  const stale = inquiry.status === 'closed' ? 'Обращение закрыто' + (viewing.cancelledAt ? ': клиент отменил просмотр' : '')
+    : viewing.confirmedAt ? 'Просмотр уже подтверждён' + (viewing.confirmedDate ? ' на ' + [viewingDateLabel(viewing.confirmedDate, 'ru'), viewing.confirmedTime].filter(Boolean).join(', ') : '') + '. Изменить дату можно в панели.'
+      : '';
+  if (stale) {
+    await acknowledgeCallback(query, token, stale);
+    telegramRequest(token, 'editMessageReplyMarkup', { chat_id: query.message.chat.id, message_id: query.message.message_id, reply_markup: inquiryStatusMarkup(inquiry) }).catch(() => {});
     return;
   }
   try {

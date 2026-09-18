@@ -27,7 +27,7 @@ import { subscriptionPanel } from './subscriptions.mjs';
 import { offHoursNote } from './hours.mjs';
 import { monthlyPayment, purchaseEstimate } from './calculator.mjs';
 import { decryptBackup, encryptBackup, runTelegramBackup, setBackupPassword } from './offsite.mjs';
-import { applyImport, parseXml, planImport, planSummary, propertyTypeOf, readFeed, runDailyFeedImport } from './feed-import.mjs';
+import { applyImport, parseXml, planImport, planSummary, propertyTypeOf, publicAddress, readFeed, runDailyFeedImport } from './feed-import.mjs';
 import { hostAllowed, loginAttempts, requestIsRemote, sessions } from './admin-http.mjs';
 import './admin-input.mjs';
 import { xlsxWorkbook } from './excel.mjs';
@@ -90,6 +90,7 @@ export {
   planImport,
   planSummary,
   propertyTypeOf,
+  publicAddress,
   readFeed,
   persistImage,
   previousRunEndedAbruptly,

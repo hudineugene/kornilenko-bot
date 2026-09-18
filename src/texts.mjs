@@ -162,6 +162,7 @@ const VIEWING_FORM_TEXT = {
     invalid: 'Пожалуйста, выберите вариант на клавиатуре или напишите удобные дату и время.',
     success: 'Заявка на просмотр отправлена. Менеджер подтвердит дату и время в этом чате.',
     slotTaken: 'Это время только что заняли. Выберите, пожалуйста, другое.',
+    slotGone: 'На это время уже нельзя записаться. Выберите, пожалуйста, другое.',
     slotBooked: '✅ Готово, вы записаны на просмотр! Подробности ниже.',
   },
   en: {
@@ -184,6 +185,7 @@ const VIEWING_FORM_TEXT = {
     invalid: 'Choose an option from the keyboard or send a convenient date and time.',
     success: 'Your viewing request has been sent. A manager will confirm the date and time in this chat.',
     slotTaken: 'This time has just been taken. Please choose another one.',
+    slotGone: 'This time can no longer be booked. Please choose another one.',
     slotBooked: '✅ Done, your viewing is booked! Details below.',
   },
   es: {
@@ -206,6 +208,7 @@ const VIEWING_FORM_TEXT = {
     invalid: 'Elige una opción del teclado o escribe una fecha y hora convenientes.',
     success: 'Tu solicitud de visita ha sido enviada. Un gestor confirmará la fecha y hora en este chat.',
     slotTaken: 'Esta hora se acaba de ocupar. Por favor, elige otra.',
+    slotGone: 'Esta hora ya no se puede reservar. Por favor, elige otra.',
     slotBooked: '✅ ¡Listo, tu visita está reservada! Los detalles, abajo.',
   },
 };

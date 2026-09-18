@@ -13,7 +13,7 @@ import { currentSelectionMatches } from './alerts.mjs';
 import { propertyRequestText } from './sections.mjs';
 import { parseViewingDate, sendViewingConfirmation, viewingDayForOption } from './viewings.mjs';
 import { withOffHoursNote } from './hours.mjs';
-import { availableSlotDays, freeTimes, slotFree, slotsEnabled } from './slots.mjs';
+import { availableSlotDays, bookedViewings, freeTimes, slotFree, slotSettings, slotsEnabled } from './slots.mjs';
 
 function savedLeadOption(user, language, field) {
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
@@ -376,7 +376,7 @@ function viewingDateValue(value, copy, language, now = new Date()) {
 // "Another date" / "Another time" leave slot mode: the manager confirms.
 function viewingKeyboard(language, step, pending = null) {
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
-  const slotMode = Boolean(pending && pending.data && pending.data.slotMode);
+  const slotMode = Boolean(pending && pending.data && pending.data.slotMode && slotsEnabled());
   if (step === 'date' && slotMode) {
     return oneColumnReplyKeyboard(availableSlotDays(language).map((day) => day.label).concat(copy.dateOptions[3]), copy.cancel, copy.askDate);
   }
@@ -438,6 +438,8 @@ async function handleViewingFormMessage(message, user, token) {
     return true;
   }
   pending.data = pending.data && typeof pending.data === 'object' ? pending.data : {};
+  // Free slots were switched off in the panel while the form was open.
+  if (pending.data.slotMode && !slotsEnabled()) pending.data.slotMode = false;
   if (pending.step === 'date') {
     if (text === copy.dateOptions[3]) {
       pending.data.slotMode = false;
@@ -467,6 +469,8 @@ async function handleViewingFormMessage(message, user, token) {
       }
       pending.data.date = viewingDateValue(text, copy, language);
       pending.data.day = viewingDayForOption(optionIndex);
+      // "As specified" belonged to the free-text date that was just replaced.
+      if (pending.data.time === copy.asSpecified) pending.data.time = '';
       if (pending.editing === 'date' && pending.data.time) {
         await sendViewingReview(user, pending, property, token, language);
         return true;
@@ -536,13 +540,15 @@ async function handleViewingFormMessage(message, user, token) {
       return true;
     }
     const slotBooking = Boolean(pending.data.slotMode && pending.data.day && pending.data.time);
-    // Someone else may have taken the slot while this client was deciding.
+    // Someone else may have taken the slot while this client was deciding,
+    // or it is now too close to book.
     if (slotBooking && !slotFree(pending.data.day, pending.data.time)) {
+      const taken = bookedViewings(pending.data.day, pending.data.time) >= slotSettings().perSlot;
       pending.step = 'date';
       pending.editing = '';
       pending.data = newViewingData(language);
       scheduleSave();
-      await sendMessage(user.chatId, copy.slotTaken, token, { reply_markup: keyboard('date') });
+      await sendMessage(user.chatId, taken ? copy.slotTaken : copy.slotGone, token, { reply_markup: keyboard('date') });
       return true;
     }
     const details = [

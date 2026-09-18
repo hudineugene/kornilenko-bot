@@ -10,13 +10,18 @@ import { PROPERTY_TYPE_LABELS } from './texts.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { parseUploadedImage } from './admin-http.mjs';
-import { queuePropertyAlerts } from './alerts.mjs';
+import { configured } from './store.mjs';
+import { deliverPropertyAlerts, propertyAlertDeliveries } from './alerts.mjs';
 
 const MAX_FEED_BYTES = 20 * 1024 * 1024;
 const MAX_FEED_PROPERTIES = 2000;
 const MAX_IMAGES_PER_PROPERTY = 10;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 30000;
+const IMAGE_TIMEOUT_MS = 15000;
+const MAX_IMAGES_PER_IMPORT = 300;
+const PHOTO_TIME_LIMIT_MS = 10 * 60 * 1000;
+const DAILY_IMPORT_HOURS = { from: 9, to: 20 };
 const FEED_REFRESH_MS = 24 * 60 * 60 * 1000;
 
 // --- A small XML reader, enough for property feeds ---------------------------
@@ -33,26 +38,56 @@ function decodeEntities(text) {
   });
 }
 
+// A single pass with indexOf: a broken file (an unclosed comment or CDATA)
+// ends the scan instead of making it slow.
 function parseXml(text) {
+  const source = String(text);
   const root = { name: '#root', attributes: {}, children: [], text: '' };
   const stack = [root];
-  const pattern = /<!\[CDATA\[([\s\S]*?)\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!DOCTYPE[^>]*>|<\/([\w:.-]+)\s*>|<([\w:.-]+)((?:\s+[\w:.-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>|([^<]+)|</g;
-  for (const match of String(text).matchAll(pattern)) {
+  const skipTo = (marker, from) => {
+    const end = source.indexOf(marker, from);
+    return end < 0 ? source.length : end + marker.length;
+  };
+  let position = 0;
+  while (position < source.length) {
     const node = stack[stack.length - 1];
-    if (match[1] !== undefined) node.text += match[1];
-    else if (match[2]) {
+    const open = source.indexOf('<', position);
+    if (open < 0) {
+      node.text += decodeEntities(source.slice(position));
+      break;
+    }
+    if (open > position) node.text += decodeEntities(source.slice(position, open));
+    if (source.startsWith('<![CDATA[', open)) {
+      const end = source.indexOf(']]>', open + 9);
+      node.text += source.slice(open + 9, end < 0 ? source.length : end);
+      position = end < 0 ? source.length : end + 3;
+      continue;
+    }
+    if (source.startsWith('<!--', open)) { position = skipTo('-->', open + 4); continue; }
+    if (source.startsWith('<?', open)) { position = skipTo('?>', open + 2); continue; }
+    if (source.startsWith('<!', open)) { position = skipTo('>', open + 2); continue; }
+    const close = source.indexOf('>', open + 1);
+    if (close < 0) break;
+    const tag = source.slice(open + 1, close);
+    position = close + 1;
+    if (tag.startsWith('/')) {
       // Tolerant: close up to the matching element, ignore a stray end tag.
-      const index = stack.map((item) => item.name).lastIndexOf(match[2]);
+      const name = tag.slice(1).trim();
+      const index = stack.map((item) => item.name).lastIndexOf(name);
       if (index > 0) stack.length = index;
-    } else if (match[3]) {
-      const attributes = {};
-      for (const [, name, double, single] of String(match[4] || '').matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
-        attributes[name] = decodeEntities(double !== undefined ? double : single);
-      }
-      const element = { name: match[3], attributes, children: [], text: '' };
-      node.children.push(element);
-      if (!match[5]) stack.push(element);
-    } else if (match[6] !== undefined) node.text += decodeEntities(match[6]);
+      continue;
+    }
+    const selfClosing = tag.endsWith('/');
+    const body = selfClosing ? tag.slice(0, -1) : tag;
+    const name = (body.match(/^[\w:.-]+/) || [''])[0];
+    if (!name) continue;
+    const attributes = {};
+    for (const [, key, double, single] of body.slice(name.length).matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+      attributes[key] = decodeEntities(double !== undefined ? double : single);
+    }
+    const element = { name, attributes, children: [], text: '' };
+    node.children.push(element);
+    if (!selfClosing) stack.push(element);
   }
   return root;
 }
@@ -126,7 +161,10 @@ function generatedTitle(type, town) {
 
 function feedItemOf(node) {
   const reference = cleanText(textOf(node, 'ref') || textOf(node, 'id'), 80);
-  const type = propertyTypeOf(textOf(node, 'type'));
+  // What the feed leaves out stays null, so an update keeps the admin's value.
+  const typeText = textOf(node, 'type');
+  const type = typeText ? propertyTypeOf(typeText) : null;
+  const currencyText = textOf(node, 'currency').toUpperCase();
   const town = cleanText(textOf(node, 'town'), 160);
   const frequency = textOf(node, 'price_freq').toLowerCase();
   const surface = child(node, 'surface_area');
@@ -141,14 +179,14 @@ function feedItemOf(node) {
     .filter((address) => /^https?:\/\//i.test(address))
     .slice(0, MAX_IMAGES_PER_PROPERTY);
   const titles = titleNode ? localizedOf(titleNode, 160) : { ru: '', en: '', es: '' };
-  const generated = generatedTitle(type, town);
+  const generated = generatedTitle(type || 'other', town);
   return {
     reference,
     fields: {
-      dealType: ['month', 'week'].includes(frequency) ? 'rent' : 'sale',
-      pricePeriod: frequency === 'month' ? 'month' : frequency === 'week' ? 'week' : 'total',
+      dealType: frequency ? (['month', 'week'].includes(frequency) ? 'rent' : 'sale') : null,
+      pricePeriod: frequency ? (frequency === 'month' ? 'month' : frequency === 'week' ? 'week' : 'total') : null,
       priceValue: numberOf(textOf(node, 'price')),
-      currency: ['EUR', 'USD', 'GBP'].includes(textOf(node, 'currency').toUpperCase()) ? textOf(node, 'currency').toUpperCase() : 'EUR',
+      currency: ['EUR', 'USD', 'GBP'].includes(currencyText) ? currencyText : null,
       propertyType: type,
       bedrooms: numberOf(textOf(node, 'beds')),
       bathrooms: numberOf(textOf(node, 'baths')),
@@ -179,8 +217,10 @@ function readFeed(xml) {
 
 // --- Applying ------------------------------------------------------------------
 
+// References match as written, ignoring case and spaces around: "A-1" and
+// "A1" are different properties.
 function referenceKey(value) {
-  return String(value || '').toUpperCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  return String(value || '').trim().toUpperCase();
 }
 
 function isEmptyLocalized(value) {
@@ -214,7 +254,8 @@ function planImport(items) {
       continue;
     }
     const changed = Object.entries(item.fields).some(([field, value]) => value != null && value !== '' && existing[field] !== value);
-    (changed ? plan.update : plan.unchanged).push({ item, record: existing });
+    const photosToAdd = !hasImages(existing) && item.images.length > 0;
+    (changed || photosToAdd ? plan.update : plan.unchanged).push({ item, record: existing });
   }
   const inFeed = new Set(items.map((item) => referenceKey(item.reference)));
   plan.missing = data.objects.filter((record) => record.reference && !inFeed.has(referenceKey(record.reference)) && record.importedAt).map((record) => record.reference);
@@ -232,15 +273,57 @@ function planSummary(plan) {
   };
 }
 
+// Photo links come from the feed, so they may not point into this computer
+// or the local network.
+function publicAddress(address) {
+  let url;
+  try {
+    url = new URL(address);
+  } catch {
+    return false;
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === '0.0.0.0') return false;
+  if (/^(127|10|0)\./.test(host) || /^169\.254\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
+  if (host === '::1' || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe80:/.test(host)) return false;
+  return true;
+}
+
+// The body up to a limit, without first taking a huge answer into memory.
+async function readLimited(response, limit, what) {
+  const declared = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limit) throw new Error(what + ' больше ' + Math.round(limit / 1024 / 1024) + ' МБ');
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > limit) throw new Error(what + ' больше ' + Math.round(limit / 1024 / 1024) + ' МБ');
+    return bytes;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > limit) {
+      reader.cancel().catch(() => {});
+      throw new Error(what + ' больше ' + Math.round(limit / 1024 / 1024) + ' МБ');
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
+
 async function downloadImage(address, fetcher) {
+  if (!publicAddress(address)) throw new Error('адрес фото недоступен');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
   try {
     const response = await fetcher(address, { signal: controller.signal, redirect: 'follow' });
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const type = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_IMAGE_BYTES) throw new Error('больше 5 МБ');
+    const bytes = await readLimited(response, MAX_IMAGE_BYTES, 'Фото');
     const mime = type === 'image/png' || bytes.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47])) ? 'image/png' : 'image/jpeg';
     return parseUploadedImage('data:' + mime + ';base64,' + bytes.toString('base64'), address.split('/').pop().split('?')[0] || 'photo.jpg');
   } finally {
@@ -248,28 +331,69 @@ async function downloadImage(address, fetcher) {
   }
 }
 
+// Photos of one import share a budget: a count and a time limit. What is
+// left out is picked up by the next import (a property without photos gets
+// them then).
+function photoBudget(now = Date.now()) {
+  return { left: MAX_IMAGES_PER_IMPORT, deadline: now + PHOTO_TIME_LIMIT_MS, skipped: 0 };
+}
+
+async function downloadImages(addresses, fetcher, budget, result) {
+  const images = [];
+  for (const address of addresses) {
+    if (budget.left <= 0 || Date.now() > budget.deadline) {
+      budget.skipped += 1;
+      continue;
+    }
+    budget.left -= 1;
+    try {
+      images.push(await downloadImage(address, fetcher));
+      result.images += 1;
+    } catch {
+      result.imageErrors += 1;
+    }
+  }
+  return images;
+}
+
+// The same photo files for every language; stored once on disk.
+function imagesForAllLanguages(images) {
+  return { ru: images, en: images.map((image) => ({ ...image, id: crypto.randomUUID() })), es: images.map((image) => ({ ...image, id: crypto.randomUUID() })) };
+}
+
+let importRunning = false;
+
 // Creates and updates properties. New ones are hidden unless publishNew:
 // the admin looks at them first. Returns counts and problems.
 async function applyImport(items, options = {}) {
+  if (importRunning) throw new Error('Загрузка с сайта уже идёт — дождитесь её окончания');
+  importRunning = true;
+  try {
+    return await runImport(items, options);
+  } finally {
+    importRunning = false;
+  }
+}
+
+async function runImport(items, options) {
   const fetcher = options.fetcher || fetch;
   const plan = planImport(items);
   const now = new Date().toISOString();
-  const result = { ...planSummary(plan), images: 0, imageErrors: 0, alerts: 0 };
+  const budget = photoBudget();
+  const result = { ...planSummary(plan), images: 0, imageErrors: 0, imagesPostponed: 0, alerts: 0 };
+  // Alerts of the whole import are sent together, at most one per client.
+  const deliveries = [];
   for (const item of plan.create) {
-    const images = [];
-    for (const address of item.images) {
-      try {
-        images.push(await downloadImage(address, fetcher));
-        result.images += 1;
-      } catch (error) {
-        result.imageErrors += 1;
-      }
-    }
+    const images = await downloadImages(item.images, fetcher, budget, result);
     const record = {
       id: crypto.randomUUID(),
       status: options.publishNew && images.length ? 'active' : 'hidden',
       reference: item.reference,
       ...item.fields,
+      dealType: item.fields.dealType || 'sale',
+      pricePeriod: item.fields.pricePeriod || 'total',
+      currency: item.fields.currency || 'EUR',
+      propertyType: item.fields.propertyType || 'other',
       title: item.texts.title,
       description: item.texts.description,
       address: { ru: '', en: '', es: '' },
@@ -282,14 +406,13 @@ async function applyImport(items, options = {}) {
       floors: '',
       distanceSea: null,
       badges: [],
-      // The same photo files for every language; stored once on disk.
-      imagesByLanguage: { ru: images, en: images.map((image) => ({ ...image, id: crypto.randomUUID() })), es: images.map((image) => ({ ...image, id: crypto.randomUUID() })) },
+      imagesByLanguage: imagesForAllLanguages(images),
       importedAt: now,
       createdAt: now,
       updatedAt: now,
     };
     data.objects.push(record);
-    result.alerts += queuePropertyAlerts(record, null);
+    deliveries.push(...propertyAlertDeliveries(record, null));
   }
   for (const { item, record } of plan.update) {
     const before = { status: record.status, priceValue: record.priceValue };
@@ -303,23 +426,22 @@ async function applyImport(items, options = {}) {
     if (!record.url && item.texts.url) record.url = item.texts.url;
     if (!record.mapUrl && item.texts.mapUrl) record.mapUrl = item.texts.mapUrl;
     if (!hasImages(record) && item.images.length) {
-      const images = [];
-      for (const address of item.images) {
-        try {
-          images.push(await downloadImage(address, fetcher));
-          result.images += 1;
-        } catch {
-          result.imageErrors += 1;
-        }
-      }
-      record.imagesByLanguage = { ru: images, en: images.map((image) => ({ ...image, id: crypto.randomUUID() })), es: images.map((image) => ({ ...image, id: crypto.randomUUID() })) };
+      const images = await downloadImages(item.images, fetcher, budget, result);
+      if (images.length) record.imagesByLanguage = imagesForAllLanguages(images);
     }
     record.importedAt = now;
     record.updatedAt = now;
-    result.alerts += queuePropertyAlerts(record, before);
+    deliveries.push(...propertyAlertDeliveries(record, before));
   }
   for (const { record } of plan.unchanged) record.importedAt = now;
+  result.imagesPostponed = budget.skipped;
   saveDataNow();
+  const perClient = new Map();
+  for (const delivery of deliveries) if (!perClient.has(delivery.user.id)) perClient.set(delivery.user.id, delivery);
+  result.alerts = perClient.size;
+  if (perClient.size && configured() && data.config.active) {
+    void deliverPropertyAlerts(Array.from(perClient.values())).catch((error) => recordError('Уведомления об объектах', error));
+  }
   return result;
 }
 
@@ -330,9 +452,7 @@ async function fetchFeed(address, fetcher = fetch) {
   try {
     const response = await fetcher(address, { signal: controller.signal, redirect: 'follow' });
     if (!response.ok) throw new Error('сайт ответил ' + response.status);
-    const text = await response.text();
-    if (Buffer.byteLength(text) > MAX_FEED_BYTES) throw new Error('выгрузка больше 20 МБ');
-    return text;
+    return (await readLimited(response, MAX_FEED_BYTES, 'Выгрузка')).toString('utf8');
   } catch (error) {
     throw new Error('Не удалось скачать выгрузку: ' + (error.name === 'AbortError' ? 'сайт не ответил за 30 секунд' : error.message));
   } finally {
@@ -352,12 +472,14 @@ function feedSettings() {
   };
 }
 
-// Once a day from the saved link, when that is switched on.
+// Once a day from the saved link, when that is switched on, in the daytime:
+// clients may get alerts about new properties.
 async function runDailyFeedImport(now = new Date(), fetcher = fetch) {
   const settings = feedSettings();
-  if (!settings.daily || !settings.url) return null;
+  if (!settings.daily || !settings.url || importRunning) return null;
+  if (now.getHours() < DAILY_IMPORT_HOURS.from || now.getHours() >= DAILY_IMPORT_HOURS.to) return null;
   const last = Date.parse(settings.lastRunAt || '');
-  if (Number.isFinite(last) && now.getTime() - last < FEED_REFRESH_MS) return null;
+  if (Number.isFinite(last) && now.getTime() - last < FEED_REFRESH_MS - 60 * 60 * 1000) return null;
   data.config.feedImport = { ...settings, lastRunAt: now.toISOString() };
   try {
     const result = await applyImport(readFeed(await fetchFeed(settings.url, fetcher)), { publishNew: settings.publishNew, fetcher });
@@ -381,6 +503,7 @@ export {
   planImport,
   planSummary,
   propertyTypeOf,
+  publicAddress,
   readFeed,
   runDailyFeedImport,
 };

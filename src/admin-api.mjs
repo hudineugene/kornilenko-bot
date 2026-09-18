@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
 import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, MAX_MANAGERS, normalizeCalculator, normalizeLoadedData, normalizeManagers, normalizeViewingSlots, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
-import { forEachStoredImage, imageBytes, imageExists } from './media.mjs';
+import { dropMissingImages, forEachStoredImage, imageBytes, imageExists } from './media.mjs';
 import { MANAGER_CONTACT_TEXT, applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
 import { configured, data, replaceData, runtime, saveDataNow, verifyPassword } from './store.mjs';
 import { recordError } from './analytics.mjs';
@@ -25,6 +25,9 @@ import { applyImport, feedSettings, fetchFeed, planImport, planSummary, readFeed
 
 function portableBackupData() {
   const payload = clone(data);
+  // The key of the Telegram copy stays on this computer: with it, anyone
+  // holding this file could open every weekly copy in the admin chat.
+  if (payload.config && payload.config.telegramBackup) payload.config.telegramBackup = { enabled: false };
   forEachStoredImage(payload, (image) => {
     if (!image) return;
     const bytes = imageBytes(image);
@@ -222,6 +225,7 @@ async function handleApi(req, res, url) {
     try {
       const backup = await readBackup(req);
       if (!backup || typeof backup !== 'object') throw new Error('Выберите корректный файл резервной копии');
+      const missingPhotos = dropMissingImages(backup);
       validateBackupPayload(backup);
       const restored = normalizeLoadedData(backup);
       replaceData(restored);
@@ -232,7 +236,7 @@ async function handleApi(req, res, url) {
       restartPolling();
       sessions.clear();
       const nextSession = createSession(res, req);
-      return json(res, 200, { ok: true, csrf: nextSession.csrf });
+      return json(res, 200, { ok: true, csrf: nextSession.csrf, missingPhotos });
     } catch (error) {
       return json(res, 400, { error: 'Не удалось восстановить копию: ' + error.message });
     }
@@ -861,7 +865,14 @@ async function handleApi(req, res, url) {
     data.config.adminChatId = adminChatId;
     if (body.notifyMode != null) data.config.notifyMode = body.notifyMode;
     if (body.reminderHours != null) data.config.reminderHours = Number(body.reminderHours);
-    if (adminChatId !== previousAdminChatId) data.config.adminNotificationVerifiedAt = '';
+    if (adminChatId !== previousAdminChatId) {
+      data.config.adminNotificationVerifiedAt = '';
+      // Plain keys are message numbers in the old admin chat; in the new chat
+      // the same numbers are other messages and must not route replies.
+      for (const key of Object.keys(data.adminReplyTargets || {})) if (!key.includes(':')) delete data.adminReplyTargets[key];
+      // A manager who became the main admin is not listed twice.
+      data.config.managers = (data.config.managers || []).filter((manager) => manager.chatId !== adminChatId);
+    }
     data.config.messages = nextMessages;
     const activeChanged = data.config.active !== Boolean(body.active);
     data.config.active = Boolean(body.active);

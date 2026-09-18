@@ -246,6 +246,85 @@ test.describe('free viewing slots', () => {
   });
 });
 
+test.describe('fixes after review', () => {
+  test('an old confirm button does not revive a cancelled viewing or move a confirmed one', async () => {
+    const chat = createChat();
+    const cancelled = await requestViewing(chat);
+    await chat.press('myreq:yes:' + cancelled.id);
+    telegram.calls = [];
+    let pressed = await adminPress('inq:confirm:' + cancelled.id);
+    assert.match(pressed.popups[0], /клиент отменил просмотр/);
+    assert.equal(sentTo(chat).length, 0);
+    assert.equal(cancelled.status, 'closed');
+
+    const other = createChat();
+    const confirmed = await requestViewing(other, 2, 0);
+    await bot.confirmViewing(confirmed, { date: dayKey(daysFromNow(3)), time: '14:00', source: 'panel' });
+    telegram.calls = [];
+    pressed = await adminPress('inq:confirm:' + confirmed.id);
+    assert.match(pressed.popups[0], /^Просмотр уже подтверждён на .+, 14:00/);
+    assert.equal(confirmed.viewing.confirmedTime, '14:00');
+    assert.equal(sentTo(other).length, 0);
+  });
+
+  test('a confirmation the client did not receive is not saved', async () => {
+    const chat = createChat();
+    const inquiry = await requestViewing(chat);
+    const working = global.fetch;
+    global.fetch = async (url, init) => {
+      if (String(url).endsWith('/sendMessage') && JSON.parse(init.body).chat_id === chat.id) {
+        return new Response(JSON.stringify({ ok: false, error_code: 403, description: 'Forbidden: bot was blocked by the user' }), { status: 403 });
+      }
+      return working(url, init);
+    };
+    try {
+      await assert.rejects(bot.confirmViewing(inquiry, { source: 'panel' }));
+    } finally {
+      global.fetch = working;
+    }
+    assert.equal(inquiry.viewing.confirmedAt, '');
+    assert.equal(inquiry.status, 'new');
+  });
+
+  test('Spanish weekdays are not months; a new date after "another date" asks the time again', async () => {
+    const now = new Date(2026, 8, 18, 12, 0);
+    assert.equal(bot.parseViewingDate('el martes 29 por la tarde', now), '', '"martes" is Tuesday, not March');
+    assert.equal(bot.parseViewingDate('29 de marzo', now), '2027-03-29');
+    assert.equal(bot.parseViewingDate('5 mar', now), '2027-03-05');
+
+    const chat = createChat();
+    await chat.press('property:viewing:villa-marbella-01');
+    await chat.say(ru.dateOptions[3]);
+    await chat.say('25 сентября после 16');
+    await chat.say(ru.editDate);
+    const step = await chat.say(ru.dateOptions[1]);
+    assert.equal(step.last.text, ru.askTime, 'the time of the free-text date is gone');
+  });
+
+  test('free slots switched off during the form, or a slot too close, are handled honestly', async () => {
+    bot.getData().config.viewingSlots = { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], times: ['10:00', '16:00'], daysAhead: 3, perSlot: 1 };
+    const chat = createChat();
+    let step = await chat.press('property:viewing:villa-marbella-01');
+    const date = daysFromNow(1);
+    const label = step.last.buttons.find((text) => text.includes(String(date.getDate()).padStart(2, '0') + '.' + String(date.getMonth() + 1).padStart(2, '0')));
+    await chat.say(label);
+    await chat.say('10:00');
+    bot.getData().config.viewingSlots.enabled = false;
+    step = await chat.say(ru.confirm);
+    assert.equal(chat.inquiries[0].status, 'new', 'no automatic confirmation once slots are off');
+    assert.equal(chat.inquiries[0].viewing.confirmedAt, '');
+
+    bot.getData().config.viewingSlots.enabled = true;
+    const late = createChat();
+    step = await late.press('property:viewing:villa-marbella-01');
+    await late.say(step.last.buttons.find((text) => text.includes(String(date.getDate()).padStart(2, '0') + '.')));
+    await late.say('16:00');
+    bot.getData().config.viewingSlots.times = ['10:00'];
+    step = await late.say(ru.confirm);
+    assert.equal(step.last.text, ru.slotGone, 'nobody took it: it is just no longer offered');
+  });
+});
+
 test.describe('my requests', () => {
   test('the list shows each request with its status', async () => {
     const chat = createChat();

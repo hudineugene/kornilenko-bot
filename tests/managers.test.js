@@ -102,6 +102,51 @@ test('navigation notices and planned follow-ups do not flood the managers', asyn
   assert.equal(sentTo(ADMIN_CHAT).length, 0, 'the follow-up goes to the one who took it');
 });
 
+test('a follow-up the manager could not get goes to the others', async () => {
+  const chat = createChat();
+  await chat.say('Перезвоните мне');
+  const inquiry = chat.inquiries[0];
+  inquiry.assignee = 'Мария';
+  inquiry.followUpDate = '2026-09-18';
+  const working = global.fetch;
+  global.fetch = async (url, init) => {
+    if (String(url).endsWith('/sendMessage') && String(JSON.parse(init.body).chat_id) === MANAGER_CHAT) {
+      return new Response(JSON.stringify({ ok: false, error_code: 403, description: 'Forbidden: bot was blocked by the user' }), { status: 403 });
+    }
+    return working(url, init);
+  };
+  telegram.calls = [];
+  try {
+    assert.deepEqual(await bot.runFollowUpReminders(new Date(2026, 8, 18, 10, 0)), [inquiry.id]);
+  } finally {
+    global.fetch = working;
+  }
+  assert.equal(sentTo(ADMIN_CHAT).length, 1, 'the admin got it instead');
+  assert.ok(inquiry.followUpNotifiedAt);
+});
+
+test('changing the main admin chat forgets the old chat\'s reply routes', async () => {
+  const chat = createChat();
+  await chat.say('Вопрос');
+  const data = bot.getData();
+  assert.ok(Object.keys(data.adminReplyTargets).some((key) => !key.includes(':')));
+  const password = bot.hashPassword('correct-password');
+  data.config.passwordSalt = password.salt;
+  data.config.passwordHash = password.hash;
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = 'http://127.0.0.1:' + bot.server.address().port;
+    const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
+    const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+    const response = await realFetch(base + '/api/settings', { method: 'PUT', headers, body: JSON.stringify({ messages: data.config.messages, active: false, adminChatId: MANAGER_CHAT }) });
+    assert.equal(response.status, 200);
+  } finally {
+    await new Promise((resolve) => bot.server.close(resolve));
+  }
+  assert.ok(Object.keys(data.adminReplyTargets).every((key) => key.includes(':')), 'no plain keys of the old chat');
+  assert.deepEqual(data.config.managers, [], 'the manager became the main admin');
+});
+
 test('the panel saves the managers and checks their chats', async () => {
   const data = bot.getData();
   const password = bot.hashPassword('correct-password');
