@@ -6,6 +6,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+
+// A stand-in for cloudflared.exe: the tunnel code only checks that it exists;
+// the process itself is replaced by a fake in the tests.
+const fakeCloudflared = require('node:path').join(require('node:os').tmpdir(), 'fake-cloudflared-' + process.pid + '.exe');
+require('node:fs').writeFileSync(fakeCloudflared, 'not a real program');
+process.env.CLOUDFLARED_PATH = fakeCloudflared;
+
 const {
   bot, telegram, TOKEN, dataFile, callbacksOf, buttonsOf, createChat, property, resetData, adminMessages, settle, cleanup,
 } = require('./helpers/chat');
@@ -382,6 +389,189 @@ test.describe('catalog filter', () => {
     chat.user.favorites = ['rent-house-5', 'sale-villa-3'];
     chat.user.catalogFilter = { deal: 'sale', type: '', bedrooms: 0 };
     assert.equal(bot.catalogRecords(chat.user, 'favorites').length, 2);
+  });
+});
+
+test.describe('access from the internet', () => {
+  const http = require('node:http');
+  const { EventEmitter } = require('node:events');
+  const { PassThrough } = require('node:stream');
+  let baseUrl;
+
+  function local(method, url, { headers = {}, cookie = '', csrf = '', body } = {}) {
+    return new Promise((resolve, reject) => {
+      const request = http.request(baseUrl + url, { method, headers: { 'content-type': 'application/json', cookie, 'x-csrf-token': csrf, ...headers } }, (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => resolve({ status: response.statusCode, headers: response.headers, json: JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') }));
+      });
+      request.on('error', reject);
+      if (body) request.write(JSON.stringify(body));
+      request.end();
+    });
+  }
+
+  // What cloudflared looks like to the bot: a process that prints its address.
+  function fakeTunnelProcess() {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.killed = false;
+    child.kill = () => { child.killed = true; };
+    return child;
+  }
+
+  const THROUGH_TUNNEL = { 'cf-connecting-ip': '203.0.113.7', 'x-forwarded-proto': 'https' };
+
+  test.before(async () => {
+    await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+    baseUrl = 'http://127.0.0.1:' + bot.server.address().port;
+  });
+  test.after(() => {
+    bot.stopTunnel();
+    bot.server.close();
+    require('node:fs').rmSync(fakeCloudflared, { force: true });
+  });
+  test.beforeEach(() => resetData((data) => {
+    const password = bot.hashPassword('correct-password');
+    data.config.passwordSalt = password.salt;
+    data.config.passwordHash = password.hash;
+    data.config.adminNotificationVerifiedAt = new Date().toISOString();
+  }));
+
+  test('requests through a proxy or to a public name are remote', () => {
+    const request = (address, headers) => ({ socket: { remoteAddress: address }, headers });
+    assert.equal(bot.requestIsRemote(request('127.0.0.1', { host: '127.0.0.1:3000' })), false);
+    assert.equal(bot.requestIsRemote(request('::1', { host: 'localhost:3000' })), false);
+    assert.equal(bot.requestIsRemote(request('127.0.0.1', { host: '127.0.0.1:3000', 'cf-connecting-ip': '1.2.3.4' })), true);
+    assert.equal(bot.requestIsRemote(request('127.0.0.1', { host: 'abc.trycloudflare.com' })), true);
+    assert.equal(bot.requestIsRemote(request('192.168.1.20', { host: '192.168.1.5:3000' })), true);
+  });
+
+  test('a remote login needs the code sent to the admin chat', async () => {
+    const start = await local('POST', '/api/login', { headers: THROUGH_TUNNEL, body: { password: 'correct-password' } });
+    assert.equal(start.status, 200);
+    assert.equal(start.json.twoFactor, true);
+    assert.equal(start.headers['set-cookie'], undefined, 'no session before the code');
+    const [notice] = adminMessages();
+    const code = notice.text.match(/Код для входа в панель: (\d{6})/)[1];
+    assert.match(notice.text, /203\.0\.113\.7/);
+
+    const wrong = await local('POST', '/api/login/verify', { headers: THROUGH_TUNNEL, body: { challenge: start.json.challenge, code: code === '000000' ? '111111' : '000000' } });
+    assert.equal(wrong.status, 401);
+    const right = await local('POST', '/api/login/verify', { headers: THROUGH_TUNNEL, body: { challenge: start.json.challenge, code } });
+    assert.equal(right.status, 200);
+    assert.match(String(right.headers['set-cookie']), /; Secure/);
+    const reused = await local('POST', '/api/login/verify', { headers: THROUGH_TUNNEL, body: { challenge: start.json.challenge, code } });
+    assert.equal(reused.status, 401, 'a code works once');
+  });
+
+  test('a code stops working after five wrong tries', async () => {
+    const start = await local('POST', '/api/login', { headers: THROUGH_TUNNEL, body: { password: 'correct-password' } });
+    const code = adminMessages()[0].text.match(/(\d{6})/)[1];
+    const other = code === '000000' ? '111111' : '000000';
+    for (let attempt = 0; attempt < 5; attempt += 1) await local('POST', '/api/login/verify', { headers: { ...THROUGH_TUNNEL, 'cf-connecting-ip': '203.0.113.' + (20 + attempt) }, body: { challenge: start.json.challenge, code: other } });
+    const late = await local('POST', '/api/login/verify', { headers: { ...THROUGH_TUNNEL, 'cf-connecting-ip': '203.0.113.99' }, body: { challenge: start.json.challenge, code } });
+    assert.equal(late.status, 401);
+    assert.equal(late.json.expired, true);
+  });
+
+  test('without a verified admin chat a remote login is refused', async () => {
+    bot.getData().config.adminNotificationVerifiedAt = '';
+    const start = await local('POST', '/api/login', { headers: { ...THROUGH_TUNNEL, 'cf-connecting-ip': '203.0.113.50' }, body: { password: 'correct-password' } });
+    assert.equal(start.status, 403);
+  });
+
+  test('a login on this computer still needs only the password', async () => {
+    const login = await local('POST', '/api/login', { body: { password: 'correct-password' } });
+    assert.equal(login.status, 200);
+    assert.ok(login.json.csrf);
+    assert.doesNotMatch(String(login.headers['set-cookie']), /Secure/);
+  });
+
+  test('the tunnel address is picked up, allowed and sent to the admin', () => {
+    bot.getData().config.remoteAccess = true;
+    const child = fakeTunnelProcess();
+    bot.startTunnel(() => child);
+    child.stderr.write('2026-09-18T10:00:00Z INF |  https://quiet-river-1234.trycloudflare.com                  |\n');
+    const tunnel = bot.getData() && require('../bot.js').runtime.tunnel;
+    assert.deepEqual([tunnel.status, tunnel.url], ['online', 'https://quiet-river-1234.trycloudflare.com']);
+    assert.equal(bot.hostAllowed({ headers: { host: 'quiet-river-1234.trycloudflare.com' } }), true);
+    assert.equal(bot.hostAllowed({ headers: { host: 'other.trycloudflare.com' } }), false, 'only this tunnel');
+    bot.stopTunnel();
+    assert.equal(child.killed, true);
+    assert.equal(bot.hostAllowed({ headers: { host: 'quiet-river-1234.trycloudflare.com' } }), false, 'not after it is stopped');
+  });
+
+  test('turning the access on requires a verified admin chat', async () => {
+    const login = await local('POST', '/api/login', { body: { password: 'correct-password' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    bot.getData().config.adminNotificationVerifiedAt = '';
+    const refused = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, body: { enabled: true } });
+    assert.equal(refused.status, 400);
+    assert.equal(bot.getData().config.remoteAccess, false);
+    const off = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, body: { enabled: false } });
+    assert.equal(off.status, 200);
+  });
+
+  test('cloudflared URLs are read from its log lines', () => {
+    assert.equal(bot.tunnelUrlFrom('INF |  https://Big-Cat-9.trycloudflare.com  |'), 'https://big-cat-9.trycloudflare.com');
+    assert.equal(bot.tunnelUrlFrom('INF Requesting new quick Tunnel on trycloudflare.com...'), '');
+  });
+
+  // Seen on this computer's network: the quick-tunnel API is blocked.
+  const BLOCKED = 'failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": context deadline exceeded (Client.Timeout exceeded while awaiting headers)';
+
+  test('the address of cloudflared\'s own API is never taken for the panel address', () => {
+    assert.equal(bot.tunnelUrlFrom(BLOCKED), '');
+    assert.equal(bot.tunnelUrlFrom('INF calling https://api.trycloudflare.com/tunnel'), '');
+  });
+
+  test('a blocked quick-tunnel service is explained, and retries slow down', () => {
+    bot.getData().config.remoteAccess = true;
+    const first = fakeTunnelProcess();
+    bot.startTunnel(() => first);
+    first.stderr.write(BLOCKED + '\n');
+    first.emit('exit', 1);
+    const { runtime } = require('../bot.js');
+    assert.equal(runtime.tunnel.status, 'error');
+    assert.match(runtime.tunnel.error, /недоступен из этой сети/);
+    assert.match(runtime.tunnel.error, /через 30 с/);
+    assert.equal(runtime.tunnel.url, '');
+    assert.equal(bot.getData().errors.filter((item) => item.area === 'Доступ из интернета').length, 1);
+    bot.stopTunnel();
+  });
+
+  test('a named tunnel runs with the token in the environment and the configured address', () => {
+    const data = bot.getData();
+    data.config.remoteAccess = true;
+    data.config.tunnelToken = 'eyJhIjoiMTIzIiwidCI6IjQ1NiIsInMiOiJzZWNyZXQtdmFsdWUtZm9yLXRlc3RzIn0=';
+    data.config.tunnelHostname = 'panel.example.com';
+    let launched;
+    const child = fakeTunnelProcess();
+    bot.startTunnel((command, args, options) => { launched = { args, options }; return child; });
+    assert.deepEqual(launched.args, ['tunnel', '--no-autoupdate', 'run']);
+    assert.ok(!launched.args.join(' ').includes(data.config.tunnelToken), 'the token is not on the command line');
+    assert.equal(launched.options.env.TUNNEL_TOKEN, data.config.tunnelToken);
+    child.stderr.write('INF Registered tunnel connection connIndex=0 location=mad01\n');
+    const { runtime } = require('../bot.js');
+    assert.deepEqual([runtime.tunnel.status, runtime.tunnel.url], ['online', 'https://panel.example.com']);
+    assert.equal(bot.hostAllowed({ headers: { host: 'panel.example.com' } }), true);
+    bot.stopTunnel();
+  });
+
+  test('the token is saved but never sent back to the browser', async () => {
+    const login = await local('POST', '/api/login', { body: { password: 'correct-password' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    const token = 'eyJhIjoiMTIzIiwidCI6IjQ1NiIsInMiOiJzZWNyZXQtdmFsdWUtZm9yLXRlc3RzIn0=';
+    const bad = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, body: { enabled: false, tunnelHostname: 'not a host' } });
+    assert.equal(bad.status, 400);
+    const saved = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, body: { enabled: false, tunnelHostname: 'https://Panel.Example.com/', tunnelToken: token } });
+    assert.equal(saved.status, 200);
+    assert.equal(bot.getData().config.tunnelHostname, 'panel.example.com');
+    const state = await local('GET', '/api/state', { cookie });
+    assert.equal(state.json.config.tunnelTokenSet, true);
+    assert.ok(!JSON.stringify(state.json).includes(token));
   });
 });
 

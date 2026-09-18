@@ -123,6 +123,9 @@ const defaultData = {
     active: true,
     notifyMode: 'inquiries',
     reminderHours: 2,
+    remoteAccess: false,
+    tunnelToken: '',
+    tunnelHostname: '',
   },
   bot: {
     id: null,
@@ -1422,6 +1425,7 @@ const runtime = {
   offset: Number(data.telegramOffset || 0),
   pollingStartedAt: null,
   broadcastRunning: false,
+  tunnel: { status: 'off', url: '', host: '', error: '' },
 };
 
 function markTelegramSuccess() {
@@ -2679,6 +2683,7 @@ function publicRuntime() {
     nextRetryAt: runtime.nextRetryAt,
     pollingStartedAt: runtime.pollingStartedAt,
     broadcastRunning: runtime.broadcastRunning,
+    tunnel: { status: runtime.tunnel.status, url: runtime.tunnel.url, error: runtime.tunnel.error, installed: tunnelInstalled() },
   };
 }
 
@@ -5080,7 +5085,7 @@ function getSession(req) {
   return session;
 }
 
-function createSession(res) {
+function createSession(res, req = null) {
   const cookie = crypto.randomBytes(32).toString('hex');
   const key = sessionKey(cookie);
   const expiresAt = Date.now() + SESSION_TTL_MS;
@@ -5091,7 +5096,7 @@ function createSession(res) {
     persistedExpiresAt: expiresAt,
   };
   sessions.set(key, session);
-  res.setHeader('set-cookie', 'admin_session=' + cookie + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
+  res.setHeader('set-cookie', 'admin_session=' + cookie + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200' + (req && secureRequest(req) ? '; Secure' : ''));
   return session;
 }
 
@@ -5105,12 +5110,46 @@ function hostAllowed(req) {
     return false;
   }
   hostname = hostname.replace(/^\[|\]$/g, '');
-  return hostname === 'localhost' || net.isIP(hostname) !== 0 || ADMIN_ALLOWED_HOSTS.has(hostname);
+  return hostname === 'localhost' || net.isIP(hostname) !== 0 || ADMIN_ALLOWED_HOSTS.has(hostname)
+    || Boolean(runtime.tunnel.host && hostname === runtime.tunnel.host);
+}
+
+function loopbackSocket(req) {
+  const address = req.socket.remoteAddress || '';
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
+// The tunnel connects to the panel from this computer, so a loopback socket
+// alone does not mean the person is here. Requests carrying proxy headers or
+// addressed to a public name are remote.
+function requestIsRemote(req) {
+  const headers = req.headers || {};
+  if (headers['cf-connecting-ip'] || headers['cf-ray'] || headers['x-forwarded-for'] || headers['x-forwarded-host'] || headers['x-forwarded-proto']) return true;
+  if (!loopbackSocket(req)) return true;
+  let hostname = '';
+  try {
+    hostname = new URL('http://' + String(headers.host || '')).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  } catch {
+    return true;
+  }
+  return !['localhost', '127.0.0.1', '::1'].includes(hostname);
 }
 
 function isLocalRequest(req) {
-  const address = req.socket.remoteAddress || '';
-  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+  return !requestIsRemote(req);
+}
+
+// The visitor's address for rate limiting; behind the tunnel it comes from
+// Cloudflare's header, otherwise every remote login would share one bucket.
+function clientAddress(req) {
+  const forwarded = cleanText(req.headers && req.headers['cf-connecting-ip'], 64);
+  if (forwarded && loopbackSocket(req)) return forwarded;
+  return req.socket.remoteAddress || 'unknown';
+}
+
+function secureRequest(req) {
+  const headers = (req && req.headers) || {};
+  return String(headers['x-forwarded-proto'] || '').toLowerCase() === 'https' || /"scheme":"https"/.test(String(headers['cf-visitor'] || ''));
 }
 
 function securityHeaders(res) {
@@ -5332,6 +5371,10 @@ function safeState(session) {
       adminChatId: data.config.adminChatId || '',
       adminNotificationVerifiedAt: data.config.adminNotificationVerifiedAt || '',
       notifyMode: data.config.notifyMode || 'inquiries',
+      remoteAccess: Boolean(data.config.remoteAccess),
+      // The tunnel token is a secret: the panel only learns whether it is set.
+      tunnelTokenSet: Boolean(data.config.tunnelToken),
+      tunnelHostname: data.config.tunnelHostname || '',
       reminderHours: Number.isFinite(Number(data.config.reminderHours)) ? Number(data.config.reminderHours) : 2,
     },
     welcomeImages: Object.fromEntries(['ru', 'en', 'es'].map((language) => {
@@ -5355,6 +5398,161 @@ function safeState(session) {
     replyTemplates: data.replyTemplates || [],
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
   };
+}
+
+// --- Access from the internet --------------------------------------------------
+// A Cloudflare quick tunnel (cloudflared.exe next to the bot) gives the panel a
+// random https://….trycloudflare.com address. A remote login needs the
+// password and a one-time code the bot sends to the admin chat in Telegram.
+
+const REMOTE_LOGIN_CODE_TTL_MS = 5 * 60 * 1000;
+const REMOTE_LOGIN_CODE_ATTEMPTS = 5;
+const TUNNEL_URL_PATTERN = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
+const TUNNEL_RESTART_DELAY_MS = 30 * 1000;
+const CLOUDFLARED_PATH = process.env.CLOUDFLARED_PATH || path.join(__dirname, 'cloudflared.exe');
+const pendingRemoteLogins = new Map();
+let tunnelProcess = null;
+let tunnelRestartTimer = null;
+
+function remoteLoginCodeHash(code, challenge) {
+  return crypto.createHash('sha256').update(challenge + ':' + code).digest('hex');
+}
+
+async function startRemoteLogin(res, ip) {
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  if (!adminChatId || !data.config.adminNotificationVerifiedAt || !data.config.botToken) {
+    return json(res, 403, { error: 'Вход из интернета возможен только с подтверждённым админ-чатом в Telegram: туда приходит код для входа.' });
+  }
+  const now = Date.now();
+  for (const [key, pending] of pendingRemoteLogins) if (pending.expiresAt < now) pendingRemoteLogins.delete(key);
+  const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+  const challenge = crypto.randomBytes(24).toString('hex');
+  try {
+    await sendMessage(adminChatId, '🔐 Код для входа в панель: ' + code + '\n\nДействует 5 минут. Вход из интернета, адрес ' + ip + '.\nЕсли это не вы — никому не сообщайте код и смените пароль в настройках панели.', data.config.botToken, { track: false });
+  } catch (error) {
+    recordError('Код для входа', error);
+    return json(res, 502, { error: 'Не удалось отправить код в Telegram. Попробуйте ещё раз.' });
+  }
+  pendingRemoteLogins.set(challenge, { codeHash: remoteLoginCodeHash(code, challenge), expiresAt: now + REMOTE_LOGIN_CODE_TTL_MS, attempts: 0 });
+  return json(res, 200, { twoFactor: true, challenge });
+}
+
+function tunnelInstalled() {
+  return fs.existsSync(CLOUDFLARED_PATH);
+}
+
+// cloudflared also mentions its own API (https://api.trycloudflare.com) in
+// log and error lines; only the assigned quick-tunnel address counts.
+function tunnelUrlFrom(output) {
+  for (const line of String(output || '').split(/\r?\n/)) {
+    if (/failed|error|\bERR\b/i.test(line)) continue;
+    for (const match of line.matchAll(new RegExp(TUNNEL_URL_PATTERN.source, 'gi'))) {
+      const url = match[0].toLowerCase();
+      if (url !== 'https://api.trycloudflare.com') return url;
+    }
+  }
+  return '';
+}
+
+function tunnelErrorFrom(output) {
+  const lines = String(output || '').split(/\r?\n/).filter((line) => /failed|error|\bERR\b/i.test(line));
+  return lines.length ? cleanText(lines[lines.length - 1], 300) : '';
+}
+
+// What to tell the admin when cloudflared stops, based on its last error.
+function tunnelFailureText(lastError, named) {
+  if (/api\.trycloudflare\.com/i.test(lastError) && /deadline|timeout|refused|unreachable/i.test(lastError)) {
+    return 'Сервис временных туннелей Cloudflare (api.trycloudflare.com) недоступен из этой сети — похоже, его блокирует провайдер, роутер или антивирус. Используйте постоянный туннель: токен и адрес из вашей учётной записи Cloudflare.';
+  }
+  if (named && /unauthorized|invalid.*token|token.*invalid/i.test(lastError)) {
+    return 'Cloudflare не принял токен туннеля. Проверьте токен в настройках.';
+  }
+  return 'Туннель остановился' + (lastError ? ': ' + lastError : '') + '.';
+}
+
+const TUNNEL_MAX_RESTART_DELAY_MS = 10 * 60 * 1000;
+let tunnelRestartDelay = TUNNEL_RESTART_DELAY_MS;
+
+function tunnelMode() {
+  return data.config.tunnelToken && data.config.tunnelHostname ? 'named' : 'quick';
+}
+
+async function announceTunnel(url) {
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  if (!adminChatId || !data.config.botToken) return;
+  await sendMessage(adminChatId, '🌐 Панель доступна из интернета:\n' + url + '\n\nВход: пароль администратора и код, который придёт сюда. Адрес меняется при каждом перезапуске бота — новый придёт в этот чат.', data.config.botToken, { track: false })
+    .catch((error) => recordError('Доступ из интернета', error));
+}
+
+function startTunnel(spawnProcess = spawn) {
+  if (tunnelProcess || !data.config.remoteAccess || shuttingDown) return;
+  clearTimeout(tunnelRestartTimer);
+  if (!tunnelInstalled()) {
+    runtime.tunnel = { status: 'missing', url: '', host: '', error: 'Рядом с ботом нет cloudflared.exe' };
+    return;
+  }
+  runtime.tunnel = { status: 'starting', url: '', host: '', error: '' };
+  const named = tunnelMode() === 'named';
+  // A named tunnel's public hostname and target are set in the Cloudflare
+  // dashboard; the token goes through the environment, not the command line.
+  const child = named
+    ? spawnProcess(CLOUDFLARED_PATH, ['tunnel', '--no-autoupdate', 'run'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, TUNNEL_TOKEN: data.config.tunnelToken } })
+    : spawnProcess(CLOUDFLARED_PATH, ['tunnel', '--no-autoupdate', '--url', 'http://127.0.0.1:' + PORT], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  tunnelProcess = child;
+  let lastError = '';
+  const goOnline = (url) => {
+    tunnelRestartDelay = TUNNEL_RESTART_DELAY_MS;
+    runtime.tunnel = { status: 'online', url, host: new URL(url).hostname, error: '' };
+    console.log('  Панель доступна из интернета: ' + url);
+    void announceTunnel(url);
+  };
+  const onOutput = (chunk) => {
+    if (tunnelProcess !== child) return;
+    lastError = tunnelErrorFrom(chunk) || lastError;
+    if (named) {
+      if (runtime.tunnel.status !== 'online' && /Registered tunnel connection/i.test(String(chunk))) goOnline('https://' + data.config.tunnelHostname);
+      return;
+    }
+    const url = tunnelUrlFrom(chunk);
+    if (url && url !== runtime.tunnel.url) goOnline(url);
+  };
+  child.stdout.on('data', onOutput);
+  child.stderr.on('data', onOutput);
+  child.on('error', (error) => {
+    runtime.tunnel = { status: 'error', url: '', host: '', error: error.message };
+    recordError('Доступ из интернета', error);
+  });
+  child.on('exit', (code) => {
+    if (tunnelProcess !== child) return;
+    tunnelProcess = null;
+    if (!data.config.remoteAccess || shuttingDown) {
+      runtime.tunnel = { status: 'off', url: '', host: '', error: '' };
+      return;
+    }
+    const delaySeconds = Math.round(tunnelRestartDelay / 1000);
+    const failure = tunnelFailureText(lastError, named);
+    runtime.tunnel = { status: 'error', url: '', host: '', error: failure + ' Новая попытка через ' + (delaySeconds >= 60 ? Math.round(delaySeconds / 60) + ' мин.' : delaySeconds + ' с.') };
+    if (tunnelRestartDelay === TUNNEL_RESTART_DELAY_MS) recordError('Доступ из интернета', failure + (code != null ? ' (код ' + code + ')' : ''));
+    tunnelRestartTimer = setTimeout(() => startTunnel(spawnProcess), tunnelRestartDelay);
+    if (tunnelRestartTimer.unref) tunnelRestartTimer.unref();
+    // Retries get rarer while the tunnel keeps failing.
+    tunnelRestartDelay = Math.min(tunnelRestartDelay * 2, TUNNEL_MAX_RESTART_DELAY_MS);
+  });
+}
+
+function stopTunnel() {
+  clearTimeout(tunnelRestartTimer);
+  tunnelRestartDelay = TUNNEL_RESTART_DELAY_MS;
+  const child = tunnelProcess;
+  tunnelProcess = null;
+  runtime.tunnel = { status: 'off', url: '', host: '', error: '' };
+  if (child) {
+    try {
+      child.kill();
+    } catch {
+      // Already gone.
+    }
+  }
 }
 
 function loginAllowed(ip) {
@@ -6027,23 +6225,83 @@ async function handleApi(req, res, url) {
     data.config.passwordHash = passwordData.hash;
     data.bot = { id: me.id, username: me.username || '', firstName: me.first_name || '' };
     saveDataNow();
-    const session = createSession(res);
+    const session = createSession(res, req);
     restartPolling();
     return json(res, 200, { ok: true, csrf: session.csrf });
   }
 
   if (url.pathname === '/api/login' && req.method === 'POST') {
     if (!configured()) return json(res, 409, { error: 'Сначала завершите настройку' });
-    const ip = req.socket.remoteAddress || 'unknown';
+    const ip = clientAddress(req);
     if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
     if (!verifyPassword(String(body.password || ''))) {
       await delay(250);
       return json(res, 401, { error: 'Неверный пароль' });
     }
+    if (requestIsRemote(req)) return startRemoteLogin(res, ip);
     loginAttempts.delete(ip);
-    const session = createSession(res);
+    const session = createSession(res, req);
     return json(res, 200, { ok: true, csrf: session.csrf });
+  }
+
+  if (url.pathname === '/api/login/verify' && req.method === 'POST') {
+    const ip = clientAddress(req);
+    if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
+    const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
+    const challenge = cleanText(body.challenge, 100);
+    const pending = pendingRemoteLogins.get(challenge);
+    if (!pending || pending.expiresAt < Date.now()) {
+      pendingRemoteLogins.delete(challenge);
+      return json(res, 401, { error: 'Код устарел. Введите пароль ещё раз.', expired: true });
+    }
+    pending.attempts += 1;
+    if (pending.attempts > REMOTE_LOGIN_CODE_ATTEMPTS) {
+      pendingRemoteLogins.delete(challenge);
+      return json(res, 401, { error: 'Слишком много неверных кодов. Введите пароль ещё раз.', expired: true });
+    }
+    const candidate = remoteLoginCodeHash(String(body.code || '').replace(/\s/g, ''), challenge);
+    if (!crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(pending.codeHash, 'hex'))) {
+      await delay(250);
+      return json(res, 401, { error: 'Неверный код' });
+    }
+    pendingRemoteLogins.delete(challenge);
+    loginAttempts.delete(ip);
+    const session = createSession(res, req);
+    return json(res, 200, { ok: true, csrf: session.csrf });
+  }
+
+  if (url.pathname === '/api/remote-access' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const enabled = body.enabled === true;
+    if (body.tunnelHostname != null) {
+      const hostname = cleanText(body.tunnelHostname, 253).toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      if (hostname && !/^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(hostname)) {
+        return json(res, 400, { error: 'Адрес панели должен быть доменным именем, например panel.example.com' });
+      }
+      data.config.tunnelHostname = hostname;
+    }
+    if (body.tunnelToken != null) {
+      const token = cleanText(body.tunnelToken, 2000);
+      if (token && !/^[A-Za-z0-9+/=_-]{40,}$/.test(token)) return json(res, 400, { error: 'Токен туннеля выглядит некорректно — скопируйте его из панели Cloudflare целиком' });
+      data.config.tunnelToken = token;
+    }
+    if (enabled) {
+      if (!data.config.adminChatId || !data.config.adminNotificationVerifiedAt) {
+        return json(res, 400, { error: 'Сначала подключите и проверьте уведомления в Telegram: на этот чат будут приходить коды для входа из интернета.' });
+      }
+      if (!tunnelInstalled()) {
+        return json(res, 400, { error: 'Рядом с ботом нет cloudflared.exe — без него туннель не запустить.' });
+      }
+    }
+    data.config.remoteAccess = enabled;
+    saveDataNow();
+    // Settings changes restart a running tunnel so they take effect.
+    stopTunnel();
+    if (enabled) startTunnel();
+    return json(res, 200, { ok: true, tunnel: runtime.tunnel });
   }
 
   if (url.pathname === '/api/logout' && req.method === 'POST') {
@@ -6119,7 +6377,7 @@ async function handleApi(req, res, url) {
       saveDataNow();
       restartPolling();
       sessions.clear();
-      const nextSession = createSession(res);
+      const nextSession = createSession(res, req);
       return json(res, 200, { ok: true, csrf: nextSession.csrf });
     } catch (error) {
       return json(res, 400, { error: 'Не удалось восстановить копию: ' + error.message });
@@ -6631,7 +6889,7 @@ async function handleApi(req, res, url) {
     const newPassword = String(body.password || '');
     // A session alone must not be enough to take over the panel or the bot.
     if (newToken || newPassword) {
-      const ip = req.socket.remoteAddress || 'unknown';
+      const ip = clientAddress(req);
       if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
       if (!verifyPassword(String(body.currentPassword || ''))) {
         await delay(250);
@@ -6946,6 +7204,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
             <button id="loginPasswordToggle3" class="auth-password-toggle" type="button" aria-label="Показать пароль" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.7" stroke="currentColor" stroke-width="1.8"/></svg></button>
           </div>
         </div>
+        <div id="loginCodeBlock3" class="field hidden"><label for="loginCode3">Код из Telegram</label><input id="loginCode3" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 цифр"><span class="hint">Вы входите из интернета: код отправлен в админ-чат Telegram и действует 5 минут.</span></div>
         <button class="btn login-submit" type="submit">Войти</button>
         <div id="loginMessage3"></div>
         <div class="auth-support"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m21 4-3 16-6-4-3 3v-5l8-7-10 6-4-2 18-7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><span>Нужна помощь? <a href="https://t.me/construcciones_kornilenko_bot" target="_blank" rel="noopener noreferrer">Напишите в поддержку</a></span></div>
@@ -7220,9 +7479,11 @@ const ADMIN_HTML = String.raw`<!doctype html>
       addCounters(el("userDetail3"));
     }
     function ensureNotificationSettings(){if(el("notificationForm3"))return;var stack=document.querySelector("#view-settings .section-stack"),form=document.createElement("form");form.id="notificationForm3";form.className="card";form.dataset.saveable="";form.innerHTML='<div class="card-head"><div><h3>Уведомления администратору</h3><div class="card-note">Сообщения и действия пользователей приходят в Telegram</div></div><span id="notificationState3" class="badge">Не настроено</span></div><div class="callout notification-help"><strong>Как подключить:</strong><span>1. Откройте этого бота в Telegram и отправьте команду <code>/myid</code>.</span><span>2. Скопируйте полученный номер в поле ниже и сохраните.</span><span>3. Нажмите «Отправить тест».</span></div><div class="field"><label for="adminChatId3">Telegram Chat ID администратора</label><input id="adminChatId3" class="input" inputmode="numeric" maxlength="20" placeholder="Например: 123456789"><span class="hint">Используйте личный Chat ID. Ответ на уведомление будет отправлен пользователю от имени бота.</span></div><div class="field"><label for="notifyMode3">Что присылать</label><select id="notifyMode3" class="select"><option value="inquiries">Только обращения и заявки + сводка активности раз в день</option><option value="all">Все действия пользователей сразу</option></select></div><div class="field"><label for="reminderHours3">Напоминать о заявках без ответа</label><select id="reminderHours3" class="select"><option value="1">Через 1 час</option><option value="2">Через 2 часа</option><option value="4">Через 4 часа</option><option value="8">Через 8 часов</option><option value="24">Через сутки</option><option value="0">Не напоминать</option></select><span class="hint">Напоминание приходит в Telegram с 9:00 до 21:00, если обращение всё ещё «новое» и на него не ответили. О каждом обращении — один раз.</span><span class="hint">Если один пользователь присылает больше 20 сообщений за 10 минут, уведомления о его сообщениях приостанавливаются. Все сообщения при этом сохраняются в панели.</span></div><div class="actions"><button class="btn" type="submit">Сохранить</button><button id="testAdminNotificationBtn3" class="btn secondary" type="button">Отправить тест</button></div>';stack.prepend(form);form.addEventListener("submit",saveNotificationSettings);el("testAdminNotificationBtn3").addEventListener("click",testAdminNotification);var backup=Array.from(document.querySelectorAll("#view-settings .card")).find(function(card){return card.querySelector("h3")&&card.querySelector("h3").textContent==="Резервная копия"});if(backup){var note=backup.querySelector(".card-note");if(note)note.textContent="Сжатая копия .json.gz содержит фотографии, токен бота, настройки входа, контент и данные пользователей. Храните файл как конфиденциальный."}}
+    function ensureRemoteAccessCard(){if(el("remoteAccessCard3"))return;var stack=document.querySelector("#view-settings .section-stack");if(!stack)return;var card=document.createElement("div");card.id="remoteAccessCard3";card.className="card";card.innerHTML='<div class="card-head"><div><h3>Доступ к панели из интернета</h3><div class="card-note">Открывать панель с телефона или другого компьютера через защищённый туннель Cloudflare</div></div><span id="remoteAccessBadge3" class="badge">Выключен</span></div><p id="remoteAccessStatus3" class="card-note"></p><div class="callout"><span>Вход из интернета — пароль администратора и одноразовый код, который бот присылает в админ-чат Telegram.</span><span>Адрес случайный и меняется при каждом перезапуске бота; новый адрес бот присылает в Telegram.</span></div><details class="form-section" style="margin-top:12px"><summary>Постоянный адрес через учётную запись Cloudflare</summary><p class="card-note">Нужен, если временный туннель недоступен в вашей сети или нужен постоянный адрес. В панели Cloudflare: Zero Trust → Networks → Tunnels → создайте туннель, в Public Hostname укажите адрес и сервис http://127.0.0.1:3000, скопируйте токен.</p><div class="field"><label for="tunnelHostname3">Адрес панели</label><input id="tunnelHostname3" class="input" maxlength="253" placeholder="panel.example.com"></div><div class="field"><label for="tunnelToken3">Токен туннеля</label><input id="tunnelToken3" class="input" type="password" autocomplete="off" maxlength="2000" placeholder="Оставьте пустым, чтобы не менять"><span id="tunnelTokenHint3" class="hint"></span></div><div class="actions"><button id="tunnelSave3" class="btn secondary" type="button">Сохранить адрес и токен</button><button id="tunnelClear3" class="btn secondary" type="button">Вернуться к временному туннелю</button></div></details><div class="actions" style="margin-top:12px"><button id="remoteAccessToggle3" class="btn" type="button">Включить</button></div>';stack.appendChild(card);el("remoteAccessToggle3").addEventListener("click",async function(){var button=this,enable=!(state.config&&state.config.remoteAccess);if(!enable&&!await confirmAction("Выключить доступ из интернета?","Панель будет открываться только на этом компьютере. Если вы сейчас зашли из интернета, соединение прервётся.","Выключить"))return;button.disabled=true;try{await api("/api/remote-access",{method:"PUT",body:JSON.stringify({enabled:enable})});await loadState();toast(enable?"Туннель запускается — адрес придёт в Telegram":"Доступ из интернета выключен")}catch(error){toast(error.message)}finally{button.disabled=false}});el("tunnelHostname3").value=(state.config&&state.config.tunnelHostname)||"";el("tunnelSave3").addEventListener("click",async function(){var button=this,body={enabled:Boolean(state.config&&state.config.remoteAccess),tunnelHostname:el("tunnelHostname3").value};if(el("tunnelToken3").value.trim())body.tunnelToken=el("tunnelToken3").value.trim();button.disabled=true;try{await api("/api/remote-access",{method:"PUT",body:JSON.stringify(body)});el("tunnelToken3").value="";await loadState();toast("Адрес и токен сохранены")}catch(error){toast(error.message)}finally{button.disabled=false}});el("tunnelClear3").addEventListener("click",async function(){var button=this;button.disabled=true;try{await api("/api/remote-access",{method:"PUT",body:JSON.stringify({enabled:Boolean(state.config&&state.config.remoteAccess),tunnelHostname:"",tunnelToken:""})});el("tunnelHostname3").value="";await loadState();toast("Используется временный туннель")}catch(error){toast(error.message)}finally{button.disabled=false}})}
+    function renderRemoteAccessCard(){ensureRemoteAccessCard();var card=el("remoteAccessCard3");if(!card||!state)return;var tunnel=(state.runtime&&state.runtime.tunnel)||{},enabled=Boolean(state.config&&state.config.remoteAccess),badge=el("remoteAccessBadge3"),status=el("remoteAccessStatus3");var text=!tunnel.installed?"Рядом с ботом нет cloudflared.exe — положите его в папку бота, чтобы включить доступ.":!enabled?"Выключен: панель открывается только на этом компьютере.":tunnel.status==="online"?"Доступна по адресу: ":tunnel.status==="starting"?"Туннель запускается…":tunnel.error||"Туннель не работает";status.textContent=text;if(tunnel.status==="online"&&enabled){var link=document.createElement("a");link.href=tunnel.url;link.textContent=tunnel.url;link.target="_blank";link.rel="noopener";status.appendChild(link)}badge.textContent=!enabled?"Выключен":tunnel.status==="online"?"Работает":tunnel.status==="starting"?"Запускается":"Ошибка";badge.className="badge "+(!enabled?"":tunnel.status==="online"?"good":"warn");el("remoteAccessToggle3").textContent=enabled?"Выключить":"Включить";el("remoteAccessToggle3").className="btn"+(enabled?" secondary":"");el("remoteAccessToggle3").disabled=!tunnel.installed&&!enabled;el("tunnelTokenHint3").textContent=state.config.tunnelTokenSet?"Токен сохранён. Используется постоянный адрес"+(state.config.tunnelHostname?" "+state.config.tunnelHostname:"")+".":"Токен не задан — используется временный туннель trycloudflare.com."}
     function ensureSourceLinksCard(){if(el("sourceLinksCard3"))return;var stack=document.querySelector("#view-settings .section-stack");if(!stack)return;var card=document.createElement("div");card.id="sourceLinksCard3";card.className="card";card.innerHTML='<h3>Ссылки с меткой источника</h3><p class="card-note">Разместите такую ссылку в рекламе или соцсетях — у клиентов, пришедших по ней, в карточке, уведомлениях, выгрузке и сводке будет видно, откуда они пришли.</p><div class="field"><label for="sourceLabel3">Метка</label><input id="sourceLabel3" class="input" maxlength="40" placeholder="Например: instagram"><span class="hint">Латинские буквы, цифры, «-» и «_».</span></div><div class="field"><label for="sourceLink3">Ссылка</label><input id="sourceLink3" class="input" readonly></div><button id="copySourceLink3" class="btn secondary" type="button">Скопировать ссылку</button>';stack.appendChild(card);var update=function(){var label=el("sourceLabel3").value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,"").slice(0,40);var bot=state&&state.bot&&state.bot.username;el("sourceLink3").value=label&&bot?"https://t.me/"+bot+"?start=src_"+label:""};el("sourceLabel3").addEventListener("input",update);el("copySourceLink3").addEventListener("click",async function(){var link=el("sourceLink3").value;if(!link){toast("Сначала введите метку");return}try{await navigator.clipboard.writeText(link);toast("Ссылка скопирована")}catch(e){el("sourceLink3").select();toast("Выделите ссылку и скопируйте её")}});update()}
     function ensureConnectionCard(){if(el("connectionCard3"))return;var stack=document.querySelector("#view-settings .section-stack"),card=document.createElement("div");card.id="connectionCard3";card.className="card";card.innerHTML='<div class="card-head"><div><h3>Состояние подключения</h3><div id="connectionSummary3" class="card-note">Проверяем Telegram…</div></div><span id="connectionBadge3" class="badge">Проверка</span></div><div class="data-row"><span>Последняя успешная проверка</span><strong id="connectionSuccess3">—</strong></div><div class="data-row"><span>Последняя проблема</span><strong id="connectionErrorAt3">—</strong></div><div id="connectionError3" class="hint" style="margin-top:10px"></div>';stack.prepend(card)}
-    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();ensureSourceLinksCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";if(el("notifyMode3"))el("notifyMode3").value=state.config.notifyMode||"inquiries";if(el("reminderHours3"))el("reminderHours3").value=String(state.config.reminderHours==null?2:state.config.reminderHours);var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
+    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();ensureSourceLinksCard();renderRemoteAccessCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";if(el("notifyMode3"))el("notifyMode3").value=state.config.notifyMode||"inquiries";if(el("reminderHours3"))el("reminderHours3").value=String(state.config.reminderHours==null?2:state.config.reminderHours);var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
     function addCounters(root){(root||document).querySelectorAll("textarea[maxlength],input[maxlength]").forEach(function(node){var c=node.nextElementSibling&&node.nextElementSibling.classList.contains("counter")?node.nextElementSibling:null;if(!c){c=document.createElement("span");c.className="counter";node.insertAdjacentElement("afterend",c);node.addEventListener("input",function(){c.textContent=node.value.length+" / "+node.maxLength})}c.textContent=node.value.length+" / "+node.maxLength})}
     function bindQuick(root){(root||document).querySelectorAll(".quick-nav").forEach(function(button){if(button._bound)return;button._bound=true;button.addEventListener("click",function(){openView(button.dataset.view)})})}
     function bindLanguageSwitch(container,prefix){container.addEventListener("click",function(e){var button=e.target.closest("[data-lang]");if(!button)return;var lang=button.dataset.lang;container.querySelectorAll("[data-lang]").forEach(function(x){var active=x===button;x.classList.toggle("active",active);x.setAttribute("aria-selected",active?"true":"false")});document.querySelectorAll("[data-"+prefix+"-pane]").forEach(function(pane){pane.classList.toggle("active",pane.dataset[prefix+"Pane"]===lang)});if(prefix==="property")renderPropertyTranslationSummary()})}
@@ -7245,7 +7506,8 @@ const ADMIN_HTML = String.raw`<!doctype html>
     async function saveNotificationSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:state.config.active,adminChatId:el("adminChatId3").value,notifyMode:el("notifyMode3").value,reminderHours:Number(el("reminderHours3").value),token:"",password:"",passwordConfirm:""})});clearDirty(el("notificationForm3"));await loadState();toast(el("adminChatId3").value&&!state.config.adminNotificationVerifiedAt?"Сохранено. Теперь отправьте тест":"Настройки уведомлений сохранены") }catch(error){toast(error.message)}finally{button.disabled=false}}
     async function testAdminNotification(){var button=el("testAdminNotificationBtn3");if(dirty.has(el("notificationForm3")))return toast("Сначала сохраните Chat ID");button.disabled=true;try{await api("/api/admin-notification/test",{method:"POST",body:"{}"});await loadState();toast("Тестовое уведомление отправлено в Telegram")}catch(error){await loadState().catch(function(){});toast(error.message)}finally{button.disabled=false}}
     el("setupForm3").addEventListener("submit",async function(e){e.preventDefault();var b=e.submitter;b.disabled=true;try{var result=await api("/api/setup",{method:"POST",body:JSON.stringify({token:el("setupToken3").value,password:el("setupPassword3").value})});csrf=result.csrf;await loadState();showScreen("app3");startRefresh();toast("Бот подключён")}catch(error){message(el("setupMessage3"),error.message,false)}finally{b.disabled=false}});
-    el("loginForm3").addEventListener("submit",async function(e){e.preventDefault();var b=e.submitter;b.disabled=true;try{var result=await api("/api/login",{method:"POST",body:JSON.stringify({password:el("loginPassword3").value})});csrf=result.csrf;el("loginPassword3").value="";await loadState();showScreen("app3");startRefresh()}catch(error){message(el("loginMessage3"),error.message,false)}finally{b.disabled=false}});
+    var loginChallenge="";function loginCodeStep(on){loginChallenge=on||"";el("loginCodeBlock3").classList.toggle("hidden",!on);el("loginPassword3").closest(".field").classList.toggle("hidden",Boolean(on));el("loginPassword3").required=!on;if(on){el("loginCode3").value="";el("loginCode3").focus()}}
+    el("loginForm3").addEventListener("submit",async function(e){e.preventDefault();var b=e.submitter;b.disabled=true;try{var result=loginChallenge?await api("/api/login/verify",{method:"POST",body:JSON.stringify({challenge:loginChallenge,code:el("loginCode3").value})}):await api("/api/login",{method:"POST",body:JSON.stringify({password:el("loginPassword3").value})});if(result.twoFactor){loginCodeStep(result.challenge);el("loginMessage3").innerHTML="";return}csrf=result.csrf;el("loginPassword3").value="";loginCodeStep("");await loadState();showScreen("app3");startRefresh()}catch(error){if(loginChallenge&&/Введите пароль/.test(error.message))loginCodeStep("");message(el("loginMessage3"),error.message,false)}finally{b.disabled=false}});
     el("loginPasswordToggle3").addEventListener("click",function(){setLoginPasswordVisible(el("loginPassword3").type==="password")});
     el("logoutBtn3").addEventListener("click",async function(){if(!canLeave())return;try{await api("/api/logout",{method:"POST",body:"{}"})}catch(e){}csrf="";state=null;clearInterval(refreshTimer);showScreen("loginScreen3")});el("refreshBtn3").addEventListener("click",function(){if(dirty.size)return toast("Сначала сохраните или отмените изменения");loadState().then(function(){toast("Данные обновлены")})});
     el("nav3").addEventListener("click",function(e){var button=e.target.closest("[data-view]");if(button)openView(button.dataset.view)});document.querySelectorAll("#nav3 details").forEach(function(group){group.addEventListener("toggle",function(){if(!group.open)return;document.querySelectorAll("#nav3 details[open]").forEach(function(other){if(other!==group)other.removeAttribute("open")})})});el("mobileMenuBtn3").addEventListener("click",function(){var open=el("sidebar3").classList.toggle("open");el("sidebarOverlay3").classList.toggle("hidden",!open);this.setAttribute("aria-expanded",open?"true":"false")});el("sidebarOverlay3").addEventListener("click",closeSidebar);document.addEventListener("click",function(e){if(!e.target.closest("#sidebar3")&&(el("sidebar3").classList.contains("open")||document.querySelector("#nav3 details[open]")))closeSidebar()});bindQuick(document);
@@ -7414,6 +7676,7 @@ function shutdown(signal) {
   clearTimeout(saveTimer);
   try { saveDataNow(); } catch (error) { console.error('Не удалось сохранить данные:', error.message); }
   clearRunMarker();
+  stopTunnel();
   const adminChatId = cleanText(data.config.adminChatId, 40);
   const notice = signal === 'SIGHUP' && adminChatId && data.config.botToken
     ? Promise.race([
@@ -7454,6 +7717,7 @@ function start() {
     console.log('');
     restartPolling();
     if (previousRun) void reportAbruptStop(previousRun).catch(() => {});
+    if (data.config.remoteAccess) startTunnel();
     runDailyBackupSafely();
     setInterval(runDailyBackupSafely, 60 * 60 * 1000).unref();
     setInterval(runScheduledNotices, 15 * 60 * 1000).unref();
@@ -7538,6 +7802,11 @@ module.exports = {
   leadSourceFromPayload,
   catalogRecords,
   catalogFilterPanel,
+  requestIsRemote,
+  tunnelUrlFrom,
+  tunnelErrorFrom,
+  startTunnel,
+  stopTunnel,
   selectionMatches,
   propertyAlertDeliveries,
   deliverPropertyAlerts,
