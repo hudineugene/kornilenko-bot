@@ -25,6 +25,7 @@ import { confirmViewing, parseViewingDate, runViewingNotices, viewingAgenda } fr
 import { myRequestsView } from './requests.mjs';
 import { subscriptionPanel } from './subscriptions.mjs';
 import { offHoursNote } from './hours.mjs';
+import { monthlyPayment, purchaseEstimate } from './calculator.mjs';
 import { hostAllowed, loginAttempts, requestIsRemote, sessions } from './admin-http.mjs';
 import './admin-input.mjs';
 import { xlsxWorkbook } from './excel.mjs';
@@ -74,6 +75,7 @@ export {
   leadSourceFromPayload,
   loadData,
   loginAttempts,
+  monthlyPayment,
   myRequestsView,
   normalizeLoadedData,
   normalizeUser,
@@ -83,6 +85,7 @@ export {
   previousRunEndedAbruptly,
   processUpdates,
   propertyAlertDeliveries,
+  purchaseEstimate,
   queuePropertyAlerts,
   referencedImageFiles,
   reportAbruptStop,

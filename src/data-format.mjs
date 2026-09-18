@@ -248,6 +248,37 @@ const DEFAULT_WORKING_HOURS = {
   },
 };
 
+// The purchase calculator under a property. Off until the administrator
+// checks the rates: taxes depend on the region and change over time.
+const DEFAULT_CALCULATOR = {
+  enabled: false,
+  resaleTaxPercent: 10,
+  newBuildTaxPercent: 10,
+  stampDutyPercent: 1.5,
+  otherCostsPercent: 1.5,
+  downPaymentPercent: 30,
+  interestPercent: 4,
+  years: 25,
+};
+
+function normalizeCalculator(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const number = (key, min, max) => {
+    const parsed = Number(source[key]);
+    return Number.isFinite(parsed) && parsed >= min && parsed <= max ? Math.round(parsed * 100) / 100 : DEFAULT_CALCULATOR[key];
+  };
+  return {
+    enabled: source.enabled === true,
+    resaleTaxPercent: number('resaleTaxPercent', 0, 30),
+    newBuildTaxPercent: number('newBuildTaxPercent', 0, 30),
+    stampDutyPercent: number('stampDutyPercent', 0, 10),
+    otherCostsPercent: number('otherCostsPercent', 0, 10),
+    downPaymentPercent: number('downPaymentPercent', 0, 100),
+    interestPercent: number('interestPercent', 0, 20),
+    years: Math.round(number('years', 1, 40)),
+  };
+}
+
 function normalizeWorkingHours(value) {
   const source = value && typeof value === 'object' ? value : {};
   const days = Array.isArray(source.days)
@@ -503,6 +534,7 @@ function normalizeLoadedData(parsed) {
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
+    normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;
 }
@@ -511,6 +543,7 @@ export {
   CLOCK_TIME_PATTERN,
   DATA_VERSION,
   DAY_KEY_PATTERN,
+  DEFAULT_CALCULATOR,
   DEFAULT_WORKING_HOURS,
   MAX_REPLY_TEMPLATES,
   REMINDER_HOUR_OPTIONS,
@@ -520,6 +553,7 @@ export {
   migrateDefaultTexts,
   migrateSelectionSteps,
   normalizeAdminReplyTargets,
+  normalizeCalculator,
   normalizeLoadedData,
   normalizeLocalizedField,
   normalizePropertyImages,

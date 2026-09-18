@@ -34,6 +34,7 @@ function propertyAnalytics(propertyId) {
     viewings: Number(current.viewings || 0),
     questions: Number(current.questions || 0),
     favorites: Number(current.favorites || 0),
+    calculator: Number(current.calculator || 0),
     updatedAt: current.updatedAt || '',
   };
   data.analytics.properties[id] = bucket;

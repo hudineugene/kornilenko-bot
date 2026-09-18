@@ -18,6 +18,7 @@ import { handleViewingConfirmCallback, handleViewingFeedbackCallback } from './v
 import { handleMyRequestsCallback, sendMyRequests } from './requests.mjs';
 import { handleSubscriptionCallback } from './subscriptions.mjs';
 import { withOffHoursNote } from './hours.mjs';
+import { handleCalculatorCallback } from './calculator.mjs';
 
 function findRule(text, language) {
   const input = text.toLocaleLowerCase('ru-RU').trim();
@@ -69,6 +70,7 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('myreq:')) await handleMyRequestsCallback(update.callback_query, token);
       else if (callbackData.startsWith('vfb:')) await handleViewingFeedbackCallback(update.callback_query, token);
       else if (callbackData.startsWith('subs:')) await handleSubscriptionCallback(update.callback_query, token);
+      else if (callbackData.startsWith('calc:')) await handleCalculatorCallback(update.callback_query, token);
       else {
         const copy = INTERACTION_TEXT[callbackUser.preferredLanguage] || INTERACTION_TEXT.ru;
         await acknowledgeCallback(update.callback_query, token, copy.stale);

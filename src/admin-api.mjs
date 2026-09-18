@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
-import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, normalizeLoadedData, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
+import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, normalizeCalculator, normalizeLoadedData, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { forEachStoredImage, imageBytes, imageExists } from './media.mjs';
 import { MANAGER_CONTACT_TEXT, applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
 import { configured, data, replaceData, runtime, saveDataNow, verifyPassword } from './store.mjs';
@@ -869,6 +869,28 @@ async function handleApi(req, res, url) {
       for (const id of sessions.keys()) if (id !== session.id) sessions.delete(id);
     }
     return json(res, 200, { ok: true });
+  }
+
+  if (url.pathname === '/api/calculator' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const limits = {
+      resaleTaxPercent: ['Налог на вторичное жильё', 0, 30],
+      newBuildTaxPercent: ['НДС на новостройку', 0, 30],
+      stampDutyPercent: ['Гербовый сбор', 0, 10],
+      otherCostsPercent: ['Нотариус и прочие расходы', 0, 10],
+      downPaymentPercent: ['Первый взнос', 0, 100],
+      interestPercent: ['Ставка по ипотеке', 0, 20],
+      years: ['Срок ипотеки', 1, 40],
+    };
+    for (const [key, [label, min, max]] of Object.entries(limits)) {
+      const value = Number(body[key]);
+      if (body[key] === '' || !Number.isFinite(value) || value < min || value > max) return json(res, 400, { error: '«' + label + '»: укажите число от ' + min + ' до ' + max });
+    }
+    data.config.calculator = normalizeCalculator({ ...body, enabled: body.enabled === true });
+    saveDataNow();
+    return json(res, 200, { ok: true, calculator: data.config.calculator });
   }
 
   if (url.pathname === '/api/working-hours' && req.method === 'PUT') {

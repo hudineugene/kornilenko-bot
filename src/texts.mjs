@@ -415,6 +415,67 @@ const SUBSCRIPTION_TEXT = {
   },
 };
 
+// The purchase calculator under a property for sale.
+const CALCULATOR_TEXT = {
+  ru: {
+    openButton: '🧮 Расчёт покупки и ипотеки',
+    title: '🧮 Примерный расчёт покупки',
+    price: 'Цена',
+    costs: 'Налоги и расходы',
+    resaleTax: 'Налог на передачу собственности (ITP)',
+    newBuildTax: 'НДС на новостройку (IVA)',
+    stampDuty: 'Гербовый сбор (AJD)',
+    otherCosts: 'Нотариус, регистрация, гестор',
+    total: 'Итого с расходами',
+    mortgage: 'Ипотека',
+    downPayment: 'первый взнос',
+    loan: 'кредит',
+    years: 'лет',
+    monthly: 'в месяц',
+    upfront: 'Нужно на старте (взнос и расходы)',
+    disclaimer: 'Расчёт примерный: ставки зависят от региона, банка и вашей ситуации. Точные цифры подскажет менеджер.',
+    discuss: '💬 Обсудить с менеджером',
+  },
+  en: {
+    openButton: '🧮 Purchase and mortgage estimate',
+    title: '🧮 Approximate purchase costs',
+    price: 'Price',
+    costs: 'Taxes and costs',
+    resaleTax: 'Transfer tax (ITP)',
+    newBuildTax: 'VAT on new builds (IVA)',
+    stampDuty: 'Stamp duty (AJD)',
+    otherCosts: 'Notary, land registry, gestor',
+    total: 'Total with costs',
+    mortgage: 'Mortgage',
+    downPayment: 'down payment',
+    loan: 'loan',
+    years: 'years',
+    monthly: 'per month',
+    upfront: 'Needed upfront (down payment and costs)',
+    disclaimer: 'This is an estimate: rates depend on the region, the bank and your situation. A manager will give you exact figures.',
+    discuss: '💬 Discuss with a manager',
+  },
+  es: {
+    openButton: '🧮 Cálculo de compra e hipoteca',
+    title: '🧮 Cálculo aproximado de la compra',
+    price: 'Precio',
+    costs: 'Impuestos y gastos',
+    resaleTax: 'Impuesto de transmisiones (ITP)',
+    newBuildTax: 'IVA de obra nueva',
+    stampDuty: 'Actos jurídicos documentados (AJD)',
+    otherCosts: 'Notaría, registro, gestoría',
+    total: 'Total con gastos',
+    mortgage: 'Hipoteca',
+    downPayment: 'entrada',
+    loan: 'préstamo',
+    years: 'años',
+    monthly: 'al mes',
+    upfront: 'Necesario al inicio (entrada y gastos)',
+    disclaimer: 'El cálculo es aproximado: los tipos dependen de la región, del banco y de tu situación. Un gestor te dará las cifras exactas.',
+    discuss: '💬 Hablar con un gestor',
+  },
+};
+
 // Messages about a viewing after the request: confirmation, a reminder the
 // evening before and a question about how it went.
 const VIEWING_NOTICE_TEXT = {
@@ -578,6 +639,7 @@ const INTERFACE_TEXT_TARGETS = {
   myRequests: { target: MY_REQUESTS_TEXT },
   viewingNotices: { target: VIEWING_NOTICE_TEXT },
   subscriptions: { target: SUBSCRIPTION_TEXT },
+  calculator: { target: CALCULATOR_TEXT },
 };
 
 const INTERFACE_TEXT_DEFAULTS = Object.fromEntries(Object.entries(INTERFACE_TEXT_TARGETS).map(([group, descriptor]) => [
@@ -636,6 +698,7 @@ function applyInterfaceText(value) {
 
 export {
   BOT_COMMAND_DESCRIPTIONS,
+  CALCULATOR_TEXT,
   CATALOG_FILTER_TEXT,
   COMMAND_TEXT,
   EMPTY_STATE_TEXT,

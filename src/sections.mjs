@@ -12,6 +12,7 @@ import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendW
 import { startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs';
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { withOffHoursNote } from './hours.mjs';
+import { calculatorButton } from './calculator.mjs';
 import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, contentButtons, deleteCatalogMessages, localizedExact, objectCaption, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 
 async function sendPromotionPage(chatId, user, token, page = 0) {
@@ -443,6 +444,8 @@ async function handlePropertyCallback(query, token) {
     const rows = [];
     const images = recordImages(record, language);
     if (images.length > 1) rows.push([{ text: '📷 ' + text.gallery + ' (' + images.length + ')', callback_data: 'property:gallery:' + record.id }]);
+    const calculator = calculatorButton(record, language);
+    if (calculator) rows.push([calculator]);
     const external = validHttpUrl(record.url);
     const map = validHttpUrl(record.mapUrl);
     const share = propertyShareUrl(record, language);
