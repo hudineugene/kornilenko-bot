@@ -332,6 +332,17 @@ test.describe('viewing form', () => {
     assert.match(step.last.text, new RegExp('Дата: ' + ru.dateOptions[0] + ' \\(' + calendarDate(new Date()).replace(/\./g, '\\.') + '\\)\nВремя: ' + ru.timeOptions[0]));
   });
 
+  test('"at the weekend" is the coming Saturday–Sunday, and today on a Sunday', () => {
+    const weekend = ru.dateOptions[2];
+    const at = (day) => bot.viewingDateValue(weekend, ru, 'ru', new Date(2026, 8, day, 12));
+    // 14 September 2026 is a Monday.
+    assert.equal(at(14), weekend + ' (19.09–20.09)');
+    assert.equal(at(18), weekend + ' (19.09–20.09)');
+    assert.equal(at(19), weekend + ' (19.09–20.09)');
+    assert.equal(at(20), weekend + ' (20.09)');
+    assert.equal(at(21), weekend + ' (26.09–27.09)');
+  });
+
   test('free text instead of a date option is rejected', async () => {
     const chat = createChat();
     await chat.press('property:viewing:villa-marbella-01');

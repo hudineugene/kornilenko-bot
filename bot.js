@@ -2032,18 +2032,20 @@ function oneColumnReplyKeyboard(options, cancelText, placeholder) {
   };
 }
 
-function viewingDateValue(value, copy, language) {
+function viewingDateValue(value, copy, language, now = new Date()) {
   const index = copy.dateOptions.indexOf(value);
   if (index < 0 || index > 2) return value;
-  const date = new Date();
+  const date = new Date(now);
   const locale = language === 'en' ? 'en-GB' : language === 'es' ? 'es-ES' : 'ru-RU';
   if (index === 2) {
-    const daysUntilSaturday = date.getDay() === 0 ? 6 : (6 - date.getDay() + 7) % 7;
+    const formatter = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit' });
+    // On Sunday "at the weekend" means today, not the next weekend.
+    if (date.getDay() === 0) return value + ' (' + formatter.format(date) + ')';
+    const daysUntilSaturday = 6 - date.getDay();
     const saturday = new Date(date);
     saturday.setDate(date.getDate() + daysUntilSaturday);
     const sunday = new Date(saturday);
     sunday.setDate(saturday.getDate() + 1);
-    const formatter = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit' });
     return value + ' (' + formatter.format(saturday) + '–' + formatter.format(sunday) + ')';
   }
   if (index === 1) date.setDate(date.getDate() + 1);
@@ -6430,6 +6432,7 @@ module.exports = {
   sessions,
   loginAttempts,
   splitTelegramText,
+  viewingDateValue,
   handleUpdate,
   createInquiry,
   runDailyBackup,
