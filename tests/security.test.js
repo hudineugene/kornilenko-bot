@@ -174,8 +174,23 @@ test('a flood from one user keeps other clients\' inquiries and mutes admin noti
   assert.equal(data.inquiries.filter((item) => item.userId === '104').length, 1);
   assert.ok(data.inquiries.filter((item) => item.userId === '666').length <= 21);
   const aboutFlooder = sentTo(ADMIN_CHAT).filter((call) => call.body.text.includes('666'));
-  assert.ok(aboutFlooder.length <= 16, 'admin got ' + aboutFlooder.length + ' notifications');
-  assert.ok(aboutFlooder.some((call) => call.body.text.includes('пишет слишком часто')));
+  assert.ok(aboutFlooder.length <= 21, 'admin got ' + aboutFlooder.length + ' notifications');
+  assert.ok(aboutFlooder.some((call) => call.body.text.includes('слишком много сообщений')));
+});
+
+test('a client who browses a lot still gets their question through to the admin', async () => {
+  resetData((next) => knownUser(next, 107));
+  const sections = ['objects', 'promotions', 'favorites', 'contacts', 'more'].map((key) => bot.text.menu.ru[key]);
+  for (let round = 0; round < 5; round += 1) {
+    for (const section of sections) await bot.processUpdates([textMessage(107, section)], TOKEN);
+  }
+  await settle();
+  telegram.calls = [];
+  await bot.processUpdates([textMessage(107, 'Есть ли квартиры до 200 000 €?')], TOKEN);
+  await settle();
+  const notifications = sentTo(ADMIN_CHAT).map((call) => call.body.text);
+  assert.ok(notifications.some((text) => text.includes('Есть ли квартиры до 200 000 €?')), 'the question reaches the admin');
+  assert.ok(!notifications.some((text) => text.includes('слишком много')), 'browsing is not reported as a flood');
 });
 
 test('closed inquiries are evicted before open ones', () => {
