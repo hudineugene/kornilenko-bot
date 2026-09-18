@@ -119,6 +119,7 @@ const defaultData = {
       },
     },
     active: true,
+    notifyMode: 'all',
   },
   bot: {
     id: null,
@@ -163,6 +164,8 @@ const defaultData = {
   errors: [],
   broadcasts: [],
   inquiries: [],
+  adminReplyTargets: {},
+  adminReplyTargetsSince: '',
   telegramOffset: 0,
 };
 
@@ -404,6 +407,23 @@ function pruneOrphanPropertyAnalytics(root) {
   for (const id of Object.keys(properties)) if (!existing.has(id)) delete properties[id];
 }
 
+function normalizeAdminReplyTargets(value) {
+  const result = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
+  for (const [messageId, target] of Object.entries(value)) {
+    if (!/^\d{1,20}$/.test(messageId) || !target || typeof target !== 'object') continue;
+    const chatId = cleanText(target.chatId, 40);
+    if (!/^-?\d{1,20}$/.test(chatId)) continue;
+    result[messageId] = {
+      chatId,
+      inquiryId: cleanText(target.inquiryId, 100),
+      sourceMessageId: Number.isFinite(Number(target.sourceMessageId)) && target.sourceMessageId != null ? Number(target.sourceMessageId) : null,
+      createdAt: cleanText(target.createdAt, 40),
+    };
+  }
+  return result;
+}
+
 function legacyConfigRemoved(config) {
   const { greeting, help, fallback, ...rest } = config;
   return rest;
@@ -587,7 +607,11 @@ function normalizeLoadedData(parsed) {
       broadcasts,
       inquiries,
       telegramOffset: Number.isFinite(Number(parsed.telegramOffset)) ? Math.max(0, Number(parsed.telegramOffset)) : 0,
+      adminReplyTargets: normalizeAdminReplyTargets(parsed.adminReplyTargets),
+      // Notifications sent before this version have no entry in the map.
+      adminReplyTargetsSince: cleanText(parsed.adminReplyTargetsSince, 40) || new Date().toISOString(),
     };
+    normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'all';
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;
 }
@@ -603,19 +627,27 @@ function readDataFile(filePath) {
   return normalizeLoadedData(JSON.parse(fs.readFileSync(filePath, 'utf8')));
 }
 
-// The hourly .bak copy first, then the snapshots in backups/, newest first.
-function recoveryCandidates() {
-  const candidates = [DATA_BACKUP_FILE];
-  const backupDirectory = path.join(path.dirname(DATA_FILE), 'backups');
+const BACKUP_DIRECTORY = path.join(path.dirname(DATA_FILE), 'backups');
+const DAILY_BACKUP_DIRECTORY = path.join(BACKUP_DIRECTORY, 'daily');
+const MEDIA_BACKUP_DIRECTORY = path.join(BACKUP_DIRECTORY, 'media');
+const DAILY_BACKUPS_KEPT = 14;
+
+function jsonFilesIn(directory) {
   try {
-    candidates.push(...fs.readdirSync(backupDirectory)
+    return fs.readdirSync(directory)
       .filter((name) => name.toLowerCase().endsWith('.json'))
-      .map((name) => path.join(backupDirectory, name))
-      .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs));
+      .map((name) => path.join(directory, name));
   } catch {
-    // No backups folder yet.
+    return [];
   }
-  return candidates.filter((candidate) => fs.existsSync(candidate));
+}
+
+// The hourly .bak copy first, then the snapshots in backups/ and
+// backups/daily/, newest first.
+function recoveryCandidates() {
+  const snapshots = jsonFilesIn(BACKUP_DIRECTORY).concat(jsonFilesIn(DAILY_BACKUP_DIRECTORY))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  return [DATA_BACKUP_FILE, ...snapshots].filter((candidate) => fs.existsSync(candidate));
 }
 
 function loadData() {
@@ -718,6 +750,84 @@ if (needsContentAddressing(data)) {
   } catch (error) {
     console.error('Не удалось объединить одинаковые фотографии:', error.message);
   }
+}
+
+function storedImageNames(root) {
+  const names = new Set();
+  forEachStoredImage(root, (image) => {
+    const fileName = storedImageFile(image);
+    if (fileName) names.add(fileName);
+  });
+  return names;
+}
+
+// Brings back photos that are referenced by the data but missing from
+// bot-media, using the copies made by the daily backup.
+function restoreMissingMedia(root) {
+  let restored = 0;
+  for (const fileName of storedImageNames(root)) {
+    const target = path.join(MEDIA_DIRECTORY, fileName);
+    const copy = path.join(MEDIA_BACKUP_DIRECTORY, fileName);
+    if (fs.existsSync(target) || !fs.existsSync(copy)) continue;
+    fs.mkdirSync(MEDIA_DIRECTORY, { recursive: true });
+    fs.copyFileSync(copy, target);
+    restored += 1;
+  }
+  return restored;
+}
+
+// Once a day: a copy of bot-data.json in backups/daily/ and a copy of every
+// photo it references in backups/media/. Photo files are named by their
+// content, so each one is copied only once no matter how many snapshots use
+// it. Only the newest DAILY_BACKUPS_KEPT snapshots are kept, and photos that
+// none of them references any more are removed.
+function runDailyBackup(now = new Date()) {
+  const target = path.join(DAILY_BACKUP_DIRECTORY, 'bot-data-' + dayKey(now) + '.json');
+  if (fs.existsSync(target)) return '';
+  saveDataNow();
+  fs.mkdirSync(DAILY_BACKUP_DIRECTORY, { recursive: true });
+  fs.mkdirSync(MEDIA_BACKUP_DIRECTORY, { recursive: true });
+  for (const fileName of storedImageNames(data)) {
+    const source = path.join(MEDIA_DIRECTORY, fileName);
+    const copy = path.join(MEDIA_BACKUP_DIRECTORY, fileName);
+    if (!fs.existsSync(copy) && fs.existsSync(source)) fs.copyFileSync(source, copy);
+  }
+  const temporary = target + '.tmp';
+  fs.copyFileSync(DATA_FILE, temporary);
+  fs.renameSync(temporary, target);
+
+  const snapshots = jsonFilesIn(DAILY_BACKUP_DIRECTORY).sort().reverse();
+  for (const old of snapshots.slice(DAILY_BACKUPS_KEPT)) fs.unlinkSync(old);
+  const needed = storedImageNames(data);
+  for (const snapshot of snapshots.slice(0, DAILY_BACKUPS_KEPT)) {
+    try {
+      for (const fileName of storedImageNames(JSON.parse(fs.readFileSync(snapshot, 'utf8')))) needed.add(fileName);
+    } catch {
+      // A damaged snapshot must not cause photos to be deleted: keep everything.
+      return target;
+    }
+  }
+  for (const fileName of fs.readdirSync(MEDIA_BACKUP_DIRECTORY)) {
+    if (!needed.has(fileName)) fs.unlinkSync(path.join(MEDIA_BACKUP_DIRECTORY, fileName));
+  }
+  return target;
+}
+
+function runDailyBackupSafely() {
+  try {
+    const created = runDailyBackup();
+    if (created) console.log('Создана ежедневная резервная копия:', created);
+  } catch (error) {
+    recordError('Ежедневная резервная копия', error);
+    console.error('Не удалось создать ежедневную резервную копию:', error.message);
+  }
+}
+
+try {
+  const restoredMedia = restoreMissingMedia(data);
+  if (restoredMedia) console.log('Восстановлено фотографий из резервной копии:', restoredMedia);
+} catch (error) {
+  console.error('Не удалось восстановить фотографии из резервной копии:', error.message);
 }
 
 function configured() {
@@ -1127,7 +1237,7 @@ function splitTelegramText(text, limit = TELEGRAM_MESSAGE_LIMIT) {
 
 async function sendMessage(chatId, text, token = data.config.botToken, options = {}) {
   if (!text) return;
-  const { track = true, ...telegramOptions } = options || {};
+  const { track = true, messageIds = null, ...telegramOptions } = options || {};
   const chunks = splitTelegramText(text);
   const { reply_markup: replyMarkup, reply_parameters: replyParameters, entities, ...baseOptions } = telegramOptions;
   let result = null;
@@ -1142,6 +1252,7 @@ async function sendMessage(chatId, text, token = data.config.botToken, options =
       ...(index === 0 && replyParameters ? { reply_parameters: replyParameters } : {}),
       ...(index === chunks.length - 1 && replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
+    if (messageIds && result && Number.isFinite(Number(result.message_id))) messageIds.push(Number(result.message_id));
     if (track) {
       data.stats.messagesSent += 1;
       recordDaily('sent');
@@ -2392,7 +2503,80 @@ function normalizeUser(from, chatId, countMessage = true) {
   return user;
 }
 
+const MAX_INQUIRIES = 5000;
+const INQUIRY_MERGE_WINDOW_MS = 10 * 60 * 1000;
+const INQUIRY_RATE_LIMIT = { count: 20, windowMs: 60 * 60 * 1000 };
+const ADMIN_NOTIFY_LIMIT = { count: 15, windowMs: 10 * 60 * 1000 };
+const MERGEABLE_INQUIRY_TYPES = ['general', 'question'];
+const inquiryTimes = new Map();
+const adminNotifyTimes = new Map();
+const adminMuteNotices = new Map();
+
+// Sliding-window counter per key; returns false once the limit is reached.
+function withinRateLimit(store, key, limit, now = Date.now()) {
+  const times = (store.get(key) || []).filter((time) => now - time < limit.windowMs);
+  const allowed = times.length < limit.count;
+  if (allowed) times.push(now);
+  store.set(key, times);
+  return allowed;
+}
+
+// Closed inquiries are dropped first, so a flood of new messages cannot push
+// out open requests from other clients.
+function trimInquiries() {
+  let excess = data.inquiries.length - MAX_INQUIRIES;
+  if (excess <= 0) return;
+  const kept = [];
+  for (let index = data.inquiries.length - 1; index >= 0; index -= 1) {
+    const item = data.inquiries[index];
+    if (excess > 0 && item.status === 'closed') {
+      excess -= 1;
+      continue;
+    }
+    kept.push(item);
+  }
+  kept.reverse();
+  if (excess > 0) kept.length -= excess;
+  data.inquiries = kept;
+}
+
+// Messages sent in a row go into the client's latest open inquiry instead of
+// creating a new card each time. Past the rate limit every further message is
+// merged, so one person cannot flood the inquiry list.
+function mergeIntoLatestInquiry(user, text, type, context) {
+  const latest = data.inquiries.find((item) => item.userId === String(user.id));
+  if (!latest) return null;
+  const combined = latest.text + '\n\n' + text;
+  const continuation = MERGEABLE_INQUIRY_TYPES.includes(type)
+    && !context.propertyId && !context.lead && !context.selection
+    && latest.type === type && !latest.propertyId && latest.status === 'new'
+    && Date.now() - Date.parse(latest.updatedAt) < INQUIRY_MERGE_WINDOW_MS
+    && combined.length <= 4000;
+  // Only new inquiries count towards the limit.
+  if (!continuation && withinRateLimit(inquiryTimes, String(user.id), INQUIRY_RATE_LIMIT)) return null;
+  // Past the limit the text is kept only while it fits; every message is
+  // still in the user's activity history.
+  if (combined.length <= 4000) latest.text = combined;
+  latest.updatedAt = new Date().toISOString();
+  if (latest.status === 'closed') latest.status = 'new';
+  return latest;
+}
+
 function createInquiry(user, text, context = {}) {
+  const type = ['question', 'interest', 'selection', 'viewing', 'lead', 'general'].includes(context.type) ? context.type : 'general';
+  const merged = mergeIntoLatestInquiry(user, cleanText(text, 4000), type, context);
+  if (merged) {
+    scheduleSave();
+    const notify = () => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в обращении' });
+    if (context.sourceMessage && !context.sourceMessage.text) {
+      void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken, merged)
+        .then(notify)
+        .catch((error) => recordError('Уведомление администратору', error));
+    } else {
+      void notify();
+    }
+    return merged;
+  }
   const now = new Date().toISOString();
   const inquiry = {
     id: crypto.randomUUID(),
@@ -2421,11 +2605,11 @@ function createInquiry(user, text, context = {}) {
     updatedAt: now,
   };
   data.inquiries.unshift(inquiry);
-  data.inquiries = data.inquiries.slice(0, 5000);
+  trimInquiries();
   recordDaily('inquiry');
   scheduleSave();
   if (context.sourceMessage && !context.sourceMessage.text) {
-    void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken)
+    void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken, inquiry)
       .then(() => notifyAdministrator(inquiry, user))
       .catch((error) => recordError('Уведомление администратору', error));
   } else {
@@ -2445,11 +2629,28 @@ function administratorTargetLines(user, inquiryId = '', sourceMessageId = null) 
   return lines;
 }
 
-async function notifyAdministratorAction(user, title, details = '', inquiryId = '', sourceMessageId = null) {
+// 'send', a one-time 'notice' that the user is muted, or 'drop'.
+function adminNotificationDecision(user) {
+  const key = String(user.id);
+  if (withinRateLimit(adminNotifyTimes, key, ADMIN_NOTIFY_LIMIT)) return 'send';
+  const noticeSentAt = adminMuteNotices.get(key) || 0;
+  if (Date.now() - noticeSentAt < ADMIN_NOTIFY_LIMIT.windowMs) return 'drop';
+  adminMuteNotices.set(key, Date.now());
+  return 'notice';
+}
+
+async function notifyAdministratorAction(user, title, details = '', inquiryId = '', sourceMessageId = null, options = {}) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
   if (!adminChatId || !data.config.botToken || !user || !user.chatId || String(user.chatId) === adminChatId) return false;
+  if (data.config.notifyMode === 'inquiries' && !options.important) return false;
   const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени';
   const username = user.username ? ' (@' + user.username + ')' : '';
+  const decision = adminNotificationDecision(user);
+  if (decision === 'drop') return false;
+  if (decision === 'notice') {
+    await sendMessage(adminChatId, '⚠️ ' + name + username + ' (ID ' + user.id + ') пишет слишком часто. Уведомления о нём приостановлены на ' + Math.round(ADMIN_NOTIFY_LIMIT.windowMs / 60000) + ' минут. Все сообщения сохраняются в панели.', data.config.botToken, { track: false }).catch((error) => recordError('Уведомление администратору', error));
+    return false;
+  }
   const notification = [
     'Действие пользователя',
     '',
@@ -2461,7 +2662,9 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   if (details) notification.push('', cleanText(details, 4000));
   notification.push(...administratorTargetLines(user, inquiryId, sourceMessageId));
   try {
-    await sendMessage(adminChatId, notification.join('\n'), data.config.botToken, { track: false });
+    const messageIds = [];
+    await sendMessage(adminChatId, notification.join('\n'), data.config.botToken, { track: false, messageIds });
+    rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId });
     if (!data.config.adminNotificationVerifiedAt) {
       data.config.adminNotificationVerifiedAt = new Date().toISOString();
       scheduleSave();
@@ -2476,27 +2679,35 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   }
 }
 
-async function notifyAdministrator(inquiry, user) {
+async function notifyAdministrator(inquiry, user, options = {}) {
   const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
   const propertyLine = property
     ? 'Объект: ' + (localized(property.title, inquiry.language) || property.reference || property.id)
     : '';
-  return notifyAdministratorAction(user, 'Новое обращение', [
+  return notifyAdministratorAction(user, options.title || 'Новое обращение', [
     'Тип: ' + ({ question: 'вопрос по объекту', interest: 'интерес к объекту', selection: 'подбор недвижимости', viewing: 'запись на просмотр', lead: 'заявка на звонок', general: 'сообщение' }[inquiry.type] || 'сообщение'),
     propertyLine,
-    inquiry.text,
-  ].filter(Boolean).join('\n'), inquiry.id, inquiry.sourceMessageId);
+    options.text || inquiry.text,
+  ].filter(Boolean).join('\n'), inquiry.id, inquiry.sourceMessageId, { important: true });
 }
 
-async function copyUserMessageToAdministrator(message, token) {
+async function copyUserMessageToAdministrator(message, token, inquiry = null) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
   if (!adminChatId || !message || !message.chat || String(message.chat.id) === adminChatId) return false;
   try {
-    await telegramRequest(token, 'copyMessage', {
+    const copied = await telegramRequest(token, 'copyMessage', {
       chat_id: adminChatId,
       from_chat_id: message.chat.id,
       message_id: message.message_id,
     });
+    // Replying directly to the copied photo or voice message works too.
+    if (copied && Number.isFinite(Number(copied.message_id))) {
+      rememberAdminReplyTarget([Number(copied.message_id)], {
+        chatId: message.chat.id,
+        inquiryId: inquiry ? inquiry.id : '',
+        sourceMessageId: message.message_id,
+      });
+    }
     return true;
   } catch (error) {
     recordError('Копирование сообщения администратору', error);
@@ -2579,25 +2790,88 @@ async function handleMessageReaction(change) {
   void notifyAdministratorAction(user, actionText, 'На сообщение: ' + targetText);
 }
 
+const ADMIN_REPLY_TARGET_LIMIT = 3000;
+const LEGACY_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Every message the bot puts into the admin chat on behalf of a user is
+// recorded here: admin chat message id -> the user it belongs to. Replies are
+// routed only by this map, never by the message text, because the text
+// contains the user's own name and message and can be forged.
+function rememberAdminReplyTarget(messageIds, target) {
+  if (!target || target.chatId == null || !messageIds.length) return;
+  if (!data.adminReplyTargets || typeof data.adminReplyTargets !== 'object') data.adminReplyTargets = {};
+  for (const messageId of messageIds) {
+    data.adminReplyTargets[String(messageId)] = {
+      chatId: String(target.chatId),
+      inquiryId: cleanText(target.inquiryId, 100),
+      sourceMessageId: Number.isFinite(Number(target.sourceMessageId)) && target.sourceMessageId != null ? Number(target.sourceMessageId) : null,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  const keys = Object.keys(data.adminReplyTargets);
+  if (keys.length > ADMIN_REPLY_TARGET_LIMIT) {
+    keys.sort((a, b) => Number(a) - Number(b));
+    for (const key of keys.slice(0, keys.length - ADMIN_REPLY_TARGET_LIMIT)) delete data.adminReplyTargets[key];
+  }
+  scheduleSave();
+}
+
+// Notifications sent by older versions are not in the map. For a short
+// transition period they are still parsed, taking the last marker, which the
+// bot itself appends after the user's text.
+function legacyAdministratorReplyTarget(replied) {
+  const since = Date.parse(data.adminReplyTargetsSince || '');
+  const sentAt = Number(replied.date) * 1000;
+  if (!Number.isFinite(since) || !(sentAt < since) || Date.now() - since > LEGACY_REPLY_WINDOW_MS) return null;
+  const source = String(replied.text || replied.caption || '');
+  const last = (pattern) => {
+    const matches = Array.from(source.matchAll(pattern));
+    return matches.length ? matches[matches.length - 1][1] : '';
+  };
+  const chatId = last(/Получатель ID:\s*(-?\d{4,20})/g);
+  if (!chatId) return null;
+  const sourceMessageId = last(/Сообщение пользователя ID:\s*(\d{1,20})/g);
+  return {
+    chatId,
+    inquiryId: last(/Обращение ID:\s*([A-Za-z0-9-]{8,100})/g),
+    sourceMessageId: sourceMessageId ? Number(sourceMessageId) : null,
+  };
+}
+
 function administratorReplyTarget(message) {
   const replied = message && message.reply_to_message;
-  const source = String(replied && (replied.text || replied.caption) || '');
-  const recipient = source.match(/Получатель ID:\s*(-?\d{4,20})/);
-  const inquiry = source.match(/Обращение ID:\s*([A-Za-z0-9-]{8,100})/);
-  const sourceMessage = source.match(/Сообщение пользователя ID:\s*(\d{1,20})/);
-  return recipient ? { chatId: recipient[1], inquiryId: inquiry ? inquiry[1] : '', sourceMessageId: sourceMessage ? Number(sourceMessage[1]) : null } : null;
+  if (!replied) return null;
+  if (data.bot.id && replied.from && Number(replied.from.id) !== Number(data.bot.id)) return null;
+  const key = String(replied.message_id);
+  const targets = data.adminReplyTargets || {};
+  if (Object.hasOwn(targets, key)) {
+    const stored = targets[key];
+    return { chatId: stored.chatId, inquiryId: stored.inquiryId || '', sourceMessageId: stored.sourceMessageId };
+  }
+  return legacyAdministratorReplyTarget(replied);
+}
+
+function looksLikeUserNotification(message) {
+  const replied = message && message.reply_to_message;
+  return Boolean(replied && /Получатель ID:/.test(String(replied.text || replied.caption || '')));
 }
 
 async function handleAdministratorReply(message, token) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
   if (!adminChatId || !message || !message.chat || String(message.chat.id) !== adminChatId) return false;
   const target = administratorReplyTarget(message);
-  if (!target) return false;
+  if (!target) {
+    // A reply to an old notification must not fall through and be treated
+    // as a message from a client.
+    if (!looksLikeUserNotification(message)) return false;
+    await sendMessage(adminChatId, '⚠️ Сообщение не отправлено: не удалось определить получателя этого уведомления. Ответьте пользователю из панели управления.', token, { track: false }).catch(() => {});
+    return true;
+  }
   const user = userByChatId(target.chatId);
   try {
     const language = user && user.preferredLanguage || 'ru';
     const header = (MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru).replyHeader;
-    const replyParameters = Number.isFinite(Number(target.sourceMessageId))
+    const replyParameters = target.sourceMessageId != null && Number.isFinite(Number(target.sourceMessageId))
       ? { message_id: Number(target.sourceMessageId), allow_sending_without_reply: true }
       : null;
     let copied;
@@ -4250,10 +4524,7 @@ function securityHeaders(res) {
   res.setHeader('x-frame-options', 'DENY');
   res.setHeader('referrer-policy', 'no-referrer');
   res.setHeader('cache-control', 'no-store');
-  res.setHeader(
-    'content-security-policy',
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
-  );
+  res.setHeader('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
 }
 
 function json(res, status, payload) {
@@ -4262,10 +4533,18 @@ function json(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+// The panel has a single inline <script>; a per-response nonce lets only that
+// script run, so an injected <script> or event handler would be blocked even
+// if some value were rendered without escaping.
 function html(res, content) {
   securityHeaders(res);
+  const nonce = crypto.randomBytes(16).toString('base64');
+  res.setHeader(
+    'content-security-policy',
+    "default-src 'self'; script-src 'nonce-" + nonce + "'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+  );
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  res.end(content);
+  res.end(content.replaceAll('<script>', '<script nonce="' + nonce + '">'));
 }
 
 function binaryImage(res, image) {
@@ -4322,24 +4601,46 @@ function parseUploadedImage(dataUrl, originalName) {
 
 function readBody(req, maximumBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
+    const tooLarge = () => {
+      const error = new Error('Слишком большой запрос');
+      error.statusCode = 413;
+      return error;
+    };
+    // The rest of an oversized body is read and thrown away instead of
+    // resetting the socket, so the client still receives the 413 answer.
+    if (Number(req.headers['content-length']) > maximumBytes) {
+      req.resume();
+      reject(tooLarge());
+      return;
+    }
     const chunks = [];
     let size = 0;
+    let overflow = false;
     req.on('data', (chunk) => {
+      if (overflow) return;
       size += chunk.length;
       if (size > maximumBytes) {
-        reject(new Error('Слишком большой запрос'));
-        req.destroy();
+        overflow = true;
+        chunks.length = 0;
+        reject(tooLarge());
         return;
       }
       chunks.push(chunk);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('end', () => {
+      if (!overflow) resolve(Buffer.concat(chunks));
+    });
     req.on('error', reject);
   });
 }
 
-async function readJson(req) {
-  const bytes = await readBody(req);
+const MAX_UNAUTHENTICATED_BODY_BYTES = 16 * 1024;
+// The token is put into the request path, so nothing but the documented
+// format is accepted.
+const BOT_TOKEN_PATTERN = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
+
+async function readJson(req, maximumBytes = MAX_BODY_BYTES) {
+  const bytes = await readBody(req, maximumBytes);
   try {
     return bytes.length ? JSON.parse(bytes.toString('utf8')) : {};
   } catch {
@@ -4436,6 +4737,7 @@ function safeState(session) {
       active: data.config.active,
       adminChatId: data.config.adminChatId || '',
       adminNotificationVerifiedAt: data.config.adminNotificationVerifiedAt || '',
+      notifyMode: data.config.notifyMode || 'all',
     },
     welcomeImages: Object.fromEntries(['ru', 'en', 'es'].map((language) => {
       const image = data.welcomeImages[language];
@@ -4719,6 +5021,40 @@ function parseBroadcast(body, existing = {}, options = {}) {
   };
 }
 
+// Everything the bot stores about one person, for a data access request.
+function userDataExport(user) {
+  const id = String(user.id);
+  const chatId = String(user.chatId);
+  return {
+    exportedAt: new Date().toISOString(),
+    user: clone(user),
+    inquiries: data.inquiries.filter((item) => item.userId === id || String(item.chatId) === chatId).map(clone),
+  };
+}
+
+// Right to erasure: removes the user's card, history, favourites, inquiries
+// and every reference to them. Snapshots in backups/ keep the data until they
+// are rotated out.
+function eraseUserData(user) {
+  const id = String(user.id);
+  const chatId = String(user.chatId);
+  delete data.users[id];
+  usersByChatId.delete(chatId);
+  inquiryTimes.delete(id);
+  adminNotifyTimes.delete(id);
+  adminMuteNotices.delete(id);
+  const inquiriesBefore = data.inquiries.length;
+  data.inquiries = data.inquiries.filter((item) => item.userId !== id && String(item.chatId) !== chatId);
+  for (const entry of data.broadcasts) {
+    if (Array.isArray(entry.processedUserIds)) entry.processedUserIds = entry.processedUserIds.filter((value) => String(value) !== id);
+    if (Array.isArray(entry.failures)) entry.failures = entry.failures.filter((failure) => String(failure.userId) !== id);
+  }
+  for (const [messageId, target] of Object.entries(data.adminReplyTargets || {})) {
+    if (String(target.chatId) === chatId) delete data.adminReplyTargets[messageId];
+  }
+  return { inquiriesRemoved: inquiriesBefore - data.inquiries.length };
+}
+
 function portableBackupData() {
   const payload = clone(data);
   forEachStoredImage(payload, (image) => {
@@ -4755,10 +5091,10 @@ async function handleApi(req, res, url) {
   if (url.pathname === '/api/setup' && req.method === 'POST') {
     if (configured()) return json(res, 409, { error: 'Первичная настройка уже выполнена' });
     if (!isLocalRequest(req)) return json(res, 403, { error: 'Настройка доступна только с этого компьютера' });
-    const body = await readJson(req);
+    const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
     const token = cleanText(body.token, 256);
     const password = String(body.password || '');
-    if (!/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+    if (!BOT_TOKEN_PATTERN.test(token)) {
       return json(res, 400, { error: 'Токен выглядит некорректно' });
     }
     if (password.length < 8) return json(res, 400, { error: 'Пароль должен содержать минимум 8 символов' });
@@ -4784,7 +5120,7 @@ async function handleApi(req, res, url) {
     if (!configured()) return json(res, 409, { error: 'Сначала завершите настройку' });
     const ip = req.socket.remoteAddress || 'unknown';
     if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
-    const body = await readJson(req);
+    const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
     if (!verifyPassword(String(body.password || ''))) {
       await delay(250);
       return json(res, 401, { error: 'Неверный пароль' });
@@ -4879,6 +5215,7 @@ async function handleApi(req, res, url) {
     if (!session) return;
     const body = await readJson(req);
     const token = cleanText(body.token, 256) || data.config.botToken;
+    if (!BOT_TOKEN_PATTERN.test(token)) return json(res, 400, { error: 'Токен выглядит некорректно' });
     try {
       const me = await telegramRequest(token, 'getMe', {});
       return json(res, 200, { ok: true, username: me.username || '', firstName: me.first_name || '' });
@@ -5082,7 +5419,31 @@ async function handleApi(req, res, url) {
     }
   }
 
+  const userExportMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/export$/);
+  if (userExportMatch && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const user = userById(decodeURIComponent(userExportMatch[1]));
+    if (!user) return json(res, 404, { error: 'Пользователь не найден' });
+    const payload = JSON.stringify(userDataExport(user), null, 2);
+    securityHeaders(res);
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': 'attachment; filename="user-' + String(user.id).replace(/[^0-9A-Za-z_-]/g, '') + '.json"',
+    });
+    return res.end(payload);
+  }
+
   const userMatch = url.pathname.match(/^\/api\/users\/([^/]+)$/);
+  if (userMatch && req.method === 'DELETE') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const user = userById(decodeURIComponent(userMatch[1]));
+    if (!user) return json(res, 404, { error: 'Пользователь не найден' });
+    const result = eraseUserData(user);
+    saveDataNow();
+    return json(res, 200, { ok: true, ...result });
+  }
   if (userMatch && req.method === 'PATCH') {
     const session = requireAuth(req, res, true);
     if (!session) return;
@@ -5304,6 +5665,7 @@ async function handleApi(req, res, url) {
       loginAttempts.delete(ip);
     }
     if (newToken) {
+      if (!BOT_TOKEN_PATTERN.test(newToken)) return json(res, 400, { error: 'Токен выглядит некорректно' });
       try {
         const me = await telegramRequest(newToken, 'getMe', {});
         nextBot = { id: me.id, username: me.username || '', firstName: me.first_name || '' };
@@ -5322,6 +5684,7 @@ async function handleApi(req, res, url) {
     const previousAdminChatId = String(data.config.adminChatId || '');
     const adminChatId = body.adminChatId == null ? previousAdminChatId : cleanText(body.adminChatId, 40);
     if (adminChatId && !/^-?\d{4,20}$/.test(adminChatId)) return json(res, 400, { error: 'Chat ID должен состоять из цифр' });
+    if (body.notifyMode != null && !['all', 'inquiries'].includes(body.notifyMode)) return json(res, 400, { error: 'Некорректный режим уведомлений' });
 
     if (tokenChanged) {
       data.bot = nextBot;
@@ -5334,6 +5697,7 @@ async function handleApi(req, res, url) {
       data.config.passwordHash = passwordData.hash;
     }
     data.config.adminChatId = adminChatId;
+    if (body.notifyMode != null) data.config.notifyMode = body.notifyMode;
     if (adminChatId !== previousAdminChatId) data.config.adminNotificationVerifiedAt = '';
     data.config.messages = nextMessages;
     const activeChanged = data.config.active !== Boolean(body.active);
@@ -5855,11 +6219,13 @@ const ADMIN_HTML = String.raw`<!doctype html>
       el("userLanguage3").value=u.preferredLanguage||"";
       el("userForm3").addEventListener("submit",saveUser);
       el("directMessageForm3").addEventListener("submit",function(e){sendDirectMessage(e,u.id)});
+      var privacy=document.createElement("div");privacy.className="form-section";privacy.innerHTML='<h3>Персональные данные</h3><div class="card-note">По запросу человека можно выгрузить или удалить всё, что бот о нём хранит: карточку, историю переписки, избранное и обращения.</div><div class="actions"><button id="exportUser3" class="btn secondary" type="button">Выгрузить данные</button><button id="deleteUser3" class="btn danger" type="button">Удалить все данные</button></div>';el("userDetail3").appendChild(privacy);
+      el("exportUser3").addEventListener("click",function(){exportUserData(u.id)});el("deleteUser3").addEventListener("click",function(){deleteUserData(u.id,userName(u))});
       addCounters(el("userDetail3"));
     }
-    function ensureNotificationSettings(){if(el("notificationForm3"))return;var stack=document.querySelector("#view-settings .section-stack"),form=document.createElement("form");form.id="notificationForm3";form.className="card";form.dataset.saveable="";form.innerHTML='<div class="card-head"><div><h3>Уведомления администратору</h3><div class="card-note">Все сообщения и действия пользователей будут приходить в Telegram</div></div><span id="notificationState3" class="badge">Не настроено</span></div><div class="callout notification-help"><strong>Как подключить:</strong><span>1. Откройте этого бота в Telegram и отправьте команду <code>/myid</code>.</span><span>2. Скопируйте полученный номер в поле ниже и сохраните.</span><span>3. Нажмите «Отправить тест».</span></div><div class="field"><label for="adminChatId3">Telegram Chat ID администратора</label><input id="adminChatId3" class="input" inputmode="numeric" maxlength="20" placeholder="Например: 123456789"><span class="hint">Используйте личный Chat ID. Ответ на уведомление будет отправлен пользователю от имени бота.</span></div><div class="actions"><button class="btn" type="submit">Сохранить</button><button id="testAdminNotificationBtn3" class="btn secondary" type="button">Отправить тест</button></div>';stack.prepend(form);form.addEventListener("submit",saveNotificationSettings);el("testAdminNotificationBtn3").addEventListener("click",testAdminNotification);var backup=Array.from(document.querySelectorAll("#view-settings .card")).find(function(card){return card.querySelector("h3")&&card.querySelector("h3").textContent==="Резервная копия"});if(backup){var note=backup.querySelector(".card-note");if(note)note.textContent="Сжатая копия .json.gz содержит фотографии, токен бота, настройки входа, контент и данные пользователей. Храните файл как конфиденциальный."}}
+    function ensureNotificationSettings(){if(el("notificationForm3"))return;var stack=document.querySelector("#view-settings .section-stack"),form=document.createElement("form");form.id="notificationForm3";form.className="card";form.dataset.saveable="";form.innerHTML='<div class="card-head"><div><h3>Уведомления администратору</h3><div class="card-note">Сообщения и действия пользователей приходят в Telegram</div></div><span id="notificationState3" class="badge">Не настроено</span></div><div class="callout notification-help"><strong>Как подключить:</strong><span>1. Откройте этого бота в Telegram и отправьте команду <code>/myid</code>.</span><span>2. Скопируйте полученный номер в поле ниже и сохраните.</span><span>3. Нажмите «Отправить тест».</span></div><div class="field"><label for="adminChatId3">Telegram Chat ID администратора</label><input id="adminChatId3" class="input" inputmode="numeric" maxlength="20" placeholder="Например: 123456789"><span class="hint">Используйте личный Chat ID. Ответ на уведомление будет отправлен пользователю от имени бота.</span></div><div class="field"><label for="notifyMode3">Что присылать</label><select id="notifyMode3" class="select"><option value="all">Все действия пользователей</option><option value="inquiries">Только обращения и заявки</option></select><span class="hint">Если пользователь пишет слишком часто, уведомления о нём приостанавливаются на 10 минут. Все сообщения при этом сохраняются в панели.</span></div><div class="actions"><button class="btn" type="submit">Сохранить</button><button id="testAdminNotificationBtn3" class="btn secondary" type="button">Отправить тест</button></div>';stack.prepend(form);form.addEventListener("submit",saveNotificationSettings);el("testAdminNotificationBtn3").addEventListener("click",testAdminNotification);var backup=Array.from(document.querySelectorAll("#view-settings .card")).find(function(card){return card.querySelector("h3")&&card.querySelector("h3").textContent==="Резервная копия"});if(backup){var note=backup.querySelector(".card-note");if(note)note.textContent="Сжатая копия .json.gz содержит фотографии, токен бота, настройки входа, контент и данные пользователей. Храните файл как конфиденциальный."}}
     function ensureConnectionCard(){if(el("connectionCard3"))return;var stack=document.querySelector("#view-settings .section-stack"),card=document.createElement("div");card.id="connectionCard3";card.className="card";card.innerHTML='<div class="card-head"><div><h3>Состояние подключения</h3><div id="connectionSummary3" class="card-note">Проверяем Telegram…</div></div><span id="connectionBadge3" class="badge">Проверка</span></div><div class="data-row"><span>Последняя успешная проверка</span><strong id="connectionSuccess3">—</strong></div><div class="data-row"><span>Последняя проблема</span><strong id="connectionErrorAt3">—</strong></div><div id="connectionError3" class="hint" style="margin-top:10px"></div>';stack.prepend(card)}
-    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
+    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";if(el("notifyMode3"))el("notifyMode3").value=state.config.notifyMode||"all";var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
     function addCounters(root){(root||document).querySelectorAll("textarea[maxlength],input[maxlength]").forEach(function(node){var c=node.nextElementSibling&&node.nextElementSibling.classList.contains("counter")?node.nextElementSibling:null;if(!c){c=document.createElement("span");c.className="counter";node.insertAdjacentElement("afterend",c);node.addEventListener("input",function(){c.textContent=node.value.length+" / "+node.maxLength})}c.textContent=node.value.length+" / "+node.maxLength})}
     function bindQuick(root){(root||document).querySelectorAll(".quick-nav").forEach(function(button){if(button._bound)return;button._bound=true;button.addEventListener("click",function(){openView(button.dataset.view)})})}
     function bindLanguageSwitch(container,prefix){container.addEventListener("click",function(e){var button=e.target.closest("[data-lang]");if(!button)return;var lang=button.dataset.lang;container.querySelectorAll("[data-lang]").forEach(function(x){var active=x===button;x.classList.toggle("active",active);x.setAttribute("aria-selected",active?"true":"false")});document.querySelectorAll("[data-"+prefix+"-pane]").forEach(function(pane){pane.classList.toggle("active",pane.dataset[prefix+"Pane"]===lang)});if(prefix==="property")renderPropertyTranslationSummary()})}
@@ -5875,9 +6241,11 @@ const ADMIN_HTML = String.raw`<!doctype html>
     function collectCampaign(){return (async function(){var messages={},buttonText={};languages.forEach(function(l){var s=l[0].toUpperCase()+l.slice(1);messages[l]=el("campaignText"+s+"3").value;buttonText[l]=el("campaignButton"+s+"3").value});var file=el("campaignImage3").files[0],body={messages:messages,languages:Array.from(document.querySelectorAll(".campaign-language3:checked")).map(function(x){return x.value}),tags:el("campaignTags3").value.split(",").map(function(x){return x.trim()}).filter(Boolean),buttonText:buttonText,buttonUrl:el("campaignButtonUrl3").value,scheduledAt:el("campaignSchedule3").value?new Date(el("campaignSchedule3").value).toISOString():"",removeImage:el("campaignRemoveImage3").checked};if(file){body.imageDataUrl=await fileData(file);body.imageName=file.name}return body})()}
     async function submitCampaign(e){e.preventDefault();var button=e.submitter,mode=button.dataset.mode||"draft";button.disabled=true;try{var body=await collectCampaign();body.mode=mode;if(mode!=="draft"){var readiness=campaignReadiness();if(!readiness.valid)throw new Error("Заполните текст и кнопки для всех выбранных языков");if(!body.languages.length)throw new Error("Выберите хотя бы один язык аудитории")}if(mode==="test"){body.userId=el("campaignTestUser3").value;if(!body.userId)throw new Error("Выберите получателя тестового сообщения");await api("/api/broadcast/test",{method:"POST",body:JSON.stringify(body)});toast("Тестовое сообщение отправлено");return}var languagesText=body.languages.map(function(language){return language.toUpperCase()}).join(", "),timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||"локальное время";if(mode==="send"&&!await confirmAction("Начать рассылку","Получатели: "+el("campaignEstimate3").textContent+". Языки: "+languagesText+". Отменить отправку после запуска нельзя.","Отправить"))return;if(mode==="schedule"&&!await confirmAction("Запланировать рассылку","Отправка: "+new Date(body.scheduledAt).toLocaleString("ru-RU")+" ("+timezone+"). Получатели: "+el("campaignEstimate3").textContent+". Языки: "+languagesText+".","Запланировать"))return;var id=el("campaignId3").value,url=id&&mode!=="send"?"/api/broadcasts/"+encodeURIComponent(id):"/api/broadcasts";await api(url,{method:id&&mode!=="send"?"PATCH":"POST",body:JSON.stringify(body)});if(id&&mode==="send")await api("/api/broadcasts/"+encodeURIComponent(id),{method:"DELETE",body:"{}"});clearDirty(el("campaignForm3"));resetCampaign();await loadState();toast(mode==="send"?"Рассылка началась":mode==="schedule"?"Рассылка запланирована":"Черновик сохранён")}catch(error){toast(error.message)}finally{button.disabled=false;updateCampaignSafety()}}
     async function saveUser(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/users/"+encodeURIComponent(selectedUser),{method:"PATCH",body:JSON.stringify({preferredLanguage:el("userLanguage3").value,tags:el("userTags3").value.split(",").map(function(x){return x.trim()}).filter(Boolean),note:el("userNote3").value})});clearDirty(el("userForm3"));await loadState();toast("Карточка пользователя сохранена")}catch(error){toast(error.message)}finally{button.disabled=false}}
+    async function exportUserData(id){try{var response=await fetch("/api/users/"+encodeURIComponent(id)+"/export");if(!response.ok){var body={};try{body=await response.json()}catch(e){}throw new Error(body.error||"Не удалось выгрузить данные")}var link=document.createElement("a");link.href=URL.createObjectURL(await response.blob());link.download="user-"+id+".json";document.body.appendChild(link);link.click();link.remove();setTimeout(function(){URL.revokeObjectURL(link.href)},1000)}catch(error){toast(error.message)}}
+    async function deleteUserData(id,name){if(!(await confirmAction("Удалить данные пользователя?","Будут удалены карточка «"+name+"», история переписки, избранное и все обращения. Отменить это нельзя. В ежедневных резервных копиях данные останутся до их автоматического удаления через 14 дней. Если человек снова напишет боту, он появится как новый пользователь.","Удалить")))return;try{var result=await api("/api/users/"+encodeURIComponent(id),{method:"DELETE"});selectedUser=null;await loadState();el("userDetail3").innerHTML='<div class="empty"><strong>Пользователь не выбран</strong>Нажмите на карточку слева, чтобы открыть детали.</div>';toast("Данные удалены, обращений: "+result.inquiriesRemoved)}catch(error){toast(error.message)}}
     async function sendDirectMessage(e,userId){e.preventDefault();var form=e.currentTarget,button=e.submitter,file=el("directMessageImage3").files[0];button.disabled=true;try{var body={text:el("directMessageText3").value,buttonText:el("directMessageButtonText3").value,buttonUrl:el("directMessageButtonUrl3").value};if(file){body.imageDataUrl=await fileData(file);body.imageName=file.name}await api("/api/users/"+encodeURIComponent(userId)+"/message",{method:"POST",body:JSON.stringify(body)});clearDirty(form);form.reset();await loadState();toast("Личное сообщение отправлено")}catch(error){toast(error.message)}finally{button.disabled=false}}
     async function saveSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:el("settingActive3").checked,adminChatId:el("adminChatId3")?el("adminChatId3").value:state.config.adminChatId,token:el("settingToken3").value,password:el("settingPassword3").value,passwordConfirm:el("settingPasswordConfirm3").value,currentPassword:el("settingCurrentPassword3").value})});el("settingToken3").value="";el("settingPassword3").value="";el("settingPasswordConfirm3").value="";el("settingCurrentPassword3").value="";clearDirty(el("technicalForm3"));await loadState();toast("Настройки сохранены")}catch(error){toast(error.message)}finally{button.disabled=false}}
-    async function saveNotificationSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:state.config.active,adminChatId:el("adminChatId3").value,token:"",password:"",passwordConfirm:""})});clearDirty(el("notificationForm3"));await loadState();toast("Chat ID сохранён. Теперь отправьте тест") }catch(error){toast(error.message)}finally{button.disabled=false}}
+    async function saveNotificationSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:state.config.active,adminChatId:el("adminChatId3").value,notifyMode:el("notifyMode3").value,token:"",password:"",passwordConfirm:""})});clearDirty(el("notificationForm3"));await loadState();toast(el("adminChatId3").value&&!state.config.adminNotificationVerifiedAt?"Сохранено. Теперь отправьте тест":"Настройки уведомлений сохранены") }catch(error){toast(error.message)}finally{button.disabled=false}}
     async function testAdminNotification(){var button=el("testAdminNotificationBtn3");if(dirty.has(el("notificationForm3")))return toast("Сначала сохраните Chat ID");button.disabled=true;try{await api("/api/admin-notification/test",{method:"POST",body:"{}"});await loadState();toast("Тестовое уведомление отправлено в Telegram")}catch(error){await loadState().catch(function(){});toast(error.message)}finally{button.disabled=false}}
     el("setupForm3").addEventListener("submit",async function(e){e.preventDefault();var b=e.submitter;b.disabled=true;try{var result=await api("/api/setup",{method:"POST",body:JSON.stringify({token:el("setupToken3").value,password:el("setupPassword3").value})});csrf=result.csrf;await loadState();showScreen("app3");startRefresh();toast("Бот подключён")}catch(error){message(el("setupMessage3"),error.message,false)}finally{b.disabled=false}});
     el("loginForm3").addEventListener("submit",async function(e){e.preventDefault();var b=e.submitter;b.disabled=true;try{var result=await api("/api/login",{method:"POST",body:JSON.stringify({password:el("loginPassword3").value})});csrf=result.csrf;el("loginPassword3").value="";await loadState();showScreen("app3");startRefresh()}catch(error){message(el("loginMessage3"),error.message,false)}finally{b.disabled=false}});
@@ -5933,6 +6301,11 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('Не найдено');
   } catch (error) {
+    if (error.statusCode === 413) {
+      res.setHeader('connection', 'close');
+      if (!res.headersSent) json(res, 413, { error: error.message });
+      return;
+    }
     console.error('Ошибка веб-панели:', error.message);
     if (!res.headersSent) json(res, 500, { error: 'Внутренняя ошибка' });
     else res.end();
@@ -5987,6 +6360,8 @@ function start() {
     }
     console.log('');
     restartPolling();
+    runDailyBackupSafely();
+    setInterval(runDailyBackupSafely, 60 * 60 * 1000).unref();
     if (process.platform === 'win32' && process.env.NO_AUTO_OPEN !== '1') {
       setTimeout(() => {
         try {
@@ -6053,4 +6428,8 @@ module.exports = {
   sessions,
   loginAttempts,
   splitTelegramText,
+  handleUpdate,
+  createInquiry,
+  runDailyBackup,
+  restoreMissingMedia,
 };
