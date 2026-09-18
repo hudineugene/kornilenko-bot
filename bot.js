@@ -167,6 +167,7 @@ const defaultData = {
   errors: [],
   broadcasts: [],
   inquiries: [],
+  replyTemplates: [],
   adminReplyTargets: {},
   adminReplyTargetsSince: '',
   telegramOffset: 0,
@@ -427,6 +428,25 @@ function normalizeAdminReplyTargets(value) {
   return result;
 }
 
+const MAX_REPLY_TEMPLATES = 50;
+
+function normalizeReplyTemplates(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => ({
+    id: cleanText(item && item.id, 100) || crypto.randomUUID(),
+    title: cleanText(item && item.title, 80),
+    text: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText(item && item.text && item.text[language], 4000)])),
+    updatedAt: cleanText(item && item.updatedAt, 40) || new Date().toISOString(),
+  })).filter((item) => item.title && (item.text.ru || item.text.en || item.text.es)).slice(0, MAX_REPLY_TEMPLATES);
+}
+
+function replyTemplateInput(body) {
+  const title = cleanText(body && body.title, 80);
+  if (!title) throw new Error('Укажите название шаблона');
+  const text = translatedInput(body && body.text, 4000, true);
+  return { title, text };
+}
+
 function legacyConfigRemoved(config) {
   const { greeting, help, fallback, ...rest } = config;
   return rest;
@@ -621,6 +641,7 @@ function normalizeLoadedData(parsed) {
     if (storedVersion < 15) normalized.config.notifyMode = 'inquiries';
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
+    normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;
@@ -5002,6 +5023,7 @@ function safeState(session) {
     languageCounts: languageCounts(),
     broadcasts: data.broadcasts.map((entry) => ({ ...entry, image: imageMeta(entry.image) })),
     inquiries: data.inquiries,
+    replyTemplates: data.replyTemplates || [],
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
   };
 }
@@ -5264,6 +5286,162 @@ function parseBroadcast(body, existing = {}, options = {}) {
     sent: Number(existing.sent || 0),
     failed: Number(existing.failed || 0),
   };
+}
+
+// --- Excel (.xlsx) export ----------------------------------------------------
+// A minimal Office Open XML workbook written by hand, so the export needs no
+// npm packages. Text goes into inline-string cells, which Excel never
+// evaluates as formulas, so a client message starting with "=" stays text.
+
+function xmlText(value) {
+  return String(value == null ? '' : value)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function excelColumn(index) {
+  let name = '';
+  for (let number = index + 1; number > 0; number = Math.floor((number - 1) / 26)) {
+    name = String.fromCharCode(65 + ((number - 1) % 26)) + name;
+  }
+  return name;
+}
+
+// Excel stores dates as days since 1899-12-30, in local time.
+function excelDate(date) {
+  return (date.getTime() - date.getTimezoneOffset() * 60000) / 86400000 + 25569;
+}
+
+function xlsxSheetXml(columns, rows) {
+  const cell = (value, reference, style) => {
+    if (value == null || value === '') return '';
+    if (value instanceof Date) {
+      return Number.isFinite(value.getTime()) ? '<c r="' + reference + '" s="2"><v>' + excelDate(value) + '</v></c>' : '';
+    }
+    if (typeof value === 'number') return '<c r="' + reference + '"><v>' + value + '</v></c>';
+    return '<c r="' + reference + '" t="inlineStr" s="' + style + '"><is><t xml:space="preserve">' + xmlText(value) + '</t></is></c>';
+  };
+  const header = '<row r="1">' + columns.map((column, index) => cell(column.title, excelColumn(index) + '1', 1)).join('') + '</row>';
+  const body = rows.map((row, rowIndex) => '<row r="' + (rowIndex + 2) + '">'
+    + row.map((value, index) => cell(value, excelColumn(index) + (rowIndex + 2), 3)).join('') + '</row>').join('');
+  const lastCell = excelColumn(columns.length - 1) + (rows.length + 1);
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+    + '<cols>' + columns.map((column, index) => '<col min="' + (index + 1) + '" max="' + (index + 1) + '" width="' + column.width + '" customWidth="1"/>').join('') + '</cols>'
+    + '<sheetData>' + header + body + '</sheetData>'
+    + '<autoFilter ref="A1:' + lastCell + '"/>'
+    + '</worksheet>';
+}
+
+function zipArchive(files) {
+  const DOS_DATE_1980_01_01 = 33;
+  const local = [];
+  const central = [];
+  let offset = 0;
+  for (const file of files) {
+    const name = Buffer.from(file.name, 'utf8');
+    const compressed = zlib.deflateRawSync(file.data);
+    const crc = zlib.crc32(file.data) >>> 0;
+    const header = Buffer.alloc(30);
+    header.writeUInt32LE(0x04034b50, 0);
+    header.writeUInt16LE(20, 4);
+    header.writeUInt16LE(0x0800, 6);
+    header.writeUInt16LE(8, 8);
+    header.writeUInt16LE(0, 10);
+    header.writeUInt16LE(DOS_DATE_1980_01_01, 12);
+    header.writeUInt32LE(crc, 14);
+    header.writeUInt32LE(compressed.length, 18);
+    header.writeUInt32LE(file.data.length, 22);
+    header.writeUInt16LE(name.length, 26);
+    header.writeUInt16LE(0, 28);
+    local.push(header, name, compressed);
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0);
+    entry.writeUInt16LE(20, 4);
+    entry.writeUInt16LE(20, 6);
+    entry.writeUInt16LE(0x0800, 8);
+    entry.writeUInt16LE(8, 10);
+    entry.writeUInt16LE(0, 12);
+    entry.writeUInt16LE(DOS_DATE_1980_01_01, 14);
+    entry.writeUInt32LE(crc, 16);
+    entry.writeUInt32LE(compressed.length, 20);
+    entry.writeUInt32LE(file.data.length, 24);
+    entry.writeUInt16LE(name.length, 28);
+    entry.writeUInt32LE(offset, 42);
+    central.push(entry, name);
+    offset += header.length + name.length + compressed.length;
+  }
+  const directory = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...local, directory, end]);
+}
+
+function xlsxWorkbook(sheetName, columns, rows) {
+  const xml = (text) => Buffer.from(text, 'utf8');
+  return zipArchive([
+    { name: '[Content_Types].xml', data: xml('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>') },
+    { name: '_rels/.rels', data: xml('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>') },
+    { name: 'xl/workbook.xml', data: xml('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' + xmlText(sheetName) + '" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\'' + xmlText(sheetName) + '\'!$A$1:$' + excelColumn(columns.length - 1) + '$' + (rows.length + 1) + '</definedName></definedNames></workbook>') },
+    { name: 'xl/_rels/workbook.xml.rels', data: xml('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>') },
+    { name: 'xl/styles.xml', data: xml('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd.mm.yyyy hh:mm"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8EEF7"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>') },
+    { name: 'xl/worksheets/sheet1.xml', data: xml(xlsxSheetXml(columns, rows)) },
+  ]);
+}
+
+const INQUIRY_EXPORT_COLUMNS = [
+  { title: 'Создано', width: 17 },
+  { title: 'Статус', width: 11 },
+  { title: 'Тип', width: 20 },
+  { title: 'Клиент', width: 22 },
+  { title: 'Username', width: 18 },
+  { title: 'Телефон', width: 18 },
+  { title: 'Имя в заявке', width: 20 },
+  { title: 'Удобное время', width: 22 },
+  { title: 'Язык', width: 6 },
+  { title: 'Объект', width: 28 },
+  { title: 'Текст обращения', width: 60 },
+  { title: 'Заметка администратора', width: 30 },
+  { title: 'Ответов', width: 9 },
+  { title: 'Последний ответ', width: 40 },
+  { title: 'Обновлено', width: 17 },
+  { title: 'ID обращения', width: 38 },
+];
+
+function inquiryExportRows(inquiries) {
+  return inquiries.map((inquiry) => {
+    const user = userById(inquiry.userId) || userByChatId(inquiry.chatId) || {};
+    const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
+    const lead = inquiry.lead || {};
+    const replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
+    const lastReply = replies[replies.length - 1];
+    return [
+      new Date(inquiry.createdAt),
+      INQUIRY_STATUS_LABELS[inquiry.status] || inquiry.status,
+      inquiryTypeLabel(inquiry),
+      [user.firstName, user.lastName].filter(Boolean).join(' '),
+      user.username ? '@' + user.username : '',
+      lead.phone || user.phone || '',
+      lead.name || '',
+      lead.preferredTime || '',
+      String(inquiry.language || '').toUpperCase(),
+      property ? localized(property.title, 'ru') || property.reference || property.id : '',
+      inquiry.text,
+      inquiry.note || '',
+      replies.length,
+      lastReply ? lastReply.text : '',
+      new Date(inquiry.updatedAt || inquiry.createdAt),
+      inquiry.id,
+    ];
+  });
 }
 
 // Everything the bot stores about one person, for a data access request.
@@ -5701,6 +5879,62 @@ async function handleApi(req, res, url) {
     if (typeof body.blocked === 'boolean') user.blocked = body.blocked;
     saveDataNow();
     return json(res, 200, { ok: true });
+  }
+
+  if (url.pathname === '/api/inquiries/export' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    // The panel sends the ids it currently shows, so the file matches the
+    // filters and search on screen. Without ids everything is exported.
+    const ids = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 10000) : null;
+    const byId = new Map(data.inquiries.map((item) => [item.id, item]));
+    const inquiries = ids ? ids.map((id) => byId.get(id)).filter(Boolean) : data.inquiries;
+    const file = xlsxWorkbook('Обращения', INQUIRY_EXPORT_COLUMNS, inquiryExportRows(inquiries));
+    const name = 'Обращения ' + dayKey() + '.xlsx';
+    securityHeaders(res);
+    res.writeHead(200, {
+      'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'content-length': file.length,
+      'content-disposition': 'attachment; filename="inquiries-' + dayKey() + '.xlsx"; filename*=UTF-8\'\'' + encodeURIComponent(name),
+    });
+    return res.end(file);
+  }
+
+  if (url.pathname === '/api/reply-templates' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    try {
+      const input = replyTemplateInput(await readJson(req));
+      if (data.replyTemplates.length >= MAX_REPLY_TEMPLATES) return json(res, 400, { error: 'Можно сохранить не больше ' + MAX_REPLY_TEMPLATES + ' шаблонов' });
+      const template = { id: crypto.randomUUID(), ...input, updatedAt: new Date().toISOString() };
+      data.replyTemplates.push(template);
+      saveDataNow();
+      return json(res, 201, { ok: true, id: template.id });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+
+  const replyTemplateMatch = url.pathname.match(/^\/api\/reply-templates\/([^/]+)$/);
+  if (replyTemplateMatch && (req.method === 'PATCH' || req.method === 'DELETE')) {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const id = decodeURIComponent(replyTemplateMatch[1]);
+    const template = data.replyTemplates.find((item) => item.id === id);
+    if (!template) return json(res, 404, { error: 'Шаблон не найден' });
+    if (req.method === 'DELETE') {
+      data.replyTemplates = data.replyTemplates.filter((item) => item.id !== id);
+      saveDataNow();
+      return json(res, 200, { ok: true });
+    }
+    try {
+      Object.assign(template, replyTemplateInput(await readJson(req)), { updatedAt: new Date().toISOString() });
+      saveDataNow();
+      return json(res, 200, { ok: true });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
   }
 
   const inquiryMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)$/);
@@ -6286,7 +6520,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
         </section>
 
         <section id="view-inquiries" class="view">
-          <div class="page-head"><div><h1>Обращения</h1><p class="page-copy">Заявки на просмотр, интерес к объектам и вопросы пользователей. Отвечайте клиенту прямо из панели.</p></div></div>
+          <div class="page-head"><div><h1>Обращения</h1><p class="page-copy">Заявки на просмотр, интерес к объектам и вопросы пользователей. Отвечайте клиенту прямо из панели.</p></div><div class="actions"><button id="replyTemplatesBtn3" class="btn secondary" type="button">✎ Шаблоны ответов</button><button id="exportInquiriesBtn3" class="btn secondary" type="button">⬇ Выгрузить в Excel</button></div></div>
           <div class="grid inquiry-layout"><div><div class="toolbar"><input id="inquirySearch3" class="input" placeholder="Имя, объект или текст обращения"><select id="inquiryStatusFilter3" class="select"><option value="">Все статусы</option><option value="new">Новые</option><option value="in_progress">В работе</option><option value="closed">Закрытые</option></select><select id="inquiryTypeFilter3" class="select"><option value="">Все типы</option><option value="selection">Подбор недвижимости</option><option value="viewing">Запись на просмотр</option><option value="lead">Заявка на звонок</option><option value="question">Вопрос по объекту</option><option value="interest">Интерес к объекту</option><option value="general">Общий вопрос</option></select><span id="inquiryResultCount3" class="badge">0</span></div><div id="inquiryList3" class="list"></div></div><aside id="inquiryDetail3" class="card inquiry-detail"><div class="empty"><strong>Обращение не выбрано</strong>Нажмите на заявку слева, чтобы открыть детали.</div></aside></div>
         </section>
 
@@ -6434,10 +6668,20 @@ const ADMIN_HTML = String.raw`<!doctype html>
     function inquiryProperty(item){return item&&item.propertyId?state.objects.find(function(record){return record.id===item.propertyId}):null}
     function filteredInquiries(){var q=el("inquirySearch3").value.toLocaleLowerCase("ru-RU").trim(),status=el("inquiryStatusFilter3").value,type=el("inquiryTypeFilter3").value,priority={new:0,in_progress:1,closed:2};return state.inquiries.filter(function(item){var user=state.users.find(function(u){return u.id===item.userId})||{},property=inquiryProperty(item)||{},lead=item.lead||{},selection=item.selection||{},hay=[userName(user),user.username||"",item.text,lead.name||"",lead.phone||"",lead.preferredTime||"",selection.deal||"",selection.location||"",selection.budget||"",selection.bedrooms||"",localized(property.title,"ru"),localized(property.title,"en"),localized(property.title,"es"),property.reference||""].join(" ").toLocaleLowerCase("ru-RU");return (!status||item.status===status)&&(!type||item.type===type)&&(!q||hay.includes(q))}).sort(function(a,b){var statusDifference=(priority[a.status]??3)-(priority[b.status]??3);return statusDifference||Date.parse(b.updatedAt||b.createdAt||0)-Date.parse(a.updatedAt||a.createdAt||0)})}
     function renderInquiries(){var items=filteredInquiries();el("inquiryResultCount3").textContent=countRu(items.length,"обращение","обращения","обращений");el("inquiryList3").innerHTML=items.length?items.map(function(item){var user=state.users.find(function(u){return u.id===item.userId})||{},property=inquiryProperty(item),propertyName=property?(localized(property.title,"ru")||property.reference||"Объект"):"";return '<button class="inquiry-card '+(item.status==="new"?"new ":"")+(selectedInquiry===item.id?"active":"")+'" data-inquiry="'+esc(item.id)+'"><div class="row-between"><strong class="truncate">'+esc(userName(user))+'</strong><span class="badge '+inquiryStatusBadge(item.status)+'">'+esc(inquiryStatusName(item.status))+'</span></div><div class="inquiry-meta">'+esc(inquiryTypeLabel3(item))+(propertyName?" · "+esc(propertyName):"")+'</div><div class="inquiry-text">'+esc(item.text)+'</div><div class="inquiry-meta">'+esc(languageName(item.language))+" · "+esc(fmtDate(item.updatedAt||item.createdAt))+"</div></button>"}).join(""):'<div class="empty"><strong>Обращений не найдено</strong>Новые вопросы без автоответа появятся здесь.</div>';if(selectedInquiry)renderInquiryDetail(selectedInquiry)}
-    function renderInquiryDetail(id){var statusForm=el("inquiryStateForm3"),replyForm=el("inquiryReplyForm3");if(selectedInquiry===id&&((statusForm&&dirty.has(statusForm))||(replyForm&&dirty.has(replyForm))))return;var item=state.inquiries.find(function(x){return x.id===id});if(!item){selectedInquiry="";el("inquiryDetail3").innerHTML='<div class="empty">Обращение не найдено</div>';return}var user=state.users.find(function(u){return u.id===item.userId})||{},property=inquiryProperty(item);var replies=(item.replies||[]).slice().reverse();el("inquiryDetail3").innerHTML='<div class="row-between"><div><h3>'+esc(userName(user))+'</h3><div class="small muted">'+(user.username?"@"+esc(user.username)+" · ":"")+"ID "+esc(item.userId)+" · "+esc(languageName(item.language))+'</div></div><span class="badge '+inquiryStatusBadge(item.status)+'">'+esc(inquiryStatusName(item.status))+'</span></div>'+(property?'<div class="property-context"><strong>'+esc(localized(property.title,"ru")||"Объект")+'</strong><span>'+esc([property.reference,localized(property.address,"ru"),propertyPriceLabel(property)].filter(Boolean).join(" · "))+'</span><button class="btn ghost small open-inquiry-property3" data-id="'+esc(property.id)+'" type="button">Открыть объект</button></div>':"")+'<div class="form-section"><div class="form-section-title">'+esc(inquiryTypeLabel3(item))+'</div><div class="timeline-item"><div class="tiny muted">'+esc(fmtDate(item.createdAt))+'</div><div class="timeline-text">'+esc(item.text)+'</div></div></div><form id="inquiryStateForm3" data-saveable><div class="grid two-col"><div class="field"><label for="inquiryStatus3">Статус</label><select id="inquiryStatus3" class="select"><option value="new">Новое</option><option value="in_progress">В работе</option><option value="closed">Закрыто</option></select></div><div class="field"><label for="inquiryNote3">Заметка администратора</label><textarea id="inquiryNote3" class="textarea" maxlength="2000"></textarea></div></div><button class="btn secondary" type="submit">Сохранить статус и заметку</button></form><div class="form-section"><div class="form-section-title">Ответить пользователю</div><form id="inquiryReplyForm3" data-saveable><div class="field"><label for="inquiryReply3">Текст ответа</label><textarea id="inquiryReply3" class="textarea" maxlength="4000" required></textarea></div><label class="small"><input id="inquiryKeepOpen3" type="checkbox" checked> Оставить обращение в работе после ответа <span class="muted">(рекомендуется)</span></label><button class="btn wide" type="submit" style="margin-top:12px">Отправить ответ</button></form></div><div class="form-section"><h3>История ответов</h3><div class="timeline" style="margin-top:10px">'+(replies.length?replies.map(function(reply){var channel=reply.source==="telegram"?" · Telegram":"",delivery=reply.source==="panel"?'<span class="delivery-state">✓ Доставлено</span>':"";return '<div class="timeline-item out"><div class="tiny muted">Администратор'+channel+' · '+esc(fmtDate(reply.createdAt))+delivery+'</div><div class="timeline-text">'+esc(reply.text)+"</div></div>"}).join(""):'<div class="empty">Ответов пока нет</div>')+'</div></div>';el("inquiryStatus3").value=item.status;el("inquiryNote3").value=item.note||"";el("inquiryStateForm3").addEventListener("submit",saveInquiryState);el("inquiryReplyForm3").addEventListener("submit",replyToInquiry);var openProperty=el("inquiryDetail3").querySelector(".open-inquiry-property3");if(openProperty)openProperty.addEventListener("click",function(){openView("properties");editProperty(openProperty.dataset.id)});addCounters(el("inquiryDetail3"))}
+    function renderInquiryDetail(id){var statusForm=el("inquiryStateForm3"),replyForm=el("inquiryReplyForm3");if(selectedInquiry===id&&((statusForm&&dirty.has(statusForm))||(replyForm&&dirty.has(replyForm))))return;var item=state.inquiries.find(function(x){return x.id===id});if(!item){selectedInquiry="";el("inquiryDetail3").innerHTML='<div class="empty">Обращение не найдено</div>';return}var user=state.users.find(function(u){return u.id===item.userId})||{},property=inquiryProperty(item);var replies=(item.replies||[]).slice().reverse();el("inquiryDetail3").innerHTML='<div class="row-between"><div><h3>'+esc(userName(user))+'</h3><div class="small muted">'+(user.username?"@"+esc(user.username)+" · ":"")+"ID "+esc(item.userId)+" · "+esc(languageName(item.language))+'</div></div><span class="badge '+inquiryStatusBadge(item.status)+'">'+esc(inquiryStatusName(item.status))+'</span></div>'+(property?'<div class="property-context"><strong>'+esc(localized(property.title,"ru")||"Объект")+'</strong><span>'+esc([property.reference,localized(property.address,"ru"),propertyPriceLabel(property)].filter(Boolean).join(" · "))+'</span><button class="btn ghost small open-inquiry-property3" data-id="'+esc(property.id)+'" type="button">Открыть объект</button></div>':"")+'<div class="form-section"><div class="form-section-title">'+esc(inquiryTypeLabel3(item))+'</div><div class="timeline-item"><div class="tiny muted">'+esc(fmtDate(item.createdAt))+'</div><div class="timeline-text">'+esc(item.text)+'</div></div></div><form id="inquiryStateForm3" data-saveable><div class="grid two-col"><div class="field"><label for="inquiryStatus3">Статус</label><select id="inquiryStatus3" class="select"><option value="new">Новое</option><option value="in_progress">В работе</option><option value="closed">Закрыто</option></select></div><div class="field"><label for="inquiryNote3">Заметка администратора</label><textarea id="inquiryNote3" class="textarea" maxlength="2000"></textarea></div></div><button class="btn secondary" type="submit">Сохранить статус и заметку</button></form><div class="form-section"><div class="form-section-title">Ответить пользователю</div><form id="inquiryReplyForm3" data-saveable><div class="field"><label for="inquiryReply3">Текст ответа</label><textarea id="inquiryReply3" class="textarea" maxlength="4000" required></textarea></div><label class="small"><input id="inquiryKeepOpen3" type="checkbox" checked> Оставить обращение в работе после ответа <span class="muted">(рекомендуется)</span></label><button class="btn wide" type="submit" style="margin-top:12px">Отправить ответ</button></form></div><div class="form-section"><h3>История ответов</h3><div class="timeline" style="margin-top:10px">'+(replies.length?replies.map(function(reply){var channel=reply.source==="telegram"?" · Telegram":"",delivery=reply.source==="panel"?'<span class="delivery-state">✓ Доставлено</span>':"";return '<div class="timeline-item out"><div class="tiny muted">Администратор'+channel+' · '+esc(fmtDate(reply.createdAt))+delivery+'</div><div class="timeline-text">'+esc(reply.text)+"</div></div>"}).join(""):'<div class="empty">Ответов пока нет</div>')+'</div></div>';el("inquiryStatus3").value=item.status;el("inquiryNote3").value=item.note||"";el("inquiryStateForm3").addEventListener("submit",saveInquiryState);el("inquiryReplyForm3").addEventListener("submit",replyToInquiry);attachTemplatePicker(el("inquiryReply3"),item.language||user.preferredLanguage||"ru",user.firstName);var openProperty=el("inquiryDetail3").querySelector(".open-inquiry-property3");if(openProperty)openProperty.addEventListener("click",function(){openView("properties");editProperty(openProperty.dataset.id)});addCounters(el("inquiryDetail3"))}
     var renderInquiryDetailCore=renderInquiryDetail;
     renderInquiryDetail=function(id){renderInquiryDetailCore(id);var item=state.inquiries.find(function(record){return record.id===id}),detail=el("inquiryDetail3"),summary=item&&item.type==="lead"?leadInquiryBlock(item):item&&item.type==="selection"?selectionInquiryBlock(item):"";if(summary&&detail&&!detail.querySelector(".lead-summary")){var header=detail.firstElementChild;if(header)header.insertAdjacentHTML("afterend",summary)}}
     async function saveInquiryState(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/inquiries/"+encodeURIComponent(selectedInquiry),{method:"PATCH",body:JSON.stringify({status:el("inquiryStatus3").value,note:el("inquiryNote3").value})});clearDirty(el("inquiryStateForm3"));await loadState();toast("Обращение обновлено")}catch(error){toast(error.message)}finally{button.disabled=false}}
+    function templateText(template,language){var text=template.text||{};return text[language]||text.ru||text.en||text.es||""}
+    function attachTemplatePicker(textarea,language,firstName){if(!textarea||!(state.replyTemplates||[]).length)return;var select=document.createElement("select");select.className="select template-picker3";select.setAttribute("aria-label","Вставить шаблон ответа");select.style.marginBottom="8px";select.innerHTML='<option value="">Вставить шаблон…</option>'+state.replyTemplates.map(function(t){return '<option value="'+esc(t.id)+'">'+esc(t.title)+"</option>"}).join("");select.addEventListener("change",function(){var template=state.replyTemplates.find(function(t){return t.id===select.value});select.value="";if(!template)return;var text=templateText(template,language).split("{first_name}").join(firstName||"");textarea.value=textarea.value.trim()?textarea.value.replace(/\s+$/,"")+"\n\n"+text:text;textarea.dispatchEvent(new Event("input",{bubbles:true}));textarea.focus()});textarea.parentElement.insertBefore(select,textarea)}
+    function ensureTemplatesDialog(){var dialog=el("templatesDialog3");if(dialog)return dialog;dialog=document.createElement("dialog");dialog.id="templatesDialog3";dialog.innerHTML='<div class="confirm-panel" style="width:min(640px,calc(100vw - 28px));max-height:calc(100vh - 40px);overflow:auto"><div class="row-between"><h3>Шаблоны ответов</h3><button id="templatesClose3" class="btn secondary small" type="button">Закрыть</button></div><p class="card-note">Готовые ответы на частые вопросы. В ответе клиенту выберите шаблон в списке «Вставить шаблон…» — текст подставится на языке клиента, а {first_name} заменится на его имя.</p><div id="templatesList3" class="list" style="margin:12px 0"></div><form id="templateForm3" class="form-section"><h3 id="templateFormTitle3">Новый шаблон</h3><input id="templateId3" type="hidden"><div class="field"><label for="templateTitle3">Название</label><input id="templateTitle3" class="input" maxlength="80" required placeholder="Например: Ипотека"></div><div class="field"><label for="templateRu3">Текст — русский</label><textarea id="templateRu3" class="textarea" maxlength="4000" placeholder="Здравствуйте, {first_name}! …"></textarea></div><div class="field"><label for="templateEn3">Текст — English</label><textarea id="templateEn3" class="textarea" maxlength="4000"></textarea></div><div class="field"><label for="templateEs3">Текст — Español</label><textarea id="templateEs3" class="textarea" maxlength="4000"></textarea></div><span class="hint">Достаточно заполнить один язык: если перевода нет, подставится русский текст.</span><div class="actions" style="margin-top:12px"><button id="templateSave3" class="btn" type="submit">Добавить шаблон</button><button id="templateReset3" class="btn secondary" type="button">Очистить форму</button></div></form></div>';document.body.appendChild(dialog);el("templatesClose3").addEventListener("click",function(){dialog.close()});el("templateReset3").addEventListener("click",resetTemplateForm);el("templateForm3").addEventListener("submit",saveTemplate);el("templatesList3").addEventListener("click",async function(e){var edit=e.target.closest(".edit-template3"),del=e.target.closest(".delete-template3");if(edit)return editTemplate(edit.dataset.id);if(!del)return;if(!await confirmAction("Удалить шаблон?","Шаблон «"+del.dataset.title+"» будет удалён. Уже отправленные ответы не изменятся.","Удалить"))return;try{await api("/api/reply-templates/"+encodeURIComponent(del.dataset.id),{method:"DELETE"});await loadState();renderTemplates();resetTemplateForm();toast("Шаблон удалён")}catch(error){toast(error.message)}});addCounters(dialog);return dialog}
+    function renderTemplates(){var list=el("templatesList3");if(!list)return;var items=state.replyTemplates||[];list.innerHTML=items.length?items.map(function(t){var languages=["ru","en","es"].filter(function(l){return t.text&&t.text[l]}).map(function(l){return l.toUpperCase()}).join(" ");var preview=templateText(t,"ru");return '<div class="list-item"><div class="list-main"><strong>'+esc(t.title)+'</strong><span>'+esc(languages)+" · "+esc(preview.length>90?preview.slice(0,90)+"…":preview)+'</span></div><button class="btn secondary small edit-template3" type="button" data-id="'+esc(t.id)+'">Изменить</button><button class="btn danger small delete-template3" type="button" data-id="'+esc(t.id)+'" data-title="'+esc(t.title)+'">Удалить</button></div>'}).join(""):'<div class="empty"><strong>Шаблонов пока нет</strong>Добавьте ответы на вопросы, которые клиенты задают чаще всего: цены, ипотека, просмотр.</div>'}
+    function resetTemplateForm(){el("templateId3").value="";el("templateTitle3").value="";el("templateRu3").value="";el("templateEn3").value="";el("templateEs3").value="";el("templateFormTitle3").textContent="Новый шаблон";el("templateSave3").textContent="Добавить шаблон";refreshTemplateCounters()}
+    function refreshTemplateCounters(){["templateTitle3","templateRu3","templateEn3","templateEs3"].forEach(function(id){el(id).dispatchEvent(new Event("input",{bubbles:true}))})}
+    function editTemplate(id){var t=(state.replyTemplates||[]).find(function(x){return x.id===id});if(!t)return;el("templateId3").value=t.id;el("templateTitle3").value=t.title;el("templateRu3").value=t.text.ru||"";el("templateEn3").value=t.text.en||"";el("templateEs3").value=t.text.es||"";el("templateFormTitle3").textContent="Изменить шаблон";el("templateSave3").textContent="Сохранить шаблон";refreshTemplateCounters();el("templateTitle3").focus()}
+    async function saveTemplate(e){e.preventDefault();var button=el("templateSave3"),id=el("templateId3").value;button.disabled=true;try{await api(id?"/api/reply-templates/"+encodeURIComponent(id):"/api/reply-templates",{method:id?"PATCH":"POST",body:JSON.stringify({title:el("templateTitle3").value,text:{ru:el("templateRu3").value,en:el("templateEn3").value,es:el("templateEs3").value}})});await loadState();renderTemplates();resetTemplateForm();toast(id?"Шаблон сохранён":"Шаблон добавлен")}catch(error){toast(error.message)}finally{button.disabled=false}}
+    function openTemplates(){var dialog=ensureTemplatesDialog();renderTemplates();resetTemplateForm();dialog.showModal()}
+    async function exportInquiries(){var button=el("exportInquiriesBtn3");var ids=filteredInquiries().map(function(item){return item.id});if(!ids.length){toast("Нет обращений для выгрузки");return}button.disabled=true;try{var response=await fetch("/api/inquiries/export",{method:"POST",headers:{"content-type":"application/json","x-csrf-token":csrf},body:JSON.stringify({ids:ids})});if(!response.ok){var body={};try{body=await response.json()}catch(e){}throw new Error(body.error||"Не удалось выгрузить обращения")}var link=document.createElement("a");link.href=URL.createObjectURL(await response.blob());link.download="Обращения "+new Date().toISOString().slice(0,10)+".xlsx";document.body.appendChild(link);link.click();link.remove();setTimeout(function(){URL.revokeObjectURL(link.href)},1000);toast("Выгружено обращений: "+ids.length)}catch(error){toast(error.message)}finally{button.disabled=false}}
     async function replyToInquiry(e){e.preventDefault();var button=e.submitter,form=e.currentTarget;button.disabled=true;try{await api("/api/inquiries/"+encodeURIComponent(selectedInquiry)+"/reply",{method:"POST",body:JSON.stringify({text:el("inquiryReply3").value,keepOpen:el("inquiryKeepOpen3").checked})});clearDirty(form);await loadState();toast("Ответ отправлен пользователю")}catch(error){toast(error.message)}finally{button.disabled=false}}
     function typeName(type){return {contains:"содержит",exact:"точно",starts:"начинается"}[type]||type}
     function filteredReplies(){var q=el("replySearch3").value.toLocaleLowerCase("ru-RU").trim(),lang=el("replyLanguageFilter3").value;return state.rules.slice().sort(function(a,b){return Number(a.order||0)-Number(b.order||0)}).filter(function(r){return (!lang||r.language===lang)&&(!q||(r.trigger+" "+r.answer).toLocaleLowerCase("ru-RU").includes(q))})}
@@ -6466,7 +6710,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
       var contactBlock=userLeadBlock(u);if(contactBlock)el("userForm3").insertAdjacentHTML("beforebegin",contactBlock);
       el("userLanguage3").value=u.preferredLanguage||"";
       el("userForm3").addEventListener("submit",saveUser);
-      el("directMessageForm3").addEventListener("submit",function(e){sendDirectMessage(e,u.id)});
+      el("directMessageForm3").addEventListener("submit",function(e){sendDirectMessage(e,u.id)});attachTemplatePicker(el("directMessageText3"),u.preferredLanguage||"ru",u.firstName);
       var privacy=document.createElement("div");privacy.className="form-section";privacy.innerHTML='<h3>Персональные данные</h3><div class="card-note">По запросу человека можно выгрузить или удалить всё, что бот о нём хранит: карточку, историю переписки, избранное и обращения.</div><div class="actions"><button id="exportUser3" class="btn secondary" type="button">Выгрузить данные</button><button id="deleteUser3" class="btn danger" type="button">Удалить все данные</button></div>';el("userDetail3").appendChild(privacy);
       el("exportUser3").addEventListener("click",function(){exportUserData(u.id)});el("deleteUser3").addEventListener("click",function(){deleteUserData(u.id,userName(u))});
       addCounters(el("userDetail3"));
@@ -6512,6 +6756,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
     el("replyList3").addEventListener("click",async function(e){var edit=e.target.closest(".edit-reply3"),copy=e.target.closest(".copy-reply3"),del=e.target.closest(".delete-reply3"),move=e.target.closest(".move-reply3");if(edit)return editReply(edit.dataset.id,false);if(copy)return editReply(copy.dataset.id,true);if(del&&await confirmAction("Удалить автоответ","После удаления бот перестанет использовать это правило.","Удалить")){try{await api("/api/rules/"+encodeURIComponent(del.dataset.id),{method:"DELETE",body:"{}"});await loadState();toast("Автоответ удалён")}catch(error){toast(error.message)}return}if(move){var ordered=state.rules.slice().sort(function(a,b){return Number(a.order||0)-Number(b.order||0)}),index=ordered.findIndex(function(x){return x.id===move.dataset.id}),next=index+Number(move.dataset.step);if(next<0||next>=ordered.length)return;var tmp=ordered[index];ordered[index]=ordered[next];ordered[next]=tmp;try{await api("/api/rules/reorder",{method:"POST",body:JSON.stringify({ids:ordered.map(function(x){return x.id})})});await loadState();toast("Порядок изменён")}catch(error){toast(error.message)}}});
     el("replyTestForm3").addEventListener("submit",async function(e){e.preventDefault();try{var result=await api("/api/rules/test",{method:"POST",body:JSON.stringify({text:el("replyTestText3").value,language:el("replyTestLanguage3").value})});message(el("replyTestResult3"),result.matched?"Сработает «"+result.matched.trigger+"»: "+result.matched.answer:"Ни один автоответ не сработает",Boolean(result.matched))}catch(error){message(el("replyTestResult3"),error.message,false)}});
     el("campaignPreviewLanguage3").addEventListener("change",updateCampaignPreview);el("campaignHistory3").addEventListener("click",async function(e){var edit=e.target.closest(".edit-campaign3"),copy=e.target.closest(".copy-campaign3"),del=e.target.closest(".delete-campaign3");if(edit)return editCampaign(edit.dataset.id,false);if(copy)return editCampaign(copy.dataset.id,true);if(del&&await confirmAction("Удалить рассылку","Черновик или запись о рассылке будет удалена.","Удалить"))try{await api("/api/broadcasts/"+encodeURIComponent(del.dataset.id),{method:"DELETE",body:"{}"});await loadState();toast("Рассылка удалена")}catch(error){toast(error.message)}});
+    el("exportInquiriesBtn3").addEventListener("click",exportInquiries);el("replyTemplatesBtn3").addEventListener("click",openTemplates);
     el("inquirySearch3").addEventListener("input",renderInquiries);el("inquiryStatusFilter3").addEventListener("change",renderInquiries);el("inquiryTypeFilter3").addEventListener("change",renderInquiries);el("inquiryList3").addEventListener("click",function(e){var card=e.target.closest("[data-inquiry]");if(!card)return;var stateForm=el("inquiryStateForm3"),replyForm=el("inquiryReplyForm3");if(card.dataset.inquiry!==selectedInquiry&&((stateForm&&dirty.has(stateForm))||(replyForm&&dirty.has(replyForm)))&&!confirm("Отменить несохранённые изменения в обращении?"))return;if(stateForm)clearDirty(stateForm);if(replyForm)clearDirty(replyForm);selectedInquiry=card.dataset.inquiry;renderInquiries()});
     el("userSearch3").addEventListener("input",renderAudience);el("userLanguageFilter3").addEventListener("change",renderAudience);el("userGrid3").addEventListener("click",function(e){var card=e.target.closest("[data-user]");if(!card)return;var form=el("userForm3"),direct=el("directMessageForm3"),hasChanges=(form&&dirty.has(form))||(direct&&dirty.has(direct));if(hasChanges&&card.dataset.user!==selectedUser&&!confirm("Отменить изменения в карточке пользователя?"))return;if(form)clearDirty(form);if(direct)clearDirty(direct);selectedUser=card.dataset.user;renderAudience()});
     el("tokenTestBtn3").addEventListener("click",async function(){var b=this;b.disabled=true;try{var result=await api("/api/token-test",{method:"POST",body:JSON.stringify({token:el("settingToken3").value})});toast("Токен работает: "+(result.username?"@"+result.username:result.firstName))}catch(error){toast(error.message)}finally{b.disabled=false}});
@@ -6684,6 +6929,7 @@ module.exports = {
   restoreMissingMedia,
   runDailyDigest,
   runInquiryReminders,
+  xlsxWorkbook,
   text: {
     lead: LEAD_FORM_TEXT,
     viewing: VIEWING_FORM_TEXT,
