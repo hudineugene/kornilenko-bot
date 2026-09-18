@@ -72,6 +72,8 @@ const ADMIN_ASSETS = {
 };
 
 const DATA_VERSION = 15;
+// 0 turns reminders about unanswered inquiries off.
+const REMINDER_HOUR_OPTIONS = [0, 1, 2, 4, 8, 24];
 
 const defaultData = {
   version: DATA_VERSION,
@@ -120,6 +122,7 @@ const defaultData = {
     },
     active: true,
     notifyMode: 'inquiries',
+    reminderHours: 2,
   },
   bot: {
     id: null,
@@ -550,6 +553,7 @@ function normalizeLoadedData(parsed) {
         bedrooms: cleanText(item.selection.bedrooms, 200),
       } : null,
       replies: Array.isArray(item.replies) ? item.replies.slice(-50) : [],
+      remindedAt: cleanText(item.remindedAt, 40),
       createdAt: item.createdAt || new Date().toISOString(),
       updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
     })).slice(0, 5000) : [];
@@ -617,6 +621,7 @@ function normalizeLoadedData(parsed) {
     if (storedVersion < 15) normalized.config.notifyMode = 'inquiries';
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
+    normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;
 }
@@ -858,6 +863,74 @@ async function runDailyDigest(now = new Date()) {
 
 function runDailyDigestSafely() {
   runDailyDigest().catch((error) => recordError('Сводка активности', error));
+}
+
+const REMINDER_WINDOW = { from: 9, to: 21 };
+const REMINDER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const REMINDERS_PER_RUN = 5;
+
+function hoursAgoText(milliseconds) {
+  const hours = Math.floor(milliseconds / (60 * 60 * 1000));
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    return days + ' ' + (days % 10 === 1 && days % 100 !== 11 ? 'день' : [2, 3, 4].includes(days % 10) && ![12, 13, 14].includes(days % 100) ? 'дня' : 'дней');
+  }
+  return hours + ' ч';
+}
+
+// An inquiry nobody has taken yet: still "new", no reply from the panel or
+// Telegram. Once reminded, it is not reminded again.
+function inquiryNeedsReminder(inquiry, now, thresholdMs) {
+  if (inquiry.status !== 'new' || inquiry.remindedAt) return false;
+  if (Array.isArray(inquiry.replies) && inquiry.replies.length) return false;
+  const age = now - Date.parse(inquiry.createdAt);
+  return Number.isFinite(age) && age >= thresholdMs && age <= REMINDER_MAX_AGE_MS;
+}
+
+// Checked every 15 minutes; sends nothing at night, so an inquiry that went
+// unanswered overnight is reminded about in the morning. Each reminder is a
+// separate message: the admin can reply to it or press a status button.
+async function runInquiryReminders(now = new Date()) {
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  const hours = Number(data.config.reminderHours);
+  if (!hours || !adminChatId || !data.config.botToken) return [];
+  if (now.getHours() < REMINDER_WINDOW.from || now.getHours() >= REMINDER_WINDOW.to) return [];
+  const due = data.inquiries
+    .filter((inquiry) => inquiryNeedsReminder(inquiry, now.getTime(), hours * 60 * 60 * 1000))
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  if (!due.length) return [];
+  const sent = [];
+  for (const inquiry of due.slice(0, REMINDERS_PER_RUN)) {
+    const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
+    const name = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Пользователь удалён';
+    const username = user && user.username ? ' (@' + user.username + ')' : '';
+    const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
+    const text = [
+      '⏰ Нет ответа ' + hoursAgoText(now.getTime() - Date.parse(inquiry.createdAt)) + ': ' + inquiryTypeLabel(inquiry),
+      '👤 ' + name + username + (inquiry.language ? ' · ' + inquiry.language.toUpperCase() : ''),
+      '',
+      ...(property ? ['🏠 ' + (localized(property.title, inquiry.language) || property.reference || property.id)] : []),
+      shortenedText(inquiry.text, 500),
+      ...(user ? ['', '↩️ Ответьте на это сообщение — ответ получит клиент.'] : []),
+    ].join('\n');
+    const messageIds = [];
+    await sendMessage(adminChatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry) });
+    if (user) rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId: inquiry.id, sourceMessageId: inquiry.sourceMessageId });
+    inquiry.remindedAt = now.toISOString();
+    sent.push(inquiry.id);
+  }
+  const rest = due.length - sent.length;
+  if (rest > 0) {
+    await sendMessage(adminChatId, '⏰ И ещё ' + rest + ' без ответа — они в панели, раздел «Обращения».', data.config.botToken, { track: false });
+    for (const inquiry of due.slice(REMINDERS_PER_RUN)) inquiry.remindedAt = now.toISOString();
+  }
+  saveDataNow();
+  return sent;
+}
+
+function runScheduledNotices() {
+  runDailyDigest().catch((error) => recordError('Сводка активности', error));
+  runInquiryReminders().catch((error) => recordError('Напоминание об обращениях', error));
 }
 
 function runDailyBackupSafely() {
@@ -4909,6 +4982,7 @@ function safeState(session) {
       adminChatId: data.config.adminChatId || '',
       adminNotificationVerifiedAt: data.config.adminNotificationVerifiedAt || '',
       notifyMode: data.config.notifyMode || 'inquiries',
+      reminderHours: Number.isFinite(Number(data.config.reminderHours)) ? Number(data.config.reminderHours) : 2,
     },
     welcomeImages: Object.fromEntries(['ru', 'en', 'es'].map((language) => {
       const image = data.welcomeImages[language];
@@ -5856,6 +5930,7 @@ async function handleApi(req, res, url) {
     const adminChatId = body.adminChatId == null ? previousAdminChatId : cleanText(body.adminChatId, 40);
     if (adminChatId && !/^-?\d{4,20}$/.test(adminChatId)) return json(res, 400, { error: 'Chat ID должен состоять из цифр' });
     if (body.notifyMode != null && !['all', 'inquiries'].includes(body.notifyMode)) return json(res, 400, { error: 'Некорректный режим уведомлений' });
+    if (body.reminderHours != null && !REMINDER_HOUR_OPTIONS.includes(Number(body.reminderHours))) return json(res, 400, { error: 'Некорректный срок напоминания' });
 
     if (tokenChanged) {
       data.bot = nextBot;
@@ -5869,6 +5944,7 @@ async function handleApi(req, res, url) {
     }
     data.config.adminChatId = adminChatId;
     if (body.notifyMode != null) data.config.notifyMode = body.notifyMode;
+    if (body.reminderHours != null) data.config.reminderHours = Number(body.reminderHours);
     if (adminChatId !== previousAdminChatId) data.config.adminNotificationVerifiedAt = '';
     data.config.messages = nextMessages;
     const activeChanged = data.config.active !== Boolean(body.active);
@@ -6301,8 +6377,8 @@ const ADMIN_HTML = String.raw`<!doctype html>
     function closeSidebar(){el("sidebar3").classList.remove("open");el("sidebarOverlay3").classList.add("hidden");el("mobileMenuBtn3").setAttribute("aria-expanded","false");document.querySelectorAll("#nav3 details[open]").forEach(function(group){group.removeAttribute("open")})}
     function openView(name){if(name===view){closeSidebar();return}if(!canLeave())return;view=name;el("app3").classList.toggle("dashboard-home",name==="home");document.querySelectorAll(".view").forEach(function(node){node.classList.toggle("active",node.id==="view-"+name)});document.querySelectorAll("#nav3 .nav-item").forEach(function(node){node.classList.toggle("active",node.dataset.view===name)});el("breadcrumb3").textContent=meta[name][0];el("topTitle3").textContent=meta[name][1];el("mobileTitle3").textContent=meta[name][1];closeSidebar();window.scrollTo({top:0,behavior:"smooth"});renderView(name)}
     async function boot(){try{var status=await api("/api/status");if(!status.configured){showScreen("setupScreen3");return}try{await loadState();showScreen("app3");startRefresh()}catch(e){showScreen("loginScreen3")}}catch(e){showScreen("loginScreen3");message(el("loginMessage3"),"Не удалось связаться с панелью",false)}}
-    function startRefresh(){clearInterval(refreshTimer);refreshTimer=setInterval(function(){if(!document.hidden)loadState(true)},8000)}document.addEventListener("visibilitychange",function(){if(!document.hidden&&state)loadState(true)});
-    async function loadState(silent){try{var next=await api("/api/state"+(silent&&state&&state.stateVersion?"?since="+encodeURIComponent(state.stateVersion):""));if(next.unchanged)return state;state=next;csrf=state.csrf;renderAll();return state}catch(e){if(e.status===401){clearInterval(refreshTimer);showScreen("loginScreen3");if(!silent)throw e}else if(!silent)throw e}}
+    function startRefresh(){clearInterval(refreshTimer);var tick=0;refreshTimer=setInterval(function(){tick+=1;if(!document.hidden||tick%4===0)loadState(true)},8000)}var baseTitle=document.title;function updateTitle(){var count=state&&state.newInquiryCount||0;document.title=count?"("+count+") "+baseTitle:baseTitle}document.addEventListener("visibilitychange",function(){if(!document.hidden&&state)loadState(true)});
+    async function loadState(silent){try{var next=await api("/api/state"+(silent&&state&&state.stateVersion?"?since="+encodeURIComponent(state.stateVersion):""));if(next.unchanged)return state;state=next;csrf=state.csrf;renderAll();updateTitle();return state}catch(e){if(e.status===401){clearInterval(refreshTimer);showScreen("loginScreen3");if(!silent)throw e}else if(!silent)throw e}}
     function renderAll(){if(!state)return;renderShell();renderHome();renderRecentReactions();renderConnectionPresentation();renderErrorContext();renderSalesHome();renderInquiryAttention();renderAdminNotificationAttention();renderTranslationAttention();renderBrandDashboard();renderWelcome();renderInterfaceText();renderMenuSections();renderProperties();renderOffers();renderContacts();renderInquiries();renderReplies();renderCampaigns();renderAudience();renderSettings();addCounters()}
     function renderView(name){if(!state)return;({home:function(){renderHome();renderRecentReactions();renderConnectionPresentation();renderErrorContext();renderSalesHome();renderInquiryAttention();renderAdminNotificationAttention();renderTranslationAttention();renderBrandDashboard()},welcome:renderWelcome,interface:renderInterfaceText,properties:function(){renderMenuSections();renderProperties()},offers:function(){renderMenuSections();renderOffers()},about:renderMenuSections,contacts:renderContacts,inquiries:renderInquiries,replies:renderReplies,campaigns:renderCampaigns,audience:renderAudience,settings:renderSettings}[name]||function(){})()}
     function renderShell(){var status=state.runtime.status,activeObjects=state.objects.filter(function(item){return item.status==="active"}).length,activeOffers=state.promotions.filter(function(item){return item.enabled}).length,newInquiries=state.newInquiryCount||0,topCount=el("topInquiryCount3");el("botUsername3").textContent=state.bot.username?"@"+state.bot.username:(state.bot.firstName||"Telegram");el("sideStatus3").textContent=statusName(status);el("sideStatusNote3").textContent=status==="online"?"Бот принимает сообщения":status==="stopped"?"Выключен в настройках":"Проверьте подключение";el("sideDot3").className="status-dot "+status;el("navPropertyCount").textContent=activeObjects+"/"+state.objects.length;el("navOfferCount").textContent=activeOffers+"/"+state.promotions.length;el("navInquiryCount").textContent=newInquiries;el("navReplyCount").textContent=state.rules.length;el("navUserCount").textContent=state.userCount;topCount.textContent=newInquiries;topCount.classList.toggle("hidden",!newInquiries)}
@@ -6395,9 +6471,9 @@ const ADMIN_HTML = String.raw`<!doctype html>
       el("exportUser3").addEventListener("click",function(){exportUserData(u.id)});el("deleteUser3").addEventListener("click",function(){deleteUserData(u.id,userName(u))});
       addCounters(el("userDetail3"));
     }
-    function ensureNotificationSettings(){if(el("notificationForm3"))return;var stack=document.querySelector("#view-settings .section-stack"),form=document.createElement("form");form.id="notificationForm3";form.className="card";form.dataset.saveable="";form.innerHTML='<div class="card-head"><div><h3>Уведомления администратору</h3><div class="card-note">Сообщения и действия пользователей приходят в Telegram</div></div><span id="notificationState3" class="badge">Не настроено</span></div><div class="callout notification-help"><strong>Как подключить:</strong><span>1. Откройте этого бота в Telegram и отправьте команду <code>/myid</code>.</span><span>2. Скопируйте полученный номер в поле ниже и сохраните.</span><span>3. Нажмите «Отправить тест».</span></div><div class="field"><label for="adminChatId3">Telegram Chat ID администратора</label><input id="adminChatId3" class="input" inputmode="numeric" maxlength="20" placeholder="Например: 123456789"><span class="hint">Используйте личный Chat ID. Ответ на уведомление будет отправлен пользователю от имени бота.</span></div><div class="field"><label for="notifyMode3">Что присылать</label><select id="notifyMode3" class="select"><option value="inquiries">Только обращения и заявки + сводка активности раз в день</option><option value="all">Все действия пользователей сразу</option></select><span class="hint">Если один пользователь присылает больше 20 сообщений за 10 минут, уведомления о его сообщениях приостанавливаются. Все сообщения при этом сохраняются в панели.</span></div><div class="actions"><button class="btn" type="submit">Сохранить</button><button id="testAdminNotificationBtn3" class="btn secondary" type="button">Отправить тест</button></div>';stack.prepend(form);form.addEventListener("submit",saveNotificationSettings);el("testAdminNotificationBtn3").addEventListener("click",testAdminNotification);var backup=Array.from(document.querySelectorAll("#view-settings .card")).find(function(card){return card.querySelector("h3")&&card.querySelector("h3").textContent==="Резервная копия"});if(backup){var note=backup.querySelector(".card-note");if(note)note.textContent="Сжатая копия .json.gz содержит фотографии, токен бота, настройки входа, контент и данные пользователей. Храните файл как конфиденциальный."}}
+    function ensureNotificationSettings(){if(el("notificationForm3"))return;var stack=document.querySelector("#view-settings .section-stack"),form=document.createElement("form");form.id="notificationForm3";form.className="card";form.dataset.saveable="";form.innerHTML='<div class="card-head"><div><h3>Уведомления администратору</h3><div class="card-note">Сообщения и действия пользователей приходят в Telegram</div></div><span id="notificationState3" class="badge">Не настроено</span></div><div class="callout notification-help"><strong>Как подключить:</strong><span>1. Откройте этого бота в Telegram и отправьте команду <code>/myid</code>.</span><span>2. Скопируйте полученный номер в поле ниже и сохраните.</span><span>3. Нажмите «Отправить тест».</span></div><div class="field"><label for="adminChatId3">Telegram Chat ID администратора</label><input id="adminChatId3" class="input" inputmode="numeric" maxlength="20" placeholder="Например: 123456789"><span class="hint">Используйте личный Chat ID. Ответ на уведомление будет отправлен пользователю от имени бота.</span></div><div class="field"><label for="notifyMode3">Что присылать</label><select id="notifyMode3" class="select"><option value="inquiries">Только обращения и заявки + сводка активности раз в день</option><option value="all">Все действия пользователей сразу</option></select></div><div class="field"><label for="reminderHours3">Напоминать о заявках без ответа</label><select id="reminderHours3" class="select"><option value="1">Через 1 час</option><option value="2">Через 2 часа</option><option value="4">Через 4 часа</option><option value="8">Через 8 часов</option><option value="24">Через сутки</option><option value="0">Не напоминать</option></select><span class="hint">Напоминание приходит в Telegram с 9:00 до 21:00, если обращение всё ещё «новое» и на него не ответили. О каждом обращении — один раз.</span><span class="hint">Если один пользователь присылает больше 20 сообщений за 10 минут, уведомления о его сообщениях приостанавливаются. Все сообщения при этом сохраняются в панели.</span></div><div class="actions"><button class="btn" type="submit">Сохранить</button><button id="testAdminNotificationBtn3" class="btn secondary" type="button">Отправить тест</button></div>';stack.prepend(form);form.addEventListener("submit",saveNotificationSettings);el("testAdminNotificationBtn3").addEventListener("click",testAdminNotification);var backup=Array.from(document.querySelectorAll("#view-settings .card")).find(function(card){return card.querySelector("h3")&&card.querySelector("h3").textContent==="Резервная копия"});if(backup){var note=backup.querySelector(".card-note");if(note)note.textContent="Сжатая копия .json.gz содержит фотографии, токен бота, настройки входа, контент и данные пользователей. Храните файл как конфиденциальный."}}
     function ensureConnectionCard(){if(el("connectionCard3"))return;var stack=document.querySelector("#view-settings .section-stack"),card=document.createElement("div");card.id="connectionCard3";card.className="card";card.innerHTML='<div class="card-head"><div><h3>Состояние подключения</h3><div id="connectionSummary3" class="card-note">Проверяем Telegram…</div></div><span id="connectionBadge3" class="badge">Проверка</span></div><div class="data-row"><span>Последняя успешная проверка</span><strong id="connectionSuccess3">—</strong></div><div class="data-row"><span>Последняя проблема</span><strong id="connectionErrorAt3">—</strong></div><div id="connectionError3" class="hint" style="margin-top:10px"></div>';stack.prepend(card)}
-    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";if(el("notifyMode3"))el("notifyMode3").value=state.config.notifyMode||"inquiries";var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
+    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";if(el("notifyMode3"))el("notifyMode3").value=state.config.notifyMode||"inquiries";if(el("reminderHours3"))el("reminderHours3").value=String(state.config.reminderHours==null?2:state.config.reminderHours);var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
     function addCounters(root){(root||document).querySelectorAll("textarea[maxlength],input[maxlength]").forEach(function(node){var c=node.nextElementSibling&&node.nextElementSibling.classList.contains("counter")?node.nextElementSibling:null;if(!c){c=document.createElement("span");c.className="counter";node.insertAdjacentElement("afterend",c);node.addEventListener("input",function(){c.textContent=node.value.length+" / "+node.maxLength})}c.textContent=node.value.length+" / "+node.maxLength})}
     function bindQuick(root){(root||document).querySelectorAll(".quick-nav").forEach(function(button){if(button._bound)return;button._bound=true;button.addEventListener("click",function(){openView(button.dataset.view)})})}
     function bindLanguageSwitch(container,prefix){container.addEventListener("click",function(e){var button=e.target.closest("[data-lang]");if(!button)return;var lang=button.dataset.lang;container.querySelectorAll("[data-lang]").forEach(function(x){var active=x===button;x.classList.toggle("active",active);x.setAttribute("aria-selected",active?"true":"false")});document.querySelectorAll("[data-"+prefix+"-pane]").forEach(function(pane){pane.classList.toggle("active",pane.dataset[prefix+"Pane"]===lang)});if(prefix==="property")renderPropertyTranslationSummary()})}
@@ -6417,7 +6493,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
     async function deleteUserData(id,name){if(!(await confirmAction("Удалить данные пользователя?","Будут удалены карточка «"+name+"», история переписки, избранное и все обращения. Отменить это нельзя. В ежедневных резервных копиях данные останутся до их автоматического удаления через 14 дней. Если человек снова напишет боту, он появится как новый пользователь.","Удалить")))return;try{var result=await api("/api/users/"+encodeURIComponent(id),{method:"DELETE"});selectedUser=null;await loadState();el("userDetail3").innerHTML='<div class="empty"><strong>Пользователь не выбран</strong>Нажмите на карточку слева, чтобы открыть детали.</div>';toast("Данные удалены, обращений: "+result.inquiriesRemoved)}catch(error){toast(error.message)}}
     async function sendDirectMessage(e,userId){e.preventDefault();var form=e.currentTarget,button=e.submitter,file=el("directMessageImage3").files[0];button.disabled=true;try{var body={text:el("directMessageText3").value,buttonText:el("directMessageButtonText3").value,buttonUrl:el("directMessageButtonUrl3").value};if(file){body.imageDataUrl=await fileData(file);body.imageName=file.name}await api("/api/users/"+encodeURIComponent(userId)+"/message",{method:"POST",body:JSON.stringify(body)});clearDirty(form);form.reset();await loadState();toast("Личное сообщение отправлено")}catch(error){toast(error.message)}finally{button.disabled=false}}
     async function saveSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:el("settingActive3").checked,adminChatId:el("adminChatId3")?el("adminChatId3").value:state.config.adminChatId,token:el("settingToken3").value,password:el("settingPassword3").value,passwordConfirm:el("settingPasswordConfirm3").value,currentPassword:el("settingCurrentPassword3").value})});el("settingToken3").value="";el("settingPassword3").value="";el("settingPasswordConfirm3").value="";el("settingCurrentPassword3").value="";clearDirty(el("technicalForm3"));await loadState();toast("Настройки сохранены")}catch(error){toast(error.message)}finally{button.disabled=false}}
-    async function saveNotificationSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:state.config.active,adminChatId:el("adminChatId3").value,notifyMode:el("notifyMode3").value,token:"",password:"",passwordConfirm:""})});clearDirty(el("notificationForm3"));await loadState();toast(el("adminChatId3").value&&!state.config.adminNotificationVerifiedAt?"Сохранено. Теперь отправьте тест":"Настройки уведомлений сохранены") }catch(error){toast(error.message)}finally{button.disabled=false}}
+    async function saveNotificationSettings(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/settings",{method:"PUT",body:JSON.stringify({messages:state.config.messages,active:state.config.active,adminChatId:el("adminChatId3").value,notifyMode:el("notifyMode3").value,reminderHours:Number(el("reminderHours3").value),token:"",password:"",passwordConfirm:""})});clearDirty(el("notificationForm3"));await loadState();toast(el("adminChatId3").value&&!state.config.adminNotificationVerifiedAt?"Сохранено. Теперь отправьте тест":"Настройки уведомлений сохранены") }catch(error){toast(error.message)}finally{button.disabled=false}}
     async function testAdminNotification(){var button=el("testAdminNotificationBtn3");if(dirty.has(el("notificationForm3")))return toast("Сначала сохраните Chat ID");button.disabled=true;try{await api("/api/admin-notification/test",{method:"POST",body:"{}"});await loadState();toast("Тестовое уведомление отправлено в Telegram")}catch(error){await loadState().catch(function(){});toast(error.message)}finally{button.disabled=false}}
     el("setupForm3").addEventListener("submit",async function(e){e.preventDefault();var b=e.submitter;b.disabled=true;try{var result=await api("/api/setup",{method:"POST",body:JSON.stringify({token:el("setupToken3").value,password:el("setupPassword3").value})});csrf=result.csrf;await loadState();showScreen("app3");startRefresh();toast("Бот подключён")}catch(error){message(el("setupMessage3"),error.message,false)}finally{b.disabled=false}});
     el("loginForm3").addEventListener("submit",async function(e){e.preventDefault();var b=e.submitter;b.disabled=true;try{var result=await api("/api/login",{method:"POST",body:JSON.stringify({password:el("loginPassword3").value})});csrf=result.csrf;el("loginPassword3").value="";await loadState();showScreen("app3");startRefresh()}catch(error){message(el("loginMessage3"),error.message,false)}finally{b.disabled=false}});
@@ -6534,7 +6610,7 @@ function start() {
     restartPolling();
     runDailyBackupSafely();
     setInterval(runDailyBackupSafely, 60 * 60 * 1000).unref();
-    setInterval(runDailyDigestSafely, 15 * 60 * 1000).unref();
+    setInterval(runScheduledNotices, 15 * 60 * 1000).unref();
     if (process.platform === 'win32' && process.env.NO_AUTO_OPEN !== '1') {
       setTimeout(() => {
         try {
@@ -6607,6 +6683,7 @@ module.exports = {
   runDailyBackup,
   restoreMissingMedia,
   runDailyDigest,
+  runInquiryReminders,
   text: {
     lead: LEAD_FORM_TEXT,
     viewing: VIEWING_FORM_TEXT,

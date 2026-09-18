@@ -333,6 +333,16 @@ test.describe('admin API', () => {
     assert.equal((await (await fetchLocal('/api/state')).json()).config.notifyMode, 'inquiries');
   });
 
+  test('the reminder delay is saved and validated', async () => {
+    const messages = bot.getData().config.messages;
+    assert.equal((await fetchLocal('/api/settings', { method: 'PUT', body: JSON.stringify({ messages, active: false, reminderHours: 3 }) })).status, 400);
+    assert.equal((await fetchLocal('/api/settings', { method: 'PUT', body: JSON.stringify({ messages, active: false, reminderHours: 4 }) })).status, 200);
+    assert.equal(bot.getData().config.reminderHours, 4);
+    assert.equal((await (await fetchLocal('/api/state')).json()).config.reminderHours, 4);
+    assert.equal((await fetchLocal('/api/settings', { method: 'PUT', body: JSON.stringify({ messages, active: false }) })).status, 200);
+    assert.equal(bot.getData().config.reminderHours, 4, 'other settings forms do not reset it');
+  });
+
   test('a user\'s data can be exported', async () => {
     const response = await fetchLocal('/api/users/200/export');
     assert.equal(response.status, 200);
