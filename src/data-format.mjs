@@ -556,6 +556,8 @@ function normalizeLoadedData(parsed) {
       assignee: cleanText(item.assignee, 60),
       createdAt: item.createdAt || new Date().toISOString(),
       updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+      // The client's last message, to tell whose turn it is.
+      clientMessageAt: cleanText(item.clientMessageAt, 40) || item.createdAt || '',
     })).slice(0, 5000) : [];
     const normalized = {
       ...clone(defaultData),

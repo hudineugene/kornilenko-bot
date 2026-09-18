@@ -12,9 +12,9 @@ import { getData, loadData, replaceData, restoreMissingMedia, runDailyBackup, ru
 import './analytics.mjs';
 import { leadSourceFromPayload, normalizeUser, rebuildUserIndex, userByChatId, userById } from './users.mjs';
 import { splitTelegramText, telegramRequest } from './telegram.mjs';
-import { menuItemForText } from './menus.mjs';
+import { configureBotCommands, menuItemForText } from './menus.mjs';
 import { formReminderDue, runFormReminders, viewingDateValue } from './forms.mjs';
-import { createInquiry } from './inquiries.mjs';
+import { awaitingReply, createInquiry } from './inquiries.mjs';
 import { catalogFilterPanel, catalogRecords } from './catalog.mjs';
 import './sections.mjs';
 import { handleUpdate, processUpdates } from './updates.mjs';
@@ -63,10 +63,12 @@ export {
   announceStart,
   applyImport,
   broadcastUsers,
+  awaitingReply,
   budgetLimit,
   catalogFilterPanel,
   catalogRecords,
   clearRunMarker,
+  configureBotCommands,
   confirmViewing,
   contentAddressImages,
   createInquiry,

@@ -11,6 +11,7 @@ import { recordError } from './analytics.mjs';
 import { eraseUserData, rebuildUserIndex, userByChatId, userById, userDataExport } from './users.mjs';
 import { forgetTelegramFileIds, sendMessage, sendPhotoMessage, telegramFileIds, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, menuKeyboard } from './menus.mjs';
+import { inquiryChats } from './inquiries.mjs';
 import { recordImages, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { findRule, restartPolling } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast, userUnavailableError } from './broadcasts.mjs';
@@ -49,6 +50,20 @@ function sendBackupDownload(res, filename) {
     'cache-control': 'no-store',
   });
   res.end(compressed);
+}
+
+
+// /inbox, /viewings and /stats are in the command menu of the admin and
+// manager chats only: a chat that is no longer one of them loses them.
+function refreshStaffCommands(previousChatIds = []) {
+  const token = data.config.botToken;
+  if (!token || !data.config.active) return;
+  const current = new Set(inquiryChats().map((chat) => chat.chatId));
+  for (const chatId of previousChatIds) {
+    if (current.has(chatId)) continue;
+    telegramRequest(token, 'deleteMyCommands', { scope: { type: 'chat', chat_id: chatId } }).catch(() => {});
+  }
+  configureBotCommands(token).catch((error) => recordError('Обновление команд Telegram', error));
 }
 
 async function handleApi(req, res, url) {
@@ -867,6 +882,7 @@ async function handleApi(req, res, url) {
     if (body.notifyMode != null) data.config.notifyMode = body.notifyMode;
     if (body.reminderHours != null) data.config.reminderHours = Number(body.reminderHours);
     if (typeof body.statusNotices === 'boolean') data.config.statusNotices = body.statusNotices;
+    const staffChatsBefore = inquiryChats().map((chat) => chat.chatId);
     if (adminChatId !== previousAdminChatId) {
       data.config.adminNotificationVerifiedAt = '';
       // Plain keys are message numbers in the old admin chat; in the new chat
@@ -881,6 +897,7 @@ async function handleApi(req, res, url) {
     saveDataNow();
     if (activeChanged || tokenChanged) restartPolling();
     if (activeChanged) announceActiveChange(data.config.active);
+    if (adminChatId !== previousAdminChatId) refreshStaffCommands(staffChatsBefore);
     if (passwordData) {
       for (const id of sessions.keys()) if (id !== session.id) sessions.delete(id);
     }
@@ -938,6 +955,7 @@ async function handleApi(req, res, url) {
     }
     if (list.length > MAX_MANAGERS) return json(res, 400, { error: 'Можно добавить не больше ' + MAX_MANAGERS + ' менеджеров' });
     const previous = new Map((data.config.managers || []).map((manager) => [manager.chatId, manager]));
+    const staffChatsBefore = inquiryChats().map((chat) => chat.chatId);
     data.config.adminName = cleanText(body.adminName, 60);
     // A chat that stays the same keeps its checked state.
     data.config.managers = normalizeManagers(list.map((item) => {
@@ -946,6 +964,7 @@ async function handleApi(req, res, url) {
       return { id: old ? old.id : '', name: item.name, chatId, verifiedAt: old ? old.verifiedAt : '' };
     }), adminChatId);
     saveDataNow();
+    refreshStaffCommands(staffChatsBefore);
     return json(res, 200, { ok: true });
   }
 
@@ -956,7 +975,7 @@ async function handleApi(req, res, url) {
     const manager = (data.config.managers || []).find((item) => item.id === decodeURIComponent(managerTestMatch[1]));
     if (!manager) return json(res, 404, { error: 'Менеджер не найден — сначала сохраните список' });
     try {
-      await sendMessage(manager.chatId, '✅ ' + manager.name + ', уведомления работают. Сюда будут приходить заявки клиентов: отвечайте на уведомление — ответ получит клиент; «⏳ В работу» закрепит заявку за вами.', data.config.botToken, { track: false });
+      await sendMessage(manager.chatId, '✅ ' + manager.name + ', уведомления работают. Сюда будут приходить заявки клиентов: отвечайте на уведомление — ответ получит клиент; «⏳ В работу» закрепит заявку за вами. Команды: /inbox — без ответа, /viewings — просмотры, /stats — цифры.', data.config.botToken, { track: false });
       manager.verifiedAt = new Date().toISOString();
       saveDataNow();
       return json(res, 200, { ok: true });

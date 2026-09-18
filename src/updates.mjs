@@ -8,7 +8,7 @@ import { leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from 
 import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, isLanguageChangeText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
-import { createInquiry, handleAdministratorReply, handleInquiryStatusCallback, handleMessageReaction, inquiryWasMerged, messageSummary, notifyAdministratorAction } from './inquiries.mjs';
+import { adminChatFor, createInquiry, handleAdministratorReply, handleInquiryStatusCallback, handleMessageReaction, inquiryWasMerged, messageSummary, notifyAdministratorAction } from './inquiries.mjs';
 import { catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard } from './catalog.mjs';
 import { catalogRequest } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
@@ -20,6 +20,7 @@ import { handleSubscriptionCallback } from './subscriptions.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { handleCalculatorCallback } from './calculator.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
+import { ADMIN_CHAT_HINT, handleAdminChatMessage } from './admin-commands.mjs';
 
 function findRule(text, language) {
   const input = text.toLocaleLowerCase('ru-RU').trim();
@@ -88,6 +89,10 @@ async function handleUpdate(update, token) {
   const message = update.message;
   if (!message || !message.from || !message.chat) return;
   if (await handleAdministratorReply(message, token)) return;
+  if (await handleAdminChatMessage(message, token)) return;
+  // The admin's own chat with the bot: menu, forms and auto-replies still work
+  // for trying the bot out, but free text is not an inquiry from the admin.
+  const adminOwnChat = Boolean(adminChatFor(message.chat.id));
 
   const user = normalizeUser(message.from, message.chat.id);
   if (duplicateInboundMessage(user, message.message_id)) return;
@@ -247,6 +252,10 @@ async function handleUpdate(update, token) {
       await sendMessage(message.chat.id, copy.stale, token, { reply_markup: menuKeyboard(user.preferredLanguage) });
       return;
     }
+    if (adminOwnChat) {
+      await sendMessage(message.chat.id, ADMIN_CHAT_HINT, token);
+      return;
+    }
     const inquiry = createInquiry(user, text || summary, { type: 'general', sourceMessage: message });
     answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
     inquiryAnswer = true;
@@ -384,6 +393,10 @@ async function handleUpdate(update, token) {
           await sendPropertyCard(message.chat.id, user, token, found.record, { heading: '🏠 ' + (PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).propertyHeading, page: 0, totalPages: 1, mode: 'all' });
           return;
         }
+        if (adminOwnChat) {
+          await sendMessage(message.chat.id, ADMIN_CHAT_HINT, token);
+          return;
+        }
         if (found) {
           // A question that names a property: the manager sees which one.
           const inquiry = createInquiry(user, propertyRequestText(found.record, user.preferredLanguage, 'question') + '\n\n' + text, { type: 'question', propertyId: found.record.id, sourceMessage: message });
@@ -398,6 +411,9 @@ async function handleUpdate(update, token) {
         }
       }
     }
+  } else if (adminOwnChat) {
+    await sendMessage(message.chat.id, ADMIN_CHAT_HINT, token);
+    return;
   } else {
     const inquiry = createInquiry(user, summary, { type: 'general', sourceMessage: message });
     answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);

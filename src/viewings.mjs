@@ -345,14 +345,56 @@ function agendaLine(inquiry, when) {
   ].filter(Boolean).join(' — ');
 }
 
+// /viewings in the admin chat: today, tomorrow and the requests that still
+// wait for the manager to confirm a date.
+function viewingsOverview(now = new Date()) {
+  const today = localDayKey(now);
+  const next = new Date(now);
+  next.setDate(next.getDate() + 1);
+  const tomorrow = localDayKey(next);
+  let unconfirmed = 0;
+  const day = (key, title) => {
+    const { confirmed, waiting } = dayViewings(key);
+    unconfirmed += waiting.length;
+    const lines = [
+      ...confirmed.map((inquiry) => agendaLine(inquiry, inquiry.viewing.confirmedTime || inquiry.viewing.timeText)),
+      ...waiting.map((inquiry) => agendaLine(inquiry, '⏳ ' + (inquiry.viewing.timeText || ''))),
+    ];
+    return [title + ', ' + viewingDateLabel(key, 'ru'), ...(lines.length ? lines : ['• нет'])].join('\n');
+  };
+  const sections = [day(today, '📅 Сегодня'), day(tomorrow, '📅 Завтра')];
+  const later = openViewings()
+    .filter((inquiry) => !inquiry.viewing.confirmedAt && ![today, tomorrow].includes(inquiry.viewing.date) && (!inquiry.viewing.date || inquiry.viewing.date > today))
+    .sort((a, b) => String(a.viewing.date || '9999').localeCompare(String(b.viewing.date || '9999')));
+  unconfirmed += later.length;
+  if (later.length) {
+    sections.push(['⏳ Ждут подтверждения на другие дни:', ...later.slice(0, 10).map((inquiry) => agendaLine(inquiry, [viewingDateLabel(inquiry.viewing.date, 'ru') || inquiry.viewing.dateText, inquiry.viewing.timeText].filter(Boolean).join(', ')))].join('\n'));
+  }
+  const laterConfirmed = openViewings().filter((inquiry) => inquiry.viewing.confirmedAt && inquiry.viewing.confirmedDate > tomorrow).length;
+  if (laterConfirmed) sections.push('✅ Подтверждено на следующие дни: ' + laterConfirmed);
+  if (unconfirmed) sections.push('⏳ — ещё не подтверждён: кнопка «✅ Подтвердить просмотр» под уведомлением о записи.');
+  return sections.join('\n\n');
+}
+
 // Today's viewings for the admin, once a day in the morning.
+function openViewings() {
+  return data.inquiries.filter((inquiry) => inquiry.type === 'viewing' && inquiry.viewing && inquiry.status !== 'closed' && !inquiry.viewing.cancelledAt);
+}
+
+// Viewings of one day: confirmed ones by time, and the requests for that day
+// the manager has not confirmed yet.
+function dayViewings(key) {
+  const open = openViewings();
+  const confirmed = open
+    .filter((inquiry) => inquiry.viewing.confirmedAt && inquiry.viewing.confirmedDate === key)
+    .sort((a, b) => String(a.viewing.confirmedTime || '99').localeCompare(String(b.viewing.confirmedTime || '99')));
+  const waiting = open.filter((inquiry) => !inquiry.viewing.confirmedAt && inquiry.viewing.date === key);
+  return { confirmed, waiting };
+}
+
 function viewingAgenda(now = new Date()) {
   const today = localDayKey(now);
-  const open = data.inquiries.filter((inquiry) => inquiry.type === 'viewing' && inquiry.viewing && inquiry.status !== 'closed' && !inquiry.viewing.cancelledAt);
-  const confirmed = open
-    .filter((inquiry) => inquiry.viewing.confirmedAt && inquiry.viewing.confirmedDate === today)
-    .sort((a, b) => String(a.viewing.confirmedTime || '99').localeCompare(String(b.viewing.confirmedTime || '99')));
-  const waiting = open.filter((inquiry) => !inquiry.viewing.confirmedAt && inquiry.viewing.date === today);
+  const { confirmed, waiting } = dayViewings(today);
   if (!confirmed.length && !waiting.length) return '';
   return [
     '📅 Просмотры сегодня, ' + viewingDateLabel(today, 'ru'),
@@ -476,4 +518,5 @@ export {
   viewingIsUpcoming,
   viewingReminderDue,
   viewingWhen,
+  viewingsOverview,
 };

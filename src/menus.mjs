@@ -7,6 +7,8 @@ import { data, runtime } from './store.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { clearCatalogMessages, clearGalleryMessages, clearUiMessages, sendUiMessage } from './catalog.mjs';
 import { tunnelInstalled } from './remote.mjs';
+import { inquiryChats } from './inquiries.mjs';
+import { ADMIN_COMMAND_DESCRIPTIONS } from './admin-commands.mjs';
 
 function languageMessages(language) {
   return data.config.messages[language] || data.config.messages.ru;
@@ -131,6 +133,13 @@ async function configureBotCommands(token) {
     const payload = { commands };
     if (language !== 'default') payload.language_code = language;
     await telegramRequest(token, 'setMyCommands', payload);
+  }
+  // The admin and manager chats also see /inbox, /viewings and /stats. A chat
+  // the bot cannot reach yet is skipped: it gets them on the next update.
+  const staff = Object.entries(ADMIN_COMMAND_DESCRIPTIONS).map(([command, description]) => ({ command, description }));
+  for (const chat of inquiryChats()) {
+    await telegramRequest(token, 'setMyCommands', { commands: [...staff, ...commandsFor('ru')], scope: { type: 'chat', chat_id: chat.chatId } })
+      .catch((error) => console.error('Команды для чата ' + chat.name + ' не обновлены:', error.message));
   }
 }
 

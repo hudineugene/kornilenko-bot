@@ -14,7 +14,10 @@ import { acknowledgeCallback, propertyRequestText } from './sections.mjs';
 import { recordBroadcastResponse, userUnavailableError } from './broadcasts.mjs';
 
 const MAX_INQUIRIES = 5000;
-const INQUIRY_MERGE_WINDOW_MS = 10 * 60 * 1000;
+// A client writing again continues the open conversation (also after the
+// manager's answer), so a dialogue is one inquiry, not one per message.
+const INQUIRY_MERGE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+const INQUIRY_ACKNOWLEDGED_WINDOW_MS = 10 * 60 * 1000;
 const INQUIRY_RATE_LIMIT = { count: 20, windowMs: 60 * 60 * 1000 };
 const ADMIN_NOTIFY_LIMIT = { count: 15, windowMs: 10 * 60 * 1000 };
 const ADMIN_MESSAGE_NOTIFY_LIMIT = { count: 20, windowMs: 10 * 60 * 1000 };
@@ -59,10 +62,13 @@ function mergeIntoLatestInquiry(user, text, type, context) {
   if (!latest) return null;
   const combined = latest.text + '\n\n' + text;
   // A question to the manager and the free messages that follow it are one
-  // conversation, so these two types continue each other.
+  // conversation, so these two types continue each other. A free message
+  // also continues any other open inquiry: "Yes, tomorrow is fine" after
+  // the manager answered a callback request or a viewing.
   const continuation = MERGEABLE_INQUIRY_TYPES.includes(type)
     && !context.propertyId && !context.lead && !context.selection
-    && MERGEABLE_INQUIRY_TYPES.includes(latest.type) && !latest.propertyId && latest.status === 'new'
+    && ['new', 'in_progress'].includes(latest.status)
+    && (type === 'general' || (MERGEABLE_INQUIRY_TYPES.includes(latest.type) && !latest.propertyId))
     && Date.now() - Date.parse(latest.updatedAt) < INQUIRY_MERGE_WINDOW_MS
     && combined.length <= 4000;
   // Only new inquiries count towards the limit.
@@ -71,6 +77,7 @@ function mergeIntoLatestInquiry(user, text, type, context) {
   // still in the user's activity history.
   if (combined.length <= 4000) latest.text = combined;
   latest.updatedAt = new Date().toISOString();
+  latest.clientMessageAt = latest.updatedAt;
   if (latest.status === 'closed') latest.status = 'new';
   return latest;
 }
@@ -94,11 +101,16 @@ function inquiryWasMerged(inquiry) {
 function createInquiry(user, text, context = {}) {
   const type = ['question', 'interest', 'selection', 'viewing', 'lead', 'general'].includes(context.type) ? context.type : 'general';
   recordBroadcastResponse(user, 'inquiry');
+  const latest = data.inquiries.find((item) => item.userId === String(user.id));
+  const lastActivity = latest ? Date.parse(latest.updatedAt) || 0 : 0;
   const merged = mergeIntoLatestInquiry(user, cleanText(text, 4000), type, context);
   if (merged) {
-    mergedInquiries.add(merged);
+    // Messages in a row are acknowledged once; after a pause the client
+    // hears again that the message was received.
+    if (Date.now() - lastActivity < INQUIRY_ACKNOWLEDGED_WINDOW_MS) mergedInquiries.add(merged);
+    else mergedInquiries.delete(merged);
     scheduleSave();
-    const notify = () => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в обращении' });
+    const notify = (copies) => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в обращении', replyTo: copies });
     if (isClientMedia(context.sourceMessage)) {
       void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken, merged)
         .then(notify)
@@ -137,6 +149,7 @@ function createInquiry(user, text, context = {}) {
     replies: [],
     createdAt: now,
     updatedAt: now,
+    clientMessageAt: now,
   };
   data.inquiries.unshift(inquiry);
   trimInquiries();
@@ -144,7 +157,7 @@ function createInquiry(user, text, context = {}) {
   scheduleSave();
   if (isClientMedia(context.sourceMessage)) {
     void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken, inquiry)
-      .then(() => notifyAdministrator(inquiry, user))
+      .then((copies) => notifyAdministrator(inquiry, user, { replyTo: copies }))
       .catch((error) => recordError('Уведомление администратору', error));
   } else {
     void notifyAdministrator(inquiry, user);
@@ -160,6 +173,17 @@ const INQUIRY_TYPE_LABELS = {
   lead: 'заявка на звонок',
   general: 'сообщение',
 };
+
+// Whose turn it is: a new inquiry nobody has taken, or one where the client
+// wrote after the last answer. One taken "In progress" without an answer in
+// the chat (the manager calls) is not waiting.
+function awaitingReply(inquiry) {
+  if (!inquiry || inquiry.status === 'closed') return false;
+  const replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
+  if (!replies.length) return inquiry.status === 'new';
+  const lastReply = Math.max(...replies.map((reply) => Date.parse(reply.createdAt) || 0));
+  return (Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0) > lastReply;
+}
 
 function inquiryTypeLabel(inquiry) {
   if (inquiry.type === 'question' && !inquiry.propertyId) return 'вопрос менеджеру';
@@ -305,8 +329,13 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   const language = user.preferredLanguage ? ' · ' + user.preferredLanguage.toUpperCase() : '';
   const who = '👤 ' + name + username + language + (user.source ? ' · 📣 ' + user.source : '');
   const cleanDetails = cleanText(details, 4000);
+  // A manager calling back needs the number without opening the panel; past
+  // inquiries tell a returning client from a new one.
+  const phone = options.important && user.phone ? '📞 ' + cleanText(user.phone, 40) : '';
+  const earlier = options.important ? data.inquiries.filter((item) => item.userId === String(user.id) && item.id !== inquiryId).length : 0;
+  const history = earlier ? '🗂 Обращений раньше: ' + earlier : '';
   const notification = options.important
-    ? ['📩 ' + cleanText(title, 160), who, '', cleanDetails, '', '↩️ Ответьте на это сообщение — ответ получит клиент.']
+    ? ['📩 ' + cleanText(title, 160), who, ...[phone, history].filter(Boolean), '', cleanDetails, '', '↩️ Ответьте на это сообщение — ответ получит клиент.']
     : ['👀 ' + cleanText(title, 160), who, ...(detailsWorthShowing(title, cleanDetails) ? ['', cleanDetails] : [])];
   const text = notification.filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n').trim();
   const inquiry = options.important && inquiryId ? data.inquiries.find((item) => item.id === inquiryId) : null;
@@ -317,7 +346,13 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
     try {
       const messageIds = [];
       const markup = inquiryStatusMarkup(inquiry);
-      await sendMessage(chat.chatId, text, data.config.botToken, { track: false, messageIds, ...(markup ? { reply_markup: markup } : {}) });
+      const replyTo = options.replyTo instanceof Map ? options.replyTo.get(String(chat.chatId)) : null;
+      await sendMessage(chat.chatId, text, data.config.botToken, {
+        track: false,
+        messageIds,
+        ...(markup ? { reply_markup: markup } : {}),
+        ...(replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {}),
+      });
       rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId }, chat.chatId);
       delivered = true;
       markAdminChatVerified(chat, true);
@@ -359,12 +394,14 @@ async function notifyAdministrator(inquiry, user, options = {}) {
   return notifyAdministratorAction(user, (options.title || 'Новое обращение') + ': ' + inquiryTypeLabel(inquiry), [
     propertyLine,
     text,
-  ].filter(Boolean).join('\n'), inquiry.id, inquiry.sourceMessageId, { important: true });
+  ].filter(Boolean).join('\n'), inquiry.id, inquiry.sourceMessageId, { important: true, replyTo: options.replyTo });
 }
 
+// Returns the copies by admin chat, so the notification can be a reply to
+// the photo or voice message it is about.
 async function copyUserMessageToAdministrator(message, token, inquiry = null) {
-  if (!message || !message.chat || adminChatFor(message.chat.id)) return false;
-  let copiedAny = false;
+  const copies = new Map();
+  if (!message || !message.chat || adminChatFor(message.chat.id)) return copies;
   for (const chat of inquiryChats()) {
     try {
       const copied = await telegramRequest(token, 'copyMessage', {
@@ -379,13 +416,13 @@ async function copyUserMessageToAdministrator(message, token, inquiry = null) {
           inquiryId: inquiry ? inquiry.id : '',
           sourceMessageId: message.message_id,
         }, chat.chatId);
+        copies.set(String(chat.chatId), Number(copied.message_id));
       }
-      copiedAny = true;
     } catch (error) {
       recordError('Копирование сообщения ' + (chat.main ? 'администратору' : 'менеджеру ' + chat.name), error);
     }
   }
-  return copiedAny;
+  return copies;
 }
 
 function messageSummary(message) {
@@ -599,6 +636,7 @@ export {
   ADMIN_NOTIFY_LIMIT,
   ADMIN_REPLY_TARGET_LIMIT,
   INQUIRY_MERGE_WINDOW_MS,
+  awaitingReply,
   INQUIRY_RATE_LIMIT,
   INQUIRY_STATUS_LABELS,
   INQUIRY_TYPE_LABELS,

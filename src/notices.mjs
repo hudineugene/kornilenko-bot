@@ -6,7 +6,7 @@ import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { userByChatId, userById } from './users.mjs';
 import { sendMessage } from './telegram.mjs';
-import { inquiryChats, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
+import { awaitingReply, inquiryChats, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
 import { localized, shortenedText } from './catalog.mjs';
 import { runViewingNotices } from './viewings.mjs';
 import { adminMessagesAllowed, adminMorningHour } from './hours.mjs';
@@ -67,6 +67,7 @@ const REMINDERS_PER_RUN = 5;
 
 function hoursAgoText(milliseconds) {
   const hours = Math.floor(milliseconds / (60 * 60 * 1000));
+  if (hours < 1) return Math.max(1, Math.floor(milliseconds / 60000)) + ' мин';
   if (hours >= 24) {
     const days = Math.floor(hours / 24);
     return days + ' ' + (days % 10 === 1 && days % 100 !== 11 ? 'день' : [2, 3, 4].includes(days % 10) && ![12, 13, 14].includes(days % 100) ? 'дня' : 'дней');
@@ -119,6 +120,8 @@ async function sendInquiryToAdministrator(inquiry, heading, extraLines = [], opt
     return delivered;
   };
   const assigned = options.onlyAssignee && inquiry.assignee ? inquiryChats().filter((chat) => chat.name === inquiry.assignee) : [];
+  // /inbox: only the chat that asked.
+  if (options.chats) return sendTo(options.chats);
   let delivered = await sendTo(assigned.length ? assigned : inquiryChats());
   // The one who took the inquiry did not get it: the others hear about it.
   if (!delivered && assigned.length) delivered = await sendTo(inquiryChats().filter((chat) => !assigned.includes(chat)));
@@ -225,7 +228,7 @@ function weeklyReport(now = new Date()) {
   const viewings = data.inquiries.filter((inquiry) => inquiry.type === 'viewing' && inquiry.viewing && inquiry.viewing.confirmedAt && !inquiry.viewing.cancelledAt);
   const heldViewings = viewings.filter((inquiry) => inquiry.viewing.confirmedDate >= startKey && inquiry.viewing.confirmedDate <= endKey).length;
   const bookedViewings = week.inquiries.filter((inquiry) => inquiry.type === 'viewing').length;
-  const waiting = data.inquiries.filter((inquiry) => inquiry.status === 'new').length;
+  const waiting = data.inquiries.filter(awaitingReply).length;
   const byProperty = new Map();
   for (const inquiry of week.inquiries) if (inquiry.propertyId) byProperty.set(inquiry.propertyId, (byProperty.get(inquiry.propertyId) || 0) + 1);
   const topProperties = Array.from(byProperty).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id, count]) => {
@@ -290,5 +293,6 @@ export {
   runScheduledNotices,
   runWeeklyReport,
   sendInquiryToAdministrator,
+  weekFigures,
   weeklyReport,
 };
