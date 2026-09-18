@@ -696,6 +696,47 @@ async function handleSelectionFormMessage(message, user, token) {
   return false;
 }
 
+// A client who started a form and went quiet hears about it once, a couple
+// of hours later and before the form expires, in the daytime. The buttons
+// are the same as after /start in the middle of a form.
+const FORM_REMINDER_IDLE_MS = 2 * 60 * 60 * 1000;
+const FORM_REMINDER_HOURS = { from: 9, to: 21 };
+const FORM_REMINDERS_PER_RUN = 20;
+const FORM_REMINDER_TEXT_KEYS = { lead: 'reminderLead', viewing_form: 'reminderViewing', property_selection: 'reminderSelection' };
+
+function formReminderDue(user, now = new Date()) {
+  const pending = user && user.pendingAction;
+  if (!pending || !FORM_REMINDER_TEXT_KEYS[pending.type] || pending.remindedAt || user.blocked || !user.chatId) return false;
+  if (now.getHours() < FORM_REMINDER_HOURS.from || now.getHours() >= FORM_REMINDER_HOURS.to) return false;
+  const createdAt = Date.parse(pending.createdAt || '');
+  if (!Number.isFinite(createdAt)) return false;
+  const lastSeen = Math.max(createdAt, Date.parse(user.lastSeenAt || '') || 0);
+  return now.getTime() - lastSeen >= FORM_REMINDER_IDLE_MS
+    && now.getTime() - createdAt < PENDING_ACTION_TTL_MS - 60 * 60 * 1000;
+}
+
+async function runFormReminders(now = new Date(), token = data.config.botToken) {
+  if (!token || !data.config.active) return [];
+  const sent = [];
+  for (const user of Object.values(data.users)) {
+    if (sent.length >= FORM_REMINDERS_PER_RUN) break;
+    if (!formReminderDue(user, now)) continue;
+    const language = user.preferredLanguage || 'ru';
+    const copy = INTERACTION_TEXT[language] || INTERACTION_TEXT.ru;
+    // Marked first: a refusal from Telegram must not be retried every run.
+    user.pendingAction.remindedAt = now.toISOString();
+    scheduleSave();
+    try {
+      await sendMessage(user.chatId, copy[FORM_REMINDER_TEXT_KEYS[user.pendingAction.type]], token, { reply_markup: unfinishedActionKeyboard(language) });
+      sent.push(user.id);
+    } catch (error) {
+      if (Number(error && error.telegramCode) === 403) user.blocked = true;
+    }
+  }
+  if (sent.length) saveDataNow();
+  return sent;
+}
+
 async function restartExpiredAction(user, token) {
   const action = user && user.expiredAction;
   if (!action) return false;
@@ -740,7 +781,10 @@ async function restartExpiredAction(user, token) {
 }
 
 export {
+  FORM_REMINDER_IDLE_MS,
   duplicateCallback,
+  formReminderDue,
+  runFormReminders,
   duplicateInboundMessage,
   expiredActionKeyboard,
   handleLeadFormMessage,

@@ -295,6 +295,62 @@ test.describe('property alerts', () => {
   });
 });
 
+test.describe('search in client messages', () => {
+  const benidorm = { ru: 'Бенидорм', en: 'Benidorm', es: 'Benidorm' };
+  test.beforeEach(() => resetData((data) => {
+    data.objects.push(property('flat-benidorm-01', 'Квартира у пляжа', 'active', { reference: 'REF-1024', city: benidorm }));
+    data.objects.push(property('villa-malaga-02', 'Вилла в Малаге', 'active', { reference: 'REF-2048', city: { ru: 'Малага', en: 'Málaga', es: 'Málaga' } }));
+    data.objects.push(property('hidden-03', 'Скрытый объект', 'hidden', { reference: 'REF-4096', city: benidorm }));
+  }));
+
+  function shownCard() {
+    const card = telegram.calls.filter((call) => call.method === 'sendPhoto').pop();
+    return card && card.body.caption;
+  }
+
+  test('a property number opens its card instead of going to the manager', async () => {
+    const chat = createChat();
+    telegram.calls = [];
+    await chat.say('ref 1024');
+    assert.match(shownCard(), /^🏠 Объект\n\nКвартира у пляжа/);
+    assert.equal(chat.inquiries.length, 0);
+    telegram.calls = [];
+    await chat.say('REF-4096');
+    assert.equal(shownCard(), undefined, 'a hidden property is not found');
+    assert.equal(chat.inquiries.length, 1, 'and the message goes to the manager as before');
+  });
+
+  test('a question that names a property is linked to it for the manager', async () => {
+    const chat = createChat();
+    const step = await chat.say('Сколько стоит обслуживание REF-2048 в год?');
+    const [inquiry] = chat.inquiries;
+    assert.equal(inquiry.type, 'question');
+    assert.equal(inquiry.propertyId, 'villa-malaga-02');
+    assert.match(step.last.text, /Вилла в Малаге$/);
+    assert.ok(adminMessages().some((message) => message.text.includes('вопрос по объекту') && message.text.includes('🏠 Вилла в Малаге')));
+  });
+
+  test('a city name shows the catalog in that city, in any language and spelling', async () => {
+    const chat = createChat();
+    await chat.say('benidorm');
+    assert.deepEqual(chat.user.catalogFilter, { deal: '', type: '', bedrooms: 0, city: 'Бенидорм', maxPrice: 0, sort: '' });
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['flat-benidorm-01']);
+    assert.equal(chat.inquiries.length, 0);
+
+    const english = createChat({ language: 'en' });
+    await english.say('Malaga');
+    assert.equal(english.user.catalogFilter.city, 'Málaga', 'the city as the client\'s language writes it');
+  });
+
+  test('longer messages and unknown places still go to the manager', async () => {
+    const chat = createChat();
+    await chat.say('Ищу что-нибудь в Бенидорме или Финестрате');
+    await chat.say('Торревьеха');
+    assert.equal(chat.inquiries.length, 1, 'both messages end up in one inquiry');
+    assert.equal(chat.user.catalogFilter, null);
+  });
+});
+
 test.describe('catalog filter', () => {
   const FILTER = bot.text.catalogFilter.ru;
   const catalog = [

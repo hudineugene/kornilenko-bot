@@ -9,7 +9,8 @@ import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMes
 import { configureBotCommands, isLanguageChangeText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
 import { createInquiry, handleAdministratorReply, handleInquiryStatusCallback, handleMessageReaction, inquiryWasMerged, messageSummary, notifyAdministratorAction } from './inquiries.mjs';
-import { clearCatalogMessages, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage } from './catalog.mjs';
+import { catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard } from './catalog.mjs';
+import { catalogRequest } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
 import { handleAlertsCallback } from './alerts.mjs';
@@ -359,9 +360,39 @@ async function handleUpdate(update, token) {
         answer = fillTemplate(rule.answer, user);
       }
       else {
-        const inquiry = createInquiry(user, text, { type: 'general', sourceMessage: message });
-        answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
-        inquiryAnswer = true;
+        const found = catalogRequest(text, user);
+        if (found && found.kind === 'city') {
+          // A city name alone: the catalog in that city, the filter can be reset.
+          user.catalogFilter = normalizedCatalogFilter({ city: found.city });
+          scheduleSave();
+          void notifyAdministratorAction(user, 'Искал объекты в городе', found.city);
+          await clearUiMessages(message.chat.id, user, token);
+          await clearGalleryMessages(message.chat.id, user, token);
+          await sendCatalogPage(message.chat.id, user, token, 0, 'all');
+          return;
+        }
+        if (found && found.exact) {
+          // Just a property number: its card.
+          const records = catalogRecords(user, 'all');
+          user.catalogContext = { mode: 'all', page: Math.max(0, records.findIndex((item) => item.id === found.record.id)) };
+          scheduleSave();
+          void notifyAdministratorAction(user, 'Открыл объект по номеру', found.record.reference || found.record.id);
+          await clearUiMessages(message.chat.id, user, token);
+          await sendPropertyCard(message.chat.id, user, token, found.record, { heading: '🏠 ' + (PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).propertyHeading, page: 0, totalPages: 1, mode: 'all' });
+          return;
+        }
+        if (found) {
+          // A question that names a property: the manager sees which one.
+          const inquiry = createInquiry(user, propertyRequestText(found.record, user.preferredLanguage, 'question') + '\n\n' + text, { type: 'question', propertyId: found.record.id, sourceMessage: message });
+          recordPropertyEvent(found.record.id, 'questions');
+          const title = localizedExact(found.record.title, user.preferredLanguage) || found.record.reference || '';
+          answer = inquiryWasMerged(inquiry) ? '' : [(PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received, title ? '🏠 ' + title : ''].filter(Boolean).join('\n\n');
+          inquiryAnswer = true;
+        } else {
+          const inquiry = createInquiry(user, text, { type: 'general', sourceMessage: message });
+          answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
+          inquiryAnswer = true;
+        }
       }
     }
   } else {

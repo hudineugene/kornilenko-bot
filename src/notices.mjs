@@ -10,6 +10,7 @@ import { inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from 
 import { localized, shortenedText } from './catalog.mjs';
 import { runViewingNotices } from './viewings.mjs';
 import { adminMessagesAllowed, adminMorningHour } from './hours.mjs';
+import { runFormReminders } from './forms.mjs';
 
 const DIGEST_HOUR = 9;
 
@@ -164,6 +165,7 @@ function runScheduledNotices() {
   runInquiryReminders().catch((error) => recordError('Напоминание об обращениях', error));
   runViewingNotices().catch((error) => recordError('Уведомления о просмотрах', error));
   runFollowUpReminders().catch((error) => recordError('Напоминание связаться с клиентом', error));
+  runFormReminders().catch((error) => recordError('Напоминание о незаконченной форме', error));
 }
 
 export {

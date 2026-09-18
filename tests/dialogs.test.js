@@ -7,7 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { bot, dataFile, buttonsOf, callbacksOf, createChat, property, resetData, adminNotifications, calendarDate, cleanup } = require('./helpers/chat');
+const { bot, telegram, dataFile, buttonsOf, callbacksOf, createChat, property, resetData, adminNotifications, calendarDate, cleanup } = require('./helpers/chat');
 
 const { lead: LEAD, viewing: VIEWING, selection: SELECTION, menu: MENU, interaction: INTERACTION, propertyActions: PROPERTY } = bot.text;
 
@@ -377,6 +377,58 @@ test.describe('selection form', () => {
     step = await chat.say('М');
     assert.equal(step.last.text, ru.invalid);
     assert.equal(chat.user.pendingAction.step, 'location');
+  });
+});
+
+// --- Reminder about an unfinished form --------------------------------------
+
+test.describe('unfinished form reminder', () => {
+  const HOUR = 60 * 60 * 1000;
+  const MORNING = new Date(2026, 8, 18, 10, 0);
+
+  test('a client who went quiet in the middle of a form is reminded once', async () => {
+    bot.getData().config.active = true;
+    const chat = createChat();
+    await chat.press('contact:lead');
+    await chat.say('Анна');
+    chat.user.pendingAction.createdAt = MORNING.toISOString();
+    chat.user.lastSeenAt = MORNING.toISOString();
+    telegram.calls = [];
+    assert.deepEqual(await bot.runFormReminders(new Date(MORNING.getTime() + 3 * HOUR)), [chat.user.id]);
+    const reminder = telegram.calls.find((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id));
+    assert.equal(reminder.body.text, INTERACTION.ru.reminderLead);
+    assert.deepEqual(buttonsOf(reminder.body.reply_markup), [INTERACTION.ru.continueForm, INTERACTION.ru.discardForm]);
+    assert.deepEqual(await bot.runFormReminders(new Date(MORNING.getTime() + 5 * HOUR)), [], 'only once');
+
+    // The client comes back (the form is still valid: it was started "now").
+    chat.user.pendingAction.createdAt = new Date().toISOString();
+    const step = await chat.say(INTERACTION.ru.continueForm);
+    assert.equal(step.last.text, LEAD.ru.askPhone, 'the form goes on from the saved step');
+  });
+
+  test('no reminder too early, at night, after the form expired or when the bot is off', async () => {
+    bot.getData().config.active = true;
+    const fresh = createChat();
+    await fresh.press('contact:lead');
+    const lastSeen = Date.parse(fresh.user.lastSeenAt);
+    assert.equal(bot.formReminderDue(fresh.user, new Date(lastSeen + HOUR)), false, 'an hour is too early');
+
+    const night = createChat();
+    await night.press('selection:start');
+    night.user.pendingAction.createdAt = new Date(2026, 8, 18, 20, 0).toISOString();
+    night.user.lastSeenAt = night.user.pendingAction.createdAt;
+    assert.equal(bot.formReminderDue(night.user, new Date(2026, 8, 18, 23, 0)), false, 'not at night');
+    assert.equal(bot.formReminderDue(night.user, new Date(2026, 8, 19, 9, 30)), true, 'in the morning');
+    assert.equal(bot.formReminderDue(night.user, new Date(2026, 8, 19, 20, 30)), false, 'close to expiry');
+
+    const question = createChat();
+    await question.press('contact:question');
+    question.user.pendingAction.createdAt = new Date(2026, 8, 18, 9, 0).toISOString();
+    question.user.lastSeenAt = question.user.pendingAction.createdAt;
+    assert.equal(bot.formReminderDue(question.user, new Date(2026, 8, 18, 14, 0)), false, 'a single question is not a form');
+
+    bot.getData().config.active = false;
+    assert.deepEqual(await bot.runFormReminders(new Date(2026, 8, 19, 10, 0)), [], 'the bot is switched off');
   });
 });
 

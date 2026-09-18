@@ -13,7 +13,7 @@ import './analytics.mjs';
 import { leadSourceFromPayload, normalizeUser, rebuildUserIndex, userByChatId, userById } from './users.mjs';
 import { splitTelegramText, telegramRequest } from './telegram.mjs';
 import './menus.mjs';
-import { viewingDateValue } from './forms.mjs';
+import { formReminderDue, runFormReminders, viewingDateValue } from './forms.mjs';
 import { createInquiry } from './inquiries.mjs';
 import { catalogFilterPanel, catalogRecords } from './catalog.mjs';
 import './sections.mjs';
@@ -65,6 +65,7 @@ export {
   createInquiry,
   deliverBroadcast,
   deliverPropertyAlerts,
+  formReminderDue,
   getData,
   handleApi,
   handleUpdate,
@@ -91,6 +92,7 @@ export {
   runDailyBackup,
   runDailyDigest,
   runFollowUpReminders,
+  runFormReminders,
   runInquiryReminders,
   runViewingNotices,
   runtime,
