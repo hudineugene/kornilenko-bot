@@ -1,5 +1,5 @@
 {
-  "main": "bot.js",
+  "main": "dist/bot.bundle.cjs",
   "output": "dist/sea-prep.blob",
   "disableExperimentalSEAWarning": true,
   "assets": {

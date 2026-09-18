@@ -5,11 +5,15 @@
   "description": "Telegram-бот и веб-панель управления для Construcciones Kornilenko",
   "main": "bot.js",
   "engines": {
-    "node": ">=20.3"
+    "node": ">=22.12"
   },
   "scripts": {
     "start": "node bot.js",
     "test": "node --test tests/*.test.js",
+    "bundle": "esbuild src/main.mjs --bundle --platform=node --format=cjs --target=node24 --outfile=dist/bot.bundle.cjs --legal-comments=none --log-level=warning",
     "build": "powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

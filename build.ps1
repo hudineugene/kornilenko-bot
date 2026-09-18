@@ -4,13 +4,26 @@
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
+if (-not (Test-Path node_modules\esbuild)) {
+  Write-Host 'Установка сборщика (npm ci)...'
+  npm.cmd ci
+  if ($LASTEXITCODE -ne 0) { throw 'Не удалось установить зависимости для сборки' }
+}
+
 Write-Host 'Проверка синтаксиса и тесты...'
-node --check bot.js
-if ($LASTEXITCODE -ne 0) { throw 'bot.js содержит синтаксическую ошибку' }
+Get-ChildItem src\*.mjs | ForEach-Object {
+  node --check $_.FullName
+  if ($LASTEXITCODE -ne 0) { throw ($_.Name + ' содержит синтаксическую ошибку') }
+}
 node --test tests/*.test.js
 if ($LASTEXITCODE -ne 0) { throw 'Тесты не прошли, сборка остановлена' }
 
 New-Item -ItemType Directory -Force dist | Out-Null
+# The modules in src\ become one file: a single executable can only run one script.
+Write-Host 'Сборка модулей в один файл...'
+npm.cmd run bundle --silent
+if ($LASTEXITCODE -ne 0) { throw 'esbuild не смог собрать модули' }
+
 Write-Host 'Подготовка SEA-блоба...'
 node --experimental-sea-config sea-config.json
 if ($LASTEXITCODE -ne 0) { throw 'Не удалось подготовить SEA-блоб' }
