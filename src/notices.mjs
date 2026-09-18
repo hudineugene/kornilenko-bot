@@ -160,12 +160,93 @@ async function runInquiryReminders(now = new Date()) {
   return sent;
 }
 
+// --- Weekly report ---------------------------------------------------------------
+// On Monday morning the admin gets the previous week (Monday to Sunday) in
+// one message, compared with the week before.
+
+const WEEKLY_REPORT_DAY = 1;
+
+function inWeek(value, start, end) {
+  const time = Date.parse(value || '');
+  return Number.isFinite(time) && time >= start.getTime() && time < end.getTime();
+}
+
+function weekFigures(start, end) {
+  const users = Object.values(data.users).filter((user) => inWeek(user.firstSeenAt, start, end));
+  const inquiries = data.inquiries.filter((inquiry) => inWeek(inquiry.createdAt, start, end));
+  return { users, inquiries };
+}
+
+function comparison(current, previous) {
+  if (current === previous) return ' (как на прошлой неделе)';
+  return ' (' + (current > previous ? '↑' : '↓') + ' было ' + previous + ')';
+}
+
+function weeklyReport(now = new Date()) {
+  const thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const start = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 7);
+  const previousStart = new Date(start.getFullYear(), start.getMonth(), start.getDate() - 7);
+  const week = weekFigures(start, thisMonday);
+  const previous = weekFigures(previousStart, start);
+  const pad = (value) => String(value).padStart(2, '0');
+  const label = (date) => pad(date.getDate()) + '.' + pad(date.getMonth() + 1);
+  const lastDay = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 1);
+  const byType = new Map();
+  for (const inquiry of week.inquiries) {
+    const name = inquiryTypeLabel(inquiry);
+    byType.set(name, (byType.get(name) || 0) + 1);
+  }
+  const startKey = localDayKey(start);
+  const endKey = localDayKey(lastDay);
+  const viewings = data.inquiries.filter((inquiry) => inquiry.type === 'viewing' && inquiry.viewing && inquiry.viewing.confirmedAt && !inquiry.viewing.cancelledAt);
+  const heldViewings = viewings.filter((inquiry) => inquiry.viewing.confirmedDate >= startKey && inquiry.viewing.confirmedDate <= endKey).length;
+  const bookedViewings = week.inquiries.filter((inquiry) => inquiry.type === 'viewing').length;
+  const waiting = data.inquiries.filter((inquiry) => inquiry.status === 'new').length;
+  const byProperty = new Map();
+  for (const inquiry of week.inquiries) if (inquiry.propertyId) byProperty.set(inquiry.propertyId, (byProperty.get(inquiry.propertyId) || 0) + 1);
+  const topProperties = Array.from(byProperty).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id, count]) => {
+    const property = data.objects.find((item) => item.id === id);
+    return (property ? localized(property.title, 'ru') || property.reference || id : 'удалённый объект') + ' — ' + count;
+  });
+  const bySource = new Map();
+  for (const user of week.users) bySource.set(user.source || 'без метки', (bySource.get(user.source || 'без метки') || 0) + 1);
+  const sources = Array.from(bySource).sort((a, b) => b[1] - a[1]).map(([name, count]) => name + ' — ' + count);
+  const broadcasts = data.broadcasts.filter((entry) => inWeek(entry.startedAt, start, thisMonday) && Number(entry.sent));
+  const sent = broadcasts.reduce((sum, entry) => sum + Number(entry.sent || 0), 0);
+  const responded = broadcasts.reduce((sum, entry) => sum + (Array.isArray(entry.respondedUserIds) ? entry.respondedUserIds.length : 0), 0);
+  return [
+    '📈 Итоги недели ' + label(start) + '–' + label(lastDay),
+    '',
+    '👥 Новых клиентов: ' + week.users.length + comparison(week.users.length, previous.users.length),
+    '📩 Обращений: ' + week.inquiries.length + comparison(week.inquiries.length, previous.inquiries.length),
+    ...(byType.size ? ['   ' + Array.from(byType).sort((a, b) => b[1] - a[1]).map(([name, count]) => name + ' — ' + count).join(', ')] : []),
+    '📅 Просмотров: записались ' + bookedViewings + ', прошло ' + heldViewings,
+    '⏳ Сейчас без ответа: ' + waiting,
+    ...(topProperties.length ? ['🏠 Больше всего обращений: ' + topProperties.join(', ')] : []),
+    ...(sources.length ? ['📣 Откуда пришли: ' + sources.join(', ')] : []),
+    ...(broadcasts.length ? ['✉️ Рассылок: ' + broadcasts.length + ', получили ' + sent + ', откликнулись ' + responded] : []),
+  ].join('\n');
+}
+
+async function runWeeklyReport(now = new Date()) {
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  if (!adminChatId || !data.config.botToken || now.getDay() !== WEEKLY_REPORT_DAY || now.getHours() < adminMorningHour(DIGEST_HOUR)) return '';
+  const today = localDayKey(now);
+  if (data.lastWeeklyReportFor === today) return '';
+  data.lastWeeklyReportFor = today;
+  scheduleSave();
+  const text = weeklyReport(now);
+  await sendMessage(adminChatId, text, data.config.botToken, { track: false });
+  return text;
+}
+
 function runScheduledNotices() {
   runDailyDigest().catch((error) => recordError('Сводка активности', error));
   runInquiryReminders().catch((error) => recordError('Напоминание об обращениях', error));
   runViewingNotices().catch((error) => recordError('Уведомления о просмотрах', error));
   runFollowUpReminders().catch((error) => recordError('Напоминание связаться с клиентом', error));
   runFormReminders().catch((error) => recordError('Напоминание о незаконченной форме', error));
+  runWeeklyReport().catch((error) => recordError('Итоги недели', error));
 }
 
 export {
@@ -181,5 +262,7 @@ export {
   runFollowUpReminders,
   runInquiryReminders,
   runScheduledNotices,
+  runWeeklyReport,
   sendInquiryToAdministrator,
+  weeklyReport,
 };

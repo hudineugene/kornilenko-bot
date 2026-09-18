@@ -19,7 +19,7 @@ import { catalogFilterPanel, catalogRecords } from './catalog.mjs';
 import './sections.mjs';
 import { handleUpdate, processUpdates } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
-import { runDailyDigest, runFollowUpReminders, runInquiryReminders } from './notices.mjs';
+import { runDailyDigest, runFollowUpReminders, runInquiryReminders, runWeeklyReport, weeklyReport } from './notices.mjs';
 import { budgetLimit, deliverPropertyAlerts, propertyAlertDeliveries, queuePropertyAlerts, selectionMatches } from './alerts.mjs';
 import { confirmViewing, parseViewingDate, runViewingNotices, viewingAgenda } from './viewings.mjs';
 import { myRequestsView } from './requests.mjs';
@@ -98,6 +98,7 @@ export {
   runFormReminders,
   runInquiryReminders,
   runViewingNotices,
+  runWeeklyReport,
   runtime,
   saveDataNow,
   selectionMatches,
@@ -116,6 +117,7 @@ export {
   userById,
   viewingAgenda,
   viewingDateValue,
+  weeklyReport,
   writeRunMarker,
   xlsxWorkbook,
 };

@@ -554,6 +554,7 @@ function normalizeLoadedData(parsed) {
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
     normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
+    normalized.lastWeeklyReportFor = cleanText(parsed.lastWeeklyReportFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);

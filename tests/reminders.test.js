@@ -185,6 +185,39 @@ test.describe('follow-ups', () => {
   });
 });
 
+test('on Monday morning the admin gets last week\'s figures, once', async () => {
+  const data = bot.getData();
+  const at = (day, hour = 12) => new Date(2026, 8, day, hour).toISOString();
+  // Last week: Monday 14.09 – Sunday 20.09. The week before: 07.09 – 13.09.
+  data.users.a = { id: 'a', chatId: 11, firstName: 'A', source: 'instagram', firstSeenAt: at(15), activity: [] };
+  data.users.b = { id: 'b', chatId: 12, firstName: 'B', firstSeenAt: at(20, 22), activity: [] };
+  data.users.c = { id: 'c', chatId: 13, firstName: 'C', firstSeenAt: at(10), activity: [] };
+  data.objects.push({ id: 'villa', status: 'active', title: { ru: 'Вилла', en: '', es: '' } });
+  data.inquiries.push(
+    { id: 'q1', userId: 'a', type: 'question', propertyId: 'villa', status: 'closed', text: '', replies: [], createdAt: at(15) },
+    { id: 'q2', userId: 'b', type: 'viewing', propertyId: 'villa', status: 'in_progress', text: '', replies: [], createdAt: at(16), viewing: { confirmedAt: at(16), confirmedDate: '2026-09-18', confirmedTime: '10:00' } },
+    { id: 'q3', userId: 'b', type: 'lead', status: 'new', text: '', replies: [], createdAt: at(21, 8) },
+  );
+  const monday = new Date(2026, 8, 21, 10, 0);
+  assert.equal(await bot.runWeeklyReport(new Date(2026, 8, 21, 7, 0)), '', 'not before the working morning');
+  assert.equal(await bot.runWeeklyReport(new Date(2026, 8, 22, 10, 0)), '', 'only on Monday');
+  telegram.calls = [];
+  const report = await bot.runWeeklyReport(monday);
+  assert.equal(report, [
+    '📈 Итоги недели 14.09–20.09',
+    '',
+    '👥 Новых клиентов: 2 (↑ было 1)',
+    '📩 Обращений: 2 (↑ было 0)',
+    '   вопрос по объекту — 1, запись на просмотр — 1',
+    '📅 Просмотров: записались 1, прошло 1',
+    '⏳ Сейчас без ответа: 1',
+    '🏠 Больше всего обращений: Вилла — 2',
+    '📣 Откуда пришли: instagram — 1, без метки — 1',
+  ].join('\n'));
+  assert.equal(adminMessages().length, 1);
+  assert.equal(await bot.runWeeklyReport(new Date(2026, 8, 21, 15, 0)), '', 'once');
+});
+
 test('the reminder setting is validated and saved', async () => {
   const data = bot.normalizeLoadedData({ version: 15, config: { reminderHours: 5 } });
   assert.equal(data.config.reminderHours, 2, 'unknown values fall back to 2 hours');
