@@ -1755,12 +1755,12 @@ function validLeadPhone(value) {
   return digits.length >= 7 && digits.length <= 20 ? phone : '';
 }
 
-function preferredTimeWithDate(value, language, createdAt) {
+function preferredTimeWithDate(value, language, answeredAt) {
   const text = cleanText(value, 160);
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
   const optionIndex = copy.timeOptions.indexOf(text);
   if (optionIndex !== 0 && optionIndex !== 1) return text;
-  const date = new Date(createdAt || Date.now());
+  const date = new Date(answeredAt || Date.now());
   if (!Number.isFinite(date.getTime())) return text;
   if (optionIndex === 1) date.setDate(date.getDate() + 1);
   const locale = language === 'en' ? 'en-GB' : language === 'es' ? 'es-ES' : 'ru-RU';
@@ -2011,7 +2011,9 @@ async function handleLeadFormMessage(message, user, token) {
     await sendMessage(user.chatId, [copy.success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
     return true;
   }
-  const preferredTime = preferredTimeWithDate(text, language, pending.createdAt);
+  // "Today" / "tomorrow" are resolved at the moment of the answer: the form
+  // may have been opened the day before.
+  const preferredTime = preferredTimeWithDate(text, language, Date.now());
   if (preferredTime.length < 2) {
     await sendMessage(user.chatId, copy.invalidTime, token, { reply_markup: leadFormKeyboard(language, 'time', user) });
     return true;
@@ -6432,4 +6434,13 @@ module.exports = {
   createInquiry,
   runDailyBackup,
   restoreMissingMedia,
+  text: {
+    lead: LEAD_FORM_TEXT,
+    viewing: VIEWING_FORM_TEXT,
+    selection: SELECTION_FORM_TEXT,
+    menu: MENU_LABELS,
+    interaction: INTERACTION_TEXT,
+    commands: COMMAND_TEXT,
+    propertyActions: PROPERTY_ACTION_TEXT,
+  },
 };
