@@ -54,7 +54,7 @@ test('admin edits of Russian texts survive a restart', () => {
   assert.equal(saved.config.messages.ru.greeting, 'Моё приветствие');
   assert.equal(saved.config.messages.ru.help, 'Моя справка');
   assert.equal(saved.config.messages.ru.fallback, 'Мой ответ');
-  assert.equal(saved.version, 14);
+  assert.equal(saved.version, 15);
   for (const key of ['greeting', 'help', 'fallback']) assert.equal(key in saved.config, false);
 
   const reloaded = bot.normalizeLoadedData(JSON.parse(JSON.stringify(saved)));

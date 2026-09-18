@@ -7,131 +7,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+const { bot, dataFile, buttonsOf, createChat, property, resetData, adminNotifications, calendarDate, cleanup } = require('./helpers/chat');
 
-const workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-dialog-test-'));
-const dataFile = path.join(workDirectory, 'bot-data.json');
-process.env.BOT_NO_START = '1';
-process.env.BOT_DATA_FILE = dataFile;
-process.env.BOT_MEDIA_DIRECTORY = path.join(workDirectory, 'bot-media');
-process.env.NO_AUTO_OPEN = '1';
-
-const bot = require('../bot.js');
 const { lead: LEAD, viewing: VIEWING, selection: SELECTION, menu: MENU, interaction: INTERACTION, propertyActions: PROPERTY } = bot.text;
 
-const TOKEN = '12345:ABCDEFGHIJKLMNOPQRSTUV';
-const ADMIN_CHAT = '9990001';
-const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('dialog test image')]).toString('base64');
-
-// --- Telegram stub -----------------------------------------------------------
-
-const telegram = { calls: [], nextMessageId: 1000 };
-global.fetch = async (url, init) => {
-  const method = String(url).split('/').pop();
-  const body = init && typeof init.body === 'string' ? JSON.parse(init.body) : {};
-  telegram.calls.push({ method, body });
-  telegram.nextMessageId += 1;
-  const result = method === 'sendMediaGroup' ? [{ message_id: telegram.nextMessageId }]
-    : ['deleteMessage', 'answerCallbackQuery', 'setMyCommands'].includes(method) ? true
-      : { message_id: telegram.nextMessageId };
-  return new Response(JSON.stringify({ ok: true, result }), { status: 200, headers: { 'content-type': 'application/json' } });
-};
-
-const settle = () => new Promise((resolve) => setTimeout(resolve, 15));
-
-function buttonsOf(markup) {
-  const rows = markup && (markup.keyboard || markup.inline_keyboard);
-  return rows ? rows.flat().map((button) => button.text) : [];
-}
-
-// --- Simulated chat ----------------------------------------------------------
-
-let updateId = 1;
-let nextUserId = 70000001;
-
-function createChat({ language = 'ru', firstName = 'Анна' } = {}) {
-  const userId = nextUserId++;
-  const from = { id: userId, first_name: firstName, language_code: language };
-  bot.getData().users[String(userId)] = {
-    id: String(userId), chatId: userId, firstName, preferredLanguage: language, activity: [],
-  };
-  let messageId = 1;
-
-  async function deliver(update) {
-    const before = telegram.calls.length;
-    await bot.processUpdates([{ update_id: updateId++, ...update }], TOKEN);
-    await settle();
-    const replies = telegram.calls.slice(before)
-      .filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(userId))
-      .map((call) => ({ text: call.body.text, buttons: buttonsOf(call.body.reply_markup), markup: call.body.reply_markup }));
-    return { replies, last: replies[replies.length - 1] || { text: '', buttons: [] }, text: replies.map((reply) => reply.text).join('\n---\n') };
-  }
-
-  return {
-    id: userId,
-    get user() {
-      return bot.userById(String(userId));
-    },
-    get inquiries() {
-      return bot.getData().inquiries.filter((item) => item.userId === String(userId));
-    },
-    say(text) {
-      messageId += 1;
-      return deliver({ message: { message_id: messageId, date: Math.floor(Date.now() / 1000), from, chat: { id: userId, type: 'private' }, text } });
-    },
-    shareContact(phone) {
-      messageId += 1;
-      return deliver({ message: { message_id: messageId, date: Math.floor(Date.now() / 1000), from, chat: { id: userId, type: 'private' }, contact: { phone_number: phone, user_id: userId, first_name: firstName } } });
-    },
-    press(data) {
-      messageId += 1;
-      return deliver({ callback_query: { id: 'cb' + updateId, from, data, message: { message_id: 5000 + messageId, date: Math.floor(Date.now() / 1000), chat: { id: userId, type: 'private' }, text: '' } } });
-    },
-  };
-}
-
-function resetData() {
-  const data = bot.normalizeLoadedData({ version: 14 });
-  data.config.botToken = TOKEN;
-  data.config.adminChatId = ADMIN_CHAT;
-  data.config.active = false;
-  data.bot = { id: 5550001, username: 'test_bot', firstName: 'Test' };
+test.beforeEach(() => resetData((data) => {
   data.objects.push(property('villa-marbella-01', 'Вилла в Марбелье', 'active'));
   data.objects.push(property('flat-reserved-02', 'Квартира у моря', 'reserved'));
-  bot.setData(data);
-  telegram.calls = [];
-  return data;
-}
-
-function property(id, title, status) {
-  return {
-    id,
-    status,
-    reference: id.toUpperCase(),
-    title: { ru: title, en: title + ' (EN)', es: title + ' (ES)' },
-    imagesByLanguage: {
-      ru: [{ id: id + '-ru', mimeType: 'image/png', dataBase64: PNG }],
-      en: [{ id: id + '-en', mimeType: 'image/png', dataBase64: PNG }],
-      es: [],
-    },
-  };
-}
-
-function calendarDate(date, language = 'ru') {
-  const locale = language === 'en' ? 'en-GB' : language === 'es' ? 'es-ES' : 'ru-RU';
-  return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
-}
-
-function adminNotifications() {
-  return telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === ADMIN_CHAT).map((call) => call.body.text);
-}
-
-test.beforeEach(() => resetData());
-test.after(() => {
-  bot.server.close();
-  fs.rmSync(workDirectory, { recursive: true, force: true });
-});
+}));
+test.after(cleanup);
 
 // --- Callback request form ---------------------------------------------------
 
@@ -222,8 +106,6 @@ test.describe('callback request form', () => {
     await chat.say('Утром');
     await chat.say(ru.confirm);
 
-    // The same button pressed again within 1.4 s is treated as a double click.
-    chat.user.lastCallback = null;
     let step = await chat.press('contact:lead');
     const savedName = ru.savedName + ': Анна';
     assert.ok(step.last.buttons.includes(savedName));

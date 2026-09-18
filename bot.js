@@ -71,7 +71,7 @@ const ADMIN_ASSETS = {
   sidebarLogo: loadBundledAsset(ADMIN_ASSET_DIRECTORY, 'admin-sidebar-logo', 'kornilenko_logo_sidebar_320.png', 'image/png'),
 };
 
-const DATA_VERSION = 14;
+const DATA_VERSION = 15;
 
 const defaultData = {
   version: DATA_VERSION,
@@ -119,7 +119,7 @@ const defaultData = {
       },
     },
     active: true,
-    notifyMode: 'all',
+    notifyMode: 'inquiries',
   },
   bot: {
     id: null,
@@ -436,7 +436,8 @@ function normalizeLoadedData(parsed) {
     // Text migrations below rewrite stored texts, so they must run only once:
     // for files written before DATA_VERSION. Running them on every load used
     // to silently discard the administrator's own edits after each restart.
-    const legacyFormat = !(Number(parsed.version) >= DATA_VERSION);
+    const storedVersion = Number(parsed.version) || 0;
+    const legacyFormat = storedVersion < 14;
     const messages = {};
     const menu = {};
     for (const language of ['ru', 'en', 'es']) {
@@ -611,7 +612,11 @@ function normalizeLoadedData(parsed) {
       // Notifications sent before this version have no entry in the map.
       adminReplyTargetsSince: cleanText(parsed.adminReplyTargetsSince, 40) || new Date().toISOString(),
     };
-    normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'all';
+    // Version 15 made "only inquiries" the default: navigation is sent as a
+    // daily digest instead of one message per click.
+    if (storedVersion < 15) normalized.config.notifyMode = 'inquiries';
+    normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
+    normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;
 }
@@ -811,6 +816,48 @@ function runDailyBackup(now = new Date()) {
     if (!needed.has(fileName)) fs.unlinkSync(path.join(MEDIA_BACKUP_DIRECTORY, fileName));
   }
   return target;
+}
+
+const DIGEST_HOUR = 9;
+
+// In "only inquiries" mode the admin gets yesterday's activity once a day,
+// after DIGEST_HOUR local time, instead of a message per click.
+function activityDigest(dayKeyValue) {
+  const daily = data.analytics.daily[dayKeyValue] || {};
+  const newUsers = Object.values(data.users).filter((user) => String(user.firstSeenAt || '').slice(0, 10) === dayKeyValue).length;
+  const sections = Object.entries(daily.menu || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => String(MENU_LABELS.ru[key] || key).replace(/^[^\p{L}\p{N}]+/u, '') + ' — ' + count);
+  const received = Number(daily.received || 0);
+  const inquiries = Number(daily.inquiries || 0);
+  if (!newUsers && !received && !inquiries && !sections.length) return '';
+  const [year, month, day] = dayKeyValue.split('-');
+  return [
+    '📊 Активность за ' + day + '.' + month + '.' + year,
+    '',
+    'Новых пользователей: ' + newUsers,
+    'Сообщений от клиентов: ' + received,
+    'Новых обращений: ' + inquiries,
+    ...(sections.length ? ['', 'Открывали разделы:', ...sections.map((line) => '• ' + line)] : []),
+  ].join('\n');
+}
+
+async function runDailyDigest(now = new Date()) {
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  if (data.config.notifyMode !== 'inquiries' || !adminChatId || !data.config.botToken || now.getHours() < DIGEST_HOUR) return '';
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const key = dayKey(yesterday);
+  if (data.lastDigestFor === key) return '';
+  const text = activityDigest(key);
+  data.lastDigestFor = key;
+  scheduleSave();
+  if (text) await sendMessage(adminChatId, text, data.config.botToken, { track: false });
+  return text;
+}
+
+function runDailyDigestSafely() {
+  runDailyDigest().catch((error) => recordError('Сводка активности', error));
 }
 
 function runDailyBackupSafely() {
@@ -1362,9 +1409,9 @@ const PROPERTY_CONDITION_LABELS = {
   es: { new: 'Nuevo', renovated: 'Reformado', needs_renovation: 'Para reformar', under_construction: 'En construcción' },
 };
 const PROPERTY_ACTION_TEXT = {
-  ru: { details: 'Подробнее', contactManager: 'Связаться с менеджером', share: 'Поделиться', sharePrefix: 'Посмотрите этот объект: ', viewWebsite: 'Посмотреть на сайте', openMap: 'Открыть карту', interest: 'Заказать звонок', viewing: 'Записаться на просмотр', availability: 'Уточнить доступность', similar: 'Показать похожие объекты', question: 'Задать вопрос', gallery: 'Все фотографии', favoriteButton: 'Добавить в избранное', favoriteRemoveButton: 'Убрать из избранного', favoriteAdd: 'Добавлено в избранное', favoriteRemove: 'Удалено из избранного', askQuestion: 'Напишите ваш вопрос по этому объекту. Можно отправить текст, фотографию или голосовое сообщение.', cancel: 'Отменить действие', cancelled: 'Действие отменено', received: 'Спасибо! Менеджер получил ваше обращение и ответит в этом чате.', emptyFavorites: 'В избранном пока нет объектов. Добавляйте их кнопкой ❤️ под карточкой.', forRent: 'Аренда', forSale: 'Продажа', reserved: 'Забронирован', available: 'Доступен', priceMonth: '/ месяц', priceWeek: '/ неделю', priceOnRequest: 'Цена по запросу', floor: 'Этаж', reference: '№ объекта:', updated: 'Обновлено', propertyUnavailable: 'Этот объект уже недоступен.', propertyHeading: 'Объект', requestViewingPrefix: 'Запрос на просмотр:', questionPrefix: 'Вопрос по объекту:', interestPrefix: 'Интересует объект:', noSimilar: 'Сейчас похожих объектов нет. Менеджер может предложить другие варианты.', similarHeading: 'Похожий объект', managerPrompt: 'Как менеджер может помочь по этому объекту?', photosUnavailable: 'Фотографии пока недоступны', nextProperty: 'Следующий объект →', nextPrompt: 'Что вы хотите сделать дальше?' },
-  en: { details: 'View details', contactManager: 'Contact a manager', share: 'Share property', sharePrefix: 'Take a look at this property: ', viewWebsite: 'View on website', openMap: 'Open map', interest: 'Request a call', viewing: 'Book a viewing', availability: 'Check availability', similar: 'Show similar properties', question: 'Ask a question', gallery: 'All photos', favoriteButton: 'Add to favorites', favoriteRemoveButton: 'Remove from favorites', favoriteAdd: 'Added to favorites', favoriteRemove: 'Removed from favorites', askQuestion: 'Send your question about this property. You can send text, a photo, or a voice message.', cancel: 'Cancel action', cancelled: 'Action cancelled', received: 'Thank you! A manager received your message and will reply in this chat.', emptyFavorites: 'Your favorites are empty. Add properties with the ❤️ button under a card.', forRent: 'For rent', forSale: 'For sale', reserved: 'Reserved', available: 'Available', priceMonth: '/ month', priceWeek: '/ week', priceOnRequest: 'Price on request', floor: 'Floor', reference: 'Ref:', updated: 'Updated', propertyUnavailable: 'This property is no longer available.', propertyHeading: 'Property', requestViewingPrefix: 'Viewing request:', questionPrefix: 'Question about:', interestPrefix: 'Interested in:', noSimilar: 'No similar properties are available right now. A manager can suggest alternatives.', similarHeading: 'Similar property', managerPrompt: 'How would you like the manager to help with this property?', photosUnavailable: 'Photos are not available yet', nextProperty: 'Next property →', nextPrompt: 'What would you like to do next?' },
-  es: { details: 'Ver detalles', contactManager: 'Contactar con un gestor', share: 'Compartir inmueble', sharePrefix: 'Mira este inmueble: ', viewWebsite: 'Ver en el sitio web', openMap: 'Abrir mapa', interest: 'Solicitar una llamada', viewing: 'Reservar una visita', availability: 'Consultar disponibilidad', similar: 'Ver inmuebles similares', question: 'Hacer una pregunta', gallery: 'Todas las fotos', favoriteButton: 'Añadir a favoritos', favoriteRemoveButton: 'Quitar de favoritos', favoriteAdd: 'Añadido a favoritos', favoriteRemove: 'Eliminado de favoritos', askQuestion: 'Escribe tu pregunta sobre este inmueble. Puedes enviar texto, una foto o un mensaje de voz.', cancel: 'Cancelar acción', cancelled: 'Acción cancelada', received: '¡Gracias! Un gestor ha recibido tu mensaje y responderá en este chat.', emptyFavorites: 'Todavía no tienes favoritos. Añade inmuebles con el botón ❤️ de la ficha.', forRent: 'Alquiler', forSale: 'Venta', reserved: 'Reservado', available: 'Disponible', priceMonth: '/ mes', priceWeek: '/ semana', priceOnRequest: 'Precio a consultar', floor: 'Planta', reference: 'Ref.:', updated: 'Actualizado', propertyUnavailable: 'Este inmueble ya no está disponible.', propertyHeading: 'Inmueble', requestViewingPrefix: 'Solicitud de visita:', questionPrefix: 'Pregunta sobre:', interestPrefix: 'Interés en:', noSimilar: 'No hay inmuebles similares disponibles ahora mismo. Un gestor puede sugerirte alternativas.', similarHeading: 'Inmueble similar', managerPrompt: '¿Cómo quieres que te ayude el gestor con este inmueble?', photosUnavailable: 'Las fotos aún no están disponibles', nextProperty: 'Siguiente inmueble →', nextPrompt: '¿Qué quieres hacer ahora?' },
+  ru: { details: 'Подробнее', contactManager: 'Связаться с менеджером', share: 'Поделиться', sharePrefix: 'Посмотрите этот объект: ', viewWebsite: 'Посмотреть на сайте', openMap: 'Открыть карту', interest: 'Заказать звонок', viewing: 'Записаться на просмотр', availability: 'Уточнить доступность', similar: 'Показать похожие объекты', question: 'Задать вопрос', gallery: 'Все фотографии', favoriteButton: 'Добавить в избранное', favoriteRemoveButton: 'Убрать из избранного', favoriteAdd: 'Добавлено в избранное', favoriteRemove: 'Удалено из избранного', askQuestion: 'Напишите ваш вопрос по этому объекту. Можно отправить текст, фотографию или голосовое сообщение.', cancel: 'Отменить действие', cancelled: 'Действие отменено', received: 'Спасибо! Менеджер получил ваше обращение и ответит в этом чате.', emptyFavorites: 'В избранном пока нет объектов. Добавляйте их кнопкой ❤️ под карточкой.', forRent: 'Аренда', forSale: 'Продажа', reserved: 'Забронирован', available: 'Доступен', priceMonth: '/ месяц', priceWeek: '/ неделю', priceOnRequest: 'Цена по запросу', floor: 'Этаж', reference: '№ объекта:', updated: 'Обновлено', propertyUnavailable: 'Этот объект уже недоступен.', propertyHeading: 'Объект', requestViewingPrefix: 'Запрос на просмотр:', questionPrefix: 'Вопрос по объекту:', interestPrefix: 'Интересует объект:', noSimilar: 'Сейчас похожих объектов нет. Менеджер может предложить другие варианты.', similarHeading: 'Похожий объект', managerPrompt: 'Как менеджер может помочь по этому объекту?', photosUnavailable: 'Фотографии пока недоступны', nextProperty: 'Следующий объект →', nextPrompt: 'Что вы хотите сделать дальше?', askPrice: 'Узнать цену', promotionAsk: 'Узнать подробнее' },
+  en: { details: 'View details', contactManager: 'Contact a manager', share: 'Share property', sharePrefix: 'Take a look at this property: ', viewWebsite: 'View on website', openMap: 'Open map', interest: 'Request a call', viewing: 'Book a viewing', availability: 'Check availability', similar: 'Show similar properties', question: 'Ask a question', gallery: 'All photos', favoriteButton: 'Add to favorites', favoriteRemoveButton: 'Remove from favorites', favoriteAdd: 'Added to favorites', favoriteRemove: 'Removed from favorites', askQuestion: 'Send your question about this property. You can send text, a photo, or a voice message.', cancel: 'Cancel action', cancelled: 'Action cancelled', received: 'Thank you! A manager received your message and will reply in this chat.', emptyFavorites: 'Your favorites are empty. Add properties with the ❤️ button under a card.', forRent: 'For rent', forSale: 'For sale', reserved: 'Reserved', available: 'Available', priceMonth: '/ month', priceWeek: '/ week', priceOnRequest: 'Price on request', floor: 'Floor', reference: 'Ref:', updated: 'Updated', propertyUnavailable: 'This property is no longer available.', propertyHeading: 'Property', requestViewingPrefix: 'Viewing request:', questionPrefix: 'Question about:', interestPrefix: 'Interested in:', noSimilar: 'No similar properties are available right now. A manager can suggest alternatives.', similarHeading: 'Similar property', managerPrompt: 'How would you like the manager to help with this property?', photosUnavailable: 'Photos are not available yet', nextProperty: 'Next property →', nextPrompt: 'What would you like to do next?', askPrice: 'Ask for the price', promotionAsk: 'Learn more' },
+  es: { details: 'Ver detalles', contactManager: 'Contactar con un gestor', share: 'Compartir inmueble', sharePrefix: 'Mira este inmueble: ', viewWebsite: 'Ver en el sitio web', openMap: 'Abrir mapa', interest: 'Solicitar una llamada', viewing: 'Reservar una visita', availability: 'Consultar disponibilidad', similar: 'Ver inmuebles similares', question: 'Hacer una pregunta', gallery: 'Todas las fotos', favoriteButton: 'Añadir a favoritos', favoriteRemoveButton: 'Quitar de favoritos', favoriteAdd: 'Añadido a favoritos', favoriteRemove: 'Eliminado de favoritos', askQuestion: 'Escribe tu pregunta sobre este inmueble. Puedes enviar texto, una foto o un mensaje de voz.', cancel: 'Cancelar acción', cancelled: 'Acción cancelada', received: '¡Gracias! Un gestor ha recibido tu mensaje y responderá en este chat.', emptyFavorites: 'Todavía no tienes favoritos. Añade inmuebles con el botón ❤️ de la ficha.', forRent: 'Alquiler', forSale: 'Venta', reserved: 'Reservado', available: 'Disponible', priceMonth: '/ mes', priceWeek: '/ semana', priceOnRequest: 'Precio a consultar', floor: 'Planta', reference: 'Ref.:', updated: 'Actualizado', propertyUnavailable: 'Este inmueble ya no está disponible.', propertyHeading: 'Inmueble', requestViewingPrefix: 'Solicitud de visita:', questionPrefix: 'Pregunta sobre:', interestPrefix: 'Interés en:', noSimilar: 'No hay inmuebles similares disponibles ahora mismo. Un gestor puede sugerirte alternativas.', similarHeading: 'Inmueble similar', managerPrompt: '¿Cómo quieres que te ayude el gestor con este inmueble?', photosUnavailable: 'Las fotos aún no están disponibles', nextProperty: 'Siguiente inmueble →', nextPrompt: '¿Qué quieres hacer ahora?', askPrice: 'Consultar el precio', promotionAsk: 'Más información' },
 };
 const LEAD_FORM_TEXT = {
   ru: {
@@ -2552,9 +2599,11 @@ function mergeIntoLatestInquiry(user, text, type, context) {
   const latest = data.inquiries.find((item) => item.userId === String(user.id));
   if (!latest) return null;
   const combined = latest.text + '\n\n' + text;
+  // A question to the manager and the free messages that follow it are one
+  // conversation, so these two types continue each other.
   const continuation = MERGEABLE_INQUIRY_TYPES.includes(type)
     && !context.propertyId && !context.lead && !context.selection
-    && latest.type === type && !latest.propertyId && latest.status === 'new'
+    && MERGEABLE_INQUIRY_TYPES.includes(latest.type) && !latest.propertyId && latest.status === 'new'
     && Date.now() - Date.parse(latest.updatedAt) < INQUIRY_MERGE_WINDOW_MS
     && combined.length <= 4000;
   // Only new inquiries count towards the limit.
@@ -2567,10 +2616,20 @@ function mergeIntoLatestInquiry(user, text, type, context) {
   return latest;
 }
 
+// Inquiries that just received another message from the client. The client
+// was already told that the message is with the manager, so the bot does not
+// repeat it for every message sent in a row.
+const mergedInquiries = new WeakSet();
+
+function inquiryWasMerged(inquiry) {
+  return Boolean(inquiry && mergedInquiries.has(inquiry));
+}
+
 function createInquiry(user, text, context = {}) {
   const type = ['question', 'interest', 'selection', 'viewing', 'lead', 'general'].includes(context.type) ? context.type : 'general';
   const merged = mergeIntoLatestInquiry(user, cleanText(text, 4000), type, context);
   if (merged) {
+    mergedInquiries.add(merged);
     scheduleSave();
     const notify = () => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в обращении' });
     if (context.sourceMessage && !context.sourceMessage.text) {
@@ -2623,15 +2682,68 @@ function createInquiry(user, text, context = {}) {
   return inquiry;
 }
 
-function administratorTargetLines(user, inquiryId = '', sourceMessageId = null) {
-  const lines = [
-    '',
-    '↩️ Ответьте на это сообщение, чтобы написать пользователю от имени бота.',
-    'Получатель ID: ' + String(user.chatId),
-  ];
-  if (inquiryId) lines.push('Обращение ID: ' + inquiryId);
-  if (Number.isFinite(Number(sourceMessageId))) lines.push('Сообщение пользователя ID: ' + Number(sourceMessageId));
-  return lines;
+const INQUIRY_TYPE_LABELS = {
+  question: 'вопрос по объекту',
+  interest: 'интерес к объекту',
+  selection: 'подбор недвижимости',
+  viewing: 'запись на просмотр',
+  lead: 'заявка на звонок',
+  general: 'сообщение',
+};
+
+function inquiryTypeLabel(inquiry) {
+  if (inquiry.type === 'question' && !inquiry.propertyId) return 'вопрос менеджеру';
+  return INQUIRY_TYPE_LABELS[inquiry.type] || 'сообщение';
+}
+
+const INQUIRY_STATUS_LABELS = { new: 'новое', in_progress: 'в работе', closed: 'закрыто' };
+
+// Buttons under an inquiry notification let the admin keep statuses from
+// Telegram, without opening the panel.
+function inquiryStatusMarkup(inquiry) {
+  if (!inquiry) return null;
+  if (inquiry.status === 'closed') return { inline_keyboard: [[{ text: '↩️ Открыть снова', callback_data: 'inq:new:' + inquiry.id }]] };
+  const row = [];
+  if (inquiry.status !== 'in_progress') row.push({ text: '⏳ В работу', callback_data: 'inq:in_progress:' + inquiry.id });
+  row.push({ text: '✅ Закрыть', callback_data: 'inq:closed:' + inquiry.id });
+  return { inline_keyboard: [row] };
+}
+
+async function handleInquiryStatusCallback(query, token) {
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  const chatId = query.message && query.message.chat ? String(query.message.chat.id) : '';
+  // Only buttons in the admin chat may change statuses.
+  if (!adminChatId || chatId !== adminChatId) {
+    await acknowledgeCallback(query, token, INTERACTION_TEXT.ru.stale);
+    return;
+  }
+  const [, status, ...rest] = String(query.data || '').split(':');
+  const inquiry = data.inquiries.find((item) => item.id === rest.join(':'));
+  if (!inquiry || !Object.hasOwn(INQUIRY_STATUS_LABELS, status)) {
+    await acknowledgeCallback(query, token, 'Обращение не найдено — возможно, оно удалено.');
+    return;
+  }
+  inquiry.status = status;
+  inquiry.updatedAt = new Date().toISOString();
+  saveDataNow();
+  await acknowledgeCallback(query, token, 'Статус: ' + INQUIRY_STATUS_LABELS[status]);
+  try {
+    await telegramRequest(token, 'editMessageReplyMarkup', {
+      chat_id: chatId,
+      message_id: query.message.message_id,
+      reply_markup: inquiryStatusMarkup(inquiry),
+    });
+  } catch {
+    // The status is saved even if Telegram no longer allows editing the buttons.
+  }
+}
+
+// Navigation notices repeat what is already in the title ("Opened «Offers»"
+// + "🔥 Offers") or show a bare command; those details are left out.
+function detailsWorthShowing(title, details) {
+  if (!details || details.startsWith('/')) return false;
+  const plain = details.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  return !plain || !String(title).includes(plain);
 }
 
 // 'send', a one-time 'notice' that the user is muted, or 'drop'.
@@ -2662,19 +2774,19 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
     await sendMessage(adminChatId, '⚠️ ' + name + username + ' (ID ' + user.id + ') присылает слишком много сообщений. Уведомления о новых сообщениях этого пользователя приостановлены на ' + Math.round(ADMIN_MESSAGE_NOTIFY_LIMIT.windowMs / 60000) + ' минут. Все сообщения сохраняются в панели.', data.config.botToken, { track: false }).catch((error) => recordError('Уведомление администратору', error));
     return false;
   }
-  const notification = [
-    'Действие пользователя',
-    '',
-    'Пользователь: ' + name + username,
-    'ID: ' + user.id,
-    'Язык: ' + (LANGUAGE_NAMES[user.preferredLanguage] || 'не выбран'),
-    'Действие: ' + cleanText(title, 160),
-  ];
-  if (details) notification.push('', cleanText(details, 4000));
-  notification.push(...administratorTargetLines(user, inquiryId, sourceMessageId));
+  // Routing of replies does not depend on this text (see adminReplyTargets),
+  // so it only carries what a person needs to read.
+  const language = user.preferredLanguage ? ' · ' + user.preferredLanguage.toUpperCase() : '';
+  const who = '👤 ' + name + username + language;
+  const cleanDetails = cleanText(details, 4000);
+  const notification = options.important
+    ? ['📩 ' + cleanText(title, 160), who, '', cleanDetails, '', '↩️ Ответьте на это сообщение — ответ получит клиент.']
+    : ['👀 ' + cleanText(title, 160), who, ...(detailsWorthShowing(title, cleanDetails) ? ['', cleanDetails] : [])];
   try {
     const messageIds = [];
-    await sendMessage(adminChatId, notification.join('\n'), data.config.botToken, { track: false, messageIds });
+    const inquiry = options.important && inquiryId ? data.inquiries.find((item) => item.id === inquiryId) : null;
+    const markup = inquiryStatusMarkup(inquiry);
+    await sendMessage(adminChatId, notification.filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n').trim(), data.config.botToken, { track: false, messageIds, ...(markup ? { reply_markup: markup } : {}) });
     rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId });
     if (!data.config.adminNotificationVerifiedAt) {
       data.config.adminNotificationVerifiedAt = new Date().toISOString();
@@ -2693,12 +2805,19 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
 async function notifyAdministrator(inquiry, user, options = {}) {
   const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
   const propertyLine = property
-    ? 'Объект: ' + (localized(property.title, inquiry.language) || property.reference || property.id)
+    ? '🏠 ' + (localized(property.title, inquiry.language) || property.reference || property.id)
     : '';
-  return notifyAdministratorAction(user, options.title || 'Новое обращение', [
-    'Тип: ' + ({ question: 'вопрос по объекту', interest: 'интерес к объекту', selection: 'подбор недвижимости', viewing: 'запись на просмотр', lead: 'заявка на звонок', general: 'сообщение' }[inquiry.type] || 'сообщение'),
+  let text = options.text || inquiry.text;
+  // Property requests start with "Question about: <title>", already shown above.
+  if (property) {
+    for (const type of ['question', 'viewing', 'interest']) {
+      const prefix = propertyRequestText(property, inquiry.language, type);
+      if (text.startsWith(prefix)) text = text.slice(prefix.length).trim();
+    }
+  }
+  return notifyAdministratorAction(user, (options.title || 'Новое обращение') + ': ' + inquiryTypeLabel(inquiry), [
     propertyLine,
-    options.text || inquiry.text,
+    text,
   ].filter(Boolean).join('\n'), inquiry.id, inquiry.sourceMessageId, { important: true });
 }
 
@@ -2864,7 +2983,9 @@ function administratorReplyTarget(message) {
 
 function looksLikeUserNotification(message) {
   const replied = message && message.reply_to_message;
-  return Boolean(replied && /Получатель ID:/.test(String(replied.text || replied.caption || '')));
+  if (!replied) return false;
+  if (data.bot.id && replied.from) return Number(replied.from.id) === Number(data.bot.id);
+  return /Получатель ID:/.test(String(replied.text || replied.caption || ''));
 }
 
 async function handleAdministratorReply(message, token) {
@@ -2993,11 +3114,17 @@ function propertyReadyForLanguage(record, language) {
   );
 }
 
+function priceOnRequest(record, language) {
+  return objectPriceText(record, language) === (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).priceOnRequest;
+}
+
 function contentButtons(record, language, user, kind = 'promotion', catalog = null) {
   const rows = [];
   const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   if (kind === 'property') {
     const isFavorite = Boolean(user && Array.isArray(user.favorites) && user.favorites.includes(record.id));
+    // Without a price the shortest path to a request is asking for it.
+    if (priceOnRequest(record, language)) rows.push([{ text: '💰 ' + action.askPrice, callback_data: 'property:price:' + record.id }]);
     rows.push([{ text: '📋 ' + action.details, callback_data: 'property:details:' + record.id }]);
     rows.push([{ text: '💬 ' + action.contactManager, callback_data: 'property:manager:' + record.id }]);
     rows.push([{ text: isFavorite ? '💔 ' + action.favoriteRemoveButton : '❤️ ' + action.favoriteButton, callback_data: 'property:favorite:' + record.id }]);
@@ -3365,7 +3492,10 @@ async function openPendingStartPayload(user, token) {
 
 function promotionButtons(record, language, page, totalPages) {
   const base = contentButtons(record, language);
-  const rows = base && Array.isArray(base.inline_keyboard) ? [...base.inline_keyboard] : [];
+  const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  // Every promotion lets the client respond with one tap.
+  const rows = [[{ text: '💬 ' + action.promotionAsk, callback_data: 'promotions:ask:' + record.id }]];
+  if (base && Array.isArray(base.inline_keyboard)) rows.push(...base.inline_keyboard);
   if (totalPages > 1) {
     const previousPage = (page - 1 + totalPages) % totalPages;
     const nextPage = (page + 1) % totalPages;
@@ -3398,7 +3528,8 @@ async function sendPromotionPage(chatId, user, token, page = 0) {
   const record = records[safePage];
   const title = localizedExact(record.title, language);
   const body = localizedExact(record.text, language);
-  const caption = [('🔥 ' + title).trim(), body, (safePage + 1) + ' / ' + records.length].filter(Boolean).join('\n\n').slice(0, 1000);
+  // The page number is shown on the pager buttons when there is more than one.
+  const caption = [('🔥 ' + title).trim(), body].filter(Boolean).join('\n\n').slice(0, 1000);
   const markup = promotionButtons(record, language, safePage, records.length);
   const previousMessageIds = Array.isArray(user.catalogMessageIds) ? [...user.catalogMessageIds] : [];
   let message;
@@ -3560,11 +3691,29 @@ async function handleAboutCallback(query, token) {
 async function handlePromotionCallback(query, token) {
   const rawPage = String(query.data || '').split(':')[1] || '0';
   if (rawPage === 'none') return acknowledgeCallback(query, token);
+  if (rawPage === 'ask') return handlePromotionQuestion(query, token);
   const page = Number(rawPage);
   const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
   const user = normalizeUser(query.from, chatId, false);
   await acknowledgeCallback(query, token);
   await sendPromotionPage(chatId, user, token, page);
+}
+
+async function handlePromotionQuestion(query, token) {
+  const promotionId = String(query.data || '').split(':').slice(2).join(':');
+  const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
+  const user = normalizeUser(query.from, chatId, false);
+  const language = user.preferredLanguage || 'ru';
+  const text = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  const record = data.promotions.find((item) => item.id === promotionId && promotionIsActive(item));
+  if (!record) {
+    await acknowledgeCallback(query, token, (INTERACTION_TEXT[language] || INTERACTION_TEXT.ru).stale);
+    return;
+  }
+  await acknowledgeCallback(query, token);
+  const title = localizedExact(record.title, language) || localizedExact(record.title, 'ru');
+  createInquiry(user, '🔥 Акция «' + title + '»: клиент хочет узнать подробнее', { type: 'question' });
+  await sendMessage(chatId, [text.received, '🔥 ' + title].join('\n\n'), token, { reply_markup: menuKeyboard(language) });
 }
 
 async function handleLanguageCallback(query, token) {
@@ -3823,6 +3972,13 @@ async function handlePropertyCallback(query, token) {
     await sendUiMessage(chatId, user, [title, text.managerPrompt].filter(Boolean).join('\n\n'), token, { reply_markup: propertyManagerMarkup(record, language, true) });
     return;
   }
+  if (actionName === 'price') {
+    recordPropertyEvent(record.id, 'questions');
+    await acknowledgeCallback(query, token);
+    createInquiry(user, propertyRequestText(record, language, 'question') + '\n\n' + text.askPrice, { type: 'question', propertyId: record.id });
+    await sendMessage(chatId, [text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
+    return;
+  }
   if (actionName === 'availability') {
     recordPropertyEvent(record.id, 'availability');
     await acknowledgeCallback(query, token);
@@ -3951,6 +4107,10 @@ async function handlePropertyCallback(query, token) {
 async function handleUpdate(update, token) {
   if (update.message_reaction) {
     await handleMessageReaction(update.message_reaction);
+    return;
+  }
+  if (update.callback_query && String(update.callback_query.data || '').startsWith('inq:')) {
+    await handleInquiryStatusCallback(update.callback_query, token);
     return;
   }
   if (update.callback_query) {
@@ -4113,8 +4273,8 @@ async function handleUpdate(update, token) {
       await sendMessage(message.chat.id, copy.stale, token, { reply_markup: menuKeyboard(user.preferredLanguage) });
       return;
     }
-    createInquiry(user, text || summary, { type: 'general', sourceMessage: message });
-    answer = fillTemplate(messages.fallback, user);
+    const inquiry = createInquiry(user, text || summary, { type: 'general', sourceMessage: message });
+    answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
   }
   else if (user.pendingAction && text === (INTERACTION_TEXT[user.preferredLanguage] || INTERACTION_TEXT.ru).continueForm) {
     await showPendingActionStep(user, token);
@@ -4140,9 +4300,9 @@ async function handleUpdate(update, token) {
   }
   else if (user.pendingAction && user.pendingAction.type === 'manager_question' && (!text || !menuItemForText(text, user.preferredLanguage))) {
     user.pendingAction = null;
-    createInquiry(user, text || summary, { type: 'question', sourceMessage: message });
+    const inquiry = createInquiry(user, text || summary, { type: 'question', sourceMessage: message });
     scheduleSave();
-    answer = (MANAGER_CONTACT_TEXT[user.preferredLanguage] || MANAGER_CONTACT_TEXT.ru).received;
+    answer = inquiryWasMerged(inquiry) ? '' : (MANAGER_CONTACT_TEXT[user.preferredLanguage] || MANAGER_CONTACT_TEXT.ru).received;
   }
   else if (user.pendingAction && (!text || !menuItemForText(text, user.preferredLanguage))) {
     const pending = user.pendingAction;
@@ -4226,13 +4386,13 @@ async function handleUpdate(update, token) {
         answer = fillTemplate(rule.answer, user);
       }
       else {
-        createInquiry(user, text, { type: 'general', sourceMessage: message });
-        answer = fillTemplate(messages.fallback, user);
+        const inquiry = createInquiry(user, text, { type: 'general', sourceMessage: message });
+        answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
       }
     }
   } else {
-    createInquiry(user, summary, { type: 'general', sourceMessage: message });
-    answer = fillTemplate(messages.fallback, user);
+    const inquiry = createInquiry(user, summary, { type: 'general', sourceMessage: message });
+    answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
   }
 
   if (answer) {
@@ -4748,7 +4908,7 @@ function safeState(session) {
       active: data.config.active,
       adminChatId: data.config.adminChatId || '',
       adminNotificationVerifiedAt: data.config.adminNotificationVerifiedAt || '',
-      notifyMode: data.config.notifyMode || 'all',
+      notifyMode: data.config.notifyMode || 'inquiries',
     },
     welcomeImages: Object.fromEntries(['ru', 'en', 'es'].map((language) => {
       const image = data.welcomeImages[language];
@@ -6110,7 +6270,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
       {key:"commands",title:"Команды",note:"Отмена и ответ на неизвестную команду"}
     ];
     var interfaceLabels={text:"Основной текст",objects:"Кнопка «Наши объекты»",selection:"Кнопка «Помочь подобрать»",promotions:"Кнопка «Акции»",favorites:"Кнопка «Избранное»",contacts:"Кнопка «Связаться с менеджером»",more:"Кнопка «Ещё»",request:"Кнопка заказа звонка",about:"Кнопка «О компании»",help:"Кнопка «Помощь»",language:"Кнопка смены языка",intro:"Вступление",call:"Позвонить",whatsapp:"WhatsApp",telegram:"Telegram",website:"Сайт",map:"Карта",question:"Кнопка вопроса",askQuestion:"Приглашение написать вопрос",received:"Подтверждение получения",replyHeader:"Заголовок ответа менеджера",cancel:"Кнопка отмены",mainMenu:"Главное меню",backToCard:"Вернуться к карточке",close:"Закрыть",browse:"Посмотреть объекты",failed:"Не удалось выполнить действие",duplicate:"Просьба подождать",stale:"Устаревшее действие",unfinished:"Незавершённая форма",continueForm:"Продолжить форму",discardForm:"Закрыть форму",expired:"Срок формы истёк",resume:"Начать заново",backToMenu:"Вернуться в меню",hideGallery:"Скрыть фотографии",cancelled:"Действие отменено",nothingToCancel:"Нечего отменять",unknown:"Неизвестная команда",catalog:"Пустой каталог",details:"Подробнее",contactManager:"Связаться с менеджером",share:"Поделиться",interest:"Заказать звонок",viewing:"Записаться на просмотр",availability:"Уточнить доступность",similar:"Похожие объекты",gallery:"Все фотографии",favoriteButton:"Добавить в избранное",favoriteRemoveButton:"Убрать из избранного",favoriteAdd:"Добавлено в избранное",favoriteRemove:"Удалено из избранного",emptyFavorites:"Пустое избранное",askName:"Запрос имени",askPhone:"Запрос телефона",askTime:"Запрос времени",phoneButton:"Отправить свой номер",invalidName:"Ошибка в имени",invalidPhone:"Ошибка в телефоне",invalidTime:"Ошибка во времени",timeOptions:"Варианты времени",review:"Проверка данных",confirm:"Кнопка подтверждения",edit:"Изменить данные",editName:"Изменить имя",editPhone:"Изменить телефон",editTime:"Изменить время",savedName:"Использовать сохранённое имя",savedPhone:"Использовать сохранённый номер",success:"Успешная отправка",askDate:"Запрос даты",dateOptions:"Варианты даты",askCustom:"Своя дата и время",askCustomTime:"Своё время",restart:"Заполнить заново",editDate:"Изменить дату",invalid:"Некорректный ответ",askDeal:"Покупка или аренда",dealOptions:"Варианты сделки",askLocation:"Запрос района",anyLocation:"Район не важен",askBudget:"Запрос бюджета",noBudget:"Бюджет не определён",askBedrooms:"Запрос количества спален",bedroomOptions:"Варианты количества спален",labels:"Подписи в итогах",editDeal:"Изменить цель",editLocation:"Изменить район",editBudget:"Изменить бюджет",editBedrooms:"Изменить спальни",apartment:"Квартира",house:"Дом",villa:"Вилла",townhouse:"Таунхаус",land:"Участок",commercial:"Коммерческая недвижимость",newbuild:"Новостройка",other:"Другое",new:"Новое / новинка",recommended:"Рекомендуем",exclusive:"Эксклюзив",price_reduced:"Цена снижена",renovated:"После ремонта",needs_renovation:"Требует ремонта",under_construction:"Строится"};
-    Object.assign(interfaceLabels,{placeholder:"Подсказка в строке ввода",tapPhone:"Подсказка для звонка",readMore:"Читать подробнее",sharePrefix:"Текст при отправке другу",viewWebsite:"Открыть сайт",openMap:"Открыть карту",forRent:"Аренда",forSale:"Продажа",reserved:"Забронирован",available:"Доступен",priceMonth:"Цена за месяц",priceWeek:"Цена за неделю",priceOnRequest:"Цена по запросу",floor:"Этаж",reference:"Номер объекта",updated:"Дата обновления",propertyUnavailable:"Объект недоступен",propertyHeading:"Заголовок объекта",requestViewingPrefix:"Заголовок заявки на просмотр",questionPrefix:"Заголовок вопроса",interestPrefix:"Заголовок интереса",noSimilar:"Похожие объекты не найдены",similarHeading:"Заголовок похожего объекта",managerPrompt:"Вопрос о помощи менеджера",photosUnavailable:"Фотографии недоступны",nextProperty:"Следующий объект",nextPrompt:"Действия после просмотра",reviewLabels:"Подписи в итогах",unavailable:"Объект недоступен для просмотра",asSpecified:"Время указано в сообщении",summaryTitle:"Заголовок итогов",start:"Запуск бота",menu:"Главное меню",myId:"Ответ на команду /myid"});
+    Object.assign(interfaceLabels,{placeholder:"Подсказка в строке ввода",tapPhone:"Подсказка для звонка",readMore:"Читать подробнее",sharePrefix:"Текст при отправке другу",viewWebsite:"Открыть сайт",openMap:"Открыть карту",forRent:"Аренда",forSale:"Продажа",reserved:"Забронирован",available:"Доступен",priceMonth:"Цена за месяц",priceWeek:"Цена за неделю",priceOnRequest:"Цена по запросу",floor:"Этаж",reference:"Номер объекта",updated:"Дата обновления",propertyUnavailable:"Объект недоступен",propertyHeading:"Заголовок объекта",requestViewingPrefix:"Заголовок заявки на просмотр",questionPrefix:"Заголовок вопроса",interestPrefix:"Заголовок интереса",noSimilar:"Похожие объекты не найдены",similarHeading:"Заголовок похожего объекта",managerPrompt:"Вопрос о помощи менеджера",photosUnavailable:"Фотографии недоступны",nextProperty:"Следующий объект",nextPrompt:"Действия после просмотра",askPrice:"Кнопка «Узнать цену»",promotionAsk:"Кнопка «Узнать подробнее» у акции",reviewLabels:"Подписи в итогах",unavailable:"Объект недоступен для просмотра",asSpecified:"Время указано в сообщении",summaryTitle:"Заголовок итогов",start:"Запуск бота",menu:"Главное меню",myId:"Ответ на команду /myid"});
     function el(id){return document.getElementById(id)}
     function esc(value){return String(value==null?"":value).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
     function fmtNumber(value){return new Intl.NumberFormat("ru-RU").format(Number(value||0))}
@@ -6155,7 +6315,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
     function renderInquiryAttention(){if(!state.newInquiryCount)return;var list=el("attentionList3");list.insertAdjacentHTML("afterbegin",'<button class="attention-item quick-nav" data-view="inquiries"><span class="attention-icon">✉</span><span class="attention-main"><strong>Новые обращения</strong><span>'+esc(countRu(state.newInquiryCount,"вопрос ждёт","вопроса ждут","вопросов ждут")+' ответа')+'</span></span><span>›</span></button>');bindQuick(list)}
     function renderAdminNotificationAttention(){var configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);if(verified)return;var list=el("attentionList3"),success=list.querySelector(".form-success");if(success)success.remove();var title=configured?"Проверьте Chat ID":"Уведомления не подключены",note=configured?"Telegram ещё не подтвердил доставку":"Укажите Chat ID администратора";list.insertAdjacentHTML("afterbegin",'<button class="attention-item quick-nav" data-view="settings"><span class="attention-icon">✉</span><span class="attention-main"><strong>'+esc(title)+'</strong><span>'+esc(note)+'</span></span><span>›</span></button>');bindQuick(list)}
     function renderTranslationAttention(){var incomplete=state.objects.filter(function(item){return item.status==="active"&&languages.some(function(language){return !propertyLanguageHealth(item,language).complete})}),missingContacts=languages.filter(function(language){return !exactLocalized(state.contacts.text,language)});if(!incomplete.length&&!missingContacts.length)return;var list=el("attentionList3"),success=list.querySelector(".form-success");if(success)success.remove();if(incomplete.length)list.insertAdjacentHTML("beforeend",'<button class="attention-item quick-nav" data-view="properties"><span class="attention-icon">A</span><span class="attention-main"><strong>Переводы объектов</strong><span>'+esc(countRu(incomplete.length,"активная карточка заполнена","активные карточки заполнены","активных карточек заполнены")+' не полностью')+'</span></span><span>›</span></button>');if(missingContacts.length)list.insertAdjacentHTML("beforeend",'<button class="attention-item quick-nav" data-view="contacts"><span class="attention-icon">☎</span><span class="attention-main"><strong>Текст контактов</strong><span>Не заполнено: '+esc(missingContacts.map(function(language){return language.toUpperCase()}).join(", "))+'</span></span><span>›</span></button>');bindQuick(list)}
-    function renderBrandDashboard(){var points=[],max=1,total=0;for(var i=13;i>=0;i--){var date=new Date();date.setUTCDate(date.getUTCDate()-i);var key=date.toISOString().slice(0,10),daily=state.analytics.daily[key]||{},received=Number(daily.received||0),sent=Number(daily.sent||0);total+=received+sent;max=Math.max(max,received,sent);points.push({key:key,received:received,sent:sent})}el("chartTotal3").textContent=countRu(total,"сообщение","сообщения","сообщений");el("activityChart3").innerHTML=points.map(function(point){return '<div class="chart-column" title="'+esc(point.key+': входящие '+point.received+', ответы '+point.sent)+'"><div class="chart-bars"><div class="chart-bar" style="height:'+Math.max(4,Math.round(point.received/max*100))+'%"></div><div class="chart-bar sent" style="height:'+Math.max(4,Math.round(point.sent/max*100))+'%"></div></div><span class="chart-label">'+esc(point.key.slice(5))+'</span></div>'}).join("");var inquiries=(state.inquiries||[]).slice().sort(function(a,b){return Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0)}).slice(0,4);el("recentInquiries3").innerHTML=inquiries.length?inquiries.map(function(item){var user=state.users.find(function(record){return record.id===item.userId})||{},property=inquiryProperty(item),context=property?(localized(property.title,"ru")||property.reference||"Объект"):inquiryTypeName(item.type);return '<div class="list-item"><span class="inquiry-mini-status '+esc(item.status)+'"></span><div class="list-main"><strong>'+esc(userName(user))+'</strong><span>'+esc(context)+' · '+esc(fmtDate(item.createdAt))+'</span></div><span class="badge '+inquiryStatusBadge(item.status)+'">'+esc(inquiryStatusName(item.status))+'</span></div>'}).join(""):'<div class="empty"><strong>Новых обращений нет</strong>Запросы клиентов появятся здесь.</div>'}
+    function renderBrandDashboard(){var points=[],max=1,total=0;for(var i=13;i>=0;i--){var date=new Date();date.setUTCDate(date.getUTCDate()-i);var key=date.toISOString().slice(0,10),daily=state.analytics.daily[key]||{},received=Number(daily.received||0),sent=Number(daily.sent||0);total+=received+sent;max=Math.max(max,received,sent);points.push({key:key,received:received,sent:sent})}el("chartTotal3").textContent=countRu(total,"сообщение","сообщения","сообщений");el("activityChart3").innerHTML=points.map(function(point){return '<div class="chart-column" title="'+esc(point.key+': входящие '+point.received+', ответы '+point.sent)+'"><div class="chart-bars"><div class="chart-bar" style="height:'+Math.max(4,Math.round(point.received/max*100))+'%"></div><div class="chart-bar sent" style="height:'+Math.max(4,Math.round(point.sent/max*100))+'%"></div></div><span class="chart-label">'+esc(point.key.slice(5))+'</span></div>'}).join("");var inquiries=(state.inquiries||[]).slice().sort(function(a,b){return Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0)}).slice(0,4);el("recentInquiries3").innerHTML=inquiries.length?inquiries.map(function(item){var user=state.users.find(function(record){return record.id===item.userId})||{},property=inquiryProperty(item),context=property?(localized(property.title,"ru")||property.reference||"Объект"):inquiryTypeLabel3(item);return '<div class="list-item"><span class="inquiry-mini-status '+esc(item.status)+'"></span><div class="list-main"><strong>'+esc(userName(user))+'</strong><span>'+esc(context)+' · '+esc(fmtDate(item.createdAt))+'</span></div><span class="badge '+inquiryStatusBadge(item.status)+'">'+esc(inquiryStatusName(item.status))+'</span></div>'}).join(""):'<div class="empty"><strong>Новых обращений нет</strong>Запросы клиентов появятся здесь.</div>'}
     function welcomePane(language){var s=language[0].toUpperCase()+language.slice(1),active=language==="ru"?" active":"";return '<div class="lang-pane'+active+'" data-welcome-pane="'+language+'"><div class="grid welcome-layout"><aside class="card"><div class="phone"><div class="phone-top">'+(language==="ru"?"Ваш бот":language==="en"?"Your bot":"Tu bot")+'</div><div class="chat-bubble"><div id="welcomePreview'+s+'3" class="chat-photo">Изображение не загружено</div><div id="welcomeTextPreview'+s+'3" class="chat-text"></div></div><div class="chat-keyboard"><span>'+(language==="ru"?"🏘 Объекты":language==="en"?"🏘 Properties":"🏘 Inmuebles")+'</span><span class="menu-wide">'+(language==="ru"?"✨ Подобрать объект":language==="en"?"✨ Find a property":"✨ Elegir inmueble")+'</span><span>'+(language==="ru"?"❤️ Избранное":language==="en"?"❤️ Favorites":"❤️ Favoritos")+'</span><span>'+(language==="ru"?"🔥 Акции":language==="en"?"🔥 Offers":"🔥 Promociones")+'</span><span>'+(language==="ru"?"💬 Менеджер":language==="en"?"💬 Manager":"💬 Gestor")+'</span><span>'+(language==="ru"?"☰ Ещё":language==="en"?"☰ More":"☰ Más")+'</span><span class="menu-wide">'+(language==="ru"?"🌐 Сменить язык":language==="en"?"🌐 Change language":"🌐 Cambiar idioma")+'</span></div></div><div class="field"><label for="welcomeFile'+s+'3">Приветственное изображение</label><input id="welcomeFile'+s+'3" class="input welcome-file3" data-lang="'+language+'" type="file" accept="image/jpeg,image/png"><button class="btn danger small welcome-remove3" data-lang="'+language+'" type="button">Удалить изображение</button></div></aside><div class="section-stack"><div class="card"><h3>Тексты сообщений</h3><div class="field"><label for="greeting'+s+'3">Приветствие</label><textarea id="greeting'+s+'3" class="textarea welcome-live3" data-lang="'+language+'" maxlength="4000" required></textarea></div><div class="field"><label for="help'+s+'3">Помощь (/help)</label><textarea id="help'+s+'3" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="fallback'+s+'3">Если автоответ не найден</label><textarea id="fallback'+s+'3" class="textarea" maxlength="4000"></textarea></div><div class="hint">Можно использовать {first_name}, {last_name}, {username}</div></div><details class="card"><summary><strong>Запасные тексты разделов</strong> <span class="card-note">используются, если карточки не добавлены</span></summary><div class="field"><label for="menuObjects'+s+'3">Наши объекты</label><textarea id="menuObjects'+s+'3" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuOffers'+s+'3">Акции</label><textarea id="menuOffers'+s+'3" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuContacts'+s+'3">Контакты</label><textarea id="menuContacts'+s+'3" class="textarea" maxlength="4000" required></textarea></div><div class="field"><label for="menuAbout'+s+'3">О нас</label><textarea id="menuAbout'+s+'3" class="textarea" maxlength="4000" required></textarea></div></details></div></div></div>'}
     function buildWelcome(){if(el("welcomePanes3").children.length)return;el("welcomePanes3").innerHTML=languages.map(welcomePane).join("");document.querySelectorAll("#welcomePanes3 details").forEach(function(details){details.remove()});document.querySelectorAll(".welcome-file3").forEach(function(input){input.addEventListener("change",function(){var file=input.files[0];if(!file)return;var lang=input.dataset.lang,s=lang[0].toUpperCase()+lang.slice(1);welcomeRemove[lang]=false;el("welcomePreview"+s+"3").innerHTML='<img src="'+URL.createObjectURL(file)+'" alt="Предпросмотр">';document.querySelector('.welcome-remove3[data-lang="'+lang+'"]').disabled=false})});document.querySelectorAll(".welcome-remove3").forEach(function(button){button.addEventListener("click",function(){var lang=button.dataset.lang,s=lang[0].toUpperCase()+lang.slice(1);welcomeRemove[lang]=true;el("welcomeFile"+s+"3").value="";el("welcomePreview"+s+"3").textContent="Изображение будет удалено";button.disabled=true;markDirty(el("welcomeForm3"))})})}
     function renderWelcome(){buildWelcome();if(dirty.has(el("welcomeForm3")))return;languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1),messages=state.config.messages[language];el("greeting"+s+"3").value=messages.greeting;el("help"+s+"3").value=messages.help;el("fallback"+s+"3").value=messages.fallback;el("welcomeTextPreview"+s+"3").textContent=messages.greeting.replaceAll("{first_name}","Анна").replaceAll("{last_name}","").replaceAll("{username}","@anna");var image=state.welcomeImages[language];el("welcomePreview"+s+"3").innerHTML=image&&image.exists?'<img src="/api/images/'+language+'/welcome?rev='+encodeURIComponent(image.updatedAt||"")+'" alt="Приветственное изображение">':"Изображение не загружено";var labels=state.interfaceText&&state.interfaceText.menuLabels&&state.interfaceText.menuLabels[language]||{},keyboard=el("welcomePreview"+s+"3").closest(".phone").querySelector(".chat-keyboard");keyboard.innerHTML='<span>'+esc(labels.objects||"")+'</span><span class="menu-wide">'+esc(labels.selection||"")+'</span><span>'+esc(labels.favorites||"")+'</span><span>'+esc(labels.promotions||"")+'</span><span>'+esc(labels.contacts||"")+'</span><span>'+esc(labels.more||"")+'</span><span class="menu-wide">'+esc(labels.language||"")+'</span>';document.querySelector('.welcome-remove3[data-lang="'+language+'"]').disabled=!(image&&image.exists);welcomeRemove[language]=false})}
@@ -6190,14 +6350,15 @@ const ADMIN_HTML = String.raw`<!doctype html>
     function updateContactsPreview(){var name=el("contactManagerName3").value,phone=el("contactPhone3").value,whatsapp=el("contactWhatsappEnabled3").checked?(el("contactWhatsapp3").value||phone.split(",")[0]):"",rows=[["☎",phone],["WA",whatsapp],["TG",el("contactTelegram3").value],["@",el("contactEmail3").value],["↗",el("contactWebsite3").value],["⌖",el("contactMap3").value]].filter(function(r){return Boolean(r[1])});el("contactsPreview3").innerHTML='<p class="muted">'+esc(el("contactTextRu3").value||"Выберите удобный способ связи с менеджером.")+"</p>"+(name?'<div class="contact-channel"><span class="channel-icon">👤</span><strong class="truncate">'+esc(name)+"</strong></div>":"")+(rows.length?rows.map(function(r){return '<div class="contact-channel"><span class="channel-icon">'+r[0]+'</span><span class="truncate">'+esc(r[1])+"</span></div>"}).join(""):'<div class="empty">Добавьте хотя бы один канал связи</div>')}
     function inquiryStatusName(status){return {new:"Новое",in_progress:"В работе",closed:"Закрыто"}[status]||status}
     function inquiryStatusBadge(status){return status==="new"?"brand":status==="closed"?"good":"warn"}
+    function inquiryTypeLabel3(item){return item.type==="question"&&!item.propertyId?"Вопрос менеджеру":inquiryTypeName(item.type)}
     function inquiryTypeName(type){return {interest:"Интерес к объекту",selection:"Подбор недвижимости",viewing:"Запись на просмотр",question:"Вопрос по объекту",lead:"Заявка на звонок",general:"Общий вопрос"}[type]||"Общий вопрос"}
     function leadInquiryBlock(item){var lead=item&&item.lead||{};if(item.type!=="lead")return"";return '<div class="lead-summary"><div class="lead-summary-title">Контактные данные</div><div class="lead-summary-row"><span>Имя</span><strong>'+esc(lead.name||"Не указано")+'</strong></div><div class="lead-summary-row"><span>Телефон</span><strong>'+esc(lead.phone||"Не указан")+'</strong></div><div class="lead-summary-row"><span>Удобное время</span><strong>'+esc(lead.preferredTime||"Не указано")+'</strong></div></div>'}
     function selectionInquiryBlock(item){var selection=item&&item.selection||{};if(item.type!=="selection")return"";return '<div class="lead-summary"><div class="lead-summary-title">Параметры подбора</div><div class="lead-summary-row"><span>Цель</span><strong>'+esc(selection.deal||"Не указана")+'</strong></div><div class="lead-summary-row"><span>Район</span><strong>'+esc(selection.location||"Не указан")+'</strong></div><div class="lead-summary-row"><span>Бюджет</span><strong>'+esc(selection.budget||"Не указан")+'</strong></div><div class="lead-summary-row"><span>Спальни</span><strong>'+esc(selection.bedrooms||"Не указано")+'</strong></div></div>'}
     function userLeadBlock(user){if(!user.phone&&!user.contactName&&!user.preferredContactTime)return"";return '<div class="lead-summary"><div class="lead-summary-title">Контакт для звонка</div><div class="lead-summary-row"><span>Имя</span><strong>'+esc(user.contactName||userName(user))+'</strong></div><div class="lead-summary-row"><span>Телефон</span><strong>'+esc(user.phone||"Не указан")+'</strong></div><div class="lead-summary-row"><span>Время</span><strong>'+esc(user.preferredContactTime||"Не указано")+'</strong></div></div>'}
     function inquiryProperty(item){return item&&item.propertyId?state.objects.find(function(record){return record.id===item.propertyId}):null}
     function filteredInquiries(){var q=el("inquirySearch3").value.toLocaleLowerCase("ru-RU").trim(),status=el("inquiryStatusFilter3").value,type=el("inquiryTypeFilter3").value,priority={new:0,in_progress:1,closed:2};return state.inquiries.filter(function(item){var user=state.users.find(function(u){return u.id===item.userId})||{},property=inquiryProperty(item)||{},lead=item.lead||{},selection=item.selection||{},hay=[userName(user),user.username||"",item.text,lead.name||"",lead.phone||"",lead.preferredTime||"",selection.deal||"",selection.location||"",selection.budget||"",selection.bedrooms||"",localized(property.title,"ru"),localized(property.title,"en"),localized(property.title,"es"),property.reference||""].join(" ").toLocaleLowerCase("ru-RU");return (!status||item.status===status)&&(!type||item.type===type)&&(!q||hay.includes(q))}).sort(function(a,b){var statusDifference=(priority[a.status]??3)-(priority[b.status]??3);return statusDifference||Date.parse(b.updatedAt||b.createdAt||0)-Date.parse(a.updatedAt||a.createdAt||0)})}
-    function renderInquiries(){var items=filteredInquiries();el("inquiryResultCount3").textContent=countRu(items.length,"обращение","обращения","обращений");el("inquiryList3").innerHTML=items.length?items.map(function(item){var user=state.users.find(function(u){return u.id===item.userId})||{},property=inquiryProperty(item),propertyName=property?(localized(property.title,"ru")||property.reference||"Объект"):"";return '<button class="inquiry-card '+(item.status==="new"?"new ":"")+(selectedInquiry===item.id?"active":"")+'" data-inquiry="'+esc(item.id)+'"><div class="row-between"><strong class="truncate">'+esc(userName(user))+'</strong><span class="badge '+inquiryStatusBadge(item.status)+'">'+esc(inquiryStatusName(item.status))+'</span></div><div class="inquiry-meta">'+esc(inquiryTypeName(item.type))+(propertyName?" · "+esc(propertyName):"")+'</div><div class="inquiry-text">'+esc(item.text)+'</div><div class="inquiry-meta">'+esc(languageName(item.language))+" · "+esc(fmtDate(item.updatedAt||item.createdAt))+"</div></button>"}).join(""):'<div class="empty"><strong>Обращений не найдено</strong>Новые вопросы без автоответа появятся здесь.</div>';if(selectedInquiry)renderInquiryDetail(selectedInquiry)}
-    function renderInquiryDetail(id){var statusForm=el("inquiryStateForm3"),replyForm=el("inquiryReplyForm3");if(selectedInquiry===id&&((statusForm&&dirty.has(statusForm))||(replyForm&&dirty.has(replyForm))))return;var item=state.inquiries.find(function(x){return x.id===id});if(!item){selectedInquiry="";el("inquiryDetail3").innerHTML='<div class="empty">Обращение не найдено</div>';return}var user=state.users.find(function(u){return u.id===item.userId})||{},property=inquiryProperty(item);var replies=(item.replies||[]).slice().reverse();el("inquiryDetail3").innerHTML='<div class="row-between"><div><h3>'+esc(userName(user))+'</h3><div class="small muted">'+(user.username?"@"+esc(user.username)+" · ":"")+"ID "+esc(item.userId)+" · "+esc(languageName(item.language))+'</div></div><span class="badge '+inquiryStatusBadge(item.status)+'">'+esc(inquiryStatusName(item.status))+'</span></div>'+(property?'<div class="property-context"><strong>'+esc(localized(property.title,"ru")||"Объект")+'</strong><span>'+esc([property.reference,localized(property.address,"ru"),propertyPriceLabel(property)].filter(Boolean).join(" · "))+'</span><button class="btn ghost small open-inquiry-property3" data-id="'+esc(property.id)+'" type="button">Открыть объект</button></div>':"")+'<div class="form-section"><div class="form-section-title">'+esc(inquiryTypeName(item.type))+'</div><div class="timeline-item"><div class="tiny muted">'+esc(fmtDate(item.createdAt))+'</div><div class="timeline-text">'+esc(item.text)+'</div></div></div><form id="inquiryStateForm3" data-saveable><div class="grid two-col"><div class="field"><label for="inquiryStatus3">Статус</label><select id="inquiryStatus3" class="select"><option value="new">Новое</option><option value="in_progress">В работе</option><option value="closed">Закрыто</option></select></div><div class="field"><label for="inquiryNote3">Заметка администратора</label><textarea id="inquiryNote3" class="textarea" maxlength="2000"></textarea></div></div><button class="btn secondary" type="submit">Сохранить статус и заметку</button></form><div class="form-section"><div class="form-section-title">Ответить пользователю</div><form id="inquiryReplyForm3" data-saveable><div class="field"><label for="inquiryReply3">Текст ответа</label><textarea id="inquiryReply3" class="textarea" maxlength="4000" required></textarea></div><label class="small"><input id="inquiryKeepOpen3" type="checkbox" checked> Оставить обращение в работе после ответа <span class="muted">(рекомендуется)</span></label><button class="btn wide" type="submit" style="margin-top:12px">Отправить ответ</button></form></div><div class="form-section"><h3>История ответов</h3><div class="timeline" style="margin-top:10px">'+(replies.length?replies.map(function(reply){var channel=reply.source==="telegram"?" · Telegram":"",delivery=reply.source==="panel"?'<span class="delivery-state">✓ Доставлено</span>':"";return '<div class="timeline-item out"><div class="tiny muted">Администратор'+channel+' · '+esc(fmtDate(reply.createdAt))+delivery+'</div><div class="timeline-text">'+esc(reply.text)+"</div></div>"}).join(""):'<div class="empty">Ответов пока нет</div>')+'</div></div>';el("inquiryStatus3").value=item.status;el("inquiryNote3").value=item.note||"";el("inquiryStateForm3").addEventListener("submit",saveInquiryState);el("inquiryReplyForm3").addEventListener("submit",replyToInquiry);var openProperty=el("inquiryDetail3").querySelector(".open-inquiry-property3");if(openProperty)openProperty.addEventListener("click",function(){openView("properties");editProperty(openProperty.dataset.id)});addCounters(el("inquiryDetail3"))}
+    function renderInquiries(){var items=filteredInquiries();el("inquiryResultCount3").textContent=countRu(items.length,"обращение","обращения","обращений");el("inquiryList3").innerHTML=items.length?items.map(function(item){var user=state.users.find(function(u){return u.id===item.userId})||{},property=inquiryProperty(item),propertyName=property?(localized(property.title,"ru")||property.reference||"Объект"):"";return '<button class="inquiry-card '+(item.status==="new"?"new ":"")+(selectedInquiry===item.id?"active":"")+'" data-inquiry="'+esc(item.id)+'"><div class="row-between"><strong class="truncate">'+esc(userName(user))+'</strong><span class="badge '+inquiryStatusBadge(item.status)+'">'+esc(inquiryStatusName(item.status))+'</span></div><div class="inquiry-meta">'+esc(inquiryTypeLabel3(item))+(propertyName?" · "+esc(propertyName):"")+'</div><div class="inquiry-text">'+esc(item.text)+'</div><div class="inquiry-meta">'+esc(languageName(item.language))+" · "+esc(fmtDate(item.updatedAt||item.createdAt))+"</div></button>"}).join(""):'<div class="empty"><strong>Обращений не найдено</strong>Новые вопросы без автоответа появятся здесь.</div>';if(selectedInquiry)renderInquiryDetail(selectedInquiry)}
+    function renderInquiryDetail(id){var statusForm=el("inquiryStateForm3"),replyForm=el("inquiryReplyForm3");if(selectedInquiry===id&&((statusForm&&dirty.has(statusForm))||(replyForm&&dirty.has(replyForm))))return;var item=state.inquiries.find(function(x){return x.id===id});if(!item){selectedInquiry="";el("inquiryDetail3").innerHTML='<div class="empty">Обращение не найдено</div>';return}var user=state.users.find(function(u){return u.id===item.userId})||{},property=inquiryProperty(item);var replies=(item.replies||[]).slice().reverse();el("inquiryDetail3").innerHTML='<div class="row-between"><div><h3>'+esc(userName(user))+'</h3><div class="small muted">'+(user.username?"@"+esc(user.username)+" · ":"")+"ID "+esc(item.userId)+" · "+esc(languageName(item.language))+'</div></div><span class="badge '+inquiryStatusBadge(item.status)+'">'+esc(inquiryStatusName(item.status))+'</span></div>'+(property?'<div class="property-context"><strong>'+esc(localized(property.title,"ru")||"Объект")+'</strong><span>'+esc([property.reference,localized(property.address,"ru"),propertyPriceLabel(property)].filter(Boolean).join(" · "))+'</span><button class="btn ghost small open-inquiry-property3" data-id="'+esc(property.id)+'" type="button">Открыть объект</button></div>':"")+'<div class="form-section"><div class="form-section-title">'+esc(inquiryTypeLabel3(item))+'</div><div class="timeline-item"><div class="tiny muted">'+esc(fmtDate(item.createdAt))+'</div><div class="timeline-text">'+esc(item.text)+'</div></div></div><form id="inquiryStateForm3" data-saveable><div class="grid two-col"><div class="field"><label for="inquiryStatus3">Статус</label><select id="inquiryStatus3" class="select"><option value="new">Новое</option><option value="in_progress">В работе</option><option value="closed">Закрыто</option></select></div><div class="field"><label for="inquiryNote3">Заметка администратора</label><textarea id="inquiryNote3" class="textarea" maxlength="2000"></textarea></div></div><button class="btn secondary" type="submit">Сохранить статус и заметку</button></form><div class="form-section"><div class="form-section-title">Ответить пользователю</div><form id="inquiryReplyForm3" data-saveable><div class="field"><label for="inquiryReply3">Текст ответа</label><textarea id="inquiryReply3" class="textarea" maxlength="4000" required></textarea></div><label class="small"><input id="inquiryKeepOpen3" type="checkbox" checked> Оставить обращение в работе после ответа <span class="muted">(рекомендуется)</span></label><button class="btn wide" type="submit" style="margin-top:12px">Отправить ответ</button></form></div><div class="form-section"><h3>История ответов</h3><div class="timeline" style="margin-top:10px">'+(replies.length?replies.map(function(reply){var channel=reply.source==="telegram"?" · Telegram":"",delivery=reply.source==="panel"?'<span class="delivery-state">✓ Доставлено</span>':"";return '<div class="timeline-item out"><div class="tiny muted">Администратор'+channel+' · '+esc(fmtDate(reply.createdAt))+delivery+'</div><div class="timeline-text">'+esc(reply.text)+"</div></div>"}).join(""):'<div class="empty">Ответов пока нет</div>')+'</div></div>';el("inquiryStatus3").value=item.status;el("inquiryNote3").value=item.note||"";el("inquiryStateForm3").addEventListener("submit",saveInquiryState);el("inquiryReplyForm3").addEventListener("submit",replyToInquiry);var openProperty=el("inquiryDetail3").querySelector(".open-inquiry-property3");if(openProperty)openProperty.addEventListener("click",function(){openView("properties");editProperty(openProperty.dataset.id)});addCounters(el("inquiryDetail3"))}
     var renderInquiryDetailCore=renderInquiryDetail;
     renderInquiryDetail=function(id){renderInquiryDetailCore(id);var item=state.inquiries.find(function(record){return record.id===id}),detail=el("inquiryDetail3"),summary=item&&item.type==="lead"?leadInquiryBlock(item):item&&item.type==="selection"?selectionInquiryBlock(item):"";if(summary&&detail&&!detail.querySelector(".lead-summary")){var header=detail.firstElementChild;if(header)header.insertAdjacentHTML("afterend",summary)}}
     async function saveInquiryState(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{await api("/api/inquiries/"+encodeURIComponent(selectedInquiry),{method:"PATCH",body:JSON.stringify({status:el("inquiryStatus3").value,note:el("inquiryNote3").value})});clearDirty(el("inquiryStateForm3"));await loadState();toast("Обращение обновлено")}catch(error){toast(error.message)}finally{button.disabled=false}}
@@ -6234,9 +6395,9 @@ const ADMIN_HTML = String.raw`<!doctype html>
       el("exportUser3").addEventListener("click",function(){exportUserData(u.id)});el("deleteUser3").addEventListener("click",function(){deleteUserData(u.id,userName(u))});
       addCounters(el("userDetail3"));
     }
-    function ensureNotificationSettings(){if(el("notificationForm3"))return;var stack=document.querySelector("#view-settings .section-stack"),form=document.createElement("form");form.id="notificationForm3";form.className="card";form.dataset.saveable="";form.innerHTML='<div class="card-head"><div><h3>Уведомления администратору</h3><div class="card-note">Сообщения и действия пользователей приходят в Telegram</div></div><span id="notificationState3" class="badge">Не настроено</span></div><div class="callout notification-help"><strong>Как подключить:</strong><span>1. Откройте этого бота в Telegram и отправьте команду <code>/myid</code>.</span><span>2. Скопируйте полученный номер в поле ниже и сохраните.</span><span>3. Нажмите «Отправить тест».</span></div><div class="field"><label for="adminChatId3">Telegram Chat ID администратора</label><input id="adminChatId3" class="input" inputmode="numeric" maxlength="20" placeholder="Например: 123456789"><span class="hint">Используйте личный Chat ID. Ответ на уведомление будет отправлен пользователю от имени бота.</span></div><div class="field"><label for="notifyMode3">Что присылать</label><select id="notifyMode3" class="select"><option value="all">Все действия пользователей</option><option value="inquiries">Только обращения и заявки</option></select><span class="hint">Если один пользователь присылает больше 20 сообщений за 10 минут, уведомления о его сообщениях приостанавливаются. Все сообщения при этом сохраняются в панели.</span></div><div class="actions"><button class="btn" type="submit">Сохранить</button><button id="testAdminNotificationBtn3" class="btn secondary" type="button">Отправить тест</button></div>';stack.prepend(form);form.addEventListener("submit",saveNotificationSettings);el("testAdminNotificationBtn3").addEventListener("click",testAdminNotification);var backup=Array.from(document.querySelectorAll("#view-settings .card")).find(function(card){return card.querySelector("h3")&&card.querySelector("h3").textContent==="Резервная копия"});if(backup){var note=backup.querySelector(".card-note");if(note)note.textContent="Сжатая копия .json.gz содержит фотографии, токен бота, настройки входа, контент и данные пользователей. Храните файл как конфиденциальный."}}
+    function ensureNotificationSettings(){if(el("notificationForm3"))return;var stack=document.querySelector("#view-settings .section-stack"),form=document.createElement("form");form.id="notificationForm3";form.className="card";form.dataset.saveable="";form.innerHTML='<div class="card-head"><div><h3>Уведомления администратору</h3><div class="card-note">Сообщения и действия пользователей приходят в Telegram</div></div><span id="notificationState3" class="badge">Не настроено</span></div><div class="callout notification-help"><strong>Как подключить:</strong><span>1. Откройте этого бота в Telegram и отправьте команду <code>/myid</code>.</span><span>2. Скопируйте полученный номер в поле ниже и сохраните.</span><span>3. Нажмите «Отправить тест».</span></div><div class="field"><label for="adminChatId3">Telegram Chat ID администратора</label><input id="adminChatId3" class="input" inputmode="numeric" maxlength="20" placeholder="Например: 123456789"><span class="hint">Используйте личный Chat ID. Ответ на уведомление будет отправлен пользователю от имени бота.</span></div><div class="field"><label for="notifyMode3">Что присылать</label><select id="notifyMode3" class="select"><option value="inquiries">Только обращения и заявки + сводка активности раз в день</option><option value="all">Все действия пользователей сразу</option></select><span class="hint">Если один пользователь присылает больше 20 сообщений за 10 минут, уведомления о его сообщениях приостанавливаются. Все сообщения при этом сохраняются в панели.</span></div><div class="actions"><button class="btn" type="submit">Сохранить</button><button id="testAdminNotificationBtn3" class="btn secondary" type="button">Отправить тест</button></div>';stack.prepend(form);form.addEventListener("submit",saveNotificationSettings);el("testAdminNotificationBtn3").addEventListener("click",testAdminNotification);var backup=Array.from(document.querySelectorAll("#view-settings .card")).find(function(card){return card.querySelector("h3")&&card.querySelector("h3").textContent==="Резервная копия"});if(backup){var note=backup.querySelector(".card-note");if(note)note.textContent="Сжатая копия .json.gz содержит фотографии, токен бота, настройки входа, контент и данные пользователей. Храните файл как конфиденциальный."}}
     function ensureConnectionCard(){if(el("connectionCard3"))return;var stack=document.querySelector("#view-settings .section-stack"),card=document.createElement("div");card.id="connectionCard3";card.className="card";card.innerHTML='<div class="card-head"><div><h3>Состояние подключения</h3><div id="connectionSummary3" class="card-note">Проверяем Telegram…</div></div><span id="connectionBadge3" class="badge">Проверка</span></div><div class="data-row"><span>Последняя успешная проверка</span><strong id="connectionSuccess3">—</strong></div><div class="data-row"><span>Последняя проблема</span><strong id="connectionErrorAt3">—</strong></div><div id="connectionError3" class="hint" style="margin-top:10px"></div>';stack.prepend(card)}
-    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";if(el("notifyMode3"))el("notifyMode3").value=state.config.notifyMode||"all";var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
+    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";if(el("notifyMode3"))el("notifyMode3").value=state.config.notifyMode||"inquiries";var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
     function addCounters(root){(root||document).querySelectorAll("textarea[maxlength],input[maxlength]").forEach(function(node){var c=node.nextElementSibling&&node.nextElementSibling.classList.contains("counter")?node.nextElementSibling:null;if(!c){c=document.createElement("span");c.className="counter";node.insertAdjacentElement("afterend",c);node.addEventListener("input",function(){c.textContent=node.value.length+" / "+node.maxLength})}c.textContent=node.value.length+" / "+node.maxLength})}
     function bindQuick(root){(root||document).querySelectorAll(".quick-nav").forEach(function(button){if(button._bound)return;button._bound=true;button.addEventListener("click",function(){openView(button.dataset.view)})})}
     function bindLanguageSwitch(container,prefix){container.addEventListener("click",function(e){var button=e.target.closest("[data-lang]");if(!button)return;var lang=button.dataset.lang;container.querySelectorAll("[data-lang]").forEach(function(x){var active=x===button;x.classList.toggle("active",active);x.setAttribute("aria-selected",active?"true":"false")});document.querySelectorAll("[data-"+prefix+"-pane]").forEach(function(pane){pane.classList.toggle("active",pane.dataset[prefix+"Pane"]===lang)});if(prefix==="property")renderPropertyTranslationSummary()})}
@@ -6373,6 +6534,7 @@ function start() {
     restartPolling();
     runDailyBackupSafely();
     setInterval(runDailyBackupSafely, 60 * 60 * 1000).unref();
+    setInterval(runDailyDigestSafely, 15 * 60 * 1000).unref();
     if (process.platform === 'win32' && process.env.NO_AUTO_OPEN !== '1') {
       setTimeout(() => {
         try {
@@ -6444,6 +6606,7 @@ module.exports = {
   createInquiry,
   runDailyBackup,
   restoreMissingMedia,
+  runDailyDigest,
   text: {
     lead: LEAD_FORM_TEXT,
     viewing: VIEWING_FORM_TEXT,
