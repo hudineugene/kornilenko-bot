@@ -26,6 +26,7 @@ import { myRequestsView } from './requests.mjs';
 import { subscriptionPanel } from './subscriptions.mjs';
 import { offHoursNote } from './hours.mjs';
 import { monthlyPayment, purchaseEstimate } from './calculator.mjs';
+import { decryptBackup, encryptBackup, runTelegramBackup, setBackupPassword } from './offsite.mjs';
 import { hostAllowed, loginAttempts, requestIsRemote, sessions } from './admin-http.mjs';
 import './admin-input.mjs';
 import { xlsxWorkbook } from './excel.mjs';
@@ -64,8 +65,10 @@ export {
   confirmViewing,
   contentAddressImages,
   createInquiry,
+  decryptBackup,
   deliverBroadcast,
   deliverPropertyAlerts,
+  encryptBackup,
   formReminderDue,
   getData,
   handleApi,
@@ -97,6 +100,7 @@ export {
   runFollowUpReminders,
   runFormReminders,
   runInquiryReminders,
+  runTelegramBackup,
   runViewingNotices,
   runWeeklyReport,
   runtime,
@@ -104,6 +108,7 @@ export {
   selectionMatches,
   server,
   sessions,
+  setBackupPassword,
   setData,
   splitTelegramText,
   startTunnel,

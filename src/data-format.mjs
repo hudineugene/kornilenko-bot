@@ -302,6 +302,22 @@ function normalizeViewingSlots(value) {
   };
 }
 
+// A weekly encrypted copy of the data sent to the admin chat. The key is
+// derived from a password only the administrator knows; the password itself
+// is not stored.
+function normalizeTelegramBackup(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const salt = /^[0-9a-f]{32}$/.test(String(source.salt || '')) ? String(source.salt) : '';
+  const key = /^[0-9a-f]{64}$/.test(String(source.key || '')) ? String(source.key) : '';
+  return {
+    enabled: source.enabled === true && Boolean(salt && key),
+    salt,
+    key,
+    lastSentAt: cleanText(source.lastSentAt, 40),
+    lastError: cleanText(source.lastError, 300),
+  };
+}
+
 function normalizeWorkingHours(value) {
   const source = value && typeof value === 'object' ? value : {};
   const days = Array.isArray(source.days)
@@ -560,6 +576,7 @@ function normalizeLoadedData(parsed) {
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
     normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
     normalized.config.viewingSlots = normalizeViewingSlots(normalized.config.viewingSlots);
+    normalized.config.telegramBackup = normalizeTelegramBackup(normalized.config.telegramBackup);
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;
 }
@@ -586,6 +603,7 @@ export {
   normalizeReplyTemplates,
   normalizeStoredImages,
   normalizeViewing,
+  normalizeTelegramBackup,
   normalizeViewingSlots,
   normalizeWorkingHours,
   pruneOrphanPropertyAnalytics,

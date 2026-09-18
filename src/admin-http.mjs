@@ -7,7 +7,8 @@ import net from 'node:net';
 import zlib from 'node:zlib';
 import { ADMIN_ALLOWED_HOSTS, DATA_FILE, MAX_BACKUP_BODY_BYTES, MAX_BACKUP_OUTPUT_BYTES, MAX_BODY_BYTES, MAX_IMAGE_BYTES, SESSION_TTL_MS } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { normalizeCalculator, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
+import { normalizeCalculator, normalizeTelegramBackup, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
+import { decryptBackup, isEncryptedBackup } from './offsite.mjs';
 import { imageBytes, imageExists } from './media.mjs';
 import { normalizedInterfaceText } from './texts.mjs';
 import { data, runtime } from './store.mjs';
@@ -300,8 +301,16 @@ async function readJson(req, maximumBytes = MAX_BODY_BYTES) {
   }
 }
 
+// A panel backup (.json.gz / .json) or the encrypted weekly copy from
+// Telegram (.kbk), whose password comes in a header as base64 of UTF-8.
 async function readBackup(req) {
-  const bytes = await readBody(req, MAX_BACKUP_BODY_BYTES);
+  let bytes = await readBody(req, MAX_BACKUP_BODY_BYTES);
+  if (isEncryptedBackup(bytes)) {
+    const header = String(req.headers['x-backup-password'] || '');
+    const password = header ? Buffer.from(header, 'base64').toString('utf8') : '';
+    if (!password) throw new Error('Это зашифрованная копия из Telegram — введите её пароль');
+    bytes = decryptBackup(bytes, password);
+  }
   let decoded = bytes;
   if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
     try {
@@ -418,6 +427,8 @@ function safeState(session) {
       workingHours: normalizeWorkingHours(data.config.workingHours),
       calculator: normalizeCalculator(data.config.calculator),
       viewingSlots: normalizeViewingSlots(data.config.viewingSlots),
+      // The key stays on this computer; the panel only learns the state.
+      telegramBackup: (({ enabled, key, lastSentAt, lastError }) => ({ enabled, passwordSet: Boolean(key), lastSentAt, lastError }))(normalizeTelegramBackup(data.config.telegramBackup)),
     },
     welcomeImages: Object.fromEntries(['ru', 'en', 'es'].map((language) => {
       const image = data.welcomeImages[language];

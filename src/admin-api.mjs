@@ -20,6 +20,7 @@ import { loginAllowed, menuInput, messagesInput, parseBroadcast, parseContentRec
 import { INQUIRY_EXPORT_COLUMNS, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { queuePropertyAlerts } from './alerts.mjs';
 import { confirmViewing } from './viewings.mjs';
+import { MIN_BACKUP_PASSWORD_LENGTH, sendTelegramBackup, setBackupPassword, telegramBackupSettings } from './offsite.mjs';
 
 function portableBackupData() {
   const payload = clone(data);
@@ -869,6 +870,50 @@ async function handleApi(req, res, url) {
       for (const id of sessions.keys()) if (id !== session.id) sessions.delete(id);
     }
     return json(res, 200, { ok: true });
+  }
+
+  if (url.pathname === '/api/telegram-backup' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const enabled = body.enabled === true;
+    const password = String(body.password || '');
+    // Sending all data out of this computer needs the admin password, as
+    // changing the token does.
+    if (enabled || password) {
+      const ip = clientAddress(req);
+      if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
+      if (!verifyPassword(String(body.currentPassword || ''))) {
+        await delay(250);
+        return json(res, 403, { error: 'Введите текущий пароль администратора' });
+      }
+      loginAttempts.delete(ip);
+    }
+    if (password) {
+      if (password.length < MIN_BACKUP_PASSWORD_LENGTH) return json(res, 400, { error: 'Пароль копии — не короче ' + MIN_BACKUP_PASSWORD_LENGTH + ' символов' });
+      if (password !== String(body.passwordConfirm || '')) return json(res, 400, { error: 'Пароли копии не совпадают' });
+      if (verifyPassword(password)) return json(res, 400, { error: 'Пароль копии должен отличаться от пароля панели' });
+      setBackupPassword(password);
+    }
+    const settings = telegramBackupSettings();
+    if (enabled && !settings.key) return json(res, 400, { error: 'Задайте пароль копии' });
+    if (enabled && !data.config.adminChatId) return json(res, 400, { error: 'Сначала подключите админ-чат в Telegram' });
+    data.config.telegramBackup = { ...settings, enabled };
+    saveDataNow();
+    return json(res, 200, { ok: true });
+  }
+
+  if (url.pathname === '/api/telegram-backup/send' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    if (!telegramBackupSettings().enabled) return json(res, 400, { error: 'Сначала включите копию в Telegram' });
+    try {
+      const size = await sendTelegramBackup();
+      return json(res, 200, { ok: true, size });
+    } catch (error) {
+      recordError('Копия данных в Telegram', error);
+      return json(res, 400, { error: 'Не удалось отправить копию: ' + error.message });
+    }
   }
 
   if (url.pathname === '/api/viewing-slots' && req.method === 'PUT') {

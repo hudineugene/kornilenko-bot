@@ -11,6 +11,7 @@ import { localized, shortenedText } from './catalog.mjs';
 import { runViewingNotices } from './viewings.mjs';
 import { adminMessagesAllowed, adminMorningHour } from './hours.mjs';
 import { runFormReminders } from './forms.mjs';
+import { runTelegramBackup } from './offsite.mjs';
 
 const DIGEST_HOUR = 9;
 
@@ -247,6 +248,7 @@ function runScheduledNotices() {
   runFollowUpReminders().catch((error) => recordError('Напоминание связаться с клиентом', error));
   runFormReminders().catch((error) => recordError('Напоминание о незаконченной форме', error));
   runWeeklyReport().catch((error) => recordError('Итоги недели', error));
+  runTelegramBackup().catch((error) => recordError('Копия данных в Telegram', error));
 }
 
 export {
