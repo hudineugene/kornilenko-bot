@@ -109,7 +109,7 @@ test.describe('confirmation', () => {
     const chat = createChat();
     const inquiry = await requestViewing(chat);
     const notification = adminMessages().find((message) => message.text.includes('запись на просмотр'));
-    assert.deepEqual(callbacksOf(notification.markup), ['inq:confirm:' + inquiry.id, 'inq:in_progress:' + inquiry.id, 'inq:closed:' + inquiry.id]);
+    assert.deepEqual(callbacksOf(notification.markup), ['inq:confirm:' + inquiry.id, 'inq:in_progress:' + inquiry.id, 'inq:closed:' + inquiry.id, 'inq:follow:' + inquiry.id]);
 
     telegram.calls = [];
     const pressed = await adminPress('inq:confirm:' + inquiry.id, 321);
@@ -127,7 +127,7 @@ test.describe('confirmation', () => {
     assert.equal(inquiry.viewing.confirmedDate, dayKey(daysFromNow(1)));
     assert.match(inquiry.replies[0].text, /^Просмотр подтверждён: /);
     const edit = pressed.calls.find((call) => call.method === 'editMessageReplyMarkup');
-    assert.deepEqual(callbacksOf(edit.body.reply_markup), ['inq:closed:' + inquiry.id], 'the confirm button is gone');
+    assert.deepEqual(callbacksOf(edit.body.reply_markup), ['inq:closed:' + inquiry.id, 'inq:follow:' + inquiry.id], 'the confirm button is gone');
   });
 
   test('only the admin chat can confirm', async () => {

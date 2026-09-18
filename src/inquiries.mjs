@@ -1,8 +1,9 @@
 // Обращения клиентов, уведомления администратору и ответы из Telegram.
 
 import crypto from 'node:crypto';
-import { cleanText } from './util.mjs';
+import { cleanText, localDayKey } from './util.mjs';
 import { normalizeViewing } from './data-format.mjs';
+import { nextOpening } from './hours.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError } from './analytics.mjs';
@@ -10,7 +11,7 @@ import { normalizeUser, userByChatId } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
 import { localized } from './catalog.mjs';
 import { acknowledgeCallback, propertyRequestText } from './sections.mjs';
-import { userUnavailableError } from './broadcasts.mjs';
+import { recordBroadcastResponse, userUnavailableError } from './broadcasts.mjs';
 
 const MAX_INQUIRIES = 5000;
 const INQUIRY_MERGE_WINDOW_MS = 10 * 60 * 1000;
@@ -92,6 +93,7 @@ function inquiryWasMerged(inquiry) {
 
 function createInquiry(user, text, context = {}) {
   const type = ['question', 'interest', 'selection', 'viewing', 'lead', 'general'].includes(context.type) ? context.type : 'general';
+  recordBroadcastResponse(user, 'inquiry');
   const merged = mergeIntoLatestInquiry(user, cleanText(text, 4000), type, context);
   if (merged) {
     mergedInquiries.add(merged);
@@ -180,7 +182,16 @@ function inquiryStatusMarkup(inquiry) {
   if (inquiry.status !== 'in_progress') row.push({ text: '⏳ В работу', callback_data: 'inq:in_progress:' + inquiry.id });
   row.push({ text: '✔️ Закрыть', callback_data: 'inq:closed:' + inquiry.id });
   rows.push(row);
+  const planned = inquiry.followUpDate && !inquiry.followUpNotifiedAt ? ' (' + inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + ')' : '';
+  rows.push([{ text: planned ? '📌 Напомню' + planned : '📌 Напомнить завтра', callback_data: 'inq:follow:' + inquiry.id }]);
   return { inline_keyboard: rows };
+}
+
+// "Remind me tomorrow": the next working day when office hours are set.
+function nextFollowUpDate(now = new Date()) {
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const opening = nextOpening(tomorrow);
+  return localDayKey(opening || tomorrow);
 }
 
 // Only buttons in the admin chat may act on inquiries.
@@ -198,14 +209,23 @@ async function handleInquiryStatusCallback(query, token) {
   }
   const [, status, ...rest] = String(query.data || '').split(':');
   const inquiry = data.inquiries.find((item) => item.id === rest.join(':'));
-  if (!inquiry || !Object.hasOwn(INQUIRY_STATUS_LABELS, status)) {
+  if (!inquiry || (!Object.hasOwn(INQUIRY_STATUS_LABELS, status) && status !== 'follow')) {
     await acknowledgeCallback(query, token, 'Обращение не найдено — возможно, оно удалено.');
     return;
   }
-  inquiry.status = status;
+  if (status === 'follow') {
+    inquiry.followUpDate = nextFollowUpDate();
+    inquiry.followUpTime = '';
+    inquiry.followUpNotifiedAt = '';
+    if (inquiry.status === 'new') inquiry.status = 'in_progress';
+  } else {
+    inquiry.status = status;
+  }
   inquiry.updatedAt = new Date().toISOString();
   saveDataNow();
-  await acknowledgeCallback(query, token, 'Статус: ' + INQUIRY_STATUS_LABELS[status]);
+  await acknowledgeCallback(query, token, status === 'follow'
+    ? 'Напомню ' + inquiry.followUpDate.split('-').reverse().join('.') + ' в начале рабочего дня'
+    : 'Статус: ' + INQUIRY_STATUS_LABELS[status]);
   try {
     await telegramRequest(token, 'editMessageReplyMarkup', {
       chat_id: chatId,
@@ -559,6 +579,7 @@ export {
   mergeIntoLatestInquiry,
   mergedInquiries,
   messageSummary,
+  nextFollowUpDate,
   notifyAdministrator,
   notifyAdministratorAction,
   reactionInfo,

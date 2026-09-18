@@ -394,9 +394,9 @@ function normalizeLoadedData(parsed) {
         buttonUrl: '',
       };
       if (entry.status === 'running') entry.status = 'queued';
-      entry.processedUserIds = Array.isArray(entry.processedUserIds)
-        ? entry.processedUserIds.map(String).slice(0, 100000)
-        : [];
+      for (const field of ['processedUserIds', 'respondedUserIds', 'inquiryUserIds', 'unsubscribedUserIds']) {
+        entry[field] = Array.isArray(entry[field]) ? entry[field].map(String).slice(0, 100000) : [];
+      }
       entry.failures = Array.isArray(entry.failures) ? entry.failures.slice(-100) : [];
       return entry;
     }) : [];
@@ -427,6 +427,10 @@ function normalizeLoadedData(parsed) {
       replies: Array.isArray(item.replies) ? item.replies.slice(-50) : [],
       remindedAt: cleanText(item.remindedAt, 40),
       viewing: item.type === 'viewing' ? normalizeViewing(item.viewing || {}) : null,
+      // When the manager plans to contact the client again.
+      followUpDate: DAY_KEY_PATTERN.test(String(item.followUpDate || '')) ? String(item.followUpDate) : '',
+      followUpTime: CLOCK_TIME_PATTERN.test(String(item.followUpTime || '')) ? String(item.followUpTime) : '',
+      followUpNotifiedAt: cleanText(item.followUpNotifiedAt, 40),
       createdAt: item.createdAt || new Date().toISOString(),
       updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
     })).slice(0, 5000) : [];

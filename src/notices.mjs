@@ -1,6 +1,6 @@
 // Ежедневная сводка и напоминания администратору о заявках без ответа.
 
-import { cleanText, dayKey } from './util.mjs';
+import { cleanText, dayKey, localDayKey } from './util.mjs';
 import { MENU_LABELS } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
@@ -80,6 +80,57 @@ function inquiryNeedsReminder(inquiry, now, thresholdMs) {
   return Number.isFinite(age) && age >= thresholdMs && age <= REMINDER_MAX_AGE_MS;
 }
 
+// An inquiry brought back to the admin chat (a reminder, a planned follow-up):
+// the admin can reply to it or press a status button, as under the first
+// notification.
+async function sendInquiryToAdministrator(adminChatId, inquiry, heading, extraLines = []) {
+  const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
+  const name = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Пользователь удалён';
+  const username = user && user.username ? ' (@' + user.username + ')' : '';
+  const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
+  const text = [
+    heading,
+    '👤 ' + name + username + (inquiry.language ? ' · ' + inquiry.language.toUpperCase() : '') + (user && user.phone ? ' · ' + user.phone : ''),
+    '',
+    ...(property ? ['🏠 ' + (localized(property.title, inquiry.language) || property.reference || property.id)] : []),
+    shortenedText(inquiry.text, 500),
+    ...extraLines,
+    ...(user ? ['', '↩️ Ответьте на это сообщение — ответ получит клиент.'] : []),
+  ].join('\n');
+  const messageIds = [];
+  await sendMessage(adminChatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry) });
+  if (user) rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId: inquiry.id, sourceMessageId: inquiry.sourceMessageId });
+}
+
+// A follow-up is due on its day: at the time the admin chose, otherwise at
+// the start of the working day.
+function followUpDue(inquiry, now) {
+  if (!inquiry.followUpDate || inquiry.followUpNotifiedAt || inquiry.status === 'closed') return false;
+  const today = localDayKey(now);
+  if (inquiry.followUpDate > today) return false;
+  if (inquiry.followUpTime) {
+    if (inquiry.followUpDate < today) return true;
+    const [hours, minutes] = inquiry.followUpTime.split(':').map(Number);
+    return now.getHours() * 60 + now.getMinutes() >= hours * 60 + minutes;
+  }
+  return adminMessagesAllowed(now);
+}
+
+async function runFollowUpReminders(now = new Date()) {
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  if (!adminChatId || !data.config.botToken) return [];
+  const due = data.inquiries.filter((inquiry) => followUpDue(inquiry, now)).slice(0, REMINDERS_PER_RUN);
+  const sent = [];
+  for (const inquiry of due) {
+    inquiry.followUpNotifiedAt = now.toISOString();
+    const planned = inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + (inquiry.followUpTime ? ' ' + inquiry.followUpTime : '');
+    await sendInquiryToAdministrator(adminChatId, inquiry, '📌 Пора связаться с клиентом (' + planned + '): ' + inquiryTypeLabel(inquiry), inquiry.note ? ['', '📝 ' + shortenedText(inquiry.note, 300)] : []);
+    sent.push(inquiry.id);
+  }
+  if (sent.length) saveDataNow();
+  return sent;
+}
+
 // Checked every 15 minutes; sends nothing outside office hours (or at night,
 // when no hours are set), so an inquiry that went unanswered overnight is
 // reminded about in the morning. Each reminder is a separate message: the
@@ -95,21 +146,7 @@ async function runInquiryReminders(now = new Date()) {
   if (!due.length) return [];
   const sent = [];
   for (const inquiry of due.slice(0, REMINDERS_PER_RUN)) {
-    const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
-    const name = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Пользователь удалён';
-    const username = user && user.username ? ' (@' + user.username + ')' : '';
-    const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
-    const text = [
-      '⏰ Нет ответа ' + hoursAgoText(now.getTime() - Date.parse(inquiry.createdAt)) + ': ' + inquiryTypeLabel(inquiry),
-      '👤 ' + name + username + (inquiry.language ? ' · ' + inquiry.language.toUpperCase() : ''),
-      '',
-      ...(property ? ['🏠 ' + (localized(property.title, inquiry.language) || property.reference || property.id)] : []),
-      shortenedText(inquiry.text, 500),
-      ...(user ? ['', '↩️ Ответьте на это сообщение — ответ получит клиент.'] : []),
-    ].join('\n');
-    const messageIds = [];
-    await sendMessage(adminChatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry) });
-    if (user) rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId: inquiry.id, sourceMessageId: inquiry.sourceMessageId });
+    await sendInquiryToAdministrator(adminChatId, inquiry, '⏰ Нет ответа ' + hoursAgoText(now.getTime() - Date.parse(inquiry.createdAt)) + ': ' + inquiryTypeLabel(inquiry));
     inquiry.remindedAt = now.toISOString();
     sent.push(inquiry.id);
   }
@@ -126,6 +163,7 @@ function runScheduledNotices() {
   runDailyDigest().catch((error) => recordError('Сводка активности', error));
   runInquiryReminders().catch((error) => recordError('Напоминание об обращениях', error));
   runViewingNotices().catch((error) => recordError('Уведомления о просмотрах', error));
+  runFollowUpReminders().catch((error) => recordError('Напоминание связаться с клиентом', error));
 }
 
 export {
@@ -133,10 +171,13 @@ export {
   REMINDERS_PER_RUN,
   REMINDER_MAX_AGE_MS,
   activityDigest,
+  followUpDue,
   hoursAgoText,
   inquiryNeedsReminder,
   runDailyDigest,
   runDailyDigestSafely,
+  runFollowUpReminders,
   runInquiryReminders,
   runScheduledNotices,
+  sendInquiryToAdministrator,
 };

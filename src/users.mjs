@@ -91,6 +91,11 @@ function normalizeUser(from, chatId, countMessage = true) {
     // The client turned broadcasts off (the "Unsubscribe" button or settings).
     broadcastsOptOut: Boolean(previous.broadcastsOptOut),
     broadcastsOptOutAt: cleanText(previous.broadcastsOptOutAt, 40),
+    // The last broadcast this client received, to count their response to it.
+    lastBroadcast: previous.lastBroadcast && typeof previous.lastBroadcast === 'object' ? {
+      id: cleanText(previous.lastBroadcast.id, 100),
+      at: cleanText(previous.lastBroadcast.at, 40),
+    } : null,
     // Properties that matched the client's last selection form.
     selectionMatchIds: Array.isArray(previous.selectionMatchIds) ? previous.selectionMatchIds.map(String).slice(0, 20) : [],
   };
@@ -124,7 +129,9 @@ function eraseUserData(user) {
   const inquiriesBefore = data.inquiries.length;
   data.inquiries = data.inquiries.filter((item) => item.userId !== id && String(item.chatId) !== chatId);
   for (const entry of data.broadcasts) {
-    if (Array.isArray(entry.processedUserIds)) entry.processedUserIds = entry.processedUserIds.filter((value) => String(value) !== id);
+    for (const field of ['processedUserIds', 'respondedUserIds', 'inquiryUserIds', 'unsubscribedUserIds']) {
+      if (Array.isArray(entry[field])) entry[field] = entry[field].filter((value) => String(value) !== id);
+    }
     if (Array.isArray(entry.failures)) entry.failures = entry.failures.filter((failure) => String(failure.userId) !== id);
   }
   for (const [messageId, target] of Object.entries(data.adminReplyTargets || {})) {

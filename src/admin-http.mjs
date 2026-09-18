@@ -375,6 +375,26 @@ function languageCounts() {
   return result;
 }
 
+// Where clients came from (the src_ label of the link they opened) and how
+// many of them sent a request. Counted over all users, not only the ones the
+// panel lists.
+const SOURCE_RECENT_DAYS = 30;
+
+function sourceReport(now = Date.now()) {
+  const withRequests = new Set(data.inquiries.map((item) => String(item.userId)));
+  const recentSince = now - SOURCE_RECENT_DAYS * 24 * 60 * 60 * 1000;
+  const rows = new Map();
+  for (const user of Object.values(data.users)) {
+    const source = cleanText(user.source, 40);
+    const row = rows.get(source) || { source, users: 0, recent: 0, withRequests: 0 };
+    row.users += 1;
+    if (Date.parse(user.firstSeenAt || user.sourceAt || '') >= recentSince) row.recent += 1;
+    if (withRequests.has(String(user.id))) row.withRequests += 1;
+    rows.set(source, row);
+  }
+  return Array.from(rows.values()).sort((a, b) => (a.source ? 0 : 1) - (b.source ? 0 : 1) || b.users - a.users || a.source.localeCompare(b.source));
+}
+
 function safeState(session) {
   const users = Object.values(data.users)
     .sort((a, b) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)))
@@ -413,11 +433,19 @@ function safeState(session) {
     interfaceText: normalizedInterfaceText(data.interfaceText),
     errors: data.errors,
     languageCounts: languageCounts(),
-    broadcasts: data.broadcasts.map((entry) => ({ ...entry, image: imageMeta(entry.image) })),
+    // Recipient ids stay on the server; the panel gets the counts.
+    broadcasts: data.broadcasts.map(({ processedUserIds, respondedUserIds, inquiryUserIds, unsubscribedUserIds, ...entry }) => ({
+      ...entry,
+      image: imageMeta(entry.image),
+      responses: Array.isArray(respondedUserIds) ? respondedUserIds.length : 0,
+      inquiriesAfter: Array.isArray(inquiryUserIds) ? inquiryUserIds.length : 0,
+      unsubscribes: Array.isArray(unsubscribedUserIds) ? unsubscribedUserIds.length : 0,
+    })),
     inquiries: data.inquiries,
     replyTemplates: data.replyTemplates || [],
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
     broadcastOptOutCount: Object.values(data.users).filter((user) => user.broadcastsOptOut && !user.blocked && user.chatId).length,
+    sources: sourceReport(),
   };
 }
 
@@ -453,4 +481,5 @@ export {
   securityHeaders,
   sessionKey,
   sessions,
+  sourceReport,
 };

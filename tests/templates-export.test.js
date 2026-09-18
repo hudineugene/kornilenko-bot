@@ -120,6 +120,75 @@ test.describe('reply templates', () => {
   });
 });
 
+test.describe('lead sources report', () => {
+  test('clients are counted by the label of their link, with how many sent a request', async () => {
+    const data = bot.getData();
+    data.users['503'] = { id: '503', chatId: 503, firstName: 'Olga', source: 'instagram', firstSeenAt: '2020-01-01T00:00:00.000Z', activity: [] };
+    data.users['504'] = { id: '504', chatId: 504, firstName: 'Ivan', source: 'facebook', firstSeenAt: new Date().toISOString(), activity: [] };
+    data.users['501'].firstSeenAt = new Date().toISOString();
+    try {
+      const state = await (await call('GET', '/api/state')).json();
+      assert.deepEqual(state.sources, [
+        { source: 'instagram', users: 2, recent: 1, withRequests: 1 },
+        { source: 'facebook', users: 1, recent: 1, withRequests: 0 },
+        { source: '', users: 1, recent: 0, withRequests: 1 },
+      ]);
+    } finally {
+      delete data.users['503'];
+      delete data.users['504'];
+    }
+  });
+});
+
+test.describe('property copies and order', () => {
+  test('a copy is hidden, placed after the original and shares the photos', async () => {
+    const data = bot.getData();
+    const original = data.objects.find((item) => item.id === 'villa-1');
+    original.reference = 'REF-1';
+    original.imagesByLanguage.ru = [{ id: 'photo-1', storageFile: 'abc.jpg', mimeType: 'image/jpeg' }];
+    const response = await call('POST', '/api/objects/villa-1/duplicate', {});
+    assert.equal(response.status, 201);
+    const { id } = await response.json();
+    const index = data.objects.findIndex((item) => item.id === 'villa-1');
+    const copy = data.objects[index + 1];
+    assert.equal(copy.id, id);
+    assert.equal(copy.status, 'hidden', 'not shown to clients until checked');
+    assert.deepEqual(copy.title, { ru: 'Вилла у моря (копия)', en: 'Sea villa (copy)', es: '' });
+    assert.equal(copy.reference, '');
+    assert.equal(copy.imagesByLanguage.ru[0].storageFile, 'abc.jpg');
+    assert.notEqual(copy.imagesByLanguage.ru[0].id, 'photo-1');
+    assert.equal(original.title.ru, 'Вилла у моря', 'the original is untouched');
+    assert.equal((await call('POST', '/api/objects/missing/duplicate', {})).status, 404);
+
+    assert.equal((await call('POST', '/api/objects/' + id + '/move', { step: -1 })).status, 200);
+    assert.deepEqual(data.objects.slice(0, 2).map((item) => item.id), [id, 'villa-1']);
+    const edge = await (await call('POST', '/api/objects/' + id + '/move', { step: -1 })).json();
+    assert.equal(edge.moved, false, 'already first');
+    assert.equal((await call('POST', '/api/objects/' + id + '/move', { step: 2 })).status, 400);
+    assert.equal((await call('DELETE', '/api/objects/' + id)).status, 200);
+    original.imagesByLanguage.ru = [];
+  });
+});
+
+test.describe('follow-up date in the panel', () => {
+  test('a date and an optional time are saved, checked and cleared', async () => {
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { followUpDate: '18.09.2026' })).status, 400);
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { followUpDate: '2026-09-25', followUpTime: '9:00' })).status, 400);
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { followUpDate: '', followUpTime: '10:00' })).status, 400, 'a time needs a date');
+
+    const inquiry = bot.getData().inquiries.find((item) => item.id === 'inq-lead');
+    inquiry.followUpNotifiedAt = '2026-09-17T09:00:00.000Z';
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { followUpDate: '2026-09-25', followUpTime: '10:30', note: 'перезвонить' })).status, 200);
+    assert.deepEqual([inquiry.followUpDate, inquiry.followUpTime, inquiry.followUpNotifiedAt], ['2026-09-25', '10:30', ''], 'a new date is reminded about again');
+
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { status: 'in_progress' })).status, 200);
+    assert.equal(inquiry.followUpDate, '2026-09-25', 'saving the status alone keeps the date');
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { followUpDate: '' })).status, 200);
+    assert.deepEqual([inquiry.followUpDate, inquiry.followUpTime], ['', '']);
+    inquiry.status = 'new';
+  });
+});
+
 test.describe('Excel export', () => {
   test('the selected inquiries are exported in the order shown', async () => {
     const response = await call('POST', '/api/inquiries/export', { ids: ['inq-question', 'inq-lead', 'missing'] });

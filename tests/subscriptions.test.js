@@ -62,6 +62,31 @@ test('every broadcast has an unsubscribe button; unsubscribed clients get no mor
   assert.equal(bot.broadcastUsers({ languages: [], tags: [] }).length, 2);
 });
 
+test('a broadcast counts who responded, sent a request or unsubscribed within three days', async () => {
+  const interested = createChat();
+  const leaving = createChat();
+  const silent = createChat();
+  const entry = { id: 'bc-news-1', ...broadcast, status: 'queued', createdAt: new Date().toISOString() };
+  bot.getData().broadcasts.unshift(entry);
+  await bot.runBroadcast(entry);
+  assert.equal(entry.sent, 3);
+  assert.equal(interested.user.lastBroadcast.id, 'bc-news-1');
+
+  await interested.say('Расскажите подробнее про виллы');
+  await interested.say('И про цены');
+  await leaving.press('subs:news:off:bc');
+  assert.deepEqual(entry.respondedUserIds, [String(interested.id)], 'each person once; unsubscribing is not a response');
+  assert.deepEqual(entry.inquiryUserIds, [String(interested.id)]);
+  assert.deepEqual(entry.unsubscribedUserIds, [String(leaving.id)]);
+
+  silent.user.lastBroadcast.at = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
+  await silent.say('Добрый день');
+  assert.ok(!entry.respondedUserIds.includes(String(silent.id)), 'too late to count');
+
+  const reloaded = bot.normalizeLoadedData(JSON.parse(JSON.stringify(bot.getData())));
+  assert.deepEqual(reloaded.broadcasts[0].respondedUserIds, [String(interested.id)], 'kept after a restart');
+});
+
 test('the setting survives a restart', () => {
   const chat = createChat();
   chat.user.broadcastsOptOut = true;

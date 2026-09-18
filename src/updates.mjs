@@ -11,7 +11,7 @@ import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, hand
 import { createInquiry, handleAdministratorReply, handleInquiryStatusCallback, handleMessageReaction, inquiryWasMerged, messageSummary, notifyAdministratorAction } from './inquiries.mjs';
 import { clearCatalogMessages, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage } from './catalog.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
-import { runDueBroadcasts } from './broadcasts.mjs';
+import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
 import { handleAlertsCallback } from './alerts.mjs';
 import { handleViewingConfirmCallback, handleViewingFeedbackCallback } from './viewings.mjs';
 import { handleMyRequestsCallback, sendMyRequests } from './requests.mjs';
@@ -48,6 +48,7 @@ async function handleUpdate(update, token) {
       ? update.callback_query.message.chat.id
       : update.callback_query.from.id;
     const callbackUser = normalizeUser(update.callback_query.from, callbackChatId, false);
+    recordBroadcastResponse(callbackUser, callbackData === 'subs:news:off:bc' ? 'unsubscribe' : 'response');
     if (duplicateCallback(callbackUser, callbackData)) {
       const copy = INTERACTION_TEXT[callbackUser.preferredLanguage] || INTERACTION_TEXT.ru;
       await acknowledgeCallback(update.callback_query, token, copy.duplicate);
@@ -86,6 +87,7 @@ async function handleUpdate(update, token) {
 
   const user = normalizeUser(message.from, message.chat.id);
   if (duplicateInboundMessage(user, message.message_id)) return;
+  recordBroadcastResponse(user, 'response');
   const expiredPending = pendingActionExpired(user) ? user.pendingAction : null;
   if (expiredPending) {
     rememberExpiredAction(user, expiredPending);

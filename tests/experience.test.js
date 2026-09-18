@@ -154,7 +154,7 @@ test.describe('admin', () => {
       '↩️ Ответьте на это сообщение — ответ получит клиент.',
     ].join('\n'));
     const id = chat.inquiries[0].id;
-    assert.deepEqual(callbacksOf(notification.markup), ['inq:in_progress:' + id, 'inq:closed:' + id]);
+    assert.deepEqual(callbacksOf(notification.markup), ['inq:in_progress:' + id, 'inq:closed:' + id, 'inq:follow:' + id]);
   });
 
   test('status buttons change the inquiry and the buttons', async () => {
@@ -167,7 +167,7 @@ test.describe('admin', () => {
     assert.deepEqual(pressed.popups, ['Статус: в работе']);
     let edit = pressed.calls.find((call) => call.method === 'editMessageReplyMarkup');
     assert.equal(edit.body.message_id, 777);
-    assert.deepEqual(callbacksOf(edit.body.reply_markup), ['inq:closed:' + inquiry.id]);
+    assert.deepEqual(callbacksOf(edit.body.reply_markup), ['inq:closed:' + inquiry.id, 'inq:follow:' + inquiry.id]);
 
     pressed = await adminPress('inq:closed:' + inquiry.id, 777);
     assert.equal(inquiry.status, 'closed');

@@ -41,6 +41,31 @@ async function deliverBroadcast(user, entry, token = data.config.botToken) {
   }
 }
 
+// Telegram does not tell the bot when a link button is pressed, so a
+// broadcast is measured by what recipients did within three days: wrote or
+// pressed something in the bot, sent a request, unsubscribed. Each person
+// counts once per broadcast.
+const BROADCAST_RESPONSE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+const BROADCAST_RESPONSE_FIELDS = { response: 'respondedUserIds', inquiry: 'inquiryUserIds', unsubscribe: 'unsubscribedUserIds' };
+
+function rememberBroadcastDelivery(user, entry, now = new Date()) {
+  user.lastBroadcast = { id: String(entry.id), at: now.toISOString() };
+}
+
+function recordBroadcastResponse(user, kind, now = Date.now()) {
+  const last = user && user.lastBroadcast;
+  const field = BROADCAST_RESPONSE_FIELDS[kind];
+  if (!field || !last || !last.id || !(now - Date.parse(last.at) <= BROADCAST_RESPONSE_WINDOW_MS)) return false;
+  const entry = data.broadcasts.find((item) => item.id === last.id);
+  if (!entry) return false;
+  entry[field] = Array.isArray(entry[field]) ? entry[field] : [];
+  const id = String(user.id);
+  if (entry[field].includes(id)) return false;
+  entry[field].push(id);
+  scheduleSave();
+  return true;
+}
+
 function userUnavailableError(error) {
   if (error && error.telegramCode === 403) return true;
   if (!error || error.telegramCode !== 400) return false;
@@ -53,6 +78,8 @@ async function runBroadcast(entry) {
   runtime.broadcastRunning = true;
   entry.status = 'running';
   entry.startedAt = entry.startedAt || new Date().toISOString();
+  // Broadcasts sent by older versions have no response counts.
+  entry.tracksResponses = true;
   entry.sent = Number(entry.sent || 0);
   entry.failed = Number(entry.failed || 0);
   entry.processedUserIds = Array.isArray(entry.processedUserIds) ? entry.processedUserIds.map(String) : [];
@@ -69,6 +96,7 @@ async function runBroadcast(entry) {
       try {
         await deliverBroadcast(user, entry);
         entry.sent += 1;
+        rememberBroadcastDelivery(user, entry);
       } catch (error) {
         entry.failed += 1;
         if (userUnavailableError(error)) user.blocked = true;
@@ -117,8 +145,12 @@ async function runDueBroadcasts() {
 }
 
 export {
+  BROADCAST_RESPONSE_FIELDS,
+  BROADCAST_RESPONSE_WINDOW_MS,
   broadcastUsers,
   deliverBroadcast,
+  recordBroadcastResponse,
+  rememberBroadcastDelivery,
   runBroadcast,
   runDueBroadcasts,
   userUnavailableError,

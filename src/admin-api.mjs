@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
-import { MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, normalizeLoadedData, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
+import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, normalizeLoadedData, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { forEachStoredImage, imageBytes, imageExists } from './media.mjs';
 import { MANAGER_CONTACT_TEXT, applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
 import { configured, data, replaceData, runtime, saveDataNow, verifyPassword } from './store.mjs';
@@ -315,6 +315,52 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // A copy of a property to start a similar one: hidden until the admin
+  // checks it, placed right after the original, sharing the photo files.
+  const duplicateMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/duplicate$/);
+  if (duplicateMatch && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const index = data.objects.findIndex((item) => item.id === decodeURIComponent(duplicateMatch[1]));
+    if (index < 0) return json(res, 404, { error: 'Объект не найден' });
+    const copy = clone(data.objects[index]);
+    const now = new Date().toISOString();
+    const suffix = { ru: ' (копия)', en: ' (copy)', es: ' (copia)' };
+    copy.id = crypto.randomUUID();
+    copy.status = 'hidden';
+    copy.reference = '';
+    copy.createdAt = now;
+    copy.updatedAt = now;
+    copy.title = Object.fromEntries(['ru', 'en', 'es'].map((language) => {
+      const title = cleanText(copy.title && copy.title[language], 160);
+      return [language, title ? cleanText(title + suffix[language], 160) : ''];
+    }));
+    for (const language of ['ru', 'en', 'es']) {
+      const images = copy.imagesByLanguage && Array.isArray(copy.imagesByLanguage[language]) ? copy.imagesByLanguage[language] : [];
+      for (const image of images) image.id = crypto.randomUUID();
+    }
+    data.objects.splice(index + 1, 0, copy);
+    saveDataNow();
+    return json(res, 201, { ok: true, id: copy.id });
+  }
+
+  // The catalog shows properties in this order.
+  const moveMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/move$/);
+  if (moveMatch && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const step = Number(body.step);
+    if (![-1, 1].includes(step)) return json(res, 400, { error: 'Некорректное направление' });
+    const index = data.objects.findIndex((item) => item.id === decodeURIComponent(moveMatch[1]));
+    if (index < 0) return json(res, 404, { error: 'Объект не найден' });
+    const target = index + step;
+    if (target < 0 || target >= data.objects.length) return json(res, 200, { ok: true, moved: false });
+    [data.objects[index], data.objects[target]] = [data.objects[target], data.objects[index]];
+    saveDataNow();
+    return json(res, 200, { ok: true, moved: true });
+  }
+
   const contentMatch = url.pathname.match(/^\/api\/(objects|promotions)\/([^/]+)$/);
   if (contentMatch && req.method === 'PATCH') {
     const session = requireAuth(req, res, true);
@@ -552,6 +598,16 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     if (body.status != null && !['new', 'in_progress', 'closed'].includes(body.status)) {
       return json(res, 400, { error: 'Некорректный статус обращения' });
+    }
+    if (body.followUpDate != null) {
+      const date = cleanText(body.followUpDate, 10);
+      const time = cleanText(body.followUpTime, 5);
+      if (date && !DAY_KEY_PATTERN.test(date)) return json(res, 400, { error: 'Некорректная дата напоминания' });
+      if (time && !CLOCK_TIME_PATTERN.test(time)) return json(res, 400, { error: 'Время напоминания укажите в формате ЧЧ:ММ' });
+      if (time && !date) return json(res, 400, { error: 'Укажите дату напоминания' });
+      if (date !== inquiry.followUpDate || time !== inquiry.followUpTime) inquiry.followUpNotifiedAt = '';
+      inquiry.followUpDate = date;
+      inquiry.followUpTime = date ? time : '';
     }
     if (body.status != null) inquiry.status = body.status;
     if (body.note != null) inquiry.note = cleanText(body.note, 2000);
@@ -819,8 +875,7 @@ async function handleApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const body = await readJson(req);
-    const clock = /^([01]\d|2[0-3]):[0-5]\d$/;
-    if (!clock.test(String(body.from || '')) || !clock.test(String(body.to || ''))) return json(res, 400, { error: 'Время укажите в формате ЧЧ:ММ' });
+    if (!CLOCK_TIME_PATTERN.test(String(body.from || '')) || !CLOCK_TIME_PATTERN.test(String(body.to || ''))) return json(res, 400, { error: 'Время укажите в формате ЧЧ:ММ' });
     if (String(body.from) >= String(body.to)) return json(res, 400, { error: 'Конец рабочего дня должен быть позже начала' });
     const days = Array.isArray(body.days) ? body.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) : [];
     if (body.enabled === true && !days.length) return json(res, 400, { error: 'Отметьте хотя бы один рабочий день' });
