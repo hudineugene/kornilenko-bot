@@ -15,6 +15,8 @@ import { runDueBroadcasts } from './broadcasts.mjs';
 import { handleAlertsCallback } from './alerts.mjs';
 import { handleViewingConfirmCallback, handleViewingFeedbackCallback } from './viewings.mjs';
 import { handleMyRequestsCallback, sendMyRequests } from './requests.mjs';
+import { handleSubscriptionCallback } from './subscriptions.mjs';
+import { withOffHoursNote } from './hours.mjs';
 
 function findRule(text, language) {
   const input = text.toLocaleLowerCase('ru-RU').trim();
@@ -64,6 +66,7 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('cfilter:')) await handleCatalogFilterCallback(update.callback_query, token);
       else if (callbackData.startsWith('myreq:')) await handleMyRequestsCallback(update.callback_query, token);
       else if (callbackData.startsWith('vfb:')) await handleViewingFeedbackCallback(update.callback_query, token);
+      else if (callbackData.startsWith('subs:')) await handleSubscriptionCallback(update.callback_query, token);
       else {
         const copy = INTERACTION_TEXT[callbackUser.preferredLanguage] || INTERACTION_TEXT.ru;
         await acknowledgeCallback(update.callback_query, token, copy.stale);
@@ -98,6 +101,8 @@ async function handleUpdate(update, token) {
   scheduleSave();
 
   let answer = '';
+  // Answers to what became an inquiry say when the manager will reply.
+  let inquiryAnswer = false;
   const command = text.split(/\s+/)[0].split('@')[0].toLowerCase();
   const commandArgument = cleanText(text.split(/\s+/).slice(1).join(' '), 100);
   const sourceLabel = command === '/start' ? leadSourceFromPayload(commandArgument) : '';
@@ -238,6 +243,7 @@ async function handleUpdate(update, token) {
     }
     const inquiry = createInquiry(user, text || summary, { type: 'general', sourceMessage: message });
     answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
+    inquiryAnswer = true;
   }
   else if (user.pendingAction && text === (INTERACTION_TEXT[user.preferredLanguage] || INTERACTION_TEXT.ru).continueForm) {
     await showPendingActionStep(user, token);
@@ -266,6 +272,7 @@ async function handleUpdate(update, token) {
     const inquiry = createInquiry(user, text || summary, { type: 'question', sourceMessage: message });
     scheduleSave();
     answer = inquiryWasMerged(inquiry) ? '' : (MANAGER_CONTACT_TEXT[user.preferredLanguage] || MANAGER_CONTACT_TEXT.ru).received;
+    inquiryAnswer = true;
   }
   else if (user.pendingAction && (!text || !menuItemForText(text, user.preferredLanguage))) {
     const pending = user.pendingAction;
@@ -279,6 +286,7 @@ async function handleUpdate(update, token) {
       const received = (PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received;
       const propertyTitle = localizedExact(property.title, user.preferredLanguage) || property.reference || '';
       answer = [received, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n');
+      inquiryAnswer = true;
     } else {
       answer = user.preferredLanguage === 'en' ? 'This property is no longer available.' : user.preferredLanguage === 'es' ? 'Este inmueble ya no está disponible.' : 'Этот объект уже недоступен.';
     }
@@ -351,14 +359,17 @@ async function handleUpdate(update, token) {
       else {
         const inquiry = createInquiry(user, text, { type: 'general', sourceMessage: message });
         answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
+        inquiryAnswer = true;
       }
     }
   } else {
     const inquiry = createInquiry(user, summary, { type: 'general', sourceMessage: message });
     answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
+    inquiryAnswer = true;
   }
 
   if (answer) {
+    if (inquiryAnswer) answer = withOffHoursNote(answer, user.preferredLanguage);
     try {
       await sendMessage(message.chat.id, answer, token, {
         reply_markup: menuKeyboard(user.preferredLanguage),

@@ -2,6 +2,7 @@
 
 import { cleanText, delay, fillTemplate } from './util.mjs';
 import { imageExists } from './media.mjs';
+import { SUBSCRIPTION_TEXT } from './texts.mjs';
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { sendMessage, sendPhotoMessage } from './telegram.mjs';
@@ -11,7 +12,7 @@ function broadcastUsers(entry) {
   const languages = Array.isArray(entry.languages) ? entry.languages.filter((language) => ['ru', 'en', 'es'].includes(language)) : [];
   const requiredTags = Array.isArray(entry.tags) ? entry.tags.map((tag) => String(tag).toLocaleLowerCase('ru-RU')) : [];
   return Object.values(data.users).filter((user) => {
-    if (user.blocked || !user.chatId) return false;
+    if (user.blocked || !user.chatId || user.broadcastsOptOut) return false;
     if (languages.length && !languages.includes(user.preferredLanguage || 'ru')) return false;
     if (requiredTags.length) {
       const userTags = (user.tags || []).map((tag) => String(tag).toLocaleLowerCase('ru-RU'));
@@ -26,7 +27,9 @@ async function deliverBroadcast(user, entry, token = data.config.botToken) {
   const text = fillTemplate(localized(entry.messages, language), user);
   const url = validHttpUrl(entry.buttonUrl);
   const buttonText = localized(entry.buttonText, language);
-  const markup = url && buttonText ? { inline_keyboard: [[{ text: buttonText, url }]] } : null;
+  // Every broadcast can be unsubscribed from with one tap.
+  const unsubscribe = { text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).unsubscribe, callback_data: 'subs:news:off:bc' };
+  const markup = { inline_keyboard: [...(url && buttonText ? [[{ text: buttonText, url }]] : []), [unsubscribe]] };
   if (imageExists(entry.image)) {
     if (text.length <= 1000) await sendPhotoMessage(user.chatId, entry.image, text, token, markup);
     else {

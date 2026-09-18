@@ -9,6 +9,7 @@ import { sendMessage } from './telegram.mjs';
 import { inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
 import { localized, shortenedText } from './catalog.mjs';
 import { runViewingNotices } from './viewings.mjs';
+import { adminMessagesAllowed, adminMorningHour } from './hours.mjs';
 
 const DIGEST_HOUR = 9;
 
@@ -42,7 +43,7 @@ function activityDigest(dayKeyValue) {
 
 async function runDailyDigest(now = new Date()) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
-  if (data.config.notifyMode !== 'inquiries' || !adminChatId || !data.config.botToken || now.getHours() < DIGEST_HOUR) return '';
+  if (data.config.notifyMode !== 'inquiries' || !adminChatId || !data.config.botToken || now.getHours() < adminMorningHour(DIGEST_HOUR)) return '';
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const key = dayKey(yesterday);
@@ -58,7 +59,6 @@ function runDailyDigestSafely() {
   runDailyDigest().catch((error) => recordError('Сводка активности', error));
 }
 
-const REMINDER_WINDOW = { from: 9, to: 21 };
 const REMINDER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const REMINDERS_PER_RUN = 5;
 
@@ -80,14 +80,15 @@ function inquiryNeedsReminder(inquiry, now, thresholdMs) {
   return Number.isFinite(age) && age >= thresholdMs && age <= REMINDER_MAX_AGE_MS;
 }
 
-// Checked every 15 minutes; sends nothing at night, so an inquiry that went
-// unanswered overnight is reminded about in the morning. Each reminder is a
-// separate message: the admin can reply to it or press a status button.
+// Checked every 15 minutes; sends nothing outside office hours (or at night,
+// when no hours are set), so an inquiry that went unanswered overnight is
+// reminded about in the morning. Each reminder is a separate message: the
+// admin can reply to it or press a status button.
 async function runInquiryReminders(now = new Date()) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
   const hours = Number(data.config.reminderHours);
   if (!hours || !adminChatId || !data.config.botToken) return [];
-  if (now.getHours() < REMINDER_WINDOW.from || now.getHours() >= REMINDER_WINDOW.to) return [];
+  if (!adminMessagesAllowed(now)) return [];
   const due = data.inquiries
     .filter((inquiry) => inquiryNeedsReminder(inquiry, now.getTime(), hours * 60 * 60 * 1000))
     .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
@@ -131,7 +132,6 @@ export {
   DIGEST_HOUR,
   REMINDERS_PER_RUN,
   REMINDER_MAX_AGE_MS,
-  REMINDER_WINDOW,
   activityDigest,
   hoursAgoText,
   inquiryNeedsReminder,

@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
-import { MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, normalizeLoadedData, pruneOrphanPropertyAnalytics } from './data-format.mjs';
+import { MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, normalizeLoadedData, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { forEachStoredImage, imageBytes, imageExists } from './media.mjs';
 import { MANAGER_CONTACT_TEXT, applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
 import { configured, data, replaceData, runtime, saveDataNow, verifyPassword } from './store.mjs';
@@ -813,6 +813,24 @@ async function handleApi(req, res, url) {
       for (const id of sessions.keys()) if (id !== session.id) sessions.delete(id);
     }
     return json(res, 200, { ok: true });
+  }
+
+  if (url.pathname === '/api/working-hours' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const clock = /^([01]\d|2[0-3]):[0-5]\d$/;
+    if (!clock.test(String(body.from || '')) || !clock.test(String(body.to || ''))) return json(res, 400, { error: 'Время укажите в формате ЧЧ:ММ' });
+    if (String(body.from) >= String(body.to)) return json(res, 400, { error: 'Конец рабочего дня должен быть позже начала' });
+    const days = Array.isArray(body.days) ? body.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) : [];
+    if (body.enabled === true && !days.length) return json(res, 400, { error: 'Отметьте хотя бы один рабочий день' });
+    const note = body.note && typeof body.note === 'object' ? body.note : {};
+    for (const language of ['ru', 'en', 'es']) {
+      if (cleanText(note[language], 500) && !String(note[language]).includes('{next}')) return json(res, 400, { error: 'В тексте для клиента оставьте {next} — туда бот подставит, когда ответит менеджер' });
+    }
+    data.config.workingHours = normalizeWorkingHours({ enabled: body.enabled === true, days, from: body.from, to: body.to, note });
+    saveDataNow();
+    return json(res, 200, { ok: true, workingHours: data.config.workingHours });
   }
 
   if (url.pathname === '/api/broadcast/estimate' && req.method === 'POST') {

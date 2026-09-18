@@ -88,6 +88,9 @@ function normalizeUser(from, chatId, countMessage = true) {
     catalogFilter: previous.catalogFilter && typeof previous.catalogFilter === 'object' ? normalizedCatalogFilter(previous.catalogFilter) : null,
     sourceAt: cleanText(previous.sourceAt, 40),
     alertsSent: previous.alertsSent && typeof previous.alertsSent === 'object' && !Array.isArray(previous.alertsSent) ? previous.alertsSent : {},
+    // The client turned broadcasts off (the "Unsubscribe" button or settings).
+    broadcastsOptOut: Boolean(previous.broadcastsOptOut),
+    broadcastsOptOutAt: cleanText(previous.broadcastsOptOutAt, 40),
     // Properties that matched the client's last selection form.
     selectionMatchIds: Array.isArray(previous.selectionMatchIds) ? previous.selectionMatchIds.map(String).slice(0, 20) : [],
   };

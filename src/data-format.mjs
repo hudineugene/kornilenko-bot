@@ -234,6 +234,37 @@ function normalizeAdminReplyTargets(value) {
 const DAY_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const CLOCK_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+// Office hours. Off by default: until the administrator sets them, the bot
+// never tells clients that the office is closed.
+const DEFAULT_WORKING_HOURS = {
+  enabled: false,
+  days: [1, 2, 3, 4, 5],
+  from: '09:00',
+  to: '19:00',
+  note: {
+    ru: 'Сейчас нерабочее время — менеджер ответит {next}. Ваше сообщение сохранено.',
+    en: 'Our office is closed now — a manager will reply {next}. Your message is saved.',
+    es: 'Ahora estamos fuera de horario: un gestor responderá {next}. Tu mensaje está guardado.',
+  },
+};
+
+function normalizeWorkingHours(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const days = Array.isArray(source.days)
+    ? Array.from(new Set(source.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))).sort()
+    : DEFAULT_WORKING_HOURS.days.slice();
+  const from = CLOCK_TIME_PATTERN.test(String(source.from || '')) ? String(source.from) : DEFAULT_WORKING_HOURS.from;
+  const to = CLOCK_TIME_PATTERN.test(String(source.to || '')) ? String(source.to) : DEFAULT_WORKING_HOURS.to;
+  const note = source.note && typeof source.note === 'object' ? source.note : {};
+  return {
+    enabled: source.enabled === true && days.length > 0 && from < to,
+    days,
+    from,
+    to,
+    note: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText(note[language], 500) || DEFAULT_WORKING_HOURS.note[language]])),
+  };
+}
+
 // A viewing request: what the client asked for (date may be unknown, for
 // "at the weekend" or a free-text answer), what the manager confirmed and
 // what the bot already sent about it.
@@ -467,6 +498,7 @@ function normalizeLoadedData(parsed) {
     normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
+    normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;
 }
@@ -475,6 +507,7 @@ export {
   CLOCK_TIME_PATTERN,
   DATA_VERSION,
   DAY_KEY_PATTERN,
+  DEFAULT_WORKING_HOURS,
   MAX_REPLY_TEMPLATES,
   REMINDER_HOUR_OPTIONS,
   defaultData,
@@ -489,5 +522,6 @@ export {
   normalizeReplyTemplates,
   normalizeStoredImages,
   normalizeViewing,
+  normalizeWorkingHours,
   pruneOrphanPropertyAnalytics,
 };

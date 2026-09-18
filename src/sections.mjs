@@ -11,6 +11,7 @@ import { sendMessage, sendPhotoAlbum, sendPhotoMessage, telegramRequest } from '
 import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendWelcome } from './menus.mjs';
 import { startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs';
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
+import { withOffHoursNote } from './hours.mjs';
 import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, contentButtons, deleteCatalogMessages, localizedExact, objectCaption, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 
 async function sendPromotionPage(chatId, user, token, page = 0) {
@@ -218,7 +219,7 @@ async function handlePromotionQuestion(query, token) {
   await acknowledgeCallback(query, token);
   const title = localizedExact(record.title, language) || localizedExact(record.title, 'ru');
   createInquiry(user, '🔥 Акция «' + title + '»: клиент хочет узнать подробнее', { type: 'question' });
-  await sendMessage(chatId, [text.received, '🔥 ' + title].join('\n\n'), token, { reply_markup: menuKeyboard(language) });
+  await sendMessage(chatId, withOffHoursNote([text.received, '🔥 ' + title].join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
 }
 
 async function handleLanguageCallback(query, token) {
@@ -478,7 +479,7 @@ async function handlePropertyCallback(query, token) {
     recordPropertyEvent(record.id, 'questions');
     await acknowledgeCallback(query, token);
     createInquiry(user, propertyRequestText(record, language, 'question') + '\n\n' + text.askPrice, { type: 'question', propertyId: record.id });
-    await sendMessage(chatId, [text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(chatId, withOffHoursNote([text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
     return;
   }
   if (actionName === 'availability') {
@@ -486,7 +487,7 @@ async function handlePropertyCallback(query, token) {
     await acknowledgeCallback(query, token);
     const inquiry = propertyRequestText(record, language, 'question') + '\n\n' + text.availability;
     createInquiry(user, inquiry, { type: 'question', propertyId: record.id, sourceMessage: query.message });
-    await sendMessage(chatId, [text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(chatId, withOffHoursNote([text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
     return;
   }
   if (actionName === 'similar') {
@@ -588,7 +589,7 @@ async function handlePropertyCallback(query, token) {
       if (record.status === 'reserved') {
         const inquiry = propertyRequestText(record, language, 'question') + '\n\n' + text.availability;
         createInquiry(user, inquiry, { type: 'question', propertyId: record.id, sourceMessage: query.message });
-        await sendMessage(chatId, [text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
+        await sendMessage(chatId, withOffHoursNote([text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
       } else {
         await startViewingForm(user, record, token);
       }

@@ -381,6 +381,40 @@ const MY_REQUESTS_TEXT = {
   },
 };
 
+// What the client agrees to receive: broadcasts and property alerts.
+const SUBSCRIPTION_TEXT = {
+  ru: {
+    menuButton: '🔔 Уведомления',
+    title: '🔔 Какие сообщения присылать?\n\nНажмите на пункт, чтобы включить или выключить его. Ответы менеджера и сообщения по вашим заявкам приходят всегда.',
+    news: 'Новости и акции',
+    alerts: 'Объекты: снижение цены и новые по вашему запросу',
+    unsubscribe: '🔕 Отписаться от рассылок',
+    newsOff: 'Вы отписались от рассылок. Включить их снова можно в «☰ Ещё → 🔔 Уведомления».',
+    newsOn: 'Рассылки снова включены.',
+    undo: '↩️ Вернуть рассылки',
+  },
+  en: {
+    menuButton: '🔔 Notifications',
+    title: '🔔 Which messages should we send you?\n\nTap an item to turn it on or off. Manager replies and messages about your requests always arrive.',
+    news: 'News and offers',
+    alerts: 'Properties: price drops and new matches for your request',
+    unsubscribe: '🔕 Unsubscribe from news',
+    newsOff: 'You have unsubscribed from our news. You can turn it back on in “☰ More → 🔔 Notifications”.',
+    newsOn: 'News messages are on again.',
+    undo: '↩️ Resubscribe',
+  },
+  es: {
+    menuButton: '🔔 Avisos',
+    title: '🔔 ¿Qué mensajes quieres recibir?\n\nPulsa una opción para activarla o desactivarla. Las respuestas del gestor y los mensajes sobre tus solicitudes llegan siempre.',
+    news: 'Novedades y promociones',
+    alerts: 'Inmuebles: bajadas de precio y novedades según tu solicitud',
+    unsubscribe: '🔕 Darse de baja de las novedades',
+    newsOff: 'Te has dado de baja de las novedades. Puedes activarlas de nuevo en «☰ Más → 🔔 Avisos».',
+    newsOn: 'Las novedades vuelven a estar activadas.',
+    undo: '↩️ Volver a suscribirme',
+  },
+};
+
 // Messages about a viewing after the request: confirmation, a reminder the
 // evening before and a question about how it went.
 const VIEWING_NOTICE_TEXT = {
@@ -543,6 +577,7 @@ const INTERFACE_TEXT_TARGETS = {
   catalogFilter: { target: CATALOG_FILTER_TEXT },
   myRequests: { target: MY_REQUESTS_TEXT },
   viewingNotices: { target: VIEWING_NOTICE_TEXT },
+  subscriptions: { target: SUBSCRIPTION_TEXT },
 };
 
 const INTERFACE_TEXT_DEFAULTS = Object.fromEntries(Object.entries(INTERFACE_TEXT_TARGETS).map(([group, descriptor]) => [
@@ -624,6 +659,7 @@ export {
   PROPERTY_CONDITION_LABELS,
   PROPERTY_TYPE_LABELS,
   SELECTION_FORM_TEXT,
+  SUBSCRIPTION_TEXT,
   VIEWING_FORM_TEXT,
   VIEWING_NOTICE_TEXT,
   applyInterfaceText,

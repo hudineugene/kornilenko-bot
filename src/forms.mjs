@@ -12,6 +12,7 @@ import { localizedExact, sendCatalogPage } from './catalog.mjs';
 import { currentSelectionMatches } from './alerts.mjs';
 import { propertyRequestText } from './sections.mjs';
 import { parseViewingDate, viewingDayForOption } from './viewings.mjs';
+import { withOffHoursNote } from './hours.mjs';
 
 function savedLeadOption(user, language, field) {
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
@@ -324,7 +325,7 @@ async function handleLeadFormMessage(message, user, token) {
     saveDataNow();
     const property = propertyId ? data.objects.find((item) => item.id === propertyId) : null;
     const propertyTitle = property ? localizedExact(property.title, language) : '';
-    await sendMessage(user.chatId, [copy.success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(user.chatId, withOffHoursNote([copy.success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
     return true;
   }
   // "Today" / "tomorrow" are resolved at the moment of the answer: the form
@@ -510,7 +511,7 @@ async function handleViewingFormMessage(message, user, token) {
     });
     recordPropertyEvent(property.id, 'viewings');
     saveDataNow();
-    await sendMessage(user.chatId, [copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(user.chatId, withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
     return true;
   }
   return false;
@@ -685,10 +686,10 @@ async function handleSelectionFormMessage(message, user, token) {
     user.selectionMatchIds = matches.map((record) => record.id);
     saveDataNow();
     if (!matches.length) {
-      await sendMessage(user.chatId, copy.success, token, { reply_markup: menuKeyboard(language) });
+      await sendMessage(user.chatId, withOffHoursNote(copy.success, language), token, { reply_markup: menuKeyboard(language) });
       return true;
     }
-    await sendMessage(user.chatId, copy.successMatches, token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(user.chatId, withOffHoursNote(copy.successMatches, language), token, { reply_markup: menuKeyboard(language) });
     await sendCatalogPage(user.chatId, user, token, 0, 'matches');
     return true;
   }

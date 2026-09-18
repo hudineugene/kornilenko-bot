@@ -14,6 +14,7 @@ import { adminCallbackAllowed, createInquiry, inquiryStatusMarkup, notifyAdminis
 import { localized, localizedExact, validHttpUrl } from './catalog.mjs';
 import { acknowledgeCallback, propertyRequestText, sendSimilarProperty } from './sections.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
+import { adminMorningHour } from './hours.mjs';
 
 const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
 const VIEWING_REMINDER_HOUR = 18;
@@ -366,7 +367,7 @@ async function runViewingNotices(now = new Date(), token = data.config.botToken)
   }
   const adminChatId = cleanText(data.config.adminChatId, 40);
   const today = localDayKey(now);
-  if (adminChatId && now.getHours() >= VIEWING_AGENDA_HOUR && data.lastViewingAgendaFor !== today) {
+  if (adminChatId && now.getHours() >= adminMorningHour(VIEWING_AGENDA_HOUR) && data.lastViewingAgendaFor !== today) {
     data.lastViewingAgendaFor = today;
     const agenda = viewingAgenda(now);
     if (agenda) {

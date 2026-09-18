@@ -2,7 +2,7 @@
 
 import { fillTemplate } from './util.mjs';
 import { imageExists } from './media.mjs';
-import { BOT_COMMAND_DESCRIPTIONS, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_REQUESTS_TEXT, NAVIGATION_TEXT } from './texts.mjs';
+import { BOT_COMMAND_DESCRIPTIONS, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_REQUESTS_TEXT, NAVIGATION_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { clearCatalogMessages, clearGalleryMessages, clearUiMessages, sendUiMessage } from './catalog.mjs';
@@ -83,6 +83,7 @@ async function sendMoreMenu(chatId, user, token) {
     reply_markup: {
       inline_keyboard: [
         [{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton, callback_data: 'myreq:list' }],
+        [{ text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).menuButton, callback_data: 'subs:menu' }],
         [{ text: labels.about, callback_data: 'nav:about' }],
         [{ text: labels.help, callback_data: 'nav:help' }],
         [{ text: labels.language, callback_data: 'nav:language' }],
