@@ -11,8 +11,9 @@ import { createInquiry } from './inquiries.mjs';
 import { localizedExact, sendCatalogPage } from './catalog.mjs';
 import { currentSelectionMatches } from './alerts.mjs';
 import { propertyRequestText } from './sections.mjs';
-import { parseViewingDate, viewingDayForOption } from './viewings.mjs';
+import { parseViewingDate, sendViewingConfirmation, viewingDayForOption } from './viewings.mjs';
 import { withOffHoursNote } from './hours.mjs';
+import { availableSlotDays, freeTimes, slotFree, slotsEnabled } from './slots.mjs';
 
 function savedLeadOption(user, language, field) {
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
@@ -155,7 +156,7 @@ async function showPendingActionStep(user, token) {
     }
     const prompt = step === 'time' ? copy.askTime : step === 'custom_time' ? copy.askCustomTime : step === 'custom' ? copy.askCustom : copy.askDate;
     const title = step === 'date' ? localizedExact(property.title, language) || property.reference || '' : '';
-    await sendMessage(user.chatId, [title ? '🏠 ' + title : '', prompt].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, step) });
+    await sendMessage(user.chatId, [title ? '🏠 ' + title : '', prompt].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, step, pending) });
     return true;
   }
   if (pending.type === 'property_selection') {
@@ -370,8 +371,18 @@ function viewingDateValue(value, copy, language, now = new Date()) {
   return value + ' (' + formatted + ')';
 }
 
-function viewingKeyboard(language, step) {
+// With free slots set in the panel ("slot mode") the date and time buttons
+// are the free days and hours, and the booking is confirmed at once.
+// "Another date" / "Another time" leave slot mode: the manager confirms.
+function viewingKeyboard(language, step, pending = null) {
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
+  const slotMode = Boolean(pending && pending.data && pending.data.slotMode);
+  if (step === 'date' && slotMode) {
+    return oneColumnReplyKeyboard(availableSlotDays(language).map((day) => day.label).concat(copy.dateOptions[3]), copy.cancel, copy.askDate);
+  }
+  if (step === 'time' && slotMode) {
+    return oneColumnReplyKeyboard(freeTimes(pending.data.day).concat(copy.timeOptions[3]), copy.cancel, copy.askTime);
+  }
   if (step === 'date') return oneColumnReplyKeyboard(copy.dateOptions, copy.cancel, copy.askDate);
   if (step === 'time') return oneColumnReplyKeyboard(copy.timeOptions, copy.cancel, copy.askTime);
   if (step === 'confirm') return oneColumnReplyKeyboard([copy.confirm, copy.editDate, copy.editTime], copy.cancel, copy.review);
@@ -388,16 +399,22 @@ async function sendViewingReview(user, pending, property, token, language) {
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
   pending.step = 'confirm';
   scheduleSave();
-  await sendMessage(user.chatId, viewingReviewText(copy, property, pending, language), token, { reply_markup: viewingKeyboard(language, 'confirm') });
+  await sendMessage(user.chatId, viewingReviewText(copy, property, pending, language), token, { reply_markup: viewingKeyboard(language, 'confirm', pending) });
+}
+
+// Slot mode only when there is something to choose from.
+function newViewingData(language) {
+  return slotsEnabled() && availableSlotDays(language).length ? { slotMode: true } : {};
 }
 
 async function startViewingForm(user, record, token) {
   const language = user.preferredLanguage || 'ru';
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
-  user.pendingAction = { type: 'viewing_form', propertyId: record.id, step: 'date', data: {}, createdAt: new Date().toISOString() };
+  const pending = { type: 'viewing_form', propertyId: record.id, step: 'date', data: newViewingData(language), createdAt: new Date().toISOString() };
+  user.pendingAction = pending;
   scheduleSave();
   const title = localizedExact(record.title, language) || record.reference || '';
-  await sendMessage(user.chatId, [title ? '🏠 ' + title : '', copy.askDate].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, 'date') });
+  await sendMessage(user.chatId, [title ? '🏠 ' + title : '', copy.askDate].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, 'date', pending) });
 }
 
 async function handleViewingFormMessage(message, user, token) {
@@ -407,6 +424,7 @@ async function handleViewingFormMessage(message, user, token) {
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
   const property = data.objects.find((item) => item.id === pending.propertyId && item.status === 'active');
   const text = typeof message.text === 'string' ? message.text.trim() : '';
+  const keyboard = (step) => viewingKeyboard(language, step, pending);
   if (!property) {
     user.pendingAction = null;
     scheduleSave();
@@ -421,38 +439,55 @@ async function handleViewingFormMessage(message, user, token) {
   }
   pending.data = pending.data && typeof pending.data === 'object' ? pending.data : {};
   if (pending.step === 'date') {
-    const optionIndex = copy.dateOptions.indexOf(text);
-    if (optionIndex < 0) {
-      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: viewingKeyboard(language, 'date') });
-      return true;
-    }
-    if (optionIndex === 3) {
+    if (text === copy.dateOptions[3]) {
+      pending.data.slotMode = false;
       pending.step = 'custom';
       scheduleSave();
-      await sendMessage(user.chatId, copy.askCustom, token, { reply_markup: viewingKeyboard(language, 'custom') });
+      await sendMessage(user.chatId, copy.askCustom, token, { reply_markup: keyboard('custom') });
       return true;
     }
-    pending.data.date = viewingDateValue(text, copy, language);
-    pending.data.day = viewingDayForOption(optionIndex);
-    if (pending.editing === 'date' && pending.data.time) {
-      await sendViewingReview(user, pending, property, token, language);
-      return true;
+    if (pending.data.slotMode) {
+      const day = availableSlotDays(language).find((item) => item.label === text);
+      if (!day) {
+        await sendMessage(user.chatId, copy.invalid, token, { reply_markup: keyboard('date') });
+        return true;
+      }
+      pending.data.day = day.key;
+      pending.data.date = day.label;
+      if (pending.editing === 'date' && day.times.includes(pending.data.time)) {
+        await sendViewingReview(user, pending, property, token, language);
+        return true;
+      }
+      pending.data.time = '';
+    } else {
+      const optionIndex = copy.dateOptions.indexOf(text);
+      if (optionIndex < 0) {
+        await sendMessage(user.chatId, copy.invalid, token, { reply_markup: keyboard('date') });
+        return true;
+      }
+      pending.data.date = viewingDateValue(text, copy, language);
+      pending.data.day = viewingDayForOption(optionIndex);
+      if (pending.editing === 'date' && pending.data.time) {
+        await sendViewingReview(user, pending, property, token, language);
+        return true;
+      }
     }
     pending.step = 'time';
     scheduleSave();
-    await sendMessage(user.chatId, copy.askTime, token, { reply_markup: viewingKeyboard(language, 'time') });
+    await sendMessage(user.chatId, copy.askTime, token, { reply_markup: keyboard('time') });
     return true;
   }
   if (pending.step === 'time') {
-    const optionIndex = copy.timeOptions.indexOf(text);
-    if (optionIndex < 0) {
-      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: viewingKeyboard(language, 'time') });
-      return true;
-    }
-    if (optionIndex === 3) {
+    if (text === copy.timeOptions[3]) {
+      pending.data.slotMode = false;
       pending.step = 'custom_time';
       scheduleSave();
-      await sendMessage(user.chatId, copy.askCustomTime, token, { reply_markup: viewingKeyboard(language, 'custom_time') });
+      await sendMessage(user.chatId, copy.askCustomTime, token, { reply_markup: keyboard('custom_time') });
+      return true;
+    }
+    const valid = pending.data.slotMode ? freeTimes(pending.data.day).includes(text) : copy.timeOptions.includes(text);
+    if (!valid) {
+      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: keyboard('time') });
       return true;
     }
     pending.data.time = text;
@@ -461,7 +496,7 @@ async function handleViewingFormMessage(message, user, token) {
   }
   if (pending.step === 'custom' || pending.step === 'custom_time') {
     if (text.length < 3) {
-      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: viewingKeyboard(language, pending.step) });
+      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: keyboard(pending.step) });
       return true;
     }
     if (pending.step === 'custom') {
@@ -477,40 +512,62 @@ async function handleViewingFormMessage(message, user, token) {
   if (pending.step === 'confirm') {
     const editStep = text === copy.editDate ? 'date' : text === copy.editTime ? 'time' : '';
     if (editStep) {
+      // Editing starts again from the free slots when they are set.
+      if (!pending.data.slotMode && editStep === 'date') Object.assign(pending.data, newViewingData(language));
+      if (pending.data.slotMode && editStep === 'time' && !pending.data.day) pending.data.slotMode = false;
       pending.step = editStep;
       pending.editing = editStep;
       scheduleSave();
       const prompt = editStep === 'date' ? copy.askDate : copy.askTime;
-      await sendMessage(user.chatId, prompt, token, { reply_markup: viewingKeyboard(language, editStep) });
+      await sendMessage(user.chatId, prompt, token, { reply_markup: keyboard(editStep) });
       return true;
     }
     if (text === copy.restart) {
       pending.step = 'date';
-      pending.data = {};
+      pending.data = newViewingData(language);
       pending.editing = '';
       pending.createdAt = new Date().toISOString();
       scheduleSave();
-      await sendMessage(user.chatId, copy.askDate, token, { reply_markup: viewingKeyboard(language, 'date') });
+      await sendMessage(user.chatId, copy.askDate, token, { reply_markup: keyboard('date') });
       return true;
     }
     if (text !== copy.confirm) {
-      await sendMessage(user.chatId, viewingReviewText(copy, property, pending, language), token, { reply_markup: viewingKeyboard(language, 'confirm') });
+      await sendMessage(user.chatId, viewingReviewText(copy, property, pending, language), token, { reply_markup: keyboard('confirm') });
+      return true;
+    }
+    const slotBooking = Boolean(pending.data.slotMode && pending.data.day && pending.data.time);
+    // Someone else may have taken the slot while this client was deciding.
+    if (slotBooking && !slotFree(pending.data.day, pending.data.time)) {
+      pending.step = 'date';
+      pending.editing = '';
+      pending.data = newViewingData(language);
+      scheduleSave();
+      await sendMessage(user.chatId, copy.slotTaken, token, { reply_markup: keyboard('date') });
       return true;
     }
     const details = [
       propertyRequestText(property, language, 'viewing'),
       copy.reviewLabels[1] + ': ' + cleanText(pending.data.date, 160),
       copy.reviewLabels[2] + ': ' + cleanText(pending.data.time, 160),
+      ...(slotBooking ? ['', '✅ Время из свободных окон — просмотр подтверждён автоматически'] : []),
     ].join('\n');
+    const viewing = { date: pending.data.day, dateText: pending.data.date, timeText: pending.data.time };
+    if (slotBooking) Object.assign(viewing, { confirmedDate: pending.data.day, confirmedTime: pending.data.time, confirmedAt: new Date().toISOString() });
     user.pendingAction = null;
-    createInquiry(user, details, {
+    const inquiry = createInquiry(user, details, {
       type: 'viewing',
       propertyId: property.id,
       sourceMessage: message,
-      viewing: { date: pending.data.day, dateText: pending.data.date, timeText: pending.data.time },
+      viewing,
+      status: slotBooking ? 'in_progress' : 'new',
     });
     recordPropertyEvent(property.id, 'viewings');
     saveDataNow();
+    if (slotBooking) {
+      await sendMessage(user.chatId, copy.slotBooked, token, { reply_markup: menuKeyboard(language) });
+      await sendViewingConfirmation(inquiry, user, token);
+      return true;
+    }
     await sendMessage(user.chatId, withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
     return true;
   }

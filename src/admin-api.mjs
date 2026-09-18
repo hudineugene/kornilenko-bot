@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
-import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, normalizeCalculator, normalizeLoadedData, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
+import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, normalizeCalculator, normalizeLoadedData, normalizeViewingSlots, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { forEachStoredImage, imageBytes, imageExists } from './media.mjs';
 import { MANAGER_CONTACT_TEXT, applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
 import { configured, data, replaceData, runtime, saveDataNow, verifyPassword } from './store.mjs';
@@ -869,6 +869,24 @@ async function handleApi(req, res, url) {
       for (const id of sessions.keys()) if (id !== session.id) sessions.delete(id);
     }
     return json(res, 200, { ok: true });
+  }
+
+  if (url.pathname === '/api/viewing-slots' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const times = (Array.isArray(body.times) ? body.times : String(body.times || '').split(/[,;\s]+/)).map((time) => String(time).trim()).filter(Boolean);
+    const wrong = times.find((time) => !CLOCK_TIME_PATTERN.test(time));
+    if (wrong) return json(res, 400, { error: 'Время «' + cleanText(wrong, 20) + '» укажите в формате ЧЧ:ММ, например 10:00' });
+    const days = Array.isArray(body.days) ? body.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) : [];
+    if (body.enabled === true && (!days.length || !times.length)) return json(res, 400, { error: 'Отметьте дни и укажите хотя бы одно время' });
+    const daysAhead = Number(body.daysAhead);
+    const perSlot = Number(body.perSlot);
+    if (!Number.isInteger(daysAhead) || daysAhead < 1 || daysAhead > 30) return json(res, 400, { error: 'Запись вперёд — от 1 до 30 дней' });
+    if (!Number.isInteger(perSlot) || perSlot < 1 || perSlot > 5) return json(res, 400, { error: 'Просмотров в одно время — от 1 до 5' });
+    data.config.viewingSlots = normalizeViewingSlots({ enabled: body.enabled === true, days, times, daysAhead, perSlot });
+    saveDataNow();
+    return json(res, 200, { ok: true, viewingSlots: data.config.viewingSlots });
   }
 
   if (url.pathname === '/api/calculator' && req.method === 'PUT') {

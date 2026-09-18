@@ -105,6 +105,13 @@ test('the panel saves office hours and checks them', async () => {
     assert.equal(state.config.workingHours.note.ru, 'Ответим {next}.');
     assert.match(state.config.workingHours.note.en, /\{next\}/, 'an empty text falls back to the default');
     assert.equal(bot.offHoursNote('ru', FRIDAY_EVENING), 'Ответим в понедельник с 9:30.');
+
+    const slots = (body) => fetch(base + '/api/viewing-slots', { method: 'PUT', headers, body: JSON.stringify(body) });
+    assert.equal((await slots({ enabled: true, days: [1], times: '10:00, 9:00', daysAhead: 7, perSlot: 1 })).status, 400, 'a wrong time');
+    assert.equal((await slots({ enabled: true, days: [], times: '10:00', daysAhead: 7, perSlot: 1 })).status, 400, 'no days');
+    assert.equal((await slots({ enabled: true, days: [1], times: '10:00', daysAhead: 60, perSlot: 1 })).status, 400, 'too far ahead');
+    assert.equal((await slots({ enabled: true, days: [1, 3], times: '16:00, 10:00 12:00', daysAhead: 14, perSlot: 2 })).status, 200);
+    assert.deepEqual(bot.getData().config.viewingSlots, { enabled: true, days: [1, 3], times: ['10:00', '12:00', '16:00'], daysAhead: 14, perSlot: 2 });
   } finally {
     await new Promise((resolve) => bot.server.close(resolve));
   }

@@ -279,6 +279,29 @@ function normalizeCalculator(value) {
   };
 }
 
+// When viewings can be booked: weekdays and start times. Off by default:
+// then the client names a convenient time and the manager confirms it.
+const DEFAULT_VIEWING_SLOTS = { enabled: false, days: [1, 2, 3, 4, 5, 6], times: ['10:00', '12:00', '16:00', '18:00'], daysAhead: 7, perSlot: 1 };
+
+function normalizeViewingSlots(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const days = Array.isArray(source.days)
+    ? Array.from(new Set(source.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))).sort()
+    : DEFAULT_VIEWING_SLOTS.days.slice();
+  const times = Array.isArray(source.times)
+    ? Array.from(new Set(source.times.map((time) => String(time).trim()).filter((time) => CLOCK_TIME_PATTERN.test(time)))).sort().slice(0, 12)
+    : DEFAULT_VIEWING_SLOTS.times.slice();
+  const daysAhead = Number(source.daysAhead);
+  const perSlot = Number(source.perSlot);
+  return {
+    enabled: source.enabled === true && days.length > 0 && times.length > 0,
+    days,
+    times,
+    daysAhead: Number.isInteger(daysAhead) && daysAhead >= 1 && daysAhead <= 30 ? daysAhead : DEFAULT_VIEWING_SLOTS.daysAhead,
+    perSlot: Number.isInteger(perSlot) && perSlot >= 1 && perSlot <= 5 ? perSlot : DEFAULT_VIEWING_SLOTS.perSlot,
+  };
+}
+
 function normalizeWorkingHours(value) {
   const source = value && typeof value === 'object' ? value : {};
   const days = Array.isArray(source.days)
@@ -535,6 +558,7 @@ function normalizeLoadedData(parsed) {
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
     normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
+    normalized.config.viewingSlots = normalizeViewingSlots(normalized.config.viewingSlots);
     pruneOrphanPropertyAnalytics(normalized);
     return normalized;
 }
@@ -544,6 +568,7 @@ export {
   DATA_VERSION,
   DAY_KEY_PATTERN,
   DEFAULT_CALCULATOR,
+  DEFAULT_VIEWING_SLOTS,
   DEFAULT_WORKING_HOURS,
   MAX_REPLY_TEMPLATES,
   REMINDER_HOUR_OPTIONS,
@@ -560,6 +585,7 @@ export {
   normalizeReplyTemplates,
   normalizeStoredImages,
   normalizeViewing,
+  normalizeViewingSlots,
   normalizeWorkingHours,
   pruneOrphanPropertyAnalytics,
 };

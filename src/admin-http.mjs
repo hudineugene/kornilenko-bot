@@ -7,7 +7,7 @@ import net from 'node:net';
 import zlib from 'node:zlib';
 import { ADMIN_ALLOWED_HOSTS, DATA_FILE, MAX_BACKUP_BODY_BYTES, MAX_BACKUP_OUTPUT_BYTES, MAX_BODY_BYTES, MAX_IMAGE_BYTES, SESSION_TTL_MS } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { normalizeCalculator, normalizeWorkingHours } from './data-format.mjs';
+import { normalizeCalculator, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { imageBytes, imageExists } from './media.mjs';
 import { normalizedInterfaceText } from './texts.mjs';
 import { data, runtime } from './store.mjs';
@@ -417,6 +417,7 @@ function safeState(session) {
       reminderHours: Number.isFinite(Number(data.config.reminderHours)) ? Number(data.config.reminderHours) : 2,
       workingHours: normalizeWorkingHours(data.config.workingHours),
       calculator: normalizeCalculator(data.config.calculator),
+      viewingSlots: normalizeViewingSlots(data.config.viewingSlots),
     },
     welcomeImages: Object.fromEntries(['ru', 'en', 'es'].map((language) => {
       const image = data.welcomeImages[language];

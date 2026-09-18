@@ -152,6 +152,19 @@ function viewingProperty(inquiry) {
 
 // --- Confirmation ------------------------------------------------------------
 
+// The client's message: property, date, time, address, a map and a way to
+// "My requests".
+async function sendViewingConfirmation(inquiry, user, token = data.config.botToken) {
+  const language = user.preferredLanguage || inquiry.language || 'ru';
+  const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
+  const property = viewingProperty(inquiry);
+  const rows = [];
+  const map = property ? validHttpUrl(property.mapUrl) : '';
+  if (map) rows.push([{ text: copy.openMap, url: map }]);
+  rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton, callback_data: 'myreq:list' }]);
+  return sendMessage(user.chatId, viewingDetailsText(inquiry, property, language, copy.confirmed, copy.confirmedFooter), token, { reply_markup: { inline_keyboard: rows } });
+}
+
 // The manager confirms a viewing from the admin chat (the client's own date)
 // or from the panel (an exact date and time). The client gets a message with
 // the details; reminders and the follow-up question are planned from it.
@@ -175,14 +188,7 @@ async function confirmViewing(inquiry, options = {}, token = data.config.botToke
   viewing.confirmedAt = new Date().toISOString();
   viewing.cancelledAt = '';
   inquiry.viewing = viewing;
-  const language = user.preferredLanguage || inquiry.language || 'ru';
-  const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
-  const property = viewingProperty(inquiry);
-  const rows = [];
-  const map = property ? validHttpUrl(property.mapUrl) : '';
-  if (map) rows.push([{ text: copy.openMap, url: map }]);
-  rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton, callback_data: 'myreq:list' }]);
-  const message = await sendMessage(user.chatId, viewingDetailsText(inquiry, property, language, copy.confirmed, copy.confirmedFooter), token, { reply_markup: { inline_keyboard: rows } });
+  const message = await sendViewingConfirmation(inquiry, user, token);
   const when = viewingWhen(inquiry, 'ru');
   inquiry.replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
   inquiry.replies.push({
@@ -441,6 +447,7 @@ export {
   handleViewingFeedbackCallback,
   parseViewingDate,
   runViewingNotices,
+  sendViewingConfirmation,
   viewingAgenda,
   viewingDateLabel,
   viewingDayForOption,

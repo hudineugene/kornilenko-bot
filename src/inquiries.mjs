@@ -131,7 +131,8 @@ function createInquiry(user, text, context = {}) {
       bedrooms: cleanText(context.selection.bedrooms, 200),
     } : null,
     viewing: type === 'viewing' ? normalizeViewing(context.viewing || {}) : null,
-    status: 'new',
+    // A viewing booked into a free slot is confirmed from the start.
+    status: context.status === 'in_progress' ? 'in_progress' : 'new',
     note: '',
     replies: [],
     createdAt: now,

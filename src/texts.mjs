@@ -161,6 +161,8 @@ const VIEWING_FORM_TEXT = {
     cancelled: 'Запись на просмотр отменена.',
     invalid: 'Пожалуйста, выберите вариант на клавиатуре или напишите удобные дату и время.',
     success: 'Заявка на просмотр отправлена. Менеджер подтвердит дату и время в этом чате.',
+    slotTaken: 'Это время только что заняли. Выберите, пожалуйста, другое.',
+    slotBooked: '✅ Готово, вы записаны на просмотр! Подробности ниже.',
   },
   en: {
     askDate: '📅 When would you like to view this property?',
@@ -181,6 +183,8 @@ const VIEWING_FORM_TEXT = {
     cancelled: 'The viewing request has been cancelled.',
     invalid: 'Choose an option from the keyboard or send a convenient date and time.',
     success: 'Your viewing request has been sent. A manager will confirm the date and time in this chat.',
+    slotTaken: 'This time has just been taken. Please choose another one.',
+    slotBooked: '✅ Done, your viewing is booked! Details below.',
   },
   es: {
     askDate: '📅 ¿Cuándo te gustaría visitar este inmueble?',
@@ -201,6 +205,8 @@ const VIEWING_FORM_TEXT = {
     cancelled: 'La solicitud de visita ha sido cancelada.',
     invalid: 'Elige una opción del teclado o escribe una fecha y hora convenientes.',
     success: 'Tu solicitud de visita ha sido enviada. Un gestor confirmará la fecha y hora en este chat.',
+    slotTaken: 'Esta hora se acaba de ocupar. Por favor, elige otra.',
+    slotBooked: '✅ ¡Listo, tu visita está reservada! Los detalles, abajo.',
   },
 };
 const SELECTION_FORM_TEXT = {

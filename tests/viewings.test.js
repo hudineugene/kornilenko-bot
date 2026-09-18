@@ -171,6 +171,81 @@ test.describe('confirmation', () => {
   });
 });
 
+test.describe('free viewing slots', () => {
+  function enableSlots(extra = {}) {
+    bot.getData().config.viewingSlots = { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], times: ['10:00', '16:00'], daysAhead: 3, perSlot: 1, ...extra };
+  }
+  const tomorrowLabel = (buttons) => {
+    const date = daysFromNow(1);
+    const ddmm = String(date.getDate()).padStart(2, '0') + '.' + String(date.getMonth() + 1).padStart(2, '0');
+    return buttons.find((text) => text.includes(ddmm));
+  };
+
+  test('the client picks a free day and hour, and the viewing is confirmed at once', async () => {
+    enableSlots();
+    const chat = createChat();
+    let step = await chat.press('property:viewing:villa-marbella-01');
+    const day = tomorrowLabel(step.last.buttons);
+    assert.ok(day, 'tomorrow is offered');
+    assert.deepEqual(step.last.buttons.slice(-2), [ru.dateOptions[3], ru.cancel]);
+    step = await chat.say(day);
+    assert.deepEqual(step.last.buttons, ['10:00', '16:00', ru.timeOptions[3], ru.cancel]);
+    await chat.say('10:00');
+    step = await chat.say(ru.confirm);
+    assert.equal(step.replies[0].text, ru.slotBooked);
+    assert.match(step.replies[1].text, /^✅ Просмотр подтверждён/);
+    assert.ok(step.replies[1].text.includes('🕒 Время: 10:00'));
+    const [inquiry] = chat.inquiries;
+    assert.equal(inquiry.status, 'in_progress');
+    assert.deepEqual([inquiry.viewing.confirmedDate, inquiry.viewing.confirmedTime], [dayKey(daysFromNow(1)), '10:00']);
+    const notification = adminMessages().find((message) => message.text.includes('запись на просмотр'));
+    assert.match(notification.text, /подтверждён автоматически/);
+    assert.ok(!callbacksOf(notification.markup).includes('inq:confirm:' + inquiry.id), 'nothing left to confirm');
+
+    const next = createChat();
+    step = await next.press('property:viewing:villa-marbella-01');
+    step = await next.say(tomorrowLabel(step.last.buttons));
+    assert.deepEqual(step.last.buttons, ['16:00', ru.timeOptions[3], ru.cancel], 'the booked hour is taken');
+  });
+
+  test('a slot taken while the client was deciding is not double-booked', async () => {
+    enableSlots();
+    const slow = createChat();
+    let step = await slow.press('property:viewing:villa-marbella-01');
+    await slow.say(tomorrowLabel(step.last.buttons));
+    await slow.say('16:00');
+    const fast = createChat();
+    step = await fast.press('property:viewing:villa-marbella-01');
+    await fast.say(tomorrowLabel(step.last.buttons));
+    await fast.say('16:00');
+    await fast.say(ru.confirm);
+    step = await slow.say(ru.confirm);
+    assert.equal(step.last.text, ru.slotTaken);
+    assert.equal(slow.user.pendingAction.step, 'date');
+    assert.equal(slow.inquiries.length, 0);
+  });
+
+  test('"another date" still works and waits for the manager', async () => {
+    enableSlots();
+    const chat = createChat();
+    await chat.press('property:viewing:villa-marbella-01');
+    await chat.say(ru.dateOptions[3]);
+    await chat.say('В следующую субботу после обеда');
+    await chat.say(ru.confirm);
+    assert.equal(chat.inquiries[0].status, 'new');
+    assert.equal(chat.inquiries[0].viewing.confirmedAt, '');
+  });
+
+  test('without free slots the form offers the usual options', async () => {
+    enableSlots({ enabled: false });
+    let step = await createChat().press('property:viewing:villa-marbella-01');
+    assert.deepEqual(step.last.buttons, [...ru.dateOptions, ru.cancel]);
+    enableSlots({ days: [] });
+    step = await createChat().press('property:viewing:villa-marbella-01');
+    assert.deepEqual(step.last.buttons, [...ru.dateOptions, ru.cancel], 'no days set');
+  });
+});
+
 test.describe('my requests', () => {
   test('the list shows each request with its status', async () => {
     const chat = createChat();
