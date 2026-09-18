@@ -1,0 +1,16 @@
+# Живые данные и медиа: содержат токен бота, хеш пароля и данные клиентов
+bot-data.json
+bot-data.json.*
+bot-media/
+
+# Сборка и журналы
+dist/
+bot.exe
+logs/
+*.log
+
+# Ручные копии exe и данных; история кода теперь хранится в git
+backups/
+
+node_modules/
+.claude/

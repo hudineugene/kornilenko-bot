@@ -1,0 +1,18 @@
+{
+  "reference": "admin_reference.png",
+  "logo": {
+    "preferred_sidebar": "kornilenko_logo_sidebar_320.png",
+    "high_res_white": "kornilenko_logo_exact_white_clean.png",
+    "transparent_optional": "kornilenko_logo_exact_transparent_v2.png",
+    "original_reference": "kornilenko_logo_original_reference.jpg"
+  },
+  "backgrounds": {
+    "desktop": "admin_header_background_1920x480.webp",
+    "desktop_lossless": "admin_header_background_1920x480.png",
+    "mobile": "admin_header_background_mobile_960x480.webp"
+  },
+  "instructions": [
+    "ADMIN_DESIGN_SPEC.md",
+    "CODEX_ADMIN_PROMPT.txt"
+  ]
+}

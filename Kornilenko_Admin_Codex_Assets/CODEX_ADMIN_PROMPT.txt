@@ -1,0 +1,13 @@
+TASK: Redesign the existing admin dashboard to match the supplied visual reference `admin_reference.png`.
+
+First read `ADMIN_DESIGN_SPEC.md` and follow it strictly.
+
+CRITICAL LOGO RULE: the company logo MUST be inserted only from `kornilenko_logo_sidebar_320.png` / `kornilenko_logo_exact_white_clean.png`. Never redraw, crop, recolor, simplify or regenerate the logo. The lower geometric shapes under “CONSTRUCCIONES KORNILENKO” are mandatory parts of the logo.
+
+Use `admin_header_background_1920x480.webp` only for the architectural hero decoration. Recreate all cards, labels, buttons, navigation, metrics and charts using the project's real frontend components and CSS. Do not use the reference screenshot itself as a page background.
+
+Preserve all current logic, routes, API calls, Telegram behavior, storage and data. This task is visual/UI only. Reuse the existing application state and values. Do not invent fake features. If a visual reference element has no existing route/function, omit it.
+
+Implement responsive behavior and keep the dashboard practical: clear hierarchy, compact spacing, readable metrics, accessible focus states, usable sidebar and no unnecessary decorative clutter.
+
+After implementation, compare the result side-by-side with `admin_reference.png` and fix spacing, typography, card sizes, border radii, colors and hero positioning until it is visually close while remaining fully functional.
