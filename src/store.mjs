@@ -5,7 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA_FILE, MEDIA_DIRECTORY } from './config.mjs';
 import { clone, dayKey } from './util.mjs';
-import { defaultData, normalizeLoadedData } from './data-format.mjs';
+import { DATA_VERSION, defaultData, normalizeLoadedData } from './data-format.mjs';
 import { cleanupOrphanImages, containsEmbeddedImages, contentAddressImages, ensureMigrationBackup, externalizeImages, forEachStoredImage, needsContentAddressing, referencedImageFiles, storedImageFile } from './media.mjs';
 import { applyInterfaceText } from './texts.mjs';
 import { recordError } from './analytics.mjs';
@@ -44,10 +44,28 @@ function recoveryCandidates() {
   return [DATA_BACKUP_FILE, ...snapshots].filter((candidate) => fs.existsSync(candidate));
 }
 
+// Data written by an older version is upgraded while it loads. The file as
+// it was is copied to backups/ first, once per upgrade
+// (pre-upgrade-v15-to-v16-<time>.json), so the upgrade can be undone by
+// stopping the bot and putting that copy back as bot-data.json.
+function backupBeforeUpgrade(raw) {
+  const version = Number(raw && raw.version) || 0;
+  if (version >= DATA_VERSION) return '';
+  try {
+    return ensureMigrationBackup('pre-upgrade-v' + version + '-to-v' + DATA_VERSION);
+  } catch (error) {
+    console.error('Не удалось сохранить копию данных перед обновлением формата:', error.message);
+    return '';
+  }
+}
+
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) return clone(defaultData);
   try {
-    return readDataFile(DATA_FILE);
+    const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    const snapshot = backupBeforeUpgrade(raw);
+    if (snapshot) console.log('Формат данных обновляется до версии ' + DATA_VERSION + '. Копия прежних данных:', snapshot);
+    return normalizeLoadedData(raw);
   } catch (error) {
     console.error('Не удалось прочитать файл данных:', error.message);
   }

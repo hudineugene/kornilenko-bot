@@ -39,6 +39,32 @@ function telegramResponse(status, body) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 }
 
+test('data from an older version is copied to backups/ before the upgrade, once', () => {
+  const backups = path.join(workDirectory, 'backups');
+  const upgradeCopies = () => (fs.existsSync(backups) ? fs.readdirSync(backups) : []).filter((name) => name.startsWith('pre-upgrade-'));
+  const saved = fs.existsSync(dataFile) ? fs.readFileSync(dataFile) : null;
+  try {
+    const old = JSON.stringify({ version: 15, config: { reminderHours: 4 }, users: {} });
+    fs.writeFileSync(dataFile, old);
+    const loaded = bot.loadData();
+    assert.equal(loaded.version, 16);
+    const copies = upgradeCopies();
+    assert.equal(copies.length, 1);
+    assert.match(copies[0], /^pre-upgrade-v15-to-v16-\d{8}-\d{6}\.json$/);
+    assert.equal(fs.readFileSync(path.join(backups, copies[0]), 'utf8'), old, 'the file exactly as it was');
+
+    bot.loadData();
+    assert.equal(upgradeCopies().length, 1, 'not copied again on the next start');
+    fs.writeFileSync(dataFile, JSON.stringify({ ...JSON.parse(old), version: 16 }));
+    bot.loadData();
+    assert.equal(upgradeCopies().length, 1, 'current data needs no copy');
+  } finally {
+    for (const name of upgradeCopies()) fs.rmSync(path.join(backups, name));
+    if (saved) fs.writeFileSync(dataFile, saved);
+    else fs.rmSync(dataFile, { force: true });
+  }
+});
+
 test('version 16 renumbers the saved selection steps, keeping the admin\'s wording', () => {
   const saved = bot.normalizeLoadedData({
     version: 15,
