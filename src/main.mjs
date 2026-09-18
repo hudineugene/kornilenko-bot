@@ -27,6 +27,7 @@ import { subscriptionPanel } from './subscriptions.mjs';
 import { offHoursNote } from './hours.mjs';
 import { monthlyPayment, purchaseEstimate } from './calculator.mjs';
 import { decryptBackup, encryptBackup, runTelegramBackup, setBackupPassword } from './offsite.mjs';
+import { applyImport, parseXml, planImport, planSummary, propertyTypeOf, readFeed, runDailyFeedImport } from './feed-import.mjs';
 import { hostAllowed, loginAttempts, requestIsRemote, sessions } from './admin-http.mjs';
 import './admin-input.mjs';
 import { xlsxWorkbook } from './excel.mjs';
@@ -57,6 +58,7 @@ const text = {
 
 export {
   abruptStopNotice,
+  applyImport,
   broadcastUsers,
   budgetLimit,
   catalogFilterPanel,
@@ -84,6 +86,11 @@ export {
   normalizeUser,
   offHoursNote,
   parseViewingDate,
+  parseXml,
+  planImport,
+  planSummary,
+  propertyTypeOf,
+  readFeed,
   persistImage,
   previousRunEndedAbruptly,
   processUpdates,
@@ -97,6 +104,7 @@ export {
   runBroadcast,
   runDailyBackup,
   runDailyDigest,
+  runDailyFeedImport,
   runFollowUpReminders,
   runFormReminders,
   runInquiryReminders,

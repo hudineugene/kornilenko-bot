@@ -21,6 +21,7 @@ import { INQUIRY_EXPORT_COLUMNS, inquiryExportRows, xlsxWorkbook } from './excel
 import { queuePropertyAlerts } from './alerts.mjs';
 import { confirmViewing } from './viewings.mjs';
 import { MIN_BACKUP_PASSWORD_LENGTH, sendTelegramBackup, setBackupPassword, telegramBackupSettings } from './offsite.mjs';
+import { applyImport, feedSettings, fetchFeed, planImport, planSummary, readFeed } from './feed-import.mjs';
 
 function portableBackupData() {
   const payload = clone(data);
@@ -869,6 +870,39 @@ async function handleApi(req, res, url) {
     if (passwordData) {
       for (const id of sessions.keys()) if (id !== session.id) sessions.delete(id);
     }
+    return json(res, 200, { ok: true });
+  }
+
+  // Properties from the website's XML feed (Kyero format): a preview first,
+  // then the import; optionally every day from the saved link.
+  if ((url.pathname === '/api/feed/preview' || url.pathname === '/api/feed/import') && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    try {
+      const address = cleanText(body.url, 1000);
+      const xml = typeof body.xml === 'string' && body.xml.trim() ? body.xml : await fetchFeed(address);
+      const items = readFeed(xml);
+      if (url.pathname === '/api/feed/preview') return json(res, 200, { ok: true, ...planSummary(planImport(items)) });
+      const settings = feedSettings();
+      const result = await applyImport(items, { publishNew: body.publishNew === true });
+      data.config.feedImport = { ...settings, url: address || settings.url, publishNew: body.publishNew === true, lastRunAt: new Date().toISOString(), lastResult: result, lastError: '' };
+      saveDataNow();
+      return json(res, 200, { ok: true, ...result });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+
+  if (url.pathname === '/api/feed/settings' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const address = cleanText(body.url, 1000);
+    if (address && !validHttpUrl(address)) return json(res, 400, { error: 'Ссылка на выгрузку должна начинаться с http:// или https://' });
+    if (body.daily === true && !address) return json(res, 400, { error: 'Для ежедневного обновления укажите ссылку на выгрузку' });
+    data.config.feedImport = { ...feedSettings(), url: address, daily: body.daily === true, publishNew: body.publishNew === true };
+    saveDataNow();
     return json(res, 200, { ok: true });
   }
 
