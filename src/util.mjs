@@ -30,10 +30,25 @@ function dayKey(value = new Date()) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+// The calendar date on this computer, for things planned in local days
+// (viewings, follow-ups). dayKey() above is the UTC date used by statistics.
+function localDayKey(value = new Date()) {
+  const date = new Date(value);
+  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+}
+
+// Local midnight of a YYYY-MM-DD key, moved by a number of days.
+function dateFromDayKey(key, addDays = 0) {
+  const [year, month, day] = String(key).split('-').map(Number);
+  return new Date(year, month - 1, day + addDays);
+}
+
 export {
   cleanText,
   clone,
+  dateFromDayKey,
   dayKey,
+  localDayKey,
   delay,
   fillTemplate,
   hashPassword,

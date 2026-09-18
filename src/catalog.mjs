@@ -1,8 +1,9 @@
 // Каталог объектов: карточки, подписи, кнопки, фильтр.
 
+import crypto from 'node:crypto';
 import { cleanText } from './util.mjs';
 import { imageBytes, imageExists } from './media.mjs';
-import { CATALOG_FILTER_TEXT, EMPTY_STATE_TEXT, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_BADGE_LABELS, PROPERTY_CONDITION_LABELS, PROPERTY_TYPE_LABELS } from './texts.mjs';
+import { CATALOG_FILTER_TEXT, EMPTY_STATE_TEXT, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_BADGE_LABELS, PROPERTY_CONDITION_LABELS, PROPERTY_TYPE_LABELS, SELECTION_FORM_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
@@ -205,25 +206,84 @@ function promotionIsActive(record, now = Date.now()) {
 const CATALOG_FILTER_MIN_RECORDS = 6;
 const CATALOG_FILTER_BEDROOMS = [1, 2, 3, 4];
 
+// Price limits offered in the filter: purchase prices and monthly rents.
+const CATALOG_FILTER_PRICES = {
+  sale: [150000, 250000, 400000, 600000, 1000000],
+  rent: [800, 1200, 2000, 3000],
+};
+
 function normalizedCatalogFilter(value) {
   const filter = value && typeof value === 'object' ? value : {};
+  const prices = CATALOG_FILTER_PRICES.sale.concat(CATALOG_FILTER_PRICES.rent);
   return {
     deal: ['sale', 'rent'].includes(filter.deal) ? filter.deal : '',
     type: Object.hasOwn(PROPERTY_TYPE_LABELS.ru, filter.type) ? filter.type : '',
     bedrooms: CATALOG_FILTER_BEDROOMS.includes(Number(filter.bedrooms)) ? Number(filter.bedrooms) : 0,
+    city: cleanText(filter.city, 160),
+    maxPrice: prices.includes(Number(filter.maxPrice)) ? Number(filter.maxPrice) : 0,
+    sort: ['asc', 'desc'].includes(filter.sort) ? filter.sort : '',
   };
 }
 
 function catalogFilterActive(filter) {
-  return Boolean(filter.deal || filter.type || filter.bedrooms);
+  return Boolean(filter.deal || filter.type || filter.bedrooms || filter.city || filter.maxPrice || filter.sort);
 }
 
-// A bedroom filter shows only properties with a known bedroom count.
-function applyCatalogFilter(records, value) {
+function recordCity(record, language) {
+  return localizedExact(record.city, language, 160);
+}
+
+function sameCity(a, b) {
+  return String(a).toLocaleLowerCase() === String(b).toLocaleLowerCase();
+}
+
+// A short stable id for a city in a button: names can be longer than
+// Telegram allows in callback data.
+function cityKey(city) {
+  return crypto.createHash('sha1').update(String(city).toLocaleLowerCase()).digest('hex').slice(0, 10);
+}
+
+// The cities of the published catalog in the client's language.
+function catalogCities(records, language) {
+  const cities = new Map();
+  for (const record of records) {
+    const city = recordCity(record, language);
+    if (city && !cities.has(city.toLocaleLowerCase())) cities.set(city.toLocaleLowerCase(), city);
+  }
+  return Array.from(cities.values()).sort((a, b) => a.localeCompare(b));
+}
+
+// Which price limits make sense: the chosen deal, or the only deal in the
+// catalog. Mixed sale and rent prices cannot share one scale.
+function catalogPriceDeal(filter, records) {
+  if (filter.deal) return filter.deal;
+  const deals = new Set(records.map((record) => (record.dealType === 'rent' ? 'rent' : 'sale')));
+  return deals.size === 1 ? Array.from(deals)[0] : '';
+}
+
+function formattedPriceLimit(value, language) {
+  const locale = language === 'en' ? 'en-US' : language === 'es' ? 'es-ES' : 'ru-RU';
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value) + ' €';
+}
+
+// A bedroom or price filter shows only properties where that value is known;
+// sorting by price puts properties with a price on request last.
+function applyCatalogFilter(records, value, language = 'ru') {
   const filter = normalizedCatalogFilter(value);
-  return records.filter((record) => (!filter.deal || record.dealType === filter.deal)
+  const filtered = records.filter((record) => (!filter.deal || record.dealType === filter.deal)
     && (!filter.type || record.propertyType === filter.type)
-    && (!filter.bedrooms || Number(record.bedrooms) >= filter.bedrooms));
+    && (!filter.bedrooms || Number(record.bedrooms) >= filter.bedrooms)
+    && (!filter.city || sameCity(recordCity(record, language), filter.city))
+    && (!filter.maxPrice || (Number(record.priceValue) > 0 && Number(record.priceValue) <= filter.maxPrice)));
+  if (!filter.sort) return filtered;
+  const direction = filter.sort === 'desc' ? -1 : 1;
+  return filtered
+    .map((record, index) => ({ record, index, price: Number(record.priceValue) > 0 ? Number(record.priceValue) : null }))
+    .sort((a, b) => {
+      if (a.price === null || b.price === null) return a.price === b.price ? a.index - b.index : a.price === null ? 1 : -1;
+      return (a.price - b.price) * direction || a.index - b.index;
+    })
+    .map((item) => item.record);
 }
 
 function catalogFilterSummary(value, language) {
@@ -233,7 +293,10 @@ function catalogFilterSummary(value, language) {
   return [
     filter.deal ? (filter.deal === 'rent' ? action.forRent : action.forSale) : '',
     filter.type ? (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[filter.type] : '',
+    filter.city,
     filter.bedrooms ? filter.bedrooms + '+ ' + copy.bedrooms : '',
+    filter.maxPrice ? copy.upTo + ' ' + formattedPriceLimit(filter.maxPrice, language) : '',
+    filter.sort === 'asc' ? copy.sortAsc : filter.sort === 'desc' ? copy.sortDesc : '',
   ].filter(Boolean).join(', ');
 }
 
@@ -252,9 +315,27 @@ function catalogFilterState(user) {
   };
 }
 
+// "all" is the catalog with the client's filter, "favorites" the saved
+// properties, "matches" what fitted the client's last selection form.
+const CATALOG_MODES = ['all', 'favorites', 'matches'];
+
+function catalogMode(mode) {
+  return CATALOG_MODES.includes(mode) ? mode : 'all';
+}
+
+function catalogHeading(mode, language) {
+  if (mode === 'favorites') return (MENU_LABELS[language] || MENU_LABELS.ru).favorites;
+  if (mode === 'matches') return (SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru).matchesHeading;
+  return (MENU_LABELS[language] || MENU_LABELS.ru).objects;
+}
+
 function catalogRecords(user, mode = 'all') {
   const active = publishedCatalog(user);
-  if (mode !== 'favorites') return applyCatalogFilter(active, user.catalogFilter);
+  if (mode === 'matches') {
+    const byId = new Map(active.filter((record) => record.status === 'active').map((record) => [record.id, record]));
+    return (Array.isArray(user.selectionMatchIds) ? user.selectionMatchIds : []).map((id) => byId.get(String(id))).filter(Boolean);
+  }
+  if (mode !== 'favorites') return applyCatalogFilter(active, user.catalogFilter, user.preferredLanguage || 'ru');
   const favorites = new Set(Array.isArray(user.favorites) ? user.favorites : []);
   return active.filter((record) => favorites.has(record.id));
 }
@@ -317,7 +398,7 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
   const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const records = catalogRecords(user, mode);
   const filterState = catalogFilterState(user);
-  if (!records.length && mode !== 'favorites' && filterState.summary) {
+  if (!records.length && mode === 'all' && filterState.summary) {
     await clearCatalogMessages(chatId, user, token);
     user.catalogContext = { mode: 'all', page: 0 };
     scheduleSave();
@@ -332,14 +413,14 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
   }
   if (!records.length) {
     await clearCatalogMessages(chatId, user, token);
-    user.catalogContext = { mode: mode === 'favorites' ? 'favorites' : 'all', page: 0 };
+    user.catalogContext = { mode: catalogMode(mode), page: 0 };
     scheduleSave();
     const empty = EMPTY_STATE_TEXT[language] || EMPTY_STATE_TEXT.ru;
     const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
     const manager = MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru;
     const text = mode === 'favorites' ? empty.favorites : empty.catalog;
     const rows = [];
-    if (mode === 'favorites') rows.push([{ text: '🏘 ' + navigation.browse, callback_data: 'catalog:all:0' }]);
+    if (mode !== 'all') rows.push([{ text: '🏘 ' + navigation.browse, callback_data: 'catalog:all:0' }]);
     rows.push([{ text: manager.question, callback_data: 'contact:question' }]);
     rows.push([{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]);
     await sendUiMessage(chatId, user, text || action.emptyFavorites, token, { reply_markup: { inline_keyboard: rows } });
@@ -347,12 +428,10 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
   }
   const totalPages = records.length;
   const safePage = Math.min(Math.max(0, Number(page) || 0), totalPages - 1);
-  user.catalogContext = { mode: mode === 'favorites' ? 'favorites' : 'all', page: safePage };
+  user.catalogContext = { mode: catalogMode(mode), page: safePage };
   scheduleSave();
   const record = records[safePage];
-  const heading = mode === 'favorites'
-    ? (MENU_LABELS[language] || MENU_LABELS.ru).favorites
-    : (MENU_LABELS[language] || MENU_LABELS.ru).objects;
+  const heading = catalogHeading(mode, language);
   await sendPropertyCard(chatId, user, token, record, {
     heading,
     page: safePage,
@@ -461,10 +540,8 @@ async function showCatalogPageFromCallback(chatId, user, token, page, mode, mess
   if (!records.length) return sendCatalogPage(chatId, user, token, 0, mode);
   const safePage = Math.min(Math.max(0, Number(page) || 0), records.length - 1);
   const record = records[safePage];
-  const heading = mode === 'favorites'
-    ? (MENU_LABELS[language] || MENU_LABELS.ru).favorites
-    : (MENU_LABELS[language] || MENU_LABELS.ru).objects;
-  user.catalogContext = { mode, page: safePage };
+  const heading = catalogHeading(mode, language);
+  user.catalogContext = { mode: catalogMode(mode), page: safePage };
   scheduleSave();
   const edited = await editPropertyCard(chatId, user, token, message, record, {
     heading,
@@ -503,7 +580,26 @@ function catalogFilterPanel(user) {
   for (let index = 0; index < typeButtons.length; index += 2) rows.push(typeButtons.slice(index, index + 2));
   rows.push([{ text: mark(!filter.bedrooms, copy.anyBedrooms), callback_data: 'cfilter:bed:0' }]);
   rows.push(CATALOG_FILTER_BEDROOMS.map((count) => ({ text: mark(filter.bedrooms === count, count + '+'), callback_data: 'cfilter:bed:' + count })));
-  rows.push([{ text: copy.show + ': ' + applyCatalogFilter(published, filter).length, callback_data: 'cfilter:show' }]);
+  // Cities appear once there is a choice; a chosen city stays visible even if
+  // it is the only one left.
+  const cities = catalogCities(published, language);
+  if (cities.length > 1 || filter.city) {
+    const cityButtons = [{ text: mark(!filter.city, copy.anyCity), callback_data: 'cfilter:city:any' }]
+      .concat(cities.map((city) => ({ text: mark(sameCity(city, filter.city), city), callback_data: 'cfilter:city:' + cityKey(city) })));
+    for (let index = 0; index < cityButtons.length; index += 2) rows.push(cityButtons.slice(index, index + 2));
+  }
+  const priceDeal = catalogPriceDeal(filter, published);
+  if (priceDeal) {
+    const priceButtons = [{ text: mark(!filter.maxPrice, copy.anyPrice), callback_data: 'cfilter:price:0' }]
+      .concat(CATALOG_FILTER_PRICES[priceDeal].map((price) => ({ text: mark(filter.maxPrice === price, copy.upTo + ' ' + formattedPriceLimit(price, language)), callback_data: 'cfilter:price:' + price })));
+    rows.push(priceButtons.slice(0, 1));
+    for (let index = 1; index < priceButtons.length; index += 3) rows.push(priceButtons.slice(index, index + 3));
+  }
+  rows.push([
+    { text: mark(filter.sort === 'asc', copy.sortAsc), callback_data: 'cfilter:sort:' + (filter.sort === 'asc' ? 'none' : 'asc') },
+    { text: mark(filter.sort === 'desc', copy.sortDesc), callback_data: 'cfilter:sort:' + (filter.sort === 'desc' ? 'none' : 'desc') },
+  ]);
+  rows.push([{ text: copy.show + ': ' + applyCatalogFilter(published, filter, language).length, callback_data: 'cfilter:show' }]);
   if (catalogFilterActive(filter)) rows.push([{ text: copy.reset, callback_data: 'cfilter:reset' }]);
   return { text: copy.title, markup: { inline_keyboard: rows } };
 }
@@ -526,10 +622,18 @@ async function handleCatalogFilterCallback(query, token) {
     await sendCatalogPage(chatId, user, token, 0, 'all');
     return;
   }
-  if (action === 'deal') filter.deal = ['sale', 'rent'].includes(value) ? value : '';
+  if (action === 'deal') {
+    filter.deal = ['sale', 'rent'].includes(value) ? value : '';
+    // Purchase and rent prices are on different scales.
+    const priceDeal = catalogPriceDeal(filter, publishedCatalog(user));
+    if (!priceDeal || !CATALOG_FILTER_PRICES[priceDeal].includes(filter.maxPrice)) filter.maxPrice = 0;
+  }
   if (action === 'type') filter.type = Object.hasOwn(PROPERTY_TYPE_LABELS.ru, value) ? value : '';
   if (action === 'bed') filter.bedrooms = CATALOG_FILTER_BEDROOMS.includes(Number(value)) ? Number(value) : 0;
-  if (['deal', 'type', 'bed'].includes(action)) {
+  if (action === 'city') filter.city = catalogCities(publishedCatalog(user), user.preferredLanguage).find((city) => cityKey(city) === value) || '';
+  if (action === 'price') filter.maxPrice = normalizedCatalogFilter({ maxPrice: value }).maxPrice;
+  if (action === 'sort') filter.sort = ['asc', 'desc'].includes(value) ? value : '';
+  if (['deal', 'type', 'bed', 'city', 'price', 'sort'].includes(action)) {
     user.catalogFilter = catalogFilterActive(filter) ? filter : null;
     scheduleSave();
   }
@@ -599,7 +703,14 @@ function promotionButtons(record, language, page, totalPages) {
 export {
   CATALOG_FILTER_BEDROOMS,
   CATALOG_FILTER_MIN_RECORDS,
+  CATALOG_FILTER_PRICES,
+  CATALOG_MODES,
   applyCatalogFilter,
+  catalogCities,
+  catalogHeading,
+  catalogMode,
+  catalogPriceDeal,
+  cityKey,
   catalogFilterActive,
   catalogFilterPanel,
   catalogFilterState,

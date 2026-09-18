@@ -13,6 +13,8 @@ import { clearCatalogMessages, clearGalleryMessages, clearUiMessages, handleCata
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { runDueBroadcasts } from './broadcasts.mjs';
 import { handleAlertsCallback } from './alerts.mjs';
+import { handleViewingConfirmCallback, handleViewingFeedbackCallback } from './viewings.mjs';
+import { handleMyRequestsCallback, sendMyRequests } from './requests.mjs';
 
 function findRule(text, language) {
   const input = text.toLocaleLowerCase('ru-RU').trim();
@@ -28,6 +30,10 @@ function findRule(text, language) {
 async function handleUpdate(update, token) {
   if (update.message_reaction) {
     await handleMessageReaction(update.message_reaction);
+    return;
+  }
+  if (update.callback_query && String(update.callback_query.data || '').startsWith('inq:confirm:')) {
+    await handleViewingConfirmCallback(update.callback_query, token);
     return;
   }
   if (update.callback_query && String(update.callback_query.data || '').startsWith('inq:')) {
@@ -56,6 +62,8 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('selection:')) await handleSelectionCallback(update.callback_query, token);
       else if (callbackData.startsWith('alerts:')) await handleAlertsCallback(update.callback_query, token);
       else if (callbackData.startsWith('cfilter:')) await handleCatalogFilterCallback(update.callback_query, token);
+      else if (callbackData.startsWith('myreq:')) await handleMyRequestsCallback(update.callback_query, token);
+      else if (callbackData.startsWith('vfb:')) await handleViewingFeedbackCallback(update.callback_query, token);
       else {
         const copy = INTERACTION_TEXT[callbackUser.preferredLanguage] || INTERACTION_TEXT.ru;
         await acknowledgeCallback(update.callback_query, token, copy.stale);
@@ -171,6 +179,16 @@ async function handleUpdate(update, token) {
     await clearGalleryMessages(message.chat.id, user, token);
     await clearCatalogMessages(message.chat.id, user, token);
     await sendHelp(message.chat.id, user, token);
+    return;
+  }
+  else if (command === '/requests') {
+    user.pendingAction = null;
+    user.expiredAction = null;
+    scheduleSave();
+    void notifyAdministratorAction(user, 'Открыл «Мои заявки»', summary);
+    await clearGalleryMessages(message.chat.id, user, token);
+    await clearCatalogMessages(message.chat.id, user, token);
+    await sendMyRequests(message.chat.id, user, token);
     return;
   }
   else if (command === '/cancel') {

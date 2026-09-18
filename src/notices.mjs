@@ -8,6 +8,7 @@ import { userByChatId, userById } from './users.mjs';
 import { sendMessage } from './telegram.mjs';
 import { inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
 import { localized, shortenedText } from './catalog.mjs';
+import { runViewingNotices } from './viewings.mjs';
 
 const DIGEST_HOUR = 9;
 
@@ -123,6 +124,7 @@ async function runInquiryReminders(now = new Date()) {
 function runScheduledNotices() {
   runDailyDigest().catch((error) => recordError('Сводка активности', error));
   runInquiryReminders().catch((error) => recordError('Напоминание об обращениях', error));
+  runViewingNotices().catch((error) => recordError('Уведомления о просмотрах', error));
 }
 
 export {

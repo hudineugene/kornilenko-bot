@@ -344,7 +344,7 @@ test.describe('catalog filter', () => {
     assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === '✓ Аренда'));
     assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === FILTER.show + ': 3'));
     await chat.press('cfilter:bed:2');
-    assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2 });
+    assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2, city: '', maxPrice: 0, sort: '' });
 
     await chat.press('cfilter:show');
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['rent-flat-2', 'rent-house-5']);
@@ -352,7 +352,7 @@ test.describe('catalog filter', () => {
     assert.equal(filterButton.text, FILTER.button + ': Аренда, 2+ спален');
 
     await chat.say('Добрый день');
-    assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2 }, 'kept after other messages');
+    assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2, city: '', maxPrice: 0, sort: '' }, 'kept after other messages');
   });
 
   test('an empty result offers to reset the filter or leave wishes', async () => {
@@ -366,6 +366,52 @@ test.describe('catalog filter', () => {
     await chat.press('cfilter:reset');
     assert.equal(chat.user.catalogFilter, null);
     assert.equal(bot.catalogRecords(chat.user).length, 7);
+  });
+
+  test('cities, price limits and sorting by price', async () => {
+    resetData((data) => {
+      const city = (ru, en) => ({ ru, en, es: en });
+      data.objects.push(property('sale-marbella-1', 'Вилла 1', 'active', { dealType: 'sale', propertyType: 'villa', priceValue: 900000, city: city('Марбелья', 'Marbella') }));
+      data.objects.push(property('sale-marbella-2', 'Квартира 2', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 240000, city: city('марбелья', 'Marbella') }));
+      data.objects.push(property('sale-estepona-3', 'Квартира 3', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 380000, city: city('Эстепона', 'Estepona') }));
+      data.objects.push(property('sale-estepona-4', 'Дом 4', 'active', { dealType: 'sale', propertyType: 'house', city: city('Эстепона', 'Estepona') }));
+      data.objects.push(property('rent-malaga-5', 'Квартира 5', 'active', { dealType: 'rent', propertyType: 'apartment', priceValue: 1100, city: city('Малага', 'Malaga') }));
+      data.objects.push(property('rent-malaga-6', 'Квартира 6', 'active', { dealType: 'rent', propertyType: 'apartment', priceValue: 1900, city: city('Малага', 'Malaga') }));
+    });
+    const chat = createChat();
+    let panel = await chat.press('cfilter:open');
+    const buttons = () => panel.calls.filter((call) => ['sendMessage', 'editMessageText'].includes(call.method)).pop().body.reply_markup.inline_keyboard.flat();
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:city:')).map((button) => button.text), ['✓ ' + FILTER.anyCity, 'Малага', 'Марбелья', 'Эстепона'], 'each city once, whatever the case');
+    assert.ok(!buttons().some((button) => button.callback_data.startsWith('cfilter:price:')), 'no price scale while sale and rent are mixed');
+
+    const marbella = buttons().find((button) => button.text === 'Марбелья');
+    panel = await chat.press(marbella.callback_data);
+    assert.equal(chat.user.catalogFilter.city, 'Марбелья');
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-1', 'sale-marbella-2']);
+
+    panel = await chat.press('cfilter:city:any');
+    panel = await chat.press('cfilter:deal:sale');
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => button.text.replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 150 000 €', 'до 250 000 €', 'до 400 000 €', 'до 600 000 €', 'до 1 000 000 €']);
+    await chat.press('cfilter:price:400000');
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-2', 'sale-estepona-3'], 'a price on request is left out');
+
+    await chat.press('cfilter:price:0');
+    await chat.press('cfilter:sort:desc');
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-1', 'sale-estepona-3', 'sale-marbella-2', 'sale-estepona-4'], 'price on request last');
+    await chat.press('cfilter:sort:asc');
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-2', 'sale-estepona-3', 'sale-marbella-1', 'sale-estepona-4']);
+
+    await chat.press('cfilter:price:250000');
+    panel = await chat.press('cfilter:deal:rent');
+    assert.equal(chat.user.catalogFilter.maxPrice, 0, 'a purchase limit does not carry over to rent');
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => button.text.replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 800 €', 'до 1 200 €', 'до 2 000 €', 'до 3 000 €']);
+    await chat.press('cfilter:show');
+    const filterButton = cardMarkup().inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:open');
+    assert.equal(filterButton.text, FILTER.button + ': Аренда, Сначала дешевле');
+
+    const english = createChat({ language: 'en' });
+    english.user.catalogFilter = { city: 'Marbella' };
+    assert.deepEqual(bot.catalogRecords(english.user).map((record) => record.id), ['sale-marbella-1', 'sale-marbella-2'], 'the city in the client\'s language');
   });
 
   test('a bedroom filter leaves out properties without a bedroom count', () => {

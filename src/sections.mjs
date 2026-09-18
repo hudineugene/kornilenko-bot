@@ -11,7 +11,7 @@ import { sendMessage, sendPhotoAlbum, sendPhotoMessage, telegramRequest } from '
 import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendWelcome } from './menus.mjs';
 import { startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs';
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
-import { catalogRecords, clearCatalogMessages, clearGalleryMessages, contentButtons, deleteCatalogMessages, localizedExact, objectCaption, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, contentButtons, deleteCatalogMessages, localizedExact, objectCaption, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 
 async function sendPromotionPage(chatId, user, token, page = 0) {
   const language = user.preferredLanguage || 'ru';
@@ -275,14 +275,14 @@ async function handleCatalogCallback(query, token) {
   const parts = String(query.data || '').split(':');
   const mode = parts[1];
   if (mode === 'none') return acknowledgeCallback(query, token);
-  if (!['all', 'favorites'].includes(mode)) return acknowledgeCallback(query, token);
+  if (!CATALOG_MODES.includes(mode)) return acknowledgeCallback(query, token);
   const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
   const user = normalizeUser(query.from, chatId, false);
   await acknowledgeCallback(query, token);
   if (!user.preferredLanguage) return sendLanguagePicker(chatId, token, '');
   void notifyAdministratorAction(
     user,
-    mode === 'favorites' ? 'Листает избранные объекты' : 'Листает каталог объектов',
+    mode === 'favorites' ? 'Листает избранные объекты' : mode === 'matches' ? 'Листает объекты по своему подбору' : 'Листает каталог объектов',
     'Страница: ' + (Math.max(0, Number(parts[2] || 0)) + 1)
   );
   await showCatalogPageFromCallback(chatId, user, token, Number(parts[2] || 0), mode, query.message);
@@ -298,14 +298,20 @@ function propertyRequestText(record, language, type) {
 
 function catalogContextFromMessage(message, language) {
   const source = String(message && (message.caption || message.text) || '');
-  const favoriteHeading = (MENU_LABELS[language] || MENU_LABELS.ru).favorites;
   const position = source.match(/·\s*(\d+)\s*\/\s*(\d+)/);
+  const mode = ['favorites', 'matches'].find((candidate) => source.startsWith(catalogHeading(candidate, language))) || 'all';
   return {
-    mode: source.includes(favoriteHeading) ? 'favorites' : 'all',
+    mode,
     page: Math.max(0, Number(position && position[1] || 1) - 1),
     totalPages: Math.max(1, Number(position && position[2] || 1)),
-    heading: source.includes(favoriteHeading) ? favoriteHeading : (MENU_LABELS[language] || MENU_LABELS.ru).objects,
+    heading: catalogHeading(mode, language),
   };
+}
+
+// The list the client was browsing, if the property is still in it.
+function browsingMode(user, record) {
+  const mode = catalogMode(user.catalogContext && user.catalogContext.mode);
+  return catalogRecords(user, mode).some((item) => item.id === record.id) ? mode : 'all';
 }
 
 function configuredWhatsappUrl() {
@@ -412,12 +418,8 @@ async function handlePropertyCallback(query, token) {
   }
   if (actionName === 'return') {
     await acknowledgeCallback(query, token);
-    let mode = user.catalogContext && user.catalogContext.mode === 'favorites' ? 'favorites' : 'all';
-    let records = catalogRecords(user, mode);
-    if (!records.some((item) => item.id === record.id)) {
-      mode = 'all';
-      records = catalogRecords(user, mode);
-    }
+    const mode = browsingMode(user, record);
+    const records = catalogRecords(user, mode);
     const page = Math.max(0, records.findIndex((item) => item.id === record.id));
     await sendCatalogPage(chatId, user, token, page, mode);
     if (query.message && query.message.message_id) {
@@ -427,14 +429,9 @@ async function handlePropertyCallback(query, token) {
   }
   if (actionName === 'next') {
     await acknowledgeCallback(query, token);
-    let mode = user.catalogContext && user.catalogContext.mode === 'favorites' ? 'favorites' : 'all';
-    let records = catalogRecords(user, mode);
-    let currentIndex = records.findIndex((item) => item.id === record.id);
-    if (currentIndex < 0) {
-      mode = 'all';
-      records = catalogRecords(user, mode);
-      currentIndex = records.findIndex((item) => item.id === record.id);
-    }
+    const mode = browsingMode(user, record);
+    const records = catalogRecords(user, mode);
+    const currentIndex = records.findIndex((item) => item.id === record.id);
     const nextPage = currentIndex >= 0 && records.length ? (currentIndex + 1) % records.length : -1;
     if (nextPage >= 0) await sendCatalogPage(chatId, user, token, nextPage, mode);
     return;

@@ -19,6 +19,7 @@ import { REMOTE_LOGIN_CODE_ATTEMPTS, pendingRemoteLogins, remoteLoginCodeHash, s
 import { loginAllowed, menuInput, messagesInput, parseBroadcast, parseContentRecord, replyTemplateInput, rulesConflict, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { INQUIRY_EXPORT_COLUMNS, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { queuePropertyAlerts } from './alerts.mjs';
+import { confirmViewing } from './viewings.mjs';
 
 function portableBackupData() {
   const payload = clone(data);
@@ -557,6 +558,24 @@ async function handleApi(req, res, url) {
     inquiry.updatedAt = new Date().toISOString();
     saveDataNow();
     return json(res, 200, { ok: true });
+  }
+
+  const inquiryViewingMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/viewing$/);
+  if (inquiryViewingMatch && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const inquiry = data.inquiries.find((item) => item.id === decodeURIComponent(inquiryViewingMatch[1]));
+    if (!inquiry) return json(res, 404, { error: 'Обращение не найдено' });
+    const body = await readJson(req);
+    try {
+      await confirmViewing(inquiry, { date: cleanText(body.date, 10), time: cleanText(body.time, 5), source: 'panel' });
+      return json(res, 200, { ok: true });
+    } catch (error) {
+      const user = userById(inquiry.userId);
+      if (user && userUnavailableError(error)) user.blocked = true;
+      if (error.telegramCode) recordError('Подтверждение просмотра', error);
+      return json(res, 400, { error: 'Не удалось подтвердить просмотр: ' + error.message });
+    }
   }
 
   const inquiryReplyMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/reply$/);

@@ -2,6 +2,7 @@
 
 import crypto from 'node:crypto';
 import { cleanText } from './util.mjs';
+import { normalizeViewing } from './data-format.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError } from './analytics.mjs';
@@ -122,10 +123,12 @@ function createInquiry(user, text, context = {}) {
     } : null,
     selection: context.selection && typeof context.selection === 'object' ? {
       deal: cleanText(context.selection.deal, 200),
+      type: cleanText(context.selection.type, 200),
       location: cleanText(context.selection.location, 200),
       budget: cleanText(context.selection.budget, 200),
       bedrooms: cleanText(context.selection.bedrooms, 200),
     } : null,
+    viewing: type === 'viewing' ? normalizeViewing(context.viewing || {}) : null,
     status: 'new',
     note: '',
     replies: [],
@@ -167,17 +170,29 @@ const INQUIRY_STATUS_LABELS = { new: 'новое', in_progress: 'в работе
 function inquiryStatusMarkup(inquiry) {
   if (!inquiry) return null;
   if (inquiry.status === 'closed') return { inline_keyboard: [[{ text: '↩️ Открыть снова', callback_data: 'inq:new:' + inquiry.id }]] };
+  const rows = [];
+  // A viewing request is confirmed with the date and time the client chose;
+  // another date is set in the panel.
+  if (inquiry.type === 'viewing' && !(inquiry.viewing && inquiry.viewing.confirmedAt)) {
+    rows.push([{ text: '✅ Подтвердить просмотр', callback_data: 'inq:confirm:' + inquiry.id }]);
+  }
   const row = [];
   if (inquiry.status !== 'in_progress') row.push({ text: '⏳ В работу', callback_data: 'inq:in_progress:' + inquiry.id });
-  row.push({ text: '✅ Закрыть', callback_data: 'inq:closed:' + inquiry.id });
-  return { inline_keyboard: [row] };
+  row.push({ text: '✔️ Закрыть', callback_data: 'inq:closed:' + inquiry.id });
+  rows.push(row);
+  return { inline_keyboard: rows };
+}
+
+// Only buttons in the admin chat may act on inquiries.
+function adminCallbackAllowed(query) {
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  const chatId = query && query.message && query.message.chat ? String(query.message.chat.id) : '';
+  return Boolean(adminChatId && chatId === adminChatId);
 }
 
 async function handleInquiryStatusCallback(query, token) {
-  const adminChatId = cleanText(data.config.adminChatId, 40);
   const chatId = query.message && query.message.chat ? String(query.message.chat.id) : '';
-  // Only buttons in the admin chat may change statuses.
-  if (!adminChatId || chatId !== adminChatId) {
+  if (!adminCallbackAllowed(query)) {
     await acknowledgeCallback(query, token, INTERACTION_TEXT.ru.stale);
     return;
   }
@@ -523,6 +538,7 @@ export {
   LEGACY_REPLY_WINDOW_MS,
   MAX_INQUIRIES,
   MERGEABLE_INQUIRY_TYPES,
+  adminCallbackAllowed,
   adminMuteNotices,
   adminNotificationDecision,
   adminNotifyTimes,

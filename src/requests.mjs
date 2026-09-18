@@ -1,0 +1,136 @@
+// «Мои заявки»: клиент видит свои последние обращения и их статус и может
+// отменить просмотр.
+
+import { INTERACTION_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT } from './texts.mjs';
+import { data } from './store.mjs';
+import { normalizeUser } from './users.mjs';
+import { localized, localizedExact, sendUiMessage, shortenedText } from './catalog.mjs';
+import { acknowledgeCallback } from './sections.mjs';
+import { cancelViewing, viewingIsUpcoming, viewingWhen } from './viewings.mjs';
+
+const MY_REQUESTS_SHOWN = 5;
+const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
+
+function requestTypeLabel(inquiry, copy) {
+  return {
+    viewing: copy.typeViewing,
+    lead: copy.typeLead,
+    selection: copy.typeSelection,
+    question: copy.typeQuestion,
+    interest: copy.typeInterest,
+  }[inquiry.type] || copy.typeGeneral;
+}
+
+function requestStatusLabel(inquiry, copy) {
+  const viewing = inquiry.type === 'viewing' ? inquiry.viewing || {} : {};
+  if (viewing.cancelledAt) return copy.statusCancelled;
+  if (inquiry.status === 'closed') return copy.statusClosed;
+  if (viewing.confirmedAt) return copy.statusConfirmed;
+  return inquiry.status === 'in_progress' ? copy.statusInProgress : copy.statusNew;
+}
+
+function requestTitle(inquiry, language) {
+  const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
+  if (!property) return '';
+  return localizedExact(property.title, language) || localized(property.title, language) || property.reference || '';
+}
+
+function userRequests(user) {
+  return data.inquiries
+    .filter((inquiry) => inquiry.userId === String(user.id))
+    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))
+    .slice(0, MY_REQUESTS_SHOWN);
+}
+
+function myRequestsView(user) {
+  const language = user.preferredLanguage || 'ru';
+  const copy = MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru;
+  const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
+  const requests = userRequests(user);
+  const rows = [];
+  if (!requests.length) {
+    rows.push([{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]);
+    return { text: copy.none, markup: { inline_keyboard: rows } };
+  }
+  const blocks = requests.map((inquiry) => {
+    const title = requestTitle(inquiry, language);
+    const heading = requestTypeLabel(inquiry, copy) + (title ? ' · ' + title : '');
+    let details;
+    if (inquiry.type === 'viewing' && inquiry.viewing) {
+      const when = viewingWhen(inquiry, language);
+      details = [when.date, when.time].filter(Boolean).join(', ');
+    } else {
+      const sent = new Date(inquiry.createdAt);
+      details = Number.isFinite(sent.getTime())
+        ? copy.sentOn + ' ' + new Intl.DateTimeFormat(LOCALES[language] || LOCALES.ru, { day: '2-digit', month: '2-digit' }).format(sent)
+        : '';
+    }
+    if (inquiry.type === 'viewing' && viewingIsUpcoming(inquiry)) {
+      rows.push([{ text: shortenedText(copy.cancelViewing + (title ? ' · ' + title : ''), 60), callback_data: 'myreq:cancel:' + inquiry.id }]);
+    }
+    return [heading, [details, requestStatusLabel(inquiry, copy)].filter(Boolean).join(' — ')].join('\n');
+  });
+  rows.push([{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]);
+  return { text: [copy.title, '', blocks.join('\n\n'), '', copy.footer].join('\n'), markup: { inline_keyboard: rows } };
+}
+
+async function sendMyRequests(chatId, user, token) {
+  const view = myRequestsView(user);
+  await sendUiMessage(chatId, user, view.text, token, { reply_markup: view.markup });
+}
+
+async function handleMyRequestsCallback(query, token) {
+  const [, action, ...rest] = String(query.data || '').split(':');
+  const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
+  const user = normalizeUser(query.from, chatId, false);
+  const language = user.preferredLanguage || 'ru';
+  const copy = MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru;
+  if (action === 'list') {
+    await acknowledgeCallback(query, token);
+    await sendMyRequests(chatId, user, token);
+    return;
+  }
+  const inquiry = data.inquiries.find((item) => item.id === rest.join(':'));
+  // A client can only cancel their own viewing, and only one still ahead.
+  if (!inquiry || inquiry.userId !== String(user.id) || !viewingIsUpcoming(inquiry)) {
+    await acknowledgeCallback(query, token, (INTERACTION_TEXT[language] || INTERACTION_TEXT.ru).stale);
+    return;
+  }
+  if (action === 'cancel') {
+    await acknowledgeCallback(query, token);
+    const title = requestTitle(inquiry, language);
+    const when = viewingWhen(inquiry, language);
+    const details = [title ? '🏠 ' + title : '', [when.date, when.time].filter(Boolean).join(', ')].filter(Boolean).join('\n');
+    await sendUiMessage(chatId, user, [copy.cancelAsk, details].filter(Boolean).join('\n\n'), token, {
+      reply_markup: { inline_keyboard: [
+        [{ text: copy.cancelYes, callback_data: 'myreq:yes:' + inquiry.id }],
+        [{ text: copy.cancelNo, callback_data: 'myreq:no:' + inquiry.id }],
+      ] },
+    });
+    return;
+  }
+  if (action === 'yes') {
+    await acknowledgeCallback(query, token);
+    await cancelViewing(inquiry, user);
+    await sendUiMessage(chatId, user, copy.cancelDone, token, { reply_markup: { inline_keyboard: [
+      [{ text: copy.menuButton, callback_data: 'myreq:list' }],
+      [{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }],
+    ] } });
+    return;
+  }
+  if (action === 'no') {
+    await acknowledgeCallback(query, token, copy.kept);
+    await sendMyRequests(chatId, user, token);
+    return;
+  }
+  await acknowledgeCallback(query, token, (INTERACTION_TEXT[language] || INTERACTION_TEXT.ru).stale);
+}
+
+export {
+  MY_REQUESTS_SHOWN,
+  handleMyRequestsCallback,
+  myRequestsView,
+  requestStatusLabel,
+  sendMyRequests,
+  userRequests,
+};

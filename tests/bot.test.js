@@ -39,6 +39,26 @@ function telegramResponse(status, body) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 }
 
+test('version 16 renumbers the saved selection steps, keeping the admin\'s wording', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 15,
+    interfaceText: { selectionForm: {
+      ru: { askDeal: '1 из 4. Вы рассматриваете покупку или аренду?', askLocation: '2 из 4. Где хотите жить?', askBudget: 'Бюджет?', askBedrooms: '4 из 4. Сколько спален нужно?' },
+      en: { askBudget: '3 of 4. What budget are you considering? You can include the amount and currency.' },
+      es: { askLocation: '2 de 4. ¿Qué ciudad, zona o ubicación te interesa?' },
+    } },
+  });
+  const form = saved.interfaceText.selectionForm;
+  assert.equal(form.ru.askDeal, '1 из 5. Вы рассматриваете покупку или аренду?');
+  assert.equal(form.ru.askLocation, '3 из 5. Где хотите жить?');
+  assert.equal(form.ru.askBudget, 'Бюджет?', 'a text without a step number is left alone');
+  assert.equal(form.ru.askBedrooms, '5 из 5. Сколько спален нужно?');
+  assert.equal(form.en.askBudget, '4 of 5. What budget are you considering? You can include the amount and currency.');
+  assert.equal(form.es.askLocation, '3 de 5. ¿Qué ciudad, zona o ubicación te interesa?');
+  const again = bot.normalizeLoadedData(JSON.parse(JSON.stringify(saved)));
+  assert.equal(again.interfaceText.selectionForm.ru.askLocation, '3 из 5. Где хотите жить?', 'runs once');
+});
+
 test('admin edits of Russian texts survive a restart', () => {
   const saved = bot.normalizeLoadedData({
     version: 13,
@@ -54,7 +74,7 @@ test('admin edits of Russian texts survive a restart', () => {
   assert.equal(saved.config.messages.ru.greeting, 'Моё приветствие');
   assert.equal(saved.config.messages.ru.help, 'Моя справка');
   assert.equal(saved.config.messages.ru.fallback, 'Мой ответ');
-  assert.equal(saved.version, 15);
+  assert.equal(saved.version, 16);
   for (const key of ['greeting', 'help', 'fallback']) assert.equal(key in saved.config, false);
 
   const reloaded = bot.normalizeLoadedData(JSON.parse(JSON.stringify(saved)));

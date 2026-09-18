@@ -58,6 +58,10 @@ function locationMatches(request, record) {
   return words.some((word) => place.includes(word));
 }
 
+// The answers to "What kind of property?" in the selection form, in order;
+// the last answer, "Any", has no group.
+const SELECTION_TYPE_GROUPS = [['apartment', 'newbuild'], ['house', 'villa', 'townhouse'], ['land'], ['commercial']];
+
 // Unknown data never excludes a property: a missing price or bedroom count
 // passes, so the manager-worthy lead is not lost.
 function selectionMatches(inquiry, record) {
@@ -66,6 +70,8 @@ function selectionMatches(inquiry, record) {
   const deal = copy.dealOptions.indexOf(selection.deal);
   if (deal === 0 && record.dealType !== 'sale') return false;
   if (deal === 1 && record.dealType !== 'rent') return false;
+  const typeGroup = SELECTION_TYPE_GROUPS[(copy.typeOptions || []).indexOf(selection.type)];
+  if (typeGroup && !typeGroup.includes(record.propertyType)) return false;
   const wantedBedrooms = copy.bedroomOptions.indexOf(selection.bedrooms) + 1;
   const bedrooms = Number(record.bedrooms);
   if (wantedBedrooms >= 1 && wantedBedrooms <= 4 && bedrooms > 0 && bedrooms < wantedBedrooms) return false;
@@ -74,6 +80,18 @@ function selectionMatches(inquiry, record) {
   if (limit && price > 0 && price > limit * 1.1) return false;
   if (selection.location && selection.location !== copy.anyLocation && !locationMatches(selection.location, record)) return false;
   return true;
+}
+
+// Published properties that already fit a selection form, best first by the
+// catalog order. Shown to the client right after they send the form.
+const SELECTION_MATCHES_SHOWN = 20;
+
+function currentSelectionMatches(user, selection) {
+  const language = user.preferredLanguage || 'ru';
+  const request = { selection, language };
+  return data.objects
+    .filter((record) => record.status === 'active' && propertyReadyForLanguage(record, language) && selectionMatches(request, record))
+    .slice(0, SELECTION_MATCHES_SHOWN);
 }
 
 // Who should hear about this property after it was created or saved.
@@ -179,8 +197,11 @@ export {
   ALERT_MEMORY_MS,
   PROPERTY_ALERT_SPACING_MS,
   SELECTION_ALERT_WINDOW_MS,
+  SELECTION_TYPE_GROUPS,
+  SELECTION_MATCHES_SHOWN,
   alertsEnabled,
   budgetLimit,
+  currentSelectionMatches,
   deliverPropertyAlerts,
   handleAlertsCallback,
   locationMatches,

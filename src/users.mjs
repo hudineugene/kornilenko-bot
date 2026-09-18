@@ -76,7 +76,7 @@ function normalizeUser(from, chatId, countMessage = true) {
     lastCallback: previous.lastCallback && typeof previous.lastCallback === 'object' ? previous.lastCallback : null,
     lastInboundMessageId: previous.lastInboundMessageId != null && Number.isFinite(Number(previous.lastInboundMessageId)) ? Number(previous.lastInboundMessageId) : null,
     catalogContext: previous.catalogContext && typeof previous.catalogContext === 'object' ? {
-      mode: ['all', 'favorites'].includes(previous.catalogContext.mode) ? previous.catalogContext.mode : 'all',
+      mode: ['all', 'favorites', 'matches'].includes(previous.catalogContext.mode) ? previous.catalogContext.mode : 'all',
       page: Math.max(0, Number(previous.catalogContext.page) || 0),
     } : { mode: 'all', page: 0 },
     pendingAction: previous.pendingAction && typeof previous.pendingAction === 'object' ? previous.pendingAction : null,
@@ -88,6 +88,8 @@ function normalizeUser(from, chatId, countMessage = true) {
     catalogFilter: previous.catalogFilter && typeof previous.catalogFilter === 'object' ? normalizedCatalogFilter(previous.catalogFilter) : null,
     sourceAt: cleanText(previous.sourceAt, 40),
     alertsSent: previous.alertsSent && typeof previous.alertsSent === 'object' && !Array.isArray(previous.alertsSent) ? previous.alertsSent : {},
+    // Properties that matched the client's last selection form.
+    selectionMatchIds: Array.isArray(previous.selectionMatchIds) ? previous.selectionMatchIds.map(String).slice(0, 20) : [],
   };
   data.users[id] = user;
   indexUser(user);

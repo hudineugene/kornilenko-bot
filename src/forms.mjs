@@ -8,8 +8,10 @@ import { recordPropertyEvent } from './analytics.mjs';
 import { sendMessage } from './telegram.mjs';
 import { menuKeyboard, sendMainMenu } from './menus.mjs';
 import { createInquiry } from './inquiries.mjs';
-import { localizedExact } from './catalog.mjs';
+import { localizedExact, sendCatalogPage } from './catalog.mjs';
+import { currentSelectionMatches } from './alerts.mjs';
 import { propertyRequestText } from './sections.mjs';
+import { parseViewingDate, viewingDayForOption } from './viewings.mjs';
 
 function savedLeadOption(user, language, field) {
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
@@ -157,13 +159,12 @@ async function showPendingActionStep(user, token) {
   }
   if (pending.type === 'property_selection') {
     const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
-    const step = ['deal', 'location', 'budget', 'bedrooms', 'confirm'].includes(pending.step) ? pending.step : 'deal';
+    const step = SELECTION_STEPS.concat('confirm').includes(pending.step) ? pending.step : 'deal';
     if (step === 'confirm') {
       await sendSelectionReview(user, pending, token, language);
       return true;
     }
-    const prompt = step === 'location' ? copy.askLocation : step === 'budget' ? copy.askBudget : step === 'bedrooms' ? copy.askBedrooms : copy.askDeal;
-    await sendMessage(user.chatId, prompt, token, { reply_markup: selectionKeyboard(language, step) });
+    await sendMessage(user.chatId, selectionPrompt(copy, step), token, { reply_markup: selectionKeyboard(language, step) });
     return true;
   }
   if (pending.type === 'manager_question') {
@@ -209,7 +210,7 @@ function duplicateCallback(user, key, intervalMs = 1400) {
 function isStaleFormControl(text) {
   const value = String(text || '').trim();
   if (!value) return false;
-  const keys = ['confirm', 'cancel', 'edit', 'editName', 'editPhone', 'editTime', 'restart', 'editDate', 'editDeal', 'editLocation', 'editBudget', 'editBedrooms'];
+  const keys = ['confirm', 'cancel', 'edit', 'editName', 'editPhone', 'editTime', 'restart', 'editDate', 'editDeal', 'editType', 'editLocation', 'editBudget', 'editBedrooms'];
   for (const language of ['ru', 'en', 'es']) {
     const interaction = INTERACTION_TEXT[language];
     if (interaction && [interaction.continueForm, interaction.discardForm, interaction.resume, interaction.backToMenu].includes(value)) return true;
@@ -431,6 +432,7 @@ async function handleViewingFormMessage(message, user, token) {
       return true;
     }
     pending.data.date = viewingDateValue(text, copy, language);
+    pending.data.day = viewingDayForOption(optionIndex);
     if (pending.editing === 'date' && pending.data.time) {
       await sendViewingReview(user, pending, property, token, language);
       return true;
@@ -463,6 +465,7 @@ async function handleViewingFormMessage(message, user, token) {
     }
     if (pending.step === 'custom') {
       pending.data.date = text;
+      pending.data.day = parseViewingDate(text);
       pending.data.time = copy.asSpecified;
     } else {
       pending.data.time = text;
@@ -499,7 +502,12 @@ async function handleViewingFormMessage(message, user, token) {
       copy.reviewLabels[2] + ': ' + cleanText(pending.data.time, 160),
     ].join('\n');
     user.pendingAction = null;
-    createInquiry(user, details, { type: 'viewing', propertyId: property.id, sourceMessage: message });
+    createInquiry(user, details, {
+      type: 'viewing',
+      propertyId: property.id,
+      sourceMessage: message,
+      viewing: { date: pending.data.day, dateText: pending.data.date, timeText: pending.data.time },
+    });
     recordPropertyEvent(property.id, 'viewings');
     saveDataNow();
     await sendMessage(user.chatId, [copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
@@ -508,17 +516,30 @@ async function handleViewingFormMessage(message, user, token) {
   return false;
 }
 
+const SELECTION_STEPS = ['deal', 'type', 'location', 'budget', 'bedrooms'];
+
+function selectionPrompt(copy, step) {
+  return { deal: copy.askDeal, type: copy.askType, location: copy.askLocation, budget: copy.askBudget, bedrooms: copy.askBedrooms }[step] || copy.askDeal;
+}
+
 function selectionKeyboard(language, step) {
   const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
   if (step === 'deal') return oneColumnReplyKeyboard(copy.dealOptions, copy.cancel, copy.askDeal);
+  if (step === 'type') return oneColumnReplyKeyboard(copy.typeOptions, copy.cancel, copy.askType);
   if (step === 'location') return oneColumnReplyKeyboard([copy.anyLocation], copy.cancel, copy.askLocation);
   if (step === 'budget') return oneColumnReplyKeyboard([copy.noBudget], copy.cancel, copy.askBudget);
   if (step === 'bedrooms') return oneColumnReplyKeyboard(copy.bedroomOptions, copy.cancel, copy.askBedrooms);
-  return oneColumnReplyKeyboard([copy.confirm, copy.editDeal, copy.editLocation, copy.editBudget, copy.editBedrooms], copy.cancel, copy.review);
+  return oneColumnReplyKeyboard([copy.confirm, copy.editDeal, copy.editType, copy.editLocation, copy.editBudget, copy.editBedrooms], copy.cancel, copy.review);
+}
+
+// Land and commercial property have no bedrooms, so that question is skipped.
+function selectionNeedsBedrooms(copy, type) {
+  const index = copy.typeOptions.indexOf(type);
+  return index !== 2 && index !== 3;
 }
 
 function selectionReviewText(copy, pending) {
-  const values = [pending.data.deal, pending.data.location, pending.data.budget, pending.data.bedrooms];
+  const values = SELECTION_STEPS.map((step) => pending.data[step]);
   return [copy.review, '', ...copy.labels.map((label, index) => label + ': ' + cleanText(values[index], 200))].join('\n');
 }
 
@@ -561,6 +582,32 @@ async function handleSelectionFormMessage(message, user, token) {
       await sendSelectionReview(user, pending, token, language);
       return true;
     }
+    pending.step = 'type';
+    scheduleSave();
+    await sendMessage(user.chatId, copy.askType, token, { reply_markup: selectionKeyboard(language, 'type') });
+    return true;
+  }
+  if (pending.step === 'type') {
+    if (!copy.typeOptions.includes(text)) {
+      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: selectionKeyboard(language, 'type') });
+      return true;
+    }
+    pending.data.type = text;
+    if (!selectionNeedsBedrooms(copy, text)) {
+      pending.data.bedrooms = copy.bedroomOptions[copy.bedroomOptions.length - 1];
+      pending.data.bedroomsSkipped = true;
+    } else if (pending.editing === 'type' && pending.data.bedroomsSkipped) {
+      // Changed from land to a house: the bedrooms were never asked.
+      pending.step = 'bedrooms';
+      pending.editing = 'bedrooms';
+      scheduleSave();
+      await sendMessage(user.chatId, copy.askBedrooms, token, { reply_markup: selectionKeyboard(language, 'bedrooms') });
+      return true;
+    }
+    if (pending.editing === 'type') {
+      await sendSelectionReview(user, pending, token, language);
+      return true;
+    }
     pending.step = 'location';
     scheduleSave();
     await sendMessage(user.chatId, copy.askLocation, token, { reply_markup: selectionKeyboard(language, 'location') });
@@ -577,10 +624,13 @@ async function handleSelectionFormMessage(message, user, token) {
       await sendSelectionReview(user, pending, token, language);
       return true;
     }
-    pending.step = pending.step === 'location' ? 'budget' : 'bedrooms';
+    if (completedStep === 'budget' && !selectionNeedsBedrooms(copy, pending.data.type)) {
+      await sendSelectionReview(user, pending, token, language);
+      return true;
+    }
+    pending.step = completedStep === 'location' ? 'budget' : 'bedrooms';
     scheduleSave();
-    const prompt = pending.step === 'budget' ? copy.askBudget : copy.askBedrooms;
-    await sendMessage(user.chatId, prompt, token, { reply_markup: selectionKeyboard(language, pending.step) });
+    await sendMessage(user.chatId, selectionPrompt(copy, pending.step), token, { reply_markup: selectionKeyboard(language, pending.step) });
     return true;
   }
   if (pending.step === 'bedrooms') {
@@ -589,25 +639,22 @@ async function handleSelectionFormMessage(message, user, token) {
       return true;
     }
     pending.data.bedrooms = text;
-    if (pending.editing === 'bedrooms') {
-      await sendSelectionReview(user, pending, token, language);
-      return true;
-    }
+    pending.data.bedroomsSkipped = false;
     await sendSelectionReview(user, pending, token, language);
     return true;
   }
   if (pending.step === 'confirm') {
     const editStep = text === copy.editDeal ? 'deal'
-      : text === copy.editLocation ? 'location'
-        : text === copy.editBudget ? 'budget'
-          : text === copy.editBedrooms ? 'bedrooms'
-            : '';
+      : text === copy.editType ? 'type'
+        : text === copy.editLocation ? 'location'
+          : text === copy.editBudget ? 'budget'
+            : text === copy.editBedrooms ? 'bedrooms'
+              : '';
     if (editStep) {
       pending.step = editStep;
       pending.editing = editStep;
       scheduleSave();
-      const prompt = editStep === 'deal' ? copy.askDeal : editStep === 'location' ? copy.askLocation : editStep === 'budget' ? copy.askBudget : copy.askBedrooms;
-      await sendMessage(user.chatId, prompt, token, { reply_markup: selectionKeyboard(language, editStep) });
+      await sendMessage(user.chatId, selectionPrompt(copy, editStep), token, { reply_markup: selectionKeyboard(language, editStep) });
       return true;
     }
     if (text === copy.restart) {
@@ -625,6 +672,7 @@ async function handleSelectionFormMessage(message, user, token) {
     }
     const selection = {
       deal: cleanText(pending.data.deal, 200),
+      type: cleanText(pending.data.type, 200),
       location: cleanText(pending.data.location, 200),
       budget: cleanText(pending.data.budget, 200),
       bedrooms: cleanText(pending.data.bedrooms, 200),
@@ -632,8 +680,16 @@ async function handleSelectionFormMessage(message, user, token) {
     const inquiryText = selectionReviewText(copy, pending).replace(copy.review, copy.summaryTitle).trim();
     user.pendingAction = null;
     createInquiry(user, inquiryText, { type: 'selection', selection, sourceMessage: message });
+    // What already fits is shown right away; the manager still gets the request.
+    const matches = currentSelectionMatches(user, selection);
+    user.selectionMatchIds = matches.map((record) => record.id);
     saveDataNow();
-    await sendMessage(user.chatId, copy.success, token, { reply_markup: menuKeyboard(language) });
+    if (!matches.length) {
+      await sendMessage(user.chatId, copy.success, token, { reply_markup: menuKeyboard(language) });
+      return true;
+    }
+    await sendMessage(user.chatId, copy.successMatches, token, { reply_markup: menuKeyboard(language) });
+    await sendCatalogPage(user.chatId, user, token, 0, 'matches');
     return true;
   }
   return false;

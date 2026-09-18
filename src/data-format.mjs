@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import { cleanText, clone } from './util.mjs';
 
-const DATA_VERSION = 15;
+const DATA_VERSION = 16;
 // 0 turns reminders about unanswered inquiries off.
 const REMINDER_HOUR_OPTIONS = [0, 1, 2, 4, 8, 24];
 
@@ -188,6 +188,24 @@ function migrateDefaultTexts(messages) {
   if (messages.es.fallback === '¡Gracias por tu mensaje! Se lo he enviado al administrador.') messages.es.fallback = defaultData.config.messages.es.fallback;
 }
 
+// Version 16 added "property type" as step 2 of the selection form. Saved
+// texts (the defaults are stored too) still say "1 of 4"; their step numbers
+// are moved, keeping any wording the administrator changed.
+const SELECTION_STEP_NUMBERS = { askDeal: 1, askLocation: 3, askBudget: 4, askBedrooms: 5 };
+
+function migrateSelectionSteps(interfaceText) {
+  const form = interfaceText && interfaceText.selectionForm;
+  if (!form || typeof form !== 'object') return;
+  for (const language of ['ru', 'en', 'es']) {
+    const texts = form[language];
+    if (!texts || typeof texts !== 'object') continue;
+    for (const [key, step] of Object.entries(SELECTION_STEP_NUMBERS)) {
+      if (typeof texts[key] !== 'string') continue;
+      texts[key] = texts[key].replace(/^\s*[1-4]\s+(из|of|de)\s+4\./u, (match, word) => step + ' ' + word + ' 5.');
+    }
+  }
+}
+
 // Analytics buckets for deleted properties are never shown, so drop them.
 function pruneOrphanPropertyAnalytics(root) {
   const properties = root && root.analytics && root.analytics.properties;
@@ -211,6 +229,30 @@ function normalizeAdminReplyTargets(value) {
     };
   }
   return result;
+}
+
+const DAY_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const CLOCK_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+// A viewing request: what the client asked for (date may be unknown, for
+// "at the weekend" or a free-text answer), what the manager confirmed and
+// what the bot already sent about it.
+function normalizeViewing(value) {
+  if (!value || typeof value !== 'object') return null;
+  const day = (text) => (DAY_KEY_PATTERN.test(String(text || '')) ? String(text) : '');
+  return {
+    date: day(value.date),
+    dateText: cleanText(value.dateText, 160),
+    timeText: cleanText(value.timeText, 160),
+    confirmedDate: day(value.confirmedDate),
+    confirmedTime: CLOCK_TIME_PATTERN.test(String(value.confirmedTime || '')) ? String(value.confirmedTime) : '',
+    confirmedAt: cleanText(value.confirmedAt, 40),
+    cancelledAt: cleanText(value.cancelledAt, 40),
+    remindedAt: cleanText(value.remindedAt, 40),
+    feedbackAskedAt: cleanText(value.feedbackAskedAt, 40),
+    feedback: ['liked', 'questions', 'disliked'].includes(value.feedback) ? value.feedback : '',
+    feedbackAt: cleanText(value.feedbackAt, 40),
+  };
 }
 
 const MAX_REPLY_TEMPLATES = 50;
@@ -290,7 +332,7 @@ function normalizeLoadedData(parsed) {
         } : null,
         lastInboundMessageId: user.lastInboundMessageId != null && Number.isFinite(Number(user.lastInboundMessageId)) ? Number(user.lastInboundMessageId) : null,
         catalogContext: user.catalogContext && typeof user.catalogContext === 'object' ? {
-          mode: ['all', 'favorites'].includes(user.catalogContext.mode) ? user.catalogContext.mode : 'all',
+          mode: ['all', 'favorites', 'matches'].includes(user.catalogContext.mode) ? user.catalogContext.mode : 'all',
           page: Math.max(0, Number(user.catalogContext.page) || 0),
         } : { mode: 'all', page: 0 },
         pendingAction: user.pendingAction && typeof user.pendingAction === 'object' ? user.pendingAction : null,
@@ -346,12 +388,14 @@ function normalizeLoadedData(parsed) {
       } : null,
       selection: item.selection && typeof item.selection === 'object' ? {
         deal: cleanText(item.selection.deal, 200),
+        type: cleanText(item.selection.type, 200),
         location: cleanText(item.selection.location, 200),
         budget: cleanText(item.selection.budget, 200),
         bedrooms: cleanText(item.selection.bedrooms, 200),
       } : null,
       replies: Array.isArray(item.replies) ? item.replies.slice(-50) : [],
       remindedAt: cleanText(item.remindedAt, 40),
+      viewing: item.type === 'viewing' ? normalizeViewing(item.viewing || {}) : null,
       createdAt: item.createdAt || new Date().toISOString(),
       updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
     })).slice(0, 5000) : [];
@@ -417,8 +461,10 @@ function normalizeLoadedData(parsed) {
     // Version 15 made "only inquiries" the default: navigation is sent as a
     // daily digest instead of one message per click.
     if (storedVersion < 15) normalized.config.notifyMode = 'inquiries';
+    if (storedVersion < 16) migrateSelectionSteps(normalized.interfaceText);
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
+    normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
     pruneOrphanPropertyAnalytics(normalized);
@@ -426,18 +472,22 @@ function normalizeLoadedData(parsed) {
 }
 
 export {
+  CLOCK_TIME_PATTERN,
   DATA_VERSION,
+  DAY_KEY_PATTERN,
   MAX_REPLY_TEMPLATES,
   REMINDER_HOUR_OPTIONS,
   defaultData,
   legacyConfigRemoved,
   managerTerminology,
   migrateDefaultTexts,
+  migrateSelectionSteps,
   normalizeAdminReplyTargets,
   normalizeLoadedData,
   normalizeLocalizedField,
   normalizePropertyImages,
   normalizeReplyTemplates,
   normalizeStoredImages,
+  normalizeViewing,
   pruneOrphanPropertyAnalytics,
 };
