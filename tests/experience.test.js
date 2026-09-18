@@ -102,6 +102,43 @@ test('a follow-up after "ask a question" joins the same inquiry', async () => {
   assert.equal(chat.inquiries[0].text, 'Есть ли квартиры до 200 000 €?\n\nИ можно ли оформить ипотеку?');
 });
 
+test.describe('admin chat copies', () => {
+  async function deliver(update) {
+    telegram.calls = [];
+    await bot.processUpdates([update], '12345:ABCDEFGHIJKLMNOPQRSTUV');
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    return telegram.calls;
+  }
+
+  test('"check availability" under a property card does not copy the bot\'s own card', async () => {
+    const chat = createChat();
+    const calls = await deliver({
+      update_id: 880001,
+      callback_query: {
+        id: 'cb-availability',
+        from: { id: chat.id, first_name: 'Анна' },
+        data: 'property:availability:villa-no-price',
+        // Telegram sends the message the button belongs to: the bot's photo card.
+        message: { message_id: 4321, date: 0, from: { id: 5550001, is_bot: true, first_name: 'Bot' }, chat: { id: chat.id, type: 'private' }, photo: [{ file_id: 'card' }], caption: 'Вилла без цены' },
+      },
+    });
+    assert.equal(calls.filter((call) => call.method === 'copyMessage').length, 0);
+    assert.ok(adminMessages().some((message) => message.text.startsWith('📩 Новое обращение: вопрос по объекту')));
+    assert.equal(chat.inquiries[0].sourceMessageId, 4321, 'the admin\'s reply still quotes the card in the client\'s chat');
+  });
+
+  test('a voice message from the client is still copied to the admin chat', async () => {
+    const chat = createChat();
+    const calls = await deliver({
+      update_id: 880002,
+      message: { message_id: 77, date: Math.floor(Date.now() / 1000), from: { id: chat.id, first_name: 'Анна' }, chat: { id: chat.id, type: 'private' }, voice: { file_id: 'v', duration: 5 } },
+    });
+    const copies = calls.filter((call) => call.method === 'copyMessage');
+    assert.equal(copies.length, 1);
+    assert.equal(copies[0].body.message_id, 77);
+  });
+});
+
 test.describe('admin', () => {
   test('an inquiry notification is short and has status buttons', async () => {
     const chat = createChat();

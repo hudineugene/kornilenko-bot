@@ -2710,6 +2710,13 @@ function mergeIntoLatestInquiry(user, text, type, context) {
   return latest;
 }
 
+// Photos, voice messages and files from the client are copied to the admin
+// chat so the admin sees them. Messages sent by the bot itself (a property
+// card behind a button the client pressed) are only referenced, not copied.
+function isClientMedia(message) {
+  return Boolean(message && !message.text && message.from && !message.from.is_bot);
+}
+
 // Inquiries that just received another message from the client. The client
 // was already told that the message is with the manager, so the bot does not
 // repeat it for every message sent in a row.
@@ -2726,7 +2733,7 @@ function createInquiry(user, text, context = {}) {
     mergedInquiries.add(merged);
     scheduleSave();
     const notify = () => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в обращении' });
-    if (context.sourceMessage && !context.sourceMessage.text) {
+    if (isClientMedia(context.sourceMessage)) {
       void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken, merged)
         .then(notify)
         .catch((error) => recordError('Уведомление администратору', error));
@@ -2766,7 +2773,7 @@ function createInquiry(user, text, context = {}) {
   trimInquiries();
   recordDaily('inquiry');
   scheduleSave();
-  if (context.sourceMessage && !context.sourceMessage.text) {
+  if (isClientMedia(context.sourceMessage)) {
     void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken, inquiry)
       .then(() => notifyAdministrator(inquiry, user))
       .catch((error) => recordError('Уведомление администратору', error));
