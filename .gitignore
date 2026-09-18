@@ -14,3 +14,9 @@ backups/
 
 node_modules/
 .claude/
+
+# Сессии панели (хеши cookie)
+bot-sessions.json
+bot-sessions.json.tmp
+bot-running.json
+bot-running.json.tmp

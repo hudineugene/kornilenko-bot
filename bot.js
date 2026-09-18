@@ -850,7 +850,13 @@ const DIGEST_HOUR = 9;
 // after DIGEST_HOUR local time, instead of a message per click.
 function activityDigest(dayKeyValue) {
   const daily = data.analytics.daily[dayKeyValue] || {};
-  const newUsers = Object.values(data.users).filter((user) => String(user.firstSeenAt || '').slice(0, 10) === dayKeyValue).length;
+  const newcomers = Object.values(data.users).filter((user) => String(user.firstSeenAt || '').slice(0, 10) === dayKeyValue);
+  const newUsers = newcomers.length;
+  const bySource = new Map();
+  for (const user of newcomers) bySource.set(user.source || 'без метки', (bySource.get(user.source || 'без метки') || 0) + 1);
+  const sources = bySource.size > 1 || !bySource.has('без метки')
+    ? Array.from(bySource).sort((a, b) => b[1] - a[1]).map(([name, count]) => name + ' — ' + count).join(', ')
+    : '';
   const sections = Object.entries(daily.menu || {})
     .sort((a, b) => b[1] - a[1])
     .map(([key, count]) => String(MENU_LABELS.ru[key] || key).replace(/^[^\p{L}\p{N}]+/u, '') + ' — ' + count);
@@ -861,7 +867,7 @@ function activityDigest(dayKeyValue) {
   return [
     '📊 Активность за ' + day + '.' + month + '.' + year,
     '',
-    'Новых пользователей: ' + newUsers,
+    'Новых пользователей: ' + newUsers + (sources ? ' (' + sources + ')' : ''),
     'Сообщений от клиентов: ' + received,
     'Новых обращений: ' + inquiries,
     ...(sections.length ? ['', 'Открывали разделы:', ...sections.map((line) => '• ' + line)] : []),
@@ -1726,6 +1732,72 @@ const BOT_COMMAND_DESCRIPTIONS = {
 
 // Every phrase below is shown to a bot user. The administrator can override it
 // without changing this file; these values remain the safe multilingual defaults.
+const CATALOG_FILTER_TEXT = {
+  ru: {
+    button: '🔎 Фильтр',
+    title: '🔎 Подберите объекты по параметрам. Отмеченное ✓ уже выбрано.',
+    anyDeal: 'Продажа и аренда',
+    anyType: 'Все типы',
+    anyBedrooms: 'Спальни: любое',
+    bedrooms: 'спален',
+    show: '✅ Показать',
+    reset: '↺ Сбросить фильтр',
+    empty: 'По этим параметрам объектов пока нет. Измените фильтр или оставьте пожелания — менеджер подберёт варианты.',
+  },
+  en: {
+    button: '🔎 Filter',
+    title: '🔎 Narrow down the properties. Options marked ✓ are selected.',
+    anyDeal: 'Sale and rent',
+    anyType: 'All types',
+    anyBedrooms: 'Bedrooms: any',
+    bedrooms: 'bedrooms',
+    show: '✅ Show',
+    reset: '↺ Reset filter',
+    empty: 'No properties match these options yet. Change the filter or leave your wishes — a manager will find options for you.',
+  },
+  es: {
+    button: '🔎 Filtro',
+    title: '🔎 Filtra los inmuebles. Las opciones con ✓ están seleccionadas.',
+    anyDeal: 'Venta y alquiler',
+    anyType: 'Todos los tipos',
+    anyBedrooms: 'Dormitorios: cualquiera',
+    bedrooms: 'dormitorios',
+    show: '✅ Mostrar',
+    reset: '↺ Quitar filtro',
+    empty: 'Todavía no hay inmuebles con estas opciones. Cambia el filtro o deja tus preferencias y un gestor buscará opciones.',
+  },
+};
+
+const PROPERTY_ALERT_TEXT = {
+  ru: {
+    priceDrop: '📉 Цена снизилась — объект из вашего избранного',
+    backAvailable: '✅ Снова доступен — объект из вашего избранного',
+    newMatch: '✨ Новый объект по вашему запросу',
+    turnOff: '🔕 Не присылать такие уведомления',
+    turnedOff: 'Хорошо, больше не будем присылать уведомления об объектах.',
+    turnOn: '🔔 Снова присылать уведомления',
+    turnedOn: 'Уведомления об объектах снова включены.',
+  },
+  en: {
+    priceDrop: '📉 Price reduced — a property from your favorites',
+    backAvailable: '✅ Available again — a property from your favorites',
+    newMatch: '✨ A new property matching your request',
+    turnOff: '🔕 Stop these notifications',
+    turnedOff: 'Done — we will not send property notifications any more.',
+    turnOn: '🔔 Send notifications again',
+    turnedOn: 'Property notifications are on again.',
+  },
+  es: {
+    priceDrop: '📉 Precio rebajado — un inmueble de tus favoritos',
+    backAvailable: '✅ Disponible de nuevo — un inmueble de tus favoritos',
+    newMatch: '✨ Un nuevo inmueble según tu solicitud',
+    turnOff: '🔕 No enviar estos avisos',
+    turnedOff: 'Hecho: ya no te enviaremos avisos sobre inmuebles.',
+    turnOn: '🔔 Volver a enviar avisos',
+    turnedOn: 'Los avisos sobre inmuebles vuelven a estar activados.',
+  },
+};
+
 const INTERFACE_TEXT_TARGETS = {
   languageSelected: { target: LANGUAGE_SELECTED, scalarKey: 'text' },
   languagePicker: { target: LANGUAGE_PICKER_TEXT, scalarKey: 'text' },
@@ -1745,6 +1817,8 @@ const INTERFACE_TEXT_TARGETS = {
   callbackForm: { target: LEAD_FORM_TEXT },
   viewingForm: { target: VIEWING_FORM_TEXT },
   selectionForm: { target: SELECTION_FORM_TEXT },
+  propertyAlerts: { target: PROPERTY_ALERT_TEXT },
+  catalogFilter: { target: CATALOG_FILTER_TEXT },
 };
 
 const INTERFACE_TEXT_DEFAULTS = Object.fromEntries(Object.entries(INTERFACE_TEXT_TARGETS).map(([group, descriptor]) => [
@@ -2608,6 +2682,21 @@ function publicRuntime() {
   };
 }
 
+// ru / en / es from Telegram's language_code ("en-US" counts as en); empty
+// for any other language.
+// Advertising links carry a label: t.me/<bot>?start=src_instagram.
+const LEAD_SOURCE_PATTERN = /^src_([a-z0-9_-]{1,40})$/i;
+
+function leadSourceFromPayload(payload) {
+  const match = cleanText(payload, 100).match(LEAD_SOURCE_PATTERN);
+  return match ? match[1].toLowerCase() : '';
+}
+
+function telegramInterfaceLanguage(user) {
+  const code = String(user && user.languageCode || '').toLowerCase().split('-')[0];
+  return ['ru', 'en', 'es'].includes(code) ? code : '';
+}
+
 function normalizeUser(from, chatId, countMessage = true) {
   const id = String(from.id);
   const previous = userById(id) || {};
@@ -2642,6 +2731,11 @@ function normalizeUser(from, chatId, countMessage = true) {
     expiredAction: previous.expiredAction && typeof previous.expiredAction === 'object' ? previous.expiredAction : null,
     pendingStartPayload: cleanText(previous.pendingStartPayload, 100),
     activity: Array.isArray(previous.activity) ? previous.activity : [],
+    propertyAlerts: previous.propertyAlerts !== false,
+    source: cleanText(previous.source, 40),
+    catalogFilter: previous.catalogFilter && typeof previous.catalogFilter === 'object' ? normalizedCatalogFilter(previous.catalogFilter) : null,
+    sourceAt: cleanText(previous.sourceAt, 40),
+    alertsSent: previous.alertsSent && typeof previous.alertsSent === 'object' && !Array.isArray(previous.alertsSent) ? previous.alertsSent : {},
   };
   data.users[id] = user;
   indexUser(user);
@@ -2878,7 +2972,7 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   // Routing of replies does not depend on this text (see adminReplyTargets),
   // so it only carries what a person needs to read.
   const language = user.preferredLanguage ? ' · ' + user.preferredLanguage.toUpperCase() : '';
-  const who = '👤 ' + name + username + language;
+  const who = '👤 ' + name + username + language + (user.source ? ' · 📣 ' + user.source : '');
   const cleanDetails = cleanText(details, 4000);
   const notification = options.important
     ? ['📩 ' + cleanText(title, 160), who, '', cleanDetails, '', '↩️ Ответьте на это сообщение — ответ получит клиент.']
@@ -3242,6 +3336,10 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     navigation.push({ text: '➡️', callback_data: 'catalog:' + catalog.mode + ':' + nextPage });
     rows.push(navigation);
   }
+  if (kind === 'property' && catalog && catalog.mode === 'all' && catalog.filter && catalog.filter.available) {
+    const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
+    rows.push([{ text: cleanText(copy.button + (catalog.filter.summary ? ': ' + catalog.filter.summary : ''), 64), callback_data: 'cfilter:open' }]);
+  }
   return rows.length ? { inline_keyboard: rows } : null;
 }
 
@@ -3345,10 +3443,60 @@ function promotionIsActive(record, now = Date.now()) {
   return (!Number.isFinite(start) || start <= now) && (!Number.isFinite(end) || end >= now);
 }
 
-function catalogRecords(user, mode = 'all') {
+// The filter only appears once the catalog is big enough to need it.
+const CATALOG_FILTER_MIN_RECORDS = 6;
+const CATALOG_FILTER_BEDROOMS = [1, 2, 3, 4];
+
+function normalizedCatalogFilter(value) {
+  const filter = value && typeof value === 'object' ? value : {};
+  return {
+    deal: ['sale', 'rent'].includes(filter.deal) ? filter.deal : '',
+    type: Object.hasOwn(PROPERTY_TYPE_LABELS.ru, filter.type) ? filter.type : '',
+    bedrooms: CATALOG_FILTER_BEDROOMS.includes(Number(filter.bedrooms)) ? Number(filter.bedrooms) : 0,
+  };
+}
+
+function catalogFilterActive(filter) {
+  return Boolean(filter.deal || filter.type || filter.bedrooms);
+}
+
+// A bedroom filter shows only properties with a known bedroom count.
+function applyCatalogFilter(records, value) {
+  const filter = normalizedCatalogFilter(value);
+  return records.filter((record) => (!filter.deal || record.dealType === filter.deal)
+    && (!filter.type || record.propertyType === filter.type)
+    && (!filter.bedrooms || Number(record.bedrooms) >= filter.bedrooms));
+}
+
+function catalogFilterSummary(value, language) {
+  const filter = normalizedCatalogFilter(value);
+  const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
+  return [
+    filter.deal ? (filter.deal === 'rent' ? action.forRent : action.forSale) : '',
+    filter.type ? (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[filter.type] : '',
+    filter.bedrooms ? filter.bedrooms + '+ ' + copy.bedrooms : '',
+  ].filter(Boolean).join(', ');
+}
+
+function publishedCatalog(user) {
   const language = user.preferredLanguage || 'ru';
-  const active = data.objects.filter((record) => ['active', 'reserved'].includes(record.status) && propertyReadyForLanguage(record, language));
-  if (mode !== 'favorites') return active;
+  return data.objects.filter((record) => ['active', 'reserved'].includes(record.status) && propertyReadyForLanguage(record, language));
+}
+
+// What the catalog card needs to show about the filter.
+function catalogFilterState(user) {
+  const filter = normalizedCatalogFilter(user.catalogFilter);
+  const active = catalogFilterActive(filter);
+  return {
+    available: active || publishedCatalog(user).length >= CATALOG_FILTER_MIN_RECORDS,
+    summary: active ? catalogFilterSummary(filter, user.preferredLanguage || 'ru') : '',
+  };
+}
+
+function catalogRecords(user, mode = 'all') {
+  const active = publishedCatalog(user);
+  if (mode !== 'favorites') return applyCatalogFilter(active, user.catalogFilter);
   const favorites = new Set(Array.isArray(user.favorites) ? user.favorites : []);
   return active.filter((record) => favorites.has(record.id));
 }
@@ -3410,6 +3558,20 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
   await clearGalleryMessages(chatId, user, token);
   const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const records = catalogRecords(user, mode);
+  const filterState = catalogFilterState(user);
+  if (!records.length && mode !== 'favorites' && filterState.summary) {
+    await clearCatalogMessages(chatId, user, token);
+    user.catalogContext = { mode: 'all', page: 0 };
+    scheduleSave();
+    const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
+    const labels = MENU_LABELS[language] || MENU_LABELS.ru;
+    await sendUiMessage(chatId, user, copy.empty + '\n\n🔎 ' + filterState.summary, token, { reply_markup: { inline_keyboard: [
+      [{ text: copy.reset, callback_data: 'cfilter:reset' }],
+      [{ text: labels.selection, callback_data: 'selection:start' }],
+      [{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }],
+    ] } });
+    return true;
+  }
   if (!records.length) {
     await clearCatalogMessages(chatId, user, token);
     user.catalogContext = { mode: mode === 'favorites' ? 'favorites' : 'all', page: 0 };
@@ -3438,6 +3600,7 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
     page: safePage,
     totalPages,
     mode,
+    filter: mode === 'all' ? filterState : null,
   });
   return true;
 }
@@ -3550,6 +3713,7 @@ async function showCatalogPageFromCallback(chatId, user, token, page, mode, mess
     page: safePage,
     totalPages: records.length,
     mode,
+    filter: mode === 'all' ? catalogFilterState(user) : null,
   });
   if (edited) return true;
   await sendCatalogPage(chatId, user, token, safePage, mode);
@@ -3557,6 +3721,71 @@ async function showCatalogPageFromCallback(chatId, user, token, page, mode, mess
     try { await telegramRequest(token, 'deleteMessage', { chat_id: chatId, message_id: message.message_id }); } catch {}
   }
   return true;
+}
+
+function catalogFilterPanel(user) {
+  const language = user.preferredLanguage || 'ru';
+  const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
+  const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  const typeLabels = PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru;
+  const filter = normalizedCatalogFilter(user.catalogFilter);
+  const published = publishedCatalog(user);
+  const mark = (selected, text) => (selected ? '✓ ' : '') + text;
+  // Only types that actually exist in the catalog are offered.
+  const types = Object.keys(typeLabels).filter((type) => published.some((record) => record.propertyType === type));
+  const typeButtons = [{ text: mark(!filter.type, copy.anyType), callback_data: 'cfilter:type:any' }]
+    .concat(types.map((type) => ({ text: mark(filter.type === type, typeLabels[type]), callback_data: 'cfilter:type:' + type })));
+  const rows = [
+    [
+      { text: mark(!filter.deal, copy.anyDeal), callback_data: 'cfilter:deal:any' },
+      { text: mark(filter.deal === 'sale', action.forSale), callback_data: 'cfilter:deal:sale' },
+      { text: mark(filter.deal === 'rent', action.forRent), callback_data: 'cfilter:deal:rent' },
+    ],
+  ];
+  for (let index = 0; index < typeButtons.length; index += 2) rows.push(typeButtons.slice(index, index + 2));
+  rows.push([{ text: mark(!filter.bedrooms, copy.anyBedrooms), callback_data: 'cfilter:bed:0' }]);
+  rows.push(CATALOG_FILTER_BEDROOMS.map((count) => ({ text: mark(filter.bedrooms === count, count + '+'), callback_data: 'cfilter:bed:' + count })));
+  rows.push([{ text: copy.show + ': ' + applyCatalogFilter(published, filter).length, callback_data: 'cfilter:show' }]);
+  if (catalogFilterActive(filter)) rows.push([{ text: copy.reset, callback_data: 'cfilter:reset' }]);
+  return { text: copy.title, markup: { inline_keyboard: rows } };
+}
+
+async function handleCatalogFilterCallback(query, token) {
+  const [, action, value] = String(query.data || '').split(':');
+  const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
+  const user = normalizeUser(query.from, chatId, false);
+  if (!user.preferredLanguage) {
+    await acknowledgeCallback(query, token);
+    return sendLanguagePicker(chatId, token, '');
+  }
+  const filter = normalizedCatalogFilter(user.catalogFilter);
+  if (action === 'show' || action === 'reset') {
+    if (action === 'reset') user.catalogFilter = null;
+    scheduleSave();
+    await acknowledgeCallback(query, token);
+    const summary = catalogFilterSummary(user.catalogFilter, user.preferredLanguage);
+    if (action === 'show' && summary) void notifyAdministratorAction(user, 'Применил фильтр каталога', summary);
+    await sendCatalogPage(chatId, user, token, 0, 'all');
+    return;
+  }
+  if (action === 'deal') filter.deal = ['sale', 'rent'].includes(value) ? value : '';
+  if (action === 'type') filter.type = Object.hasOwn(PROPERTY_TYPE_LABELS.ru, value) ? value : '';
+  if (action === 'bed') filter.bedrooms = CATALOG_FILTER_BEDROOMS.includes(Number(value)) ? Number(value) : 0;
+  if (['deal', 'type', 'bed'].includes(action)) {
+    user.catalogFilter = catalogFilterActive(filter) ? filter : null;
+    scheduleSave();
+  }
+  await acknowledgeCallback(query, token);
+  const panel = catalogFilterPanel(user);
+  if (action !== 'open' && query.message && query.message.message_id) {
+    try {
+      await telegramRequest(token, 'editMessageText', { chat_id: chatId, message_id: query.message.message_id, text: panel.text, reply_markup: panel.markup });
+      return;
+    } catch {
+      // The panel is sent again below if the old one can no longer be edited.
+    }
+  }
+  await sendUiMessage(chatId, user, panel.text, token, { reply_markup: panel.markup });
 }
 
 async function sendCatalog(chatId, user, token) {
@@ -4234,6 +4463,8 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('about:')) await handleAboutCallback(update.callback_query, token);
       else if (callbackData.startsWith('nav:')) await handleNavigationCallback(update.callback_query, token);
       else if (callbackData.startsWith('selection:')) await handleSelectionCallback(update.callback_query, token);
+      else if (callbackData.startsWith('alerts:')) await handleAlertsCallback(update.callback_query, token);
+      else if (callbackData.startsWith('cfilter:')) await handleCatalogFilterCallback(update.callback_query, token);
       else {
         const copy = INTERACTION_TEXT[callbackUser.preferredLanguage] || INTERACTION_TEXT.ru;
         await acknowledgeCallback(update.callback_query, token, copy.stale);
@@ -4270,7 +4501,15 @@ async function handleUpdate(update, token) {
   let answer = '';
   const command = text.split(/\s+/)[0].split('@')[0].toLowerCase();
   const commandArgument = cleanText(text.split(/\s+/).slice(1).join(' '), 100);
-  if (command === '/start' && commandArgument) {
+  const sourceLabel = command === '/start' ? leadSourceFromPayload(commandArgument) : '';
+  if (sourceLabel) {
+    // The first link a client came through is kept: it is what brought them.
+    if (!user.source) {
+      user.source = sourceLabel;
+      user.sourceAt = new Date().toISOString();
+    }
+    scheduleSave();
+  } else if (command === '/start' && commandArgument) {
     user.pendingStartPayload = commandArgument;
     scheduleSave();
   }
@@ -4279,6 +4518,20 @@ async function handleUpdate(update, token) {
     const copy = COMMAND_TEXT[user.preferredLanguage || 'ru'] || COMMAND_TEXT.ru;
     await sendMessage(message.chat.id, copy.myId + ' ' + String(message.chat.id), token);
     return;
+  }
+  // First contact: when the client's Telegram is set to a language the bot
+  // speaks, greet them in it instead of asking. "🌐 Change language" stays in
+  // the menu. Other Telegram languages still get the picker.
+  const telegramLanguage = telegramInterfaceLanguage(user);
+  if (!user.preferredLanguage && telegramLanguage && command !== '/language') {
+    user.preferredLanguage = telegramLanguage;
+    scheduleSave();
+    void notifyAdministratorAction(user, 'Первый запуск', 'Язык по настройкам Telegram: ' + LANGUAGE_NAMES[telegramLanguage]);
+    await sendWelcome(message.chat.id, user, token);
+    if (command === '/start') {
+      await openPendingStartPayload(user, token);
+      return;
+    }
   }
   if (command === '/language' || (user.preferredLanguage && isLanguageChangeText(text, user.preferredLanguage)) || !user.preferredLanguage) {
     user.pendingAction = null;
@@ -4737,7 +4990,67 @@ async function runDueBroadcasts() {
   }
 }
 
-const sessions = new Map();
+const SESSIONS_FILE = path.join(path.dirname(DATA_FILE), 'bot-sessions.json');
+const SESSION_PERSIST_STEP_MS = 10 * 60 * 1000;
+
+function sessionKey(cookieValue) {
+  return crypto.createHash('sha256').update(String(cookieValue)).digest('hex');
+}
+
+// Panel sessions, kept on disk so that restarting the bot (for example after
+// an update) does not log the administrator out. The file holds only SHA-256
+// hashes of the session cookies, so reading it does not give access to the
+// panel. Every change to the map is written straight away.
+class PersistentSessionStore extends Map {
+  set(key, value) {
+    super.set(key, value);
+    this.persist();
+    return this;
+  }
+
+  delete(key) {
+    const removed = super.delete(key);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  clear() {
+    super.clear();
+    this.persist();
+  }
+
+  persist() {
+    const now = Date.now();
+    const stored = {};
+    for (const [key, session] of this) {
+      if (session.expiresAt > now) stored[key] = { csrf: session.csrf, expiresAt: session.expiresAt };
+    }
+    try {
+      const temporary = SESSIONS_FILE + '.tmp';
+      fs.writeFileSync(temporary, JSON.stringify(stored), { encoding: 'utf8', mode: 0o600 });
+      fs.renameSync(temporary, SESSIONS_FILE);
+    } catch (error) {
+      console.error('Не удалось сохранить сессии панели:', error.message);
+    }
+  }
+
+  load() {
+    let stored = {};
+    try {
+      stored = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
+    } catch {
+      return;
+    }
+    const now = Date.now();
+    for (const [key, value] of Object.entries(stored && typeof stored === 'object' ? stored : {})) {
+      if (!/^[0-9a-f]{64}$/.test(key) || !value || typeof value.csrf !== 'string' || !(Number(value.expiresAt) > now)) continue;
+      super.set(key, { id: key, csrf: value.csrf, expiresAt: Number(value.expiresAt), persistedExpiresAt: Number(value.expiresAt) });
+    }
+  }
+}
+
+const sessions = new PersistentSessionStore();
+sessions.load();
 const loginAttempts = new Map();
 
 function parseCookies(header) {
@@ -4750,26 +5063,35 @@ function parseCookies(header) {
 }
 
 function getSession(req) {
-  const id = parseCookies(req.headers.cookie).admin_session;
-  const session = id && sessions.get(id);
+  const cookie = parseCookies(req.headers.cookie).admin_session;
+  const key = cookie && sessionKey(cookie);
+  const session = key && sessions.get(key);
   if (!session) return null;
   if (session.expiresAt < Date.now()) {
-    sessions.delete(id);
+    sessions.delete(key);
     return null;
   }
   session.expiresAt = Date.now() + SESSION_TTL_MS;
+  // The sliding expiry is written to disk in steps, not on every request.
+  if (session.expiresAt - (session.persistedExpiresAt || 0) > SESSION_PERSIST_STEP_MS) {
+    session.persistedExpiresAt = session.expiresAt;
+    sessions.persist();
+  }
   return session;
 }
 
 function createSession(res) {
-  const id = crypto.randomBytes(32).toString('hex');
+  const cookie = crypto.randomBytes(32).toString('hex');
+  const key = sessionKey(cookie);
+  const expiresAt = Date.now() + SESSION_TTL_MS;
   const session = {
-    id,
+    id: key,
     csrf: crypto.randomBytes(24).toString('hex'),
-    expiresAt: Date.now() + SESSION_TTL_MS,
+    expiresAt,
+    persistedExpiresAt: expiresAt,
   };
-  sessions.set(id, session);
-  res.setHeader('set-cookie', 'admin_session=' + id + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
+  sessions.set(key, session);
+  res.setHeader('set-cookie', 'admin_session=' + cookie + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200');
   return session;
 }
 
@@ -5414,6 +5736,7 @@ const INQUIRY_EXPORT_COLUMNS = [
   { title: 'Имя в заявке', width: 20 },
   { title: 'Удобное время', width: 22 },
   { title: 'Язык', width: 6 },
+  { title: 'Источник', width: 14 },
   { title: 'Объект', width: 28 },
   { title: 'Текст обращения', width: 60 },
   { title: 'Заметка администратора', width: 30 },
@@ -5440,6 +5763,7 @@ function inquiryExportRows(inquiries) {
       lead.name || '',
       lead.preferredTime || '',
       String(inquiry.language || '').toUpperCase(),
+      user.source || '',
       property ? localized(property.title, 'ru') || property.reference || property.id : '',
       inquiry.text,
       inquiry.note || '',
@@ -5449,6 +5773,168 @@ function inquiryExportRows(inquiries) {
       inquiry.id,
     ];
   });
+}
+
+// --- Property alerts ---------------------------------------------------------
+// A client hears about a property again when it matters to them: a favourite
+// got cheaper or is available again, or a newly published property fits the
+// wishes they left in "Help me find a property". Every message has a button
+// to stop these alerts.
+
+const PROPERTY_ALERT_SPACING_MS = 60;
+const SELECTION_ALERT_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+const ALERT_MEMORY_MS = 180 * 24 * 60 * 60 * 1000;
+
+function alertsEnabled(user) {
+  return Boolean(user && user.chatId && !user.blocked && user.preferredLanguage && user.propertyAlerts !== false);
+}
+
+function rememberAlert(user, key) {
+  const sent = user.alertsSent && typeof user.alertsSent === 'object' ? user.alertsSent : {};
+  const cutoff = Date.now() - ALERT_MEMORY_MS;
+  for (const [storedKey, at] of Object.entries(sent)) if (Date.parse(at) < cutoff) delete sent[storedKey];
+  sent[key] = new Date().toISOString();
+  user.alertsSent = sent;
+}
+
+// The largest amount in a free-text budget: "до 600 000 €", "1,2 млн",
+// "600k", "600 mil". 0 when no amount can be read.
+function budgetLimit(text) {
+  const normalized = String(text || '').toLowerCase().replace(/(\d)[\s\u00a0.](?=\d{3}(?!\d))/g, '$1');
+  let best = 0;
+  for (const match of normalized.matchAll(/(\d+(?:[.,]\d+)?)\s*(млн|миллион\S*|mln|millones|million|m(?![\p{L}])|тыс\S*|k(?![\p{L}])|mil(?![\p{L}]))?/gu)) {
+    const unit = match[2] || '';
+    const multiplier = unit === 'm' || /^(млн|миллион|mln|millones|million)/.test(unit) ? 1e6 : /^(тыс|k|mil)/.test(unit) ? 1e3 : 1;
+    const value = Number(match[1].replace(',', '.')) * multiplier;
+    if (value >= 1000) best = Math.max(best, value);
+  }
+  return best;
+}
+
+function locationMatches(request, record) {
+  const place = ['city', 'district', 'address', 'title']
+    .flatMap((field) => ['ru', 'en', 'es'].map((language) => localizedExact(record[field], language, 400)))
+    .join(' ')
+    .toLowerCase();
+  const words = String(request || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 4);
+  return words.some((word) => place.includes(word));
+}
+
+// Unknown data never excludes a property: a missing price or bedroom count
+// passes, so the manager-worthy lead is not lost.
+function selectionMatches(inquiry, record) {
+  const selection = inquiry.selection || {};
+  const copy = SELECTION_FORM_TEXT[inquiry.language] || SELECTION_FORM_TEXT.ru;
+  const deal = copy.dealOptions.indexOf(selection.deal);
+  if (deal === 0 && record.dealType !== 'sale') return false;
+  if (deal === 1 && record.dealType !== 'rent') return false;
+  const wantedBedrooms = copy.bedroomOptions.indexOf(selection.bedrooms) + 1;
+  const bedrooms = Number(record.bedrooms);
+  if (wantedBedrooms >= 1 && wantedBedrooms <= 4 && bedrooms > 0 && bedrooms < wantedBedrooms) return false;
+  const limit = selection.budget && selection.budget !== copy.noBudget ? budgetLimit(selection.budget) : 0;
+  const price = Number(record.priceValue);
+  if (limit && price > 0 && price > limit * 1.1) return false;
+  if (selection.location && selection.location !== copy.anyLocation && !locationMatches(selection.location, record)) return false;
+  return true;
+}
+
+// Who should hear about this property after it was created or saved.
+// before: the status and price before the change, or null for a new record.
+function propertyAlertDeliveries(record, before) {
+  if (record.status !== 'active') return [];
+  const deliveries = [];
+  const notified = new Set();
+  const becameAvailable = Boolean(before && before.status !== 'active');
+  const oldPrice = Number(before && before.priceValue);
+  const newPrice = Number(record.priceValue);
+  const priceDropped = Boolean(before && before.status === 'active' && oldPrice > 0 && newPrice > 0 && newPrice < oldPrice);
+  if (priceDropped || becameAvailable) {
+    for (const user of Object.values(data.users)) {
+      if (!alertsEnabled(user) || !Array.isArray(user.favorites) || !user.favorites.includes(record.id)) continue;
+      if (!propertyReadyForLanguage(record, user.preferredLanguage)) continue;
+      const copy = PROPERTY_ALERT_TEXT[user.preferredLanguage] || PROPERTY_ALERT_TEXT.ru;
+      const key = priceDropped ? 'price:' + record.id + ':' + newPrice : 'available:' + record.id + ':' + dayKey();
+      if (user.alertsSent && user.alertsSent[key]) continue;
+      const heading = priceDropped
+        ? copy.priceDrop + '\n💰 ' + objectPriceText({ ...record, priceValue: oldPrice }, user.preferredLanguage) + ' → ' + objectPriceText(record, user.preferredLanguage)
+        : copy.backAvailable;
+      deliveries.push({ user, record, heading, key });
+      notified.add(user.id);
+    }
+  }
+  if (!before || becameAvailable) {
+    const since = Date.now() - SELECTION_ALERT_WINDOW_MS;
+    const latestSelection = new Map();
+    for (const inquiry of data.inquiries) {
+      if (inquiry.type !== 'selection' || !inquiry.selection || Date.parse(inquiry.createdAt) < since) continue;
+      if (!latestSelection.has(inquiry.userId)) latestSelection.set(inquiry.userId, inquiry);
+    }
+    for (const [userId, inquiry] of latestSelection) {
+      const user = userById(userId);
+      if (!alertsEnabled(user) || notified.has(user.id) || !propertyReadyForLanguage(record, user.preferredLanguage)) continue;
+      const key = 'match:' + record.id;
+      if (user.alertsSent && user.alertsSent[key]) continue;
+      if (!selectionMatches(inquiry, record)) continue;
+      deliveries.push({ user, record, heading: (PROPERTY_ALERT_TEXT[user.preferredLanguage] || PROPERTY_ALERT_TEXT.ru).newMatch, key });
+    }
+  }
+  return deliveries;
+}
+
+async function sendPropertyAlert(delivery, token) {
+  const { user, record, heading } = delivery;
+  const language = user.preferredLanguage;
+  const copy = PROPERTY_ALERT_TEXT[language] || PROPERTY_ALERT_TEXT.ru;
+  const caption = [heading, objectCaption(record, language)].join('\n\n').slice(0, 1000);
+  const buttons = contentButtons(record, language, user, 'property');
+  const markup = { inline_keyboard: [...(buttons ? buttons.inline_keyboard : []), [{ text: copy.turnOff, callback_data: 'alerts:off' }]] };
+  const image = recordImages(record, language)[0];
+  // Sent as a separate message: the client's open catalog is left untouched.
+  if (imageExists(image)) await sendPhotoMessage(user.chatId, image, caption, token, markup);
+  else await sendMessage(user.chatId, caption, token, { reply_markup: markup });
+  recordPropertyEvent(record.id, 'impressions');
+}
+
+async function deliverPropertyAlerts(deliveries, token = data.config.botToken) {
+  let sent = 0;
+  for (const delivery of deliveries) {
+    try {
+      await sendPropertyAlert(delivery, token);
+      rememberAlert(delivery.user, delivery.key);
+      sent += 1;
+    } catch (error) {
+      if (userUnavailableError(error)) delivery.user.blocked = true;
+      recordError('Уведомление об объекте', error);
+    }
+    await delay(PROPERTY_ALERT_SPACING_MS);
+  }
+  saveDataNow();
+  return sent;
+}
+
+// Called after a property is created or saved in the panel. Returns how many
+// clients will be notified; sending runs in the background.
+function queuePropertyAlerts(record, before) {
+  if (!configured() || !data.config.active) return 0;
+  const deliveries = propertyAlertDeliveries(record, before);
+  if (deliveries.length) {
+    void deliverPropertyAlerts(deliveries).catch((error) => recordError('Уведомления об объектах', error));
+  }
+  return deliveries.length;
+}
+
+async function handleAlertsCallback(query, token) {
+  const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
+  const user = normalizeUser(query.from, chatId, false);
+  const copy = PROPERTY_ALERT_TEXT[user.preferredLanguage] || PROPERTY_ALERT_TEXT.ru;
+  const enable = String(query.data || '') === 'alerts:on';
+  user.propertyAlerts = enable;
+  scheduleSave();
+  await acknowledgeCallback(query, token);
+  void notifyAdministratorAction(user, enable ? 'Включил уведомления об объектах' : 'Отключил уведомления об объектах');
+  await sendMessage(chatId, enable ? copy.turnedOn : copy.turnedOff, token, enable
+    ? { reply_markup: menuKeyboard(user.preferredLanguage || 'ru') }
+    : { reply_markup: { inline_keyboard: [[{ text: copy.turnOn, callback_data: 'alerts:on' }]] } });
 }
 
 // Everything the bot stores about one person, for a data access request.
@@ -5712,7 +6198,8 @@ async function handleApi(req, res, url) {
       const record = parseContentRecord(await readJson(req), kind);
       data[kind].unshift(record);
       saveDataNow();
-      return json(res, 201, { ok: true, id: record.id });
+      const alertsQueued = kind === 'objects' ? queuePropertyAlerts(record, null) : 0;
+      return json(res, 201, { ok: true, id: record.id, alertsQueued });
     } catch (error) {
       return json(res, 400, { error: error.message });
     }
@@ -5726,9 +6213,11 @@ async function handleApi(req, res, url) {
     const record = data[kind].find((item) => item.id === decodeURIComponent(contentMatch[2]));
     if (!record) return json(res, 404, { error: 'Запись не найдена' });
     try {
+      const before = { status: record.status, priceValue: record.priceValue };
       Object.assign(record, parseContentRecord(await readJson(req), kind, record));
       saveDataNow();
-      return json(res, 200, { ok: true });
+      const alertsQueued = kind === 'objects' ? queuePropertyAlerts(record, before) : 0;
+      return json(res, 200, { ok: true, alertsQueued });
     } catch (error) {
       return json(res, 400, { error: error.message });
     }
@@ -6339,7 +6828,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
     .admin-gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.language-gallery{padding:14px;margin-top:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface-soft)}.gallery-item{position:relative;aspect-ratio:4/3;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}.gallery-item img{width:100%;height:100%;object-fit:cover}.gallery-item .gallery-number{position:absolute;left:6px;top:6px;background:rgba(23,32,51,.82);color:white;border-radius:6px;padding:3px 6px;font-size:.68rem}.gallery-actions{position:absolute;right:5px;bottom:5px;display:flex;gap:4px}.gallery-actions button{width:28px;height:28px;border:0;border-radius:7px;background:rgba(255,255,255,.94);color:#344054;font-weight:800}.gallery-empty{grid-column:1/-1;padding:18px;text-align:center;color:var(--muted);background:var(--surface);border-radius:10px}.property-context{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;align-items:center;margin:16px 0;padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft)}.property-context strong,.property-context span{grid-column:1}.property-context .btn{grid-column:2;grid-row:1/3}.performance-list{display:grid;gap:8px}.performance-row{width:100%;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) repeat(4,90px);align-items:center;gap:10px;padding:11px 5px;border-bottom:1px solid var(--line)}.performance-row:hover{background:var(--surface-soft)}.performance-row:last-child{border-bottom:0}.performance-name{min-width:0}.performance-name strong,.performance-name span{display:block}.performance-name strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.performance-value{text-align:right}.performance-value strong,.performance-value span{display:block}.performance-value span,.performance-name span{font-size:.72rem;color:var(--muted)}
     .language-health{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.language-health .badge{font-size:.68rem}.language-health .badge.warn{border-color:#fed7aa;color:#9a3412;background:#fff7ed}.language-health .badge.good{border-color:#bbf7d0;color:#166534;background:#f0fdf4}.translation-summary{margin:12px 0 2px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#f8fafc;color:var(--muted);font-size:.78rem}.translation-summary strong{color:var(--text)}
     .direct-message-composer.composer-collapsed form{display:none}.composer-toggle{margin-left:auto}#errorList3{max-height:320px;overflow:auto;padding-right:4px}
-    #confirmDialog3{width:auto;max-width:none;padding:0;border:0;border-radius:16px;background:#fff;box-shadow:0 24px 70px rgba(15,23,42,.24);overflow:hidden}#confirmDialog3::backdrop{background:rgba(15,23,42,.48);backdrop-filter:blur(2px)}.confirm-panel{width:min(440px,calc(100vw - 28px));padding:24px;background:#fff}.confirm-panel h3{margin-bottom:8px}.confirm-panel p{color:var(--muted);line-height:1.55}.confirm-panel .actions{justify-content:flex-end;margin-top:22px}
+    #confirmDialog3{width:auto;max-width:none;padding:0;border:0;border-radius:16px;background:#fff;box-shadow:0 24px 70px rgba(15,23,42,.24);overflow:hidden}#confirmDialog3::backdrop{background:rgba(15,23,42,.48);backdrop-filter:blur(2px)}.confirm-panel{width:min(440px,calc(100vw - 28px));padding:24px;background:#fff}.untranslated3{border-color:#d99100!important;background:#fffaf0!important}.untranslated-hint3{display:block;margin-top:4px;font-size:12px;color:#9a5b00}.confirm-panel h3{margin-bottom:8px}.confirm-panel p{color:var(--muted);line-height:1.55}.confirm-panel .actions{justify-content:flex-end;margin-top:22px}
     .chat-keyboard span:last-child{grid-column:auto}
     @media(max-width:920px){.sidebar{width:min(310px,86vw)}.workspace{padding:22px 18px 84px}.home-hero{grid-template-columns:1fr}.global-unsaved{left:50%}}
     @media(max-width:650px){h1{font-size:1.55rem}.workspace{padding-left:12px;padding-right:12px}.page-head{gap:10px;margin-bottom:18px}.page-copy{font-size:.88rem}.home-hero{gap:12px}.health{padding:17px}.health-content{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px}.health-number{margin:0;font-size:1.9rem}.health-content>div:last-child{text-align:right}.health .btn{grid-column:1/3}.metric-grid{grid-template-columns:1fr 1fr}.metric{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px}.metric:nth-child(2){border-right:0}.metric:nth-child(3),.metric:nth-child(4){border-bottom:0}.metric:nth-child(4){border-right:0}.quick-grid{display:grid}.quick-card{border-right:0;border-bottom:1px solid var(--line)}.quick-card:last-child{border-bottom:0}.welcome-layout{padding-bottom:84px}.welcome-layout>.card:first-child{order:2}.welcome-layout>.section-stack{order:1}.card{padding:14px}#saveWelcomeTop3,#saveContactsTop3{display:none}.sticky-save{bottom:10px}.mobile-bar{height:60px;padding:0 12px}.mobile-menu{width:38px;height:38px}.drawer-head{padding:13px 15px}.drawer-body{padding-top:15px}.drawer-footer{padding:10px 12px}.drawer-footer .btn{flex:1}.admin-gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.property-context{grid-template-columns:1fr}.property-context .btn{grid-column:1;grid-row:auto}.performance-row{grid-template-columns:1fr 1fr}.performance-name{grid-column:1/-1}.performance-value{text-align:left}}
@@ -6583,11 +7072,13 @@ const ADMIN_HTML = String.raw`<!doctype html>
       {key:"callbackForm",title:"Форма заказа звонка",note:"Все шаги, варианты и сообщения формы"},
       {key:"viewingForm",title:"Форма записи на просмотр",note:"Дата, время и подтверждение просмотра"},
       {key:"selectionForm",title:"Форма подбора объекта",note:"Вопросы о цели, районе, бюджете и спальнях"},
+      {key:"propertyAlerts",title:"Уведомления об объектах",note:"Снижение цены и «снова доступен» для избранного, новые объекты по подбору"},
+      {key:"catalogFilter",title:"Фильтр каталога",note:"Кнопка фильтра, варианты и сообщение, когда ничего не найдено"},
       {key:"interaction",title:"Состояния и незавершённые формы",note:"Ошибки, продолжение и возврат пользователя"},
       {key:"commands",title:"Команды",note:"Отмена и ответ на неизвестную команду"}
     ];
     var interfaceLabels={text:"Основной текст",objects:"Кнопка «Наши объекты»",selection:"Кнопка «Помочь подобрать»",promotions:"Кнопка «Акции»",favorites:"Кнопка «Избранное»",contacts:"Кнопка «Связаться с менеджером»",more:"Кнопка «Ещё»",request:"Кнопка заказа звонка",about:"Кнопка «О компании»",help:"Кнопка «Помощь»",language:"Кнопка смены языка",intro:"Вступление",call:"Позвонить",whatsapp:"WhatsApp",telegram:"Telegram",website:"Сайт",map:"Карта",question:"Кнопка вопроса",askQuestion:"Приглашение написать вопрос",received:"Подтверждение получения",replyHeader:"Заголовок ответа менеджера",cancel:"Кнопка отмены",mainMenu:"Главное меню",backToCard:"Вернуться к карточке",close:"Закрыть",browse:"Посмотреть объекты",failed:"Не удалось выполнить действие",duplicate:"Просьба подождать",stale:"Устаревшее действие",unfinished:"Незавершённая форма",continueForm:"Продолжить форму",discardForm:"Закрыть форму",expired:"Срок формы истёк",resume:"Начать заново",backToMenu:"Вернуться в меню",hideGallery:"Скрыть фотографии",cancelled:"Действие отменено",nothingToCancel:"Нечего отменять",unknown:"Неизвестная команда",catalog:"Пустой каталог",details:"Подробнее",contactManager:"Связаться с менеджером",share:"Поделиться",interest:"Заказать звонок",viewing:"Записаться на просмотр",availability:"Уточнить доступность",similar:"Похожие объекты",gallery:"Все фотографии",favoriteButton:"Добавить в избранное",favoriteRemoveButton:"Убрать из избранного",favoriteAdd:"Добавлено в избранное",favoriteRemove:"Удалено из избранного",emptyFavorites:"Пустое избранное",askName:"Запрос имени",askPhone:"Запрос телефона",askTime:"Запрос времени",phoneButton:"Отправить свой номер",invalidName:"Ошибка в имени",invalidPhone:"Ошибка в телефоне",invalidTime:"Ошибка во времени",timeOptions:"Варианты времени",review:"Проверка данных",confirm:"Кнопка подтверждения",edit:"Изменить данные",editName:"Изменить имя",editPhone:"Изменить телефон",editTime:"Изменить время",savedName:"Использовать сохранённое имя",savedPhone:"Использовать сохранённый номер",success:"Успешная отправка",askDate:"Запрос даты",dateOptions:"Варианты даты",askCustom:"Своя дата и время",askCustomTime:"Своё время",restart:"Заполнить заново",editDate:"Изменить дату",invalid:"Некорректный ответ",askDeal:"Покупка или аренда",dealOptions:"Варианты сделки",askLocation:"Запрос района",anyLocation:"Район не важен",askBudget:"Запрос бюджета",noBudget:"Бюджет не определён",askBedrooms:"Запрос количества спален",bedroomOptions:"Варианты количества спален",labels:"Подписи в итогах",editDeal:"Изменить цель",editLocation:"Изменить район",editBudget:"Изменить бюджет",editBedrooms:"Изменить спальни",apartment:"Квартира",house:"Дом",villa:"Вилла",townhouse:"Таунхаус",land:"Участок",commercial:"Коммерческая недвижимость",newbuild:"Новостройка",other:"Другое",new:"Новое / новинка",recommended:"Рекомендуем",exclusive:"Эксклюзив",price_reduced:"Цена снижена",renovated:"После ремонта",needs_renovation:"Требует ремонта",under_construction:"Строится"};
-    Object.assign(interfaceLabels,{placeholder:"Подсказка в строке ввода",tapPhone:"Подсказка для звонка",readMore:"Читать подробнее",sharePrefix:"Текст при отправке другу",viewWebsite:"Открыть сайт",openMap:"Открыть карту",forRent:"Аренда",forSale:"Продажа",reserved:"Забронирован",available:"Доступен",priceMonth:"Цена за месяц",priceWeek:"Цена за неделю",priceOnRequest:"Цена по запросу",floor:"Этаж",reference:"Номер объекта",updated:"Дата обновления",propertyUnavailable:"Объект недоступен",propertyHeading:"Заголовок объекта",requestViewingPrefix:"Заголовок заявки на просмотр",questionPrefix:"Заголовок вопроса",interestPrefix:"Заголовок интереса",noSimilar:"Похожие объекты не найдены",similarHeading:"Заголовок похожего объекта",managerPrompt:"Вопрос о помощи менеджера",photosUnavailable:"Фотографии недоступны",nextProperty:"Следующий объект",nextPrompt:"Действия после просмотра",askPrice:"Кнопка «Узнать цену»",promotionAsk:"Кнопка «Узнать подробнее» у акции",reviewLabels:"Подписи в итогах",unavailable:"Объект недоступен для просмотра",asSpecified:"Время указано в сообщении",summaryTitle:"Заголовок итогов",start:"Запуск бота",menu:"Главное меню",myId:"Ответ на команду /myid"});
+    Object.assign(interfaceLabels,{placeholder:"Подсказка в строке ввода",tapPhone:"Подсказка для звонка",readMore:"Читать подробнее",sharePrefix:"Текст при отправке другу",viewWebsite:"Открыть сайт",openMap:"Открыть карту",forRent:"Аренда",forSale:"Продажа",reserved:"Забронирован",available:"Доступен",priceMonth:"Цена за месяц",priceWeek:"Цена за неделю",priceOnRequest:"Цена по запросу",floor:"Этаж",reference:"Номер объекта",updated:"Дата обновления",propertyUnavailable:"Объект недоступен",propertyHeading:"Заголовок объекта",requestViewingPrefix:"Заголовок заявки на просмотр",questionPrefix:"Заголовок вопроса",interestPrefix:"Заголовок интереса",noSimilar:"Похожие объекты не найдены",similarHeading:"Заголовок похожего объекта",managerPrompt:"Вопрос о помощи менеджера",photosUnavailable:"Фотографии недоступны",nextProperty:"Следующий объект",nextPrompt:"Действия после просмотра",askPrice:"Кнопка «Узнать цену»",priceDrop:"Заголовок: цена снизилась",backAvailable:"Заголовок: снова доступен",newMatch:"Заголовок: новый объект по запросу",turnOff:"Кнопка «Не присылать»",turnedOff:"Ответ после отключения",turnOn:"Кнопка «Снова присылать»",turnedOn:"Ответ после включения",button:"Кнопка фильтра",anyDeal:"Вариант «любая сделка»",anyType:"Вариант «все типы»",anyBedrooms:"Вариант «любое число спален»",bedrooms:"Слово «спален»",show:"Кнопка «Показать»",reset:"Кнопка «Сбросить фильтр»",empty:"Ничего не найдено",promotionAsk:"Кнопка «Узнать подробнее» у акции",reviewLabels:"Подписи в итогах",unavailable:"Объект недоступен для просмотра",asSpecified:"Время указано в сообщении",summaryTitle:"Заголовок итогов",start:"Запуск бота",menu:"Главное меню",myId:"Ответ на команду /myid"});
     function el(id){return document.getElementById(id)}
     function esc(value){return String(value==null?"":value).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
     function fmtNumber(value){return new Intl.NumberFormat("ru-RU").format(Number(value||0))}
@@ -6603,7 +7094,13 @@ const ADMIN_HTML = String.raw`<!doctype html>
     function setLoginPasswordVisible(visible){var input=el("loginPassword3"),button=el("loginPasswordToggle3");if(!input||!button)return;input.type=visible?"text":"password";button.setAttribute("aria-pressed",visible?"true":"false");button.setAttribute("aria-label",visible?"Скрыть пароль":"Показать пароль")}
     function localized(value,language){return value&&typeof value==="object"?(value[language]||value.ru||value.en||value.es||""):""}
     function exactLocalized(value,language){return value&&typeof value==="object"?String(value[language]||"").trim():""}
-    function propertyLanguageHealth(item,language){var missing=[];if(!exactLocalized(item.title,language))missing.push("название");if(!exactLocalized(item.address,language))missing.push("адрес");if(!exactLocalized(item.description,language))missing.push("описание");var byLanguage=item.imagesByLanguage||{ru:item.images||[],en:[],es:[]};if(!(byLanguage[language]||[]).length)missing.push("фото");return{complete:!missing.length,missing:missing}}
+    var UNTRANSLATED_FIELDS=[["propertyTitle","название"],["propertyAddress","адрес"],["propertyDescription","описание"],["propertyCity","город"],["propertyDistrict","район"],["offerTitle","заголовок"],["offerText","текст"]];
+    function hasCyrillic(value){return /[А-Яа-яЁё]/.test(String(value||""))}
+    // An English or Spanish field that contains Cyrillic was most likely left
+    // in Russian; clients of that language would see Russian text.
+    function markUntranslated(){["en","es"].forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);UNTRANSLATED_FIELDS.forEach(function(pair){var node=el(pair[0]+s+"3");if(!node)return;var bad=hasCyrillic(node.value),hint=node.parentElement.querySelector(".untranslated-hint3");node.classList.toggle("untranslated3",bad);if(bad&&!hint){hint=document.createElement("span");hint.className="untranslated-hint3";hint.textContent="Похоже, текст на русском — клиенты на "+(language==="en"?"английском":"испанском")+" увидят его без перевода.";var counter=node.nextElementSibling&&node.nextElementSibling.classList.contains("counter")?node.nextElementSibling:null;(counter||node).insertAdjacentElement("afterend",hint)}else if(!bad&&hint)hint.remove()})})}
+    function untranslatedLabels(values,language){if(language==="ru")return[];return values.filter(function(pair){return hasCyrillic(pair[1])}).map(function(pair){return "перевод: "+pair[0]})}
+    function propertyLanguageHealth(item,language){var missing=[];if(!exactLocalized(item.title,language))missing.push("название");if(!exactLocalized(item.address,language))missing.push("адрес");if(!exactLocalized(item.description,language))missing.push("описание");var byLanguage=item.imagesByLanguage||{ru:item.images||[],en:[],es:[]};if(!(byLanguage[language]||[]).length)missing.push("фото");missing=missing.concat(untranslatedLabels([["название",exactLocalized(item.title,language)],["адрес",exactLocalized(item.address,language)],["описание",exactLocalized(item.description,language)],["город",exactLocalized(item.city,language)],["район",exactLocalized(item.district,language)]],language));return{complete:!missing.length,missing:missing}}
     function userName(user){return [user.firstName,user.lastName].filter(Boolean).join(" ")||"Без имени"}
     function initials(user){return ([user.firstName,user.lastName].filter(Boolean).map(function(x){return x[0]}).join("").slice(0,2)||"?").toUpperCase()}
     function languageName(language){return {ru:"Русский",en:"English",es:"Español",all:"Все языки"}[language]||"Не выбран"}
@@ -6649,9 +7146,9 @@ const ADMIN_HTML = String.raw`<!doctype html>
     function propertyPriceLabel(item){if(Number(item.priceValue)>0){var value=new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(Number(item.priceValue)),period=item.pricePeriod==="month"?"/ месяц":item.pricePeriod==="week"?"/ неделю":"";return [value,item.currency||"EUR",period].filter(Boolean).join(" ")}return localized(item.price,"ru")||""}
     function propertyFilePreview(file){if(!propertyPreviewUrls.has(file))propertyPreviewUrls.set(file,URL.createObjectURL(file));return propertyPreviewUrls.get(file)}
     function propertyOrderedEntries(language){var s=language[0].toUpperCase()+language.slice(1),removeAll=el("propertyRemoveImages"+s+"3").checked,removed=propertyRemovedImages[language]||[],existing=(removeAll?[]:propertyEditingImages[language]||[]).filter(function(image){return !removed.includes(image.id)}).map(function(image){return{token:String(image.id),kind:"existing",image:image}}),fresh=(propertyNewImages[language]||[]).map(function(item){return{token:item.id,kind:"new",file:item.file}}),available=new Map(existing.concat(fresh).map(function(entry){return[entry.token,entry]})),ordered=[];(propertyImageOrder[language]||[]).forEach(function(token){var entry=available.get(token);if(entry&&!ordered.includes(entry))ordered.push(entry)});existing.concat(fresh).forEach(function(entry){if(!ordered.includes(entry))ordered.push(entry)});propertyImageOrder[language]=ordered.map(function(entry){return entry.token});return ordered}
-    function propertyFormHealth(language){var s=language[0].toUpperCase()+language.slice(1),missing=[],publicationMissing=[];if(!el("propertyTitle"+s+"3").value.trim()){missing.push("название");publicationMissing.push("название")}if(!el("propertyAddress"+s+"3").value.trim())missing.push("адрес");if(!el("propertyDescription"+s+"3").value.trim())missing.push("описание");if(!propertyOrderedEntries(language).length){missing.push("фото");publicationMissing.push("фото")}return{complete:!missing.length,ready:!publicationMissing.length,missing:missing,publicationMissing:publicationMissing}}
+    function propertyFormHealth(language){var s=language[0].toUpperCase()+language.slice(1),missing=[],publicationMissing=[];if(!el("propertyTitle"+s+"3").value.trim()){missing.push("название");publicationMissing.push("название")}if(!el("propertyAddress"+s+"3").value.trim())missing.push("адрес");if(!el("propertyDescription"+s+"3").value.trim())missing.push("описание");if(!propertyOrderedEntries(language).length){missing.push("фото");publicationMissing.push("фото")}missing=missing.concat(untranslatedLabels(UNTRANSLATED_FIELDS.slice(0,5).map(function(pair){var node=el(pair[0]+s+"3");return[pair[1],node?node.value:""]}),language));return{complete:!missing.length,ready:!publicationMissing.length,missing:missing,publicationMissing:publicationMissing}}
     function renderPropertyPreview(){var root=el("propertyCardPreview3");if(!root)return;var button=el("propertyLang3").querySelector("button.active"),language=button?button.dataset.lang:"ru",s=language[0].toUpperCase()+language.slice(1),entries=propertyOrderedEntries(language),first=entries[0],source="";if(first)source=first.kind==="new"?propertyFilePreview(first.file):"/api/media/objects/"+encodeURIComponent(el("propertyId3").value)+"?imageId="+encodeURIComponent(first.image.id)+"&rev="+encodeURIComponent(first.image.updatedAt||"");var title=el("propertyTitle"+s+"3").value.trim()||"Название объекта",location=[el("propertyCity"+s+"3").value.trim(),el("propertyDistrict"+s+"3").value.trim(),el("propertyAddress"+s+"3").value.trim()].filter(Boolean).join(", ")||"Адрес и район",customPrice=el("propertyPrice"+s+"3").value.trim(),numeric=Number(el("propertyPriceValue3").value),price=customPrice||(numeric>0?new Intl.NumberFormat(language==="en"?"en-US":language==="es"?"es-ES":"ru-RU",{maximumFractionDigits:2}).format(numeric)+" "+el("propertyCurrency3").value:"Цена по запросу"),description=el("propertyDescription"+s+"3").value.trim()||"Короткое описание появится здесь";if(description.length>135)description=description.slice(0,132).trimEnd()+"…";root.innerHTML='<div class="property-preview-head"><strong>Предпросмотр карточки · '+language.toUpperCase()+'</strong><span class="badge">как в Telegram</span></div><div class="property-preview-shell"><div class="property-preview-image">'+(source?'<img src="'+esc(source)+'" alt="Обложка объекта">':"Нет фото")+'</div><div class="property-preview-copy"><strong>'+esc(title)+'</strong><span class="property-preview-price">💰 '+esc(price)+'</span><span>📍 '+esc(location)+'</span><span>'+esc(description)+'</span></div></div>'}
-    function renderPropertyTranslationSummary(){var summary=el("propertyTranslationSummary3");if(!summary)return;var parts=languages.map(function(language){var health=propertyFormHealth(language),button=el("propertyLang3").querySelector('[data-lang="'+language+'"]');button.textContent=language.toUpperCase()+(health.complete?" ✓":" · "+health.missing.length);var label=health.complete?"готово":health.ready?"показывается · дополнить: "+health.missing.join(", "):"не показывается · нужно: "+health.publicationMissing.join(", ");return '<span class="badge '+(health.complete?"good":"warn")+'" title="'+esc(label)+'">'+language.toUpperCase()+' '+label+'</span>'});summary.innerHTML='<strong>Доступность карточки по языкам</strong><div class="language-health">'+parts.join("")+'</div><span class="summary-note">Для показа в каталоге обязательны название и фотография. Адрес и описание отмечаются как рекомендации к заполнению.</span>';renderPropertyPreview()}
+    function renderPropertyTranslationSummary(){markUntranslated();var summary=el("propertyTranslationSummary3");if(!summary)return;var parts=languages.map(function(language){var health=propertyFormHealth(language),button=el("propertyLang3").querySelector('[data-lang="'+language+'"]');button.textContent=language.toUpperCase()+(health.complete?" ✓":" · "+health.missing.length);var label=health.complete?"готово":health.ready?"показывается · дополнить: "+health.missing.join(", "):"не показывается · нужно: "+health.publicationMissing.join(", ");return '<span class="badge '+(health.complete?"good":"warn")+'" title="'+esc(label)+'">'+language.toUpperCase()+' '+label+'</span>'});summary.innerHTML='<strong>Доступность карточки по языкам</strong><div class="language-health">'+parts.join("")+'</div><span class="summary-note">Для показа в каталоге обязательны название и фотография. Адрес и описание отмечаются как рекомендации к заполнению.</span>';renderPropertyPreview()}
     function renderPropertyGallery(language){if(!language){languages.forEach(renderPropertyGallery);renderPropertyTranslationSummary();return}var s=language[0].toUpperCase()+language.slice(1),root=el("propertyGallery"+s+"3");if(!root)return;var id=el("propertyId3").value,entries=propertyOrderedEntries(language),cards=entries.map(function(entry,index){var source=entry.kind==="new"?propertyFilePreview(entry.file):"/api/media/objects/"+encodeURIComponent(id)+"?imageId="+encodeURIComponent(entry.image.id)+"&rev="+encodeURIComponent(entry.image.updatedAt||"");return '<div class="gallery-item"><img src="'+esc(source)+'" alt="Фото объекта"><span class="gallery-number">'+(index+1)+'</span><span class="gallery-actions"><button class="gallery-move3" data-lang="'+language+'" data-token="'+esc(entry.token)+'" data-step="-1" type="button" aria-label="Переместить влево">‹</button><button class="gallery-move3" data-lang="'+language+'" data-token="'+esc(entry.token)+'" data-step="1" type="button" aria-label="Переместить вправо">›</button><button class="gallery-remove3" data-lang="'+language+'" data-token="'+esc(entry.token)+'" data-kind="'+entry.kind+'" type="button" aria-label="Удалить фотографию">×</button></span></div>'}).join("");root.innerHTML=cards||'<div class="gallery-empty">Для этого языка фотографий пока нет</div>';var totalBytes=(propertyNewImages[language]||[]).reduce(function(sum,item){return sum+Number(item.file.size||0)},0),sizeText=totalBytes?" · новые файлы "+(totalBytes/1024/1024).toFixed(1)+" МБ":"";el("propertyImageNote"+s+"3").textContent=entries.length+" из 10 фотографий для "+language.toUpperCase()+sizeText;renderPropertyTranslationSummary()}
     function filteredProperties(){var q=el("propertySearch3").value.toLocaleLowerCase("ru-RU").trim(),status=el("propertyStatusFilter3").value;return state.objects.filter(function(item){var hay=[localized(item.title,"ru"),localized(item.title,"en"),localized(item.title,"es"),localized(item.address,"ru"),localized(item.address,"en"),localized(item.address,"es"),localized(item.city,"ru"),localized(item.city,"en"),localized(item.city,"es"),localized(item.district,"ru"),localized(item.district,"en"),localized(item.district,"es"),localized(item.price,"ru"),localized(item.price,"en"),localized(item.price,"es"),item.reference,item.priceValue].join(" ").toLocaleLowerCase("ru-RU");return (!status||item.status===status)&&(!q||hay.includes(q))})}
     function renderProperties(){buildDrawers();var items=filteredProperties();el("propertyResultCount3").textContent=countRu(items.length,"объект","объекта","объектов");el("propertyGrid3").innerHTML=items.length?items.map(function(item){var status={active:["Показывается","good"],reserved:["Забронирован","brand"],hidden:["Скрыт","warn"],sold:["Продан","bad"]}[item.status]||[item.status,""],price=propertyPriceLabel(item),byLanguage=item.imagesByLanguage||{ru:item.images||[],en:[],es:[]},counts={ru:(byLanguage.ru||[]).length,en:(byLanguage.en||[]).length,es:(byLanguage.es||[]).length},photos=counts.ru+counts.en+counts.es,health=languages.map(function(language){return[language,propertyLanguageHealth(item,language)]}),healthHtml=health.map(function(row){var language=row[0],result=row[1],title=result.complete?"Заполнено полностью":"Нет: "+result.missing.join(", ");return '<span class="badge '+(result.complete?"good":"warn")+'" title="'+esc(title)+'">'+language.toUpperCase()+' '+(result.complete?"✓":"· "+result.missing.length)+'</span>'}).join("");return '<article class="card content-card"><div class="content-cover">'+mediaThumb("objects",item)+(photos?'<span class="content-photo-count">📷 '+photos+'</span>':"")+'</div><div class="content-body"><div class="row-between"><div class="content-title">'+esc(localized(item.title,"ru")||"Без названия")+'</div><span class="badge '+status[1]+'">'+esc(status[0])+'</span></div><div class="content-meta">'+esc([item.reference,localized(item.city,"ru")||localized(item.address,"ru"),price].filter(Boolean).join(" · ")||"Данные не указаны")+'</div><div class="language-health">'+healthHtml+'</div><div class="tiny muted" style="margin-top:7px">Фото: RU '+counts.ru+' · EN '+counts.en+' · ES '+counts.es+'</div><div class="content-actions"><button class="btn secondary small edit-property3" data-id="'+esc(item.id)+'">Изменить</button><button class="btn danger small delete-property3" data-id="'+esc(item.id)+'">Удалить</button></div></div></article>'}).join(""):'<div class="empty" style="grid-column:1/-1"><strong>Объекты не найдены</strong>Добавьте первую карточку или измените параметры поиска.</div>'}
@@ -6662,7 +7159,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
     function filteredOffers(){var q=el("offerSearch3").value.toLocaleLowerCase("ru-RU").trim(),filter=el("offerStatusFilter3").value;return state.promotions.filter(function(item){var st=offerState(item),hay=languages.map(function(language){return localized(item.title,language)+" "+localized(item.text,language)}).join(" ").toLocaleLowerCase("ru-RU");return (!filter||st[1]===filter)&&(!q||hay.includes(q))})}
     function renderOffers(){buildDrawers();var items=filteredOffers();el("offerResultCount3").textContent=countRu(items.length,"акция","акции","акций");el("offerGrid3").innerHTML=items.length?items.map(function(item){var st=offerState(item),byLanguage=item.imagesByLanguage||{ru:item.images||[],en:[],es:[]},imageHealth=languages.map(function(language){return '<span class="badge '+((byLanguage[language]||[]).length?"good":"warn")+'">'+language.toUpperCase()+' '+((byLanguage[language]||[]).length?"✓":"без фото")+'</span>'}).join("");return '<article class="card content-card"><div class="content-cover">'+mediaThumb("promotions",item)+'</div><div class="content-body"><div class="row-between"><div class="content-title">'+esc(localized(item.title,"ru")||"Без названия")+'</div><span class="badge '+st[2]+'">'+st[0]+'</span></div><div class="content-meta">'+(item.endAt?"До "+esc(fmtDate(item.endAt)):"Без даты окончания")+'</div><div class="language-health">'+imageHealth+'</div><div class="content-actions"><button class="btn secondary small edit-offer3" data-id="'+esc(item.id)+'">Изменить</button><button class="btn danger small delete-offer3" data-id="'+esc(item.id)+'">Удалить</button></div></div></article>'}).join(""):'<div class="empty" style="grid-column:1/-1"><strong>Акции не найдены</strong>Добавьте предложение или измените параметры поиска.</div>'}
     function resetOffer(){languages.forEach(function(language){if(offerPreviewUrls[language])URL.revokeObjectURL(offerPreviewUrls[language])});offerEditingImages={ru:null,en:null,es:null};offerNewImages={ru:null,en:null,es:null};offerPreviewUrls={ru:"",en:"",es:""};el("offerForm3").reset();el("offerId3").value="";el("offerEnabled3").checked=true;el("offerDialogTitle3").textContent="Новая акция";languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);el("offerTitle"+s+"3").value="";el("offerText"+s+"3").value=""});renderOfferGallery();clearDirty(el("offerForm3"))}
-    function editOffer(id){var item=state.promotions.find(function(x){return x.id===id});if(!item)return;resetOffer();el("offerId3").value=id;el("offerDialogTitle3").textContent="Редактирование акции";el("offerEnabled3").checked=item.enabled!==false;el("offerStart3").value=localDate(item.startAt);el("offerEnd3").value=localDate(item.endAt);el("offerUrl3").value=item.url||"";var byLanguage=item.imagesByLanguage||{ru:item.images||[],en:[],es:[]};languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);offerEditingImages[language]=(byLanguage[language]||[])[0]||null;el("offerTitle"+s+"3").value=item.title&&item.title[language]||"";el("offerText"+s+"3").value=item.text&&item.text[language]||item.description&&item.description[language]||""});renderOfferGallery();addCounters(el("offerForm3"));el("offerDialog3").showModal()}
+    function editOffer(id){var item=state.promotions.find(function(x){return x.id===id});if(!item)return;resetOffer();el("offerId3").value=id;el("offerDialogTitle3").textContent="Редактирование акции";el("offerEnabled3").checked=item.enabled!==false;el("offerStart3").value=localDate(item.startAt);el("offerEnd3").value=localDate(item.endAt);el("offerUrl3").value=item.url||"";var byLanguage=item.imagesByLanguage||{ru:item.images||[],en:[],es:[]};languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);offerEditingImages[language]=(byLanguage[language]||[])[0]||null;el("offerTitle"+s+"3").value=item.title&&item.title[language]||"";el("offerText"+s+"3").value=item.text&&item.text[language]||item.description&&item.description[language]||""});renderOfferGallery();addCounters(el("offerForm3"));markUntranslated();el("offerDialog3").showModal()}
     function renderContacts(){if(!dirty.has(el("contactsForm3"))){el("contactManagerName3").value=state.contacts.managerName||"";el("contactPhone3").value=state.contacts.phone||"";el("contactWhatsapp3").value=state.contacts.whatsapp||"";el("contactWhatsappEnabled3").checked=state.contacts.whatsappEnabled!==false;el("contactTelegram3").value=state.contacts.telegram||"";el("contactEmail3").value=state.contacts.email||"";el("contactWebsite3").value=state.contacts.website||"";el("contactMap3").value=state.contacts.mapUrl||"";languages.forEach(function(l){var s=l[0].toUpperCase()+l.slice(1);el("contactText"+s+"3").value=state.contacts.text[l]||""})}updateContactsPreview()}
     function updateContactsPreview(){var name=el("contactManagerName3").value,phone=el("contactPhone3").value,whatsapp=el("contactWhatsappEnabled3").checked?(el("contactWhatsapp3").value||phone.split(",")[0]):"",rows=[["☎",phone],["WA",whatsapp],["TG",el("contactTelegram3").value],["@",el("contactEmail3").value],["↗",el("contactWebsite3").value],["⌖",el("contactMap3").value]].filter(function(r){return Boolean(r[1])});el("contactsPreview3").innerHTML='<p class="muted">'+esc(el("contactTextRu3").value||"Выберите удобный способ связи с менеджером.")+"</p>"+(name?'<div class="contact-channel"><span class="channel-icon">👤</span><strong class="truncate">'+esc(name)+"</strong></div>":"")+(rows.length?rows.map(function(r){return '<div class="contact-channel"><span class="channel-icon">'+r[0]+'</span><span class="truncate">'+esc(r[1])+"</span></div>"}).join(""):'<div class="empty">Добавьте хотя бы один канал связи</div>')}
     function inquiryStatusName(status){return {new:"Новое",in_progress:"В работе",closed:"Закрыто"}[status]||status}
@@ -6712,7 +7209,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
       if(selectedUser===id&&((existing&&dirty.has(existing))||(direct&&dirty.has(direct))))return;
       var u=state.users.find(function(x){return x.id===id});
       if(!u){el("userDetail3").innerHTML='<div class="empty">Пользователь не найден</div>';return}
-      el("userDetail3").innerHTML='<div class="row-between"><div><h3>'+esc(userName(u))+'</h3><div class="small muted">'+(u.username?"@"+esc(u.username)+" · ":"")+"ID "+esc(u.id)+'</div></div><div class="avatar">'+esc(initials(u))+'</div></div><form id="userForm3" data-saveable><div class="field"><label for="userLanguage3">Язык</label><select id="userLanguage3" class="select"><option value="">Не выбран</option><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option></select></div><div class="field"><label for="userTags3">Теги через запятую</label><input id="userTags3" class="input" maxlength="500" value="'+esc((u.tags||[]).join(", "))+'"></div><div class="field"><label for="userNote3">Заметка администратора</label><textarea id="userNote3" class="textarea" maxlength="2000">'+esc(u.note||"")+'</textarea></div><button class="btn" type="submit">Сохранить карточку</button></form><div class="form-section direct-message-composer"><div class="row-between"><div><h3>Написать пользователю</h3><div class="card-note">Личное сообщение от имени бота — только этому человеку</div></div><span class="badge '+(u.blocked?"bad":"good")+'">'+(u.blocked?"Недоступен":"Доступен")+'</span></div><form id="directMessageForm3" data-saveable><div class="field"><label for="directMessageText3">Сообщение</label><textarea id="directMessageText3" class="textarea" maxlength="4000" placeholder="Введите текст сообщения"></textarea></div><div class="field"><label for="directMessageImage3">Изображение</label><input id="directMessageImage3" class="input" type="file" accept="image/jpeg,image/png"><span class="hint">Необязательно. JPG или PNG до 5 МБ.</span></div><div class="grid two-col"><div class="field"><label for="directMessageButtonText3">Название кнопки</label><input id="directMessageButtonText3" class="input" maxlength="80" placeholder="Например: Открыть объект"></div><div class="field"><label for="directMessageButtonUrl3">Ссылка кнопки</label><input id="directMessageButtonUrl3" class="input" type="url" maxlength="500" placeholder="https://..."></div></div><button class="btn wide" type="submit" '+(u.blocked?"disabled":"")+'>Отправить пользователю</button></form></div><div class="form-section"><h3>История общения и реакции</h3><div class="timeline" style="margin-top:10px">'+((u.activity||[]).length?(u.activity||[]).slice().reverse().slice(0,20).map(function(a){var reactions=(a.reactions||[]).map(function(reaction){return '<span class="reaction-chip">'+esc(reaction)+"</span>"}).join(""),target=a.kind==="reaction"&&a.targetText?'<div class="tiny muted reaction-target">На сообщение: '+esc(a.targetText)+"</div>":"",who=a.kind==="reaction"?"Реакция":a.direction==="in"?"Пользователь":"Бот";return '<div class="timeline-item '+esc(a.kind==="reaction"?"reaction":a.direction)+'"><div class="tiny muted">'+who+" · "+esc(fmtDate(a.createdAt))+'</div><div class="timeline-text">'+esc(a.text)+"</div>"+target+(reactions?'<div class="timeline-reactions">'+reactions+"</div>":"")+"</div>"}).join(""):'<div class="empty">История пока пуста</div>')+"</div></div>";
+      el("userDetail3").innerHTML='<div class="row-between"><div><h3>'+esc(userName(u))+'</h3><div class="small muted">'+(u.username?"@"+esc(u.username)+" · ":"")+"ID "+esc(u.id)+'</div>'+(u.source?'<div class="small muted">📣 Источник: '+esc(u.source)+'</div>':"")+'</div><div class="avatar">'+esc(initials(u))+'</div></div><form id="userForm3" data-saveable><div class="field"><label for="userLanguage3">Язык</label><select id="userLanguage3" class="select"><option value="">Не выбран</option><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option></select></div><div class="field"><label for="userTags3">Теги через запятую</label><input id="userTags3" class="input" maxlength="500" value="'+esc((u.tags||[]).join(", "))+'"></div><div class="field"><label for="userNote3">Заметка администратора</label><textarea id="userNote3" class="textarea" maxlength="2000">'+esc(u.note||"")+'</textarea></div><button class="btn" type="submit">Сохранить карточку</button></form><div class="form-section direct-message-composer"><div class="row-between"><div><h3>Написать пользователю</h3><div class="card-note">Личное сообщение от имени бота — только этому человеку</div></div><span class="badge '+(u.blocked?"bad":"good")+'">'+(u.blocked?"Недоступен":"Доступен")+'</span></div><form id="directMessageForm3" data-saveable><div class="field"><label for="directMessageText3">Сообщение</label><textarea id="directMessageText3" class="textarea" maxlength="4000" placeholder="Введите текст сообщения"></textarea></div><div class="field"><label for="directMessageImage3">Изображение</label><input id="directMessageImage3" class="input" type="file" accept="image/jpeg,image/png"><span class="hint">Необязательно. JPG или PNG до 5 МБ.</span></div><div class="grid two-col"><div class="field"><label for="directMessageButtonText3">Название кнопки</label><input id="directMessageButtonText3" class="input" maxlength="80" placeholder="Например: Открыть объект"></div><div class="field"><label for="directMessageButtonUrl3">Ссылка кнопки</label><input id="directMessageButtonUrl3" class="input" type="url" maxlength="500" placeholder="https://..."></div></div><button class="btn wide" type="submit" '+(u.blocked?"disabled":"")+'>Отправить пользователю</button></form></div><div class="form-section"><h3>История общения и реакции</h3><div class="timeline" style="margin-top:10px">'+((u.activity||[]).length?(u.activity||[]).slice().reverse().slice(0,20).map(function(a){var reactions=(a.reactions||[]).map(function(reaction){return '<span class="reaction-chip">'+esc(reaction)+"</span>"}).join(""),target=a.kind==="reaction"&&a.targetText?'<div class="tiny muted reaction-target">На сообщение: '+esc(a.targetText)+"</div>":"",who=a.kind==="reaction"?"Реакция":a.direction==="in"?"Пользователь":"Бот";return '<div class="timeline-item '+esc(a.kind==="reaction"?"reaction":a.direction)+'"><div class="tiny muted">'+who+" · "+esc(fmtDate(a.createdAt))+'</div><div class="timeline-text">'+esc(a.text)+"</div>"+target+(reactions?'<div class="timeline-reactions">'+reactions+"</div>":"")+"</div>"}).join(""):'<div class="empty">История пока пуста</div>')+"</div></div>";
       var composer=el("userDetail3").querySelector(".direct-message-composer"),composerHead=composer&&composer.querySelector(".row-between");if(composer&&composerHead){composer.classList.add("composer-collapsed");var toggle=document.createElement("button");toggle.className="btn secondary small composer-toggle";toggle.type="button";toggle.textContent="Написать";toggle.addEventListener("click",function(){var collapsed=composer.classList.toggle("composer-collapsed");toggle.textContent=collapsed?"Написать":"Свернуть"});composerHead.appendChild(toggle)}
       var contactBlock=userLeadBlock(u);if(contactBlock)el("userForm3").insertAdjacentHTML("beforebegin",contactBlock);
       el("userLanguage3").value=u.preferredLanguage||"";
@@ -6723,8 +7220,9 @@ const ADMIN_HTML = String.raw`<!doctype html>
       addCounters(el("userDetail3"));
     }
     function ensureNotificationSettings(){if(el("notificationForm3"))return;var stack=document.querySelector("#view-settings .section-stack"),form=document.createElement("form");form.id="notificationForm3";form.className="card";form.dataset.saveable="";form.innerHTML='<div class="card-head"><div><h3>Уведомления администратору</h3><div class="card-note">Сообщения и действия пользователей приходят в Telegram</div></div><span id="notificationState3" class="badge">Не настроено</span></div><div class="callout notification-help"><strong>Как подключить:</strong><span>1. Откройте этого бота в Telegram и отправьте команду <code>/myid</code>.</span><span>2. Скопируйте полученный номер в поле ниже и сохраните.</span><span>3. Нажмите «Отправить тест».</span></div><div class="field"><label for="adminChatId3">Telegram Chat ID администратора</label><input id="adminChatId3" class="input" inputmode="numeric" maxlength="20" placeholder="Например: 123456789"><span class="hint">Используйте личный Chat ID. Ответ на уведомление будет отправлен пользователю от имени бота.</span></div><div class="field"><label for="notifyMode3">Что присылать</label><select id="notifyMode3" class="select"><option value="inquiries">Только обращения и заявки + сводка активности раз в день</option><option value="all">Все действия пользователей сразу</option></select></div><div class="field"><label for="reminderHours3">Напоминать о заявках без ответа</label><select id="reminderHours3" class="select"><option value="1">Через 1 час</option><option value="2">Через 2 часа</option><option value="4">Через 4 часа</option><option value="8">Через 8 часов</option><option value="24">Через сутки</option><option value="0">Не напоминать</option></select><span class="hint">Напоминание приходит в Telegram с 9:00 до 21:00, если обращение всё ещё «новое» и на него не ответили. О каждом обращении — один раз.</span><span class="hint">Если один пользователь присылает больше 20 сообщений за 10 минут, уведомления о его сообщениях приостанавливаются. Все сообщения при этом сохраняются в панели.</span></div><div class="actions"><button class="btn" type="submit">Сохранить</button><button id="testAdminNotificationBtn3" class="btn secondary" type="button">Отправить тест</button></div>';stack.prepend(form);form.addEventListener("submit",saveNotificationSettings);el("testAdminNotificationBtn3").addEventListener("click",testAdminNotification);var backup=Array.from(document.querySelectorAll("#view-settings .card")).find(function(card){return card.querySelector("h3")&&card.querySelector("h3").textContent==="Резервная копия"});if(backup){var note=backup.querySelector(".card-note");if(note)note.textContent="Сжатая копия .json.gz содержит фотографии, токен бота, настройки входа, контент и данные пользователей. Храните файл как конфиденциальный."}}
+    function ensureSourceLinksCard(){if(el("sourceLinksCard3"))return;var stack=document.querySelector("#view-settings .section-stack");if(!stack)return;var card=document.createElement("div");card.id="sourceLinksCard3";card.className="card";card.innerHTML='<h3>Ссылки с меткой источника</h3><p class="card-note">Разместите такую ссылку в рекламе или соцсетях — у клиентов, пришедших по ней, в карточке, уведомлениях, выгрузке и сводке будет видно, откуда они пришли.</p><div class="field"><label for="sourceLabel3">Метка</label><input id="sourceLabel3" class="input" maxlength="40" placeholder="Например: instagram"><span class="hint">Латинские буквы, цифры, «-» и «_».</span></div><div class="field"><label for="sourceLink3">Ссылка</label><input id="sourceLink3" class="input" readonly></div><button id="copySourceLink3" class="btn secondary" type="button">Скопировать ссылку</button>';stack.appendChild(card);var update=function(){var label=el("sourceLabel3").value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,"").slice(0,40);var bot=state&&state.bot&&state.bot.username;el("sourceLink3").value=label&&bot?"https://t.me/"+bot+"?start=src_"+label:""};el("sourceLabel3").addEventListener("input",update);el("copySourceLink3").addEventListener("click",async function(){var link=el("sourceLink3").value;if(!link){toast("Сначала введите метку");return}try{await navigator.clipboard.writeText(link);toast("Ссылка скопирована")}catch(e){el("sourceLink3").select();toast("Выделите ссылку и скопируйте её")}});update()}
     function ensureConnectionCard(){if(el("connectionCard3"))return;var stack=document.querySelector("#view-settings .section-stack"),card=document.createElement("div");card.id="connectionCard3";card.className="card";card.innerHTML='<div class="card-head"><div><h3>Состояние подключения</h3><div id="connectionSummary3" class="card-note">Проверяем Telegram…</div></div><span id="connectionBadge3" class="badge">Проверка</span></div><div class="data-row"><span>Последняя успешная проверка</span><strong id="connectionSuccess3">—</strong></div><div class="data-row"><span>Последняя проблема</span><strong id="connectionErrorAt3">—</strong></div><div id="connectionError3" class="hint" style="margin-top:10px"></div>';stack.prepend(card)}
-    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";if(el("notifyMode3"))el("notifyMode3").value=state.config.notifyMode||"inquiries";if(el("reminderHours3"))el("reminderHours3").value=String(state.config.reminderHours==null?2:state.config.reminderHours);var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
+    function renderSettings(){ensureNotificationSettings();ensureConnectionCard();ensureSourceLinksCard();if(!dirty.has(el("technicalForm3")))el("settingActive3").checked=state.config.active;if(!dirty.has(el("notificationForm3")))el("adminChatId3").value=state.config.adminChatId||"";if(el("notifyMode3"))el("notifyMode3").value=state.config.notifyMode||"inquiries";if(el("reminderHours3"))el("reminderHours3").value=String(state.config.reminderHours==null?2:state.config.reminderHours);var notificationBadge=el("notificationState3"),configured=Boolean(state.config.adminChatId),verified=Boolean(configured&&state.config.adminNotificationVerifiedAt);notificationBadge.textContent=!configured?"Не настроено":verified?"Проверено":"Нужно проверить";notificationBadge.className="badge "+(verified?"good":"warn");var runtime=state.runtime||{},status=runtime.status,badge=el("connectionBadge3");badge.textContent=statusName(status);badge.className="badge "+(status==="online"?"good":status==="stopped"?"":"warn");el("connectionSummary3").textContent=connectionNote();el("connectionSuccess3").textContent=runtime.lastSuccessfulContactAt?fmtDate(runtime.lastSuccessfulContactAt):"Ещё не было";el("connectionErrorAt3").textContent=runtime.lastErrorAt?fmtDate(runtime.lastErrorAt):"Нет";el("connectionError3").textContent=runtime.lastError||"Ошибок текущего подключения нет.";el("dataUsers3").textContent=fmtNumber(state.userCount);el("dataProperties3").textContent=fmtNumber(state.objects.length);el("dataOffers3").textContent=fmtNumber(state.promotions.length);el("dataReplies3").textContent=fmtNumber(state.rules.length)}
     function addCounters(root){(root||document).querySelectorAll("textarea[maxlength],input[maxlength]").forEach(function(node){var c=node.nextElementSibling&&node.nextElementSibling.classList.contains("counter")?node.nextElementSibling:null;if(!c){c=document.createElement("span");c.className="counter";node.insertAdjacentElement("afterend",c);node.addEventListener("input",function(){c.textContent=node.value.length+" / "+node.maxLength})}c.textContent=node.value.length+" / "+node.maxLength})}
     function bindQuick(root){(root||document).querySelectorAll(".quick-nav").forEach(function(button){if(button._bound)return;button._bound=true;button.addEventListener("click",function(){openView(button.dataset.view)})})}
     function bindLanguageSwitch(container,prefix){container.addEventListener("click",function(e){var button=e.target.closest("[data-lang]");if(!button)return;var lang=button.dataset.lang;container.querySelectorAll("[data-lang]").forEach(function(x){var active=x===button;x.classList.toggle("active",active);x.setAttribute("aria-selected",active?"true":"false")});document.querySelectorAll("[data-"+prefix+"-pane]").forEach(function(pane){pane.classList.toggle("active",pane.dataset[prefix+"Pane"]===lang)});if(prefix==="property")renderPropertyTranslationSummary()})}
@@ -6733,7 +7231,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
     async function saveMenuSection(e,key,prefix,label){e.preventDefault();var button=e.submitter;button.disabled=true;try{var menu=JSON.parse(JSON.stringify(state.config.menu));languages.forEach(function(language){var s=language[0].toUpperCase()+language.slice(1);menu[language][key]=el("section"+prefix+s+"3").value});await api("/api/menu",{method:"PUT",body:JSON.stringify({menu:menu})});clearDirty(e.currentTarget);await loadState();toast(label+" сохранён")}catch(error){toast(error.message)}finally{button.disabled=false}}
     function translations(prefix,fields){var out={};fields.forEach(function(field){out[field]={};languages.forEach(function(l){var s=l[0].toUpperCase()+l.slice(1);out[field][l]=el(prefix+field[0].toUpperCase()+field.slice(1)+s+"3").value})});return out}
     async function confirmPropertyPublication(){if(el("propertyStatus3").value!=="active"&&el("propertyStatus3").value!=="reserved")return true;var missing=languages.filter(function(language){return !propertyFormHealth(language).ready});if(!missing.length)return true;return confirmAction("Не все языки опубликованы","Карточка не появится в каталоге без названия и фотографии для языков "+missing.map(function(language){return language.toUpperCase()}).join(", ")+". Сохранить объект в текущем виде?","Сохранить")}
-    async function saveProperty(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{if(!await confirmPropertyPublication())return;var t=translations("property",["title","city","district","address","price","description"]),imageDataUrlsByLanguage={ru:[],en:[],es:[]},removeImagesByLanguage={},removeImageIdsByLanguage={},imageOrderByLanguage={},imageSequenceByLanguage={},totalNewBytes=languages.reduce(function(total,language){return total+(propertyNewImages[language]||[]).reduce(function(sum,item){return sum+Number(item.file.size||0)},0)},0);if(totalNewBytes>45*1024*1024)throw new Error("Новые фотографии занимают больше 45 МБ. Сохраните их в два этапа.");for(var languageIndex=0;languageIndex<languages.length;languageIndex++){var language=languages[languageIndex],s=language[0].toUpperCase()+language.slice(1),fresh=propertyNewImages[language]||[],removed=propertyRemovedImages[language]||[],entries=propertyOrderedEntries(language),removeAll=el("propertyRemoveImages"+s+"3").checked;if(entries.length>10)throw new Error("Для "+language.toUpperCase()+" можно загрузить не более 10 фотографий");removeImagesByLanguage[language]=removeAll;removeImageIdsByLanguage[language]=removed;imageOrderByLanguage[language]=entries.filter(function(entry){return entry.kind==="existing"}).map(function(entry){return entry.token});imageSequenceByLanguage[language]=entries.map(function(entry){return entry.token});for(var fileIndex=0;fileIndex<fresh.length;fileIndex++)imageDataUrlsByLanguage[language].push({clientId:fresh[fileIndex].id,dataUrl:await fileData(fresh[fileIndex].file),name:fresh[fileIndex].file.name})}var body={title:t.title,city:t.city,district:t.district,address:t.address,price:t.price,description:t.description,priceValue:el("propertyPriceValue3").value,currency:el("propertyCurrency3").value,pricePeriod:el("propertyPricePeriod3").value,dealType:el("propertyDealType3").value,propertyType:el("propertyType3").value,reference:el("propertyReference3").value,bedrooms:el("propertyBedrooms3").value,bathrooms:el("propertyBathrooms3").value,area:el("propertyArea3").value,plotArea:el("propertyPlotArea3").value,floor:el("propertyFloor3").value,floors:el("propertyFloors3").value,distanceSea:el("propertyDistanceSea3").value,condition:el("propertyCondition3").value,url:el("propertyUrl3").value,mapUrl:el("propertyMapUrl3").value,badges:Array.from(document.querySelectorAll(".property-badge3:checked")).map(function(box){return box.value}),status:el("propertyStatus3").value,removeImagesByLanguage:removeImagesByLanguage,removeImageIdsByLanguage:removeImageIdsByLanguage,imageOrderByLanguage:imageOrderByLanguage,imageSequenceByLanguage:imageSequenceByLanguage,imageDataUrlsByLanguage:imageDataUrlsByLanguage};var id=el("propertyId3").value;await api(id?"/api/objects/"+encodeURIComponent(id):"/api/objects",{method:id?"PATCH":"POST",body:JSON.stringify(body)});clearDirty(el("propertyForm3"));el("propertyDialog3").close();await loadState();toast("Объект сохранён")}catch(error){toast(error.message)}finally{button.disabled=false}}
+    async function saveProperty(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{if(!await confirmPropertyPublication())return;var t=translations("property",["title","city","district","address","price","description"]),imageDataUrlsByLanguage={ru:[],en:[],es:[]},removeImagesByLanguage={},removeImageIdsByLanguage={},imageOrderByLanguage={},imageSequenceByLanguage={},totalNewBytes=languages.reduce(function(total,language){return total+(propertyNewImages[language]||[]).reduce(function(sum,item){return sum+Number(item.file.size||0)},0)},0);if(totalNewBytes>45*1024*1024)throw new Error("Новые фотографии занимают больше 45 МБ. Сохраните их в два этапа.");for(var languageIndex=0;languageIndex<languages.length;languageIndex++){var language=languages[languageIndex],s=language[0].toUpperCase()+language.slice(1),fresh=propertyNewImages[language]||[],removed=propertyRemovedImages[language]||[],entries=propertyOrderedEntries(language),removeAll=el("propertyRemoveImages"+s+"3").checked;if(entries.length>10)throw new Error("Для "+language.toUpperCase()+" можно загрузить не более 10 фотографий");removeImagesByLanguage[language]=removeAll;removeImageIdsByLanguage[language]=removed;imageOrderByLanguage[language]=entries.filter(function(entry){return entry.kind==="existing"}).map(function(entry){return entry.token});imageSequenceByLanguage[language]=entries.map(function(entry){return entry.token});for(var fileIndex=0;fileIndex<fresh.length;fileIndex++)imageDataUrlsByLanguage[language].push({clientId:fresh[fileIndex].id,dataUrl:await fileData(fresh[fileIndex].file),name:fresh[fileIndex].file.name})}var body={title:t.title,city:t.city,district:t.district,address:t.address,price:t.price,description:t.description,priceValue:el("propertyPriceValue3").value,currency:el("propertyCurrency3").value,pricePeriod:el("propertyPricePeriod3").value,dealType:el("propertyDealType3").value,propertyType:el("propertyType3").value,reference:el("propertyReference3").value,bedrooms:el("propertyBedrooms3").value,bathrooms:el("propertyBathrooms3").value,area:el("propertyArea3").value,plotArea:el("propertyPlotArea3").value,floor:el("propertyFloor3").value,floors:el("propertyFloors3").value,distanceSea:el("propertyDistanceSea3").value,condition:el("propertyCondition3").value,url:el("propertyUrl3").value,mapUrl:el("propertyMapUrl3").value,badges:Array.from(document.querySelectorAll(".property-badge3:checked")).map(function(box){return box.value}),status:el("propertyStatus3").value,removeImagesByLanguage:removeImagesByLanguage,removeImageIdsByLanguage:removeImageIdsByLanguage,imageOrderByLanguage:imageOrderByLanguage,imageSequenceByLanguage:imageSequenceByLanguage,imageDataUrlsByLanguage:imageDataUrlsByLanguage};var id=el("propertyId3").value;var saved=await api(id?"/api/objects/"+encodeURIComponent(id):"/api/objects",{method:id?"PATCH":"POST",body:JSON.stringify(body)});clearDirty(el("propertyForm3"));el("propertyDialog3").close();await loadState();toast(saved&&saved.alertsQueued?"Объект сохранён. Уведомление отправляется клиентам: "+saved.alertsQueued:"Объект сохранён")}catch(error){toast(error.message)}finally{button.disabled=false}}
     async function saveOffer(e){e.preventDefault();var button=e.submitter;button.disabled=true;try{var t=translations("offer",["title","text"]),imageDataUrlsByLanguage={ru:[],en:[],es:[]},removeImagesByLanguage={};for(var index=0;index<languages.length;index++){var language=languages[index],s=language[0].toUpperCase()+language.slice(1),file=offerNewImages[language];removeImagesByLanguage[language]=el("offerRemoveImage"+s+"3").checked||Boolean(file);if(file)imageDataUrlsByLanguage[language]=[{dataUrl:await fileData(file),name:file.name}]}var body={title:t.title,text:t.text,url:el("offerUrl3").value,startAt:el("offerStart3").value?new Date(el("offerStart3").value).toISOString():"",endAt:el("offerEnd3").value?new Date(el("offerEnd3").value).toISOString():"",enabled:el("offerEnabled3").checked,removeImagesByLanguage:removeImagesByLanguage,imageDataUrlsByLanguage:imageDataUrlsByLanguage};var id=el("offerId3").value;await api(id?"/api/promotions/"+encodeURIComponent(id):"/api/promotions",{method:id?"PATCH":"POST",body:JSON.stringify(body)});clearDirty(el("offerForm3"));el("offerDialog3").close();await loadState();toast("Акция сохранена")}catch(error){toast(error.message)}finally{button.disabled=false}}
     async function saveContacts(e){e.preventDefault();var button=e.submitter||el("saveContactsTop3");button.disabled=true;try{var text={};languages.forEach(function(l){var s=l[0].toUpperCase()+l.slice(1);text[l]=el("contactText"+s+"3").value});await api("/api/contacts",{method:"PUT",body:JSON.stringify({managerName:el("contactManagerName3").value,phone:el("contactPhone3").value,whatsapp:el("contactWhatsapp3").value,whatsappEnabled:el("contactWhatsappEnabled3").checked,telegram:el("contactTelegram3").value,email:el("contactEmail3").value,website:el("contactWebsite3").value,mapUrl:el("contactMap3").value,text:text})});clearDirty(el("contactsForm3"));await loadState();toast("Контакты менеджера сохранены")}catch(error){toast(error.message)}finally{button.disabled=false}}
     async function saveReply(e){e.preventDefault();var button=e.submitter,id=el("replyId3").value;button.disabled=true;try{var result=await api(id?"/api/rules/"+encodeURIComponent(id):"/api/rules",{method:id?"PATCH":"POST",body:JSON.stringify({trigger:el("replyTrigger3").value,type:el("replyType3").value,language:el("replyLanguage3").value,answer:el("replyAnswer3").value})});clearDirty(el("replyForm3"));el("replyDialog3").close();await loadState();toast(result.conflicts&&result.conflicts.length?"Сохранено. Найден похожий автоответ":"Автоответ сохранён")}catch(error){toast(error.message)}finally{button.disabled=false}}
@@ -6752,8 +7250,8 @@ const ADMIN_HTML = String.raw`<!doctype html>
     el("logoutBtn3").addEventListener("click",async function(){if(!canLeave())return;try{await api("/api/logout",{method:"POST",body:"{}"})}catch(e){}csrf="";state=null;clearInterval(refreshTimer);showScreen("loginScreen3")});el("refreshBtn3").addEventListener("click",function(){if(dirty.size)return toast("Сначала сохраните или отмените изменения");loadState().then(function(){toast("Данные обновлены")})});
     el("nav3").addEventListener("click",function(e){var button=e.target.closest("[data-view]");if(button)openView(button.dataset.view)});document.querySelectorAll("#nav3 details").forEach(function(group){group.addEventListener("toggle",function(){if(!group.open)return;document.querySelectorAll("#nav3 details[open]").forEach(function(other){if(other!==group)other.removeAttribute("open")})})});el("mobileMenuBtn3").addEventListener("click",function(){var open=el("sidebar3").classList.toggle("open");el("sidebarOverlay3").classList.toggle("hidden",!open);this.setAttribute("aria-expanded",open?"true":"false")});el("sidebarOverlay3").addEventListener("click",closeSidebar);document.addEventListener("click",function(e){if(!e.target.closest("#sidebar3")&&(el("sidebar3").classList.contains("open")||document.querySelector("#nav3 details[open]")))closeSidebar()});bindQuick(document);
     bindLanguageSwitch(el("welcomeLang3"),"welcome");bindLanguageSwitch(el("interfaceLang3"),"interface");bindLanguageSwitch(el("propertyLang3"),"property");bindLanguageSwitch(el("offerLang3"),"offer");bindLanguageSwitch(el("campaignLang3"),"campaign");
-    document.addEventListener("input",function(e){var form=e.target.closest("form[data-saveable]");if(form)markDirty(form);if(e.target.closest("#propertyForm3"))renderPropertyTranslationSummary();if(e.target.closest("#contactsForm3"))updateContactsPreview();if(e.target.closest("#campaignForm3")){updateCampaignPreview();updateCampaignEstimate()}if(e.target.classList.contains("welcome-live3")){var l=e.target.dataset.lang,s=l[0].toUpperCase()+l.slice(1);el("welcomeTextPreview"+s+"3").textContent=e.target.value.replaceAll("{first_name}","Анна").replaceAll("{last_name}","").replaceAll("{username}","@anna")}});
-    document.addEventListener("change",function(e){var form=e.target.closest("form[data-saveable]");if(form)markDirty(form);if(e.target.closest("#propertyForm3"))renderPropertyTranslationSummary();if(e.target.closest("#contactsForm3"))updateContactsPreview();if(e.target.closest("#campaignForm3")){updateCampaignPreview();updateCampaignEstimate()}});
+    document.addEventListener("input",function(e){var form=e.target.closest("form[data-saveable]");if(form)markDirty(form);if(e.target.closest("#propertyForm3"))renderPropertyTranslationSummary();if(e.target.closest("#offerForm3"))markUntranslated();if(e.target.closest("#contactsForm3"))updateContactsPreview();if(e.target.closest("#campaignForm3")){updateCampaignPreview();updateCampaignEstimate()}if(e.target.classList.contains("welcome-live3")){var l=e.target.dataset.lang,s=l[0].toUpperCase()+l.slice(1);el("welcomeTextPreview"+s+"3").textContent=e.target.value.replaceAll("{first_name}","Анна").replaceAll("{last_name}","").replaceAll("{username}","@anna")}});
+    document.addEventListener("change",function(e){var form=e.target.closest("form[data-saveable]");if(form)markDirty(form);if(e.target.closest("#propertyForm3"))renderPropertyTranslationSummary();if(e.target.closest("#offerForm3"))markUntranslated();if(e.target.closest("#contactsForm3"))updateContactsPreview();if(e.target.closest("#campaignForm3")){updateCampaignPreview();updateCampaignEstimate()}});
     document.querySelectorAll("[data-close]").forEach(function(button){button.addEventListener("click",function(){var form=button.closest("dialog").querySelector("form");if(dirty.has(form)&&!confirm("Закрыть без сохранения изменений?"))return;clearDirty(form);el(button.dataset.close).close()})});
     document.querySelectorAll("dialog").forEach(function(dialog){dialog.addEventListener("cancel",function(e){var form=dialog.querySelector("form");if(form&&dirty.has(form)){if(!confirm("Закрыть без сохранения изменений?")){e.preventDefault();return}clearDirty(form)}})});
     el("saveWelcomeTop3").addEventListener("click",function(){el("welcomeForm3").requestSubmit()});el("saveInterfaceTop3").addEventListener("click",function(){el("interfaceForm3").requestSubmit()});el("saveContactsTop3").addEventListener("click",function(){el("contactsForm3").requestSubmit()});el("welcomeForm3").addEventListener("submit",saveWelcome);el("interfaceForm3").addEventListener("submit",saveInterfaceText);el("propertySectionForm3").addEventListener("submit",function(e){saveMenuSection(e,"objects","Objects","Текст раздела «Объекты»")});el("offerSectionForm3").addEventListener("submit",function(e){saveMenuSection(e,"promotions","Promotions","Текст раздела «Акции»")});el("aboutForm3").addEventListener("submit",function(e){saveMenuSection(e,"about","About","Раздел «О нас»")});el("propertyForm3").addEventListener("submit",saveProperty);el("offerForm3").addEventListener("submit",saveOffer);el("contactsForm3").addEventListener("submit",saveContacts);el("replyForm3").addEventListener("submit",saveReply);el("campaignForm3").addEventListener("submit",submitCampaign);el("technicalForm3").addEventListener("submit",saveSettings);
@@ -6826,9 +7324,88 @@ const broadcastScheduleTimer = setInterval(() => {
 }, 30000);
 broadcastScheduleTimer.unref();
 
+const RUN_MARKER_FILE = path.join(path.dirname(DATA_FILE), 'bot-running.json');
+const RUN_HEARTBEAT_MS = 60 * 1000;
+
+// While the bot runs, a small marker file holds the time it was last seen
+// alive. A normal shutdown removes it. If the marker is still there at the
+// next start, the previous run ended abruptly: the process crashed or was
+// killed, or the computer was turned off. (Closing the window is handled as a
+// normal shutdown, see shutdown().)
+function writeRunMarker(startedAt, now = new Date()) {
+  try {
+    const temporary = RUN_MARKER_FILE + '.tmp';
+    fs.writeFileSync(temporary, JSON.stringify({ pid: process.pid, startedAt: startedAt.toISOString(), lastAliveAt: now.toISOString() }), 'utf8');
+    fs.renameSync(temporary, RUN_MARKER_FILE);
+  } catch (error) {
+    console.error('Не удалось обновить отметку работы бота:', error.message);
+  }
+}
+
+function clearRunMarker() {
+  try {
+    fs.rmSync(RUN_MARKER_FILE, { force: true });
+  } catch {
+    // Nothing to clean up.
+  }
+}
+
+// Returns { lastAliveAt } of an abruptly ended previous run, or null.
+function previousRunEndedAbruptly() {
+  let marker;
+  try {
+    marker = JSON.parse(fs.readFileSync(RUN_MARKER_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+  const lastAliveAt = new Date(marker && marker.lastAliveAt);
+  return Number.isFinite(lastAliveAt.getTime()) ? { lastAliveAt } : { lastAliveAt: null };
+}
+
+function clockTime(date) {
+  const pad = (value) => String(value).padStart(2, '0');
+  const today = dayKey(new Date()) === dayKey(date);
+  return (today ? '' : pad(date.getDate()) + '.' + pad(date.getMonth() + 1) + ' ') + pad(date.getHours()) + ':' + pad(date.getMinutes());
+}
+
+function abruptStopNotice(previous, now = new Date()) {
+  const stoppedAt = previous.lastAliveAt ? 'около ' + clockTime(previous.lastAliveAt) : 'в неизвестное время';
+  const lines = [
+    '⚠️ Бот был остановлен нештатно ' + stoppedAt + ' (сбой, выключение компьютера или принудительное завершение процесса). Снова работает с ' + clockTime(now) + '.',
+  ];
+  const downtime = previous.lastAliveAt ? now - previous.lastAliveAt : 0;
+  lines.push(downtime < 24 * 60 * 60 * 1000
+    ? 'Сообщения клиентов за это время Telegram сохранил — бот ответит на них сейчас.'
+    : 'Бот не работал больше суток: Telegram хранит сообщения только 24 часа, часть из них могла потеряться.');
+  lines.push('Чтобы остановить бота штатно, нажмите Ctrl+C в его окне.');
+  return lines.join('\n');
+}
+
+async function reportAbruptStop(previous, token = data.config.botToken) {
+  const text = abruptStopNotice(previous);
+  recordError('Нештатная остановка', text.split('\n')[0]);
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  if (!adminChatId || !token) return text;
+  // The connection may still be coming up right after the start.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await sendMessage(adminChatId, text, token, { track: false });
+      return text;
+    } catch {
+      await delay(15000);
+    }
+  }
+  return text;
+}
+
 let shuttingDown = false;
 
-function shutdown() {
+// Closing the console window (SIGHUP on Windows) gives the process about ten
+// seconds: enough to save, and to tell the admin that the bot is no longer
+// running, since nobody may notice otherwise.
+const WINDOW_CLOSED_NOTICE_TIMEOUT_MS = 4000;
+
+function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log('\nЗавершение работы…');
@@ -6836,12 +7413,28 @@ function shutdown() {
   if (runtime.abortController) runtime.abortController.abort();
   clearTimeout(saveTimer);
   try { saveDataNow(); } catch (error) { console.error('Не удалось сохранить данные:', error.message); }
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(0), 2000).unref();
+  clearRunMarker();
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  const notice = signal === 'SIGHUP' && adminChatId && data.config.botToken
+    ? Promise.race([
+      sendMessage(adminChatId, '⚠️ Окно бота закрыто — бот остановлен в ' + clockTime(new Date()) + '. Клиенты не получат ответов, пока бот не запущен снова (start-bot.ps1).', data.config.botToken, { track: false }).catch(() => {}),
+      delay(WINDOW_CLOSED_NOTICE_TIMEOUT_MS),
+    ])
+    : Promise.resolve();
+  notice.finally(() => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 2000).unref();
+  });
 }
 
 function start() {
+  const previousRun = previousRunEndedAbruptly();
   server.listen(PORT, HOST, () => {
+    // Only a started instance owns the marker: a second copy that fails on a
+    // busy port must not overwrite the marker of the running one.
+    const startedAt = new Date();
+    writeRunMarker(startedAt);
+    setInterval(() => writeRunMarker(startedAt), RUN_HEARTBEAT_MS).unref();
     const visibleHost = HOST === '0.0.0.0' ? '127.0.0.1' : HOST;
     const adminUrl = 'http://' + visibleHost + ':' + PORT;
     console.log('');
@@ -6860,6 +7453,7 @@ function start() {
     }
     console.log('');
     restartPolling();
+    if (previousRun) void reportAbruptStop(previousRun).catch(() => {});
     runDailyBackupSafely();
     setInterval(runDailyBackupSafely, 60 * 60 * 1000).unref();
     setInterval(runScheduledNotices, 15 * 60 * 1000).unref();
@@ -6880,6 +7474,7 @@ function start() {
   });
 
   process.on('SIGINT', shutdown);
+  process.on('SIGHUP', shutdown);
   process.on('SIGTERM', shutdown);
   // The app usually runs without a supervisor that would restart it, so it
   // keeps running: the error is shown in the panel and the Telegram
@@ -6937,6 +7532,19 @@ module.exports = {
   runDailyDigest,
   runInquiryReminders,
   xlsxWorkbook,
+  writeRunMarker,
+  clearRunMarker,
+  budgetLimit,
+  leadSourceFromPayload,
+  catalogRecords,
+  catalogFilterPanel,
+  selectionMatches,
+  propertyAlertDeliveries,
+  deliverPropertyAlerts,
+  queuePropertyAlerts,
+  previousRunEndedAbruptly,
+  abruptStopNotice,
+  reportAbruptStop,
   text: {
     lead: LEAD_FORM_TEXT,
     viewing: VIEWING_FORM_TEXT,
@@ -6945,5 +7553,7 @@ module.exports = {
     interaction: INTERACTION_TEXT,
     commands: COMMAND_TEXT,
     propertyActions: PROPERTY_ACTION_TEXT,
+    propertyAlerts: PROPERTY_ALERT_TEXT,
+    catalogFilter: CATALOG_FILTER_TEXT,
   },
 };

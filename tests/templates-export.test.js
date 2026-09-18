@@ -63,7 +63,7 @@ test.before(async () => {
   data.config.passwordHash = password.hash;
   data.config.botToken = '12345:ABCDEFGHIJKLMNOPQRSTUV';
   data.config.active = false;
-  data.users['501'] = { id: '501', chatId: 501, firstName: 'Анна', lastName: 'Петрова', username: 'anna', phone: '+34 600 000 501', preferredLanguage: 'ru', activity: [] };
+  data.users['501'] = { id: '501', chatId: 501, firstName: 'Анна', lastName: 'Петрова', username: 'anna', phone: '+34 600 000 501', source: 'instagram', preferredLanguage: 'ru', activity: [] };
   data.users['502'] = { id: '502', chatId: 502, firstName: 'John', preferredLanguage: 'en', activity: [] };
   data.objects.push({ id: 'villa-1', status: 'active', title: { ru: 'Вилла у моря', en: 'Sea villa', es: '' }, imagesByLanguage: { ru: [], en: [], es: [] } });
   data.inquiries.push(
@@ -130,23 +130,25 @@ test.describe('Excel export', () => {
     assert.deepEqual(Object.keys(files).sort(), ['[Content_Types].xml', '_rels/.rels', 'xl/_rels/workbook.xml.rels', 'xl/styles.xml', 'xl/workbook.xml', 'xl/worksheets/sheet1.xml']);
     const [header, first, second, third] = sheetCells(files['xl/worksheets/sheet1.xml']);
     assert.equal(header.A, 'Создано');
-    assert.equal(header.K, 'Текст обращения');
+    assert.equal(header.J, 'Источник');
+    assert.equal(header.L, 'Текст обращения');
     assert.equal(third, undefined, 'unknown ids are skipped');
 
-    assert.equal(first.P, 'inq-question');
+    assert.equal(first.Q, 'inq-question');
     assert.equal(first.B, 'закрыто');
     assert.equal(first.C, 'вопрос по объекту');
-    assert.equal(first.J, 'Вилла у моря');
-    assert.equal(first.K, '=HYPERLINK(&quot;http://evil&quot;)', 'formula-like text stays a string');
-    assert.equal(first.M, 1);
-    assert.equal(first.N, 'Yes, it is available');
+    assert.equal(first.K, 'Вилла у моря');
+    assert.equal(first.L, '=HYPERLINK(&quot;http://evil&quot;)', 'formula-like text stays a string');
+    assert.equal(first.N, 1);
+    assert.equal(first.O, 'Yes, it is available');
 
     assert.equal(second.D, 'Анна Петрова');
     assert.equal(second.E, '@anna');
     assert.equal(second.F, '+34 611 111 111', 'the phone from the request wins over the profile');
     assert.equal(second.G, 'Анна');
     assert.equal(second.H, 'Утром');
-    assert.equal(second.L, 'перезвонить');
+    assert.equal(second.M, 'перезвонить');
+    assert.equal(second.J, 'instagram');
     assert.equal(typeof second.A, 'number', 'dates are real Excel dates');
     assert.ok(Math.abs(second.A - (Date.parse('2026-09-17T08:30:00.000Z') - new Date('2026-09-17T08:30:00.000Z').getTimezoneOffset() * 60000) / 86400000 - 25569) < 1e-6);
   });
