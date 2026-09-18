@@ -2,7 +2,7 @@
 
 import { fillTemplate } from './util.mjs';
 import { imageExists } from './media.mjs';
-import { BOT_COMMAND_DESCRIPTIONS, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_REQUESTS_TEXT, NAVIGATION_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
+import { BOT_COMMAND_DESCRIPTIONS, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { clearCatalogMessages, clearGalleryMessages, clearUiMessages, sendUiMessage } from './catalog.mjs';
@@ -12,15 +12,17 @@ function languageMessages(language) {
   return data.config.messages[language] || data.config.messages.ru;
 }
 
+// Four short rows. "Call me back" is on the main keyboard: for an agency it
+// is the main action. The language is chosen automatically and can be
+// changed in "More".
 function menuKeyboard(language) {
   const labels = MENU_LABELS[language] || MENU_LABELS.ru;
   return {
     keyboard: [
-      [{ text: labels.objects }],
-      [{ text: labels.selection }],
+      [{ text: labels.objects }, { text: labels.selection }],
       [{ text: labels.favorites }, { text: labels.promotions }],
-      [{ text: labels.contacts }],
-      [{ text: labels.more }, { text: labels.language }],
+      [{ text: labels.request }, { text: labels.contacts }],
+      [{ text: labels.more }],
     ],
     resize_keyboard: true,
     is_persistent: true,
@@ -31,8 +33,9 @@ function menuKeyboard(language) {
 function menuItemForText(text, language) {
   const labels = MENU_LABELS[language] || MENU_LABELS.ru;
   const legacy = LEGACY_MENU_LABELS[language] || LEGACY_MENU_LABELS.ru;
+  const previous = PREVIOUS_MENU_LABELS[language] || PREVIOUS_MENU_LABELS.ru;
   return ['objects', 'selection', 'contacts', 'promotions', 'favorites', 'request', 'about', 'help', 'more'].find((key) => {
-    return labels[key] === text || legacy[key] === text;
+    return labels[key] === text || legacy[key] === text || previous[key] === text;
   }) || '';
 }
 

@@ -2,13 +2,13 @@
 
 import { PENDING_ACTION_TTL_MS } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { INTERACTION_TEXT, LEAD_FORM_TEXT, MANAGER_CONTACT_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
+import { INTERACTION_TEXT, LEAD_FORM_TEXT, MANAGER_CONTACT_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { sendMessage } from './telegram.mjs';
 import { menuKeyboard, sendMainMenu } from './menus.mjs';
 import { createInquiry } from './inquiries.mjs';
-import { localizedExact, sendCatalogPage } from './catalog.mjs';
+import { localizedExact, publishedCatalog, sendCatalogPage, sendUiMessage } from './catalog.mjs';
 import { currentSelectionMatches } from './alerts.mjs';
 import { propertyRequestText } from './sections.mjs';
 import { parseViewingDate, sendViewingConfirmation, viewingDayForOption } from './viewings.mjs';
@@ -38,9 +38,7 @@ function leadFormKeyboard(language, step, user) {
   }
   if (step === 'confirm') {
     keyboard.push([{ text: copy.confirm }]);
-    keyboard.push([{ text: copy.editName }]);
-    keyboard.push([{ text: copy.editPhone }]);
-    keyboard.push([{ text: copy.editTime }]);
+    keyboard.push(...optionRows([copy.editName, copy.editPhone, copy.editTime]));
   }
   keyboard.push([{ text: copy.cancel }]);
   return {
@@ -122,7 +120,7 @@ function expiredActionKeyboard(language) {
 
 function unfinishedActionKeyboard(language) {
   const copy = INTERACTION_TEXT[language] || INTERACTION_TEXT.ru;
-  return oneColumnReplyKeyboard([copy.continueForm], copy.discardForm, copy.unfinished);
+  return optionReplyKeyboard([copy.continueForm], copy.discardForm, copy.unfinished);
 }
 
 async function showPendingActionStep(user, token) {
@@ -341,9 +339,34 @@ async function handleLeadFormMessage(message, user, token) {
   return true;
 }
 
-function oneColumnReplyKeyboard(options, cancelText, placeholder) {
+// Short answers go two to a row (three for times such as "10:00") so the
+// keyboard does not cover the chat; the first `fullWidth` options (such as
+// "Send") and long answers get a row of their own.
+function optionRows(options, fullWidth = 0) {
+  const rows = [];
+  let row = [];
+  const flush = () => {
+    if (row.length) rows.push(row);
+    row = [];
+  };
+  options.forEach((text, index) => {
+    const length = [...String(text)].length;
+    if (index < fullWidth || length > 22) {
+      flush();
+      rows.push([{ text }]);
+      return;
+    }
+    const perRow = length <= 6 && row.every((button) => [...button.text].length <= 6) ? 3 : 2;
+    if (row.length >= perRow) flush();
+    row.push({ text });
+  });
+  flush();
+  return rows;
+}
+
+function optionReplyKeyboard(options, cancelText, placeholder, fullWidth = 0) {
   return {
-    keyboard: [...options.map((text) => [{ text }]), [{ text: cancelText }]],
+    keyboard: [...optionRows(options, fullWidth), [{ text: cancelText }]],
     resize_keyboard: true,
     is_persistent: true,
     input_field_placeholder: cleanText(placeholder, 64),
@@ -378,15 +401,15 @@ function viewingKeyboard(language, step, pending = null) {
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
   const slotMode = Boolean(pending && pending.data && pending.data.slotMode && slotsEnabled());
   if (step === 'date' && slotMode) {
-    return oneColumnReplyKeyboard(availableSlotDays(language).map((day) => day.label).concat(copy.dateOptions[3]), copy.cancel, copy.askDate);
+    return optionReplyKeyboard(availableSlotDays(language).map((day) => day.label).concat(copy.dateOptions[3]), copy.cancel, copy.askDate);
   }
   if (step === 'time' && slotMode) {
-    return oneColumnReplyKeyboard(freeTimes(pending.data.day).concat(copy.timeOptions[3]), copy.cancel, copy.askTime);
+    return optionReplyKeyboard(freeTimes(pending.data.day).concat(copy.timeOptions[3]), copy.cancel, copy.askTime);
   }
-  if (step === 'date') return oneColumnReplyKeyboard(copy.dateOptions, copy.cancel, copy.askDate);
-  if (step === 'time') return oneColumnReplyKeyboard(copy.timeOptions, copy.cancel, copy.askTime);
-  if (step === 'confirm') return oneColumnReplyKeyboard([copy.confirm, copy.editDate, copy.editTime], copy.cancel, copy.review);
-  return oneColumnReplyKeyboard([], copy.cancel, step === 'custom_time' ? copy.askCustomTime : copy.askCustom);
+  if (step === 'date') return optionReplyKeyboard(copy.dateOptions, copy.cancel, copy.askDate);
+  if (step === 'time') return optionReplyKeyboard(copy.timeOptions, copy.cancel, copy.askTime);
+  if (step === 'confirm') return optionReplyKeyboard([copy.confirm, copy.editDate, copy.editTime], copy.cancel, copy.review, 1);
+  return optionReplyKeyboard([], copy.cancel, step === 'custom_time' ? copy.askCustomTime : copy.askCustom);
 }
 
 function viewingReviewText(copy, property, pending, language) {
@@ -588,12 +611,12 @@ function selectionPrompt(copy, step) {
 
 function selectionKeyboard(language, step) {
   const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
-  if (step === 'deal') return oneColumnReplyKeyboard(copy.dealOptions, copy.cancel, copy.askDeal);
-  if (step === 'type') return oneColumnReplyKeyboard(copy.typeOptions, copy.cancel, copy.askType);
-  if (step === 'location') return oneColumnReplyKeyboard([copy.anyLocation], copy.cancel, copy.askLocation);
-  if (step === 'budget') return oneColumnReplyKeyboard([copy.noBudget], copy.cancel, copy.askBudget);
-  if (step === 'bedrooms') return oneColumnReplyKeyboard(copy.bedroomOptions, copy.cancel, copy.askBedrooms);
-  return oneColumnReplyKeyboard([copy.confirm, copy.editDeal, copy.editType, copy.editLocation, copy.editBudget, copy.editBedrooms], copy.cancel, copy.review);
+  if (step === 'deal') return optionReplyKeyboard(copy.dealOptions, copy.cancel, copy.askDeal);
+  if (step === 'type') return optionReplyKeyboard(copy.typeOptions, copy.cancel, copy.askType);
+  if (step === 'location') return optionReplyKeyboard([copy.anyLocation], copy.cancel, copy.askLocation);
+  if (step === 'budget') return optionReplyKeyboard([copy.noBudget], copy.cancel, copy.askBudget);
+  if (step === 'bedrooms') return optionReplyKeyboard(copy.bedroomOptions, copy.cancel, copy.askBedrooms);
+  return optionReplyKeyboard([copy.confirm, copy.editDeal, copy.editType, copy.editLocation, copy.editBudget, copy.editBedrooms], copy.cancel, copy.review, 1);
 }
 
 // Land and commercial property have no bedrooms, so that question is skipped.
@@ -750,6 +773,11 @@ async function handleSelectionFormMessage(message, user, token) {
     saveDataNow();
     if (!matches.length) {
       await sendMessage(user.chatId, withOffHoursNote(copy.success, language), token, { reply_markup: menuKeyboard(language) });
+      // Nothing fits yet: the rest of the catalog is one tap away.
+      if (publishedCatalog(user).length) {
+        const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
+        await sendUiMessage(user.chatId, user, copy.noMatchesYet, token, { reply_markup: { inline_keyboard: [[{ text: '🏘 ' + navigation.browse, callback_data: 'catalog:all:0' }]] } });
+      }
       return true;
     }
     await sendMessage(user.chatId, withOffHoursNote(copy.successMatches, language), token, { reply_markup: menuKeyboard(language) });
@@ -856,7 +884,8 @@ export {
   isStaleFormControl,
   leadFormKeyboard,
   leadReviewText,
-  oneColumnReplyKeyboard,
+  optionReplyKeyboard,
+  optionRows,
   pendingActionExpired,
   preferredTimeWithDate,
   rememberExpiredAction,

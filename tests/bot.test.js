@@ -44,18 +44,18 @@ test('data from an older version is copied to backups/ before the upgrade, once'
   const upgradeCopies = () => (fs.existsSync(backups) ? fs.readdirSync(backups) : []).filter((name) => name.startsWith('pre-upgrade-'));
   const saved = fs.existsSync(dataFile) ? fs.readFileSync(dataFile) : null;
   try {
-    const old = JSON.stringify({ version: 15, config: { reminderHours: 4 }, users: {} });
+    const old = JSON.stringify({ version: 16, config: { reminderHours: 4 }, users: {} });
     fs.writeFileSync(dataFile, old);
     const loaded = bot.loadData();
-    assert.equal(loaded.version, 16);
+    assert.equal(loaded.version, 17);
     const copies = upgradeCopies();
     assert.equal(copies.length, 1);
-    assert.match(copies[0], /^pre-upgrade-v15-to-v16-\d{8}-\d{6}\.json$/);
+    assert.match(copies[0], /^pre-upgrade-v16-to-v17-\d{8}-\d{6}\.json$/);
     assert.equal(fs.readFileSync(path.join(backups, copies[0]), 'utf8'), old, 'the file exactly as it was');
 
     bot.loadData();
     assert.equal(upgradeCopies().length, 1, 'not copied again on the next start');
-    fs.writeFileSync(dataFile, JSON.stringify({ ...JSON.parse(old), version: 16 }));
+    fs.writeFileSync(dataFile, JSON.stringify({ ...JSON.parse(old), version: 17 }));
     bot.loadData();
     assert.equal(upgradeCopies().length, 1, 'current data needs no copy');
   } finally {
@@ -85,6 +85,35 @@ test('version 16 renumbers the saved selection steps, keeping the admin\'s wordi
   assert.equal(again.interfaceText.selectionForm.ru.askLocation, '3 из 5. Где хотите жить?', 'runs once');
 });
 
+test('version 17 gives the short menu labels and help to texts still at the old defaults', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 16,
+    config: { messages: {
+      ru: { greeting: 'Привет', help: bot.previousHelpDefaults.ru, fallback: 'Спасибо' },
+      en: { greeting: 'Hi', help: 'My own help', fallback: 'Thanks' },
+    } },
+    interfaceText: { menuLabels: {
+      ru: { objects: '🏘 Наши объекты', selection: '✨ Помогите подобрать объект', contacts: '💬 Связаться с менеджером', request: '📞 Заказать звонок' },
+      en: { objects: '🏡 Homes', request: '📞 Request a call' },
+    } },
+  });
+  assert.deepEqual(
+    ['objects', 'selection', 'contacts', 'request'].map((key) => saved.interfaceText.menuLabels.ru[key]),
+    ['🏘 Объекты', '✨ Подбор', '💬 Менеджер', '📞 Позвоните мне'],
+  );
+  assert.equal(saved.interfaceText.menuLabels.en.objects, '🏡 Homes', 'a label the administrator changed is kept');
+  assert.equal(saved.interfaceText.menuLabels.en.request, '📞 Call me back');
+  assert.match(saved.config.messages.ru.help, /📞 Позвоните мне —/);
+  assert.equal(saved.config.messages.en.help, 'My own help');
+});
+
+test('an old menu keyboard still opens its sections', async () => {
+  assert.equal(bot.menuItemForText('🏘 Наши объекты', 'ru'), 'objects');
+  assert.equal(bot.menuItemForText('📞 Заказать звонок', 'ru'), 'request');
+  assert.equal(bot.menuItemForText('✨ Help me find a property', 'en'), 'selection');
+  assert.equal(bot.menuItemForText('💬 Contactar con un gestor', 'es'), 'contacts');
+});
+
 test('admin edits of Russian texts survive a restart', () => {
   const saved = bot.normalizeLoadedData({
     version: 13,
@@ -100,7 +129,7 @@ test('admin edits of Russian texts survive a restart', () => {
   assert.equal(saved.config.messages.ru.greeting, 'Моё приветствие');
   assert.equal(saved.config.messages.ru.help, 'Моя справка');
   assert.equal(saved.config.messages.ru.fallback, 'Мой ответ');
-  assert.equal(saved.version, 16);
+  assert.equal(saved.version, 17);
   for (const key of ['greeting', 'help', 'fallback']) assert.equal(key in saved.config, false);
 
   const reloaded = bot.normalizeLoadedData(JSON.parse(JSON.stringify(saved)));

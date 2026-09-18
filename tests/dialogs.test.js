@@ -122,7 +122,7 @@ test.describe('callback request form', () => {
     await chat.say('Анна');
     const step = await chat.say(ru.cancel);
     assert.equal(step.last.text, ru.cancelled);
-    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }], [{ text: MENU.ru.selection }], [{ text: MENU.ru.favorites }, { text: MENU.ru.promotions }], [{ text: MENU.ru.contacts }], [{ text: MENU.ru.more }, { text: MENU.ru.language }]] }));
+    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.favorites }, { text: MENU.ru.promotions }], [{ text: MENU.ru.request }, { text: MENU.ru.contacts }], [{ text: MENU.ru.more }]] }));
     assert.equal(chat.user.pendingAction, null);
     assert.equal(chat.inquiries.length, 0);
   });
@@ -272,6 +272,7 @@ test.describe('selection form', () => {
     let step = await chat.say(MENU.ru.selection);
     assert.equal(step.last.text, ru.intro + '\n\n' + ru.askDeal);
     assert.deepEqual(step.last.buttons, [...ru.dealOptions, ru.cancel]);
+    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 1, 1], 'short answers share a row');
 
     step = await chat.say(ru.dealOptions[0]);
     assert.equal(step.last.text, ru.askType);
@@ -286,8 +287,13 @@ test.describe('selection form', () => {
     step = await chat.say(ru.bedroomOptions[2]);
     assert.equal(step.last.text, [ru.review, '', 'Цель: Покупка', 'Тип: Дом или вилла', 'Район: Марбелья, у моря', 'Бюджет: до 600 000 €', 'Спальни: 3 спальни'].join('\n'));
 
+    assert.deepEqual(step.last.markup.keyboard[0], [{ text: ru.confirm }], '«Send» has a row of its own');
+    assert.deepEqual(step.last.markup.keyboard[1], [{ text: ru.editDeal }, { text: ru.editType }], 'the edit buttons go two to a row');
+
     step = await chat.say(ru.confirm);
-    assert.equal(step.last.text, ru.success, 'nothing in the catalog fits yet');
+    assert.equal(step.replies[0].text, ru.success, 'nothing in the catalog fits yet');
+    assert.equal(step.last.text, ru.noMatchesYet);
+    assert.deepEqual(callbacksOf(step.last.markup), ['catalog:all:0'], 'the whole catalog is one tap away');
     const [inquiry] = chat.inquiries;
     assert.equal(inquiry.type, 'selection');
     assert.deepEqual(inquiry.selection, { deal: 'Покупка', type: 'Дом или вилла', location: 'Марбелья, у моря', budget: 'до 600 000 €', bedrooms: '3 спальни' });
@@ -512,5 +518,68 @@ test.describe('interrupted forms', () => {
     assert.match(step.last.text, new RegExp('^' + VIEWING.ru.review));
     await chat.say(VIEWING.ru.confirm);
     assert.equal(chat.inquiries.length, 1);
+  });
+});
+
+// --- Property card -------------------------------------------------------------
+
+test.describe('property card', () => {
+  function furnish(record) {
+    Object.assign(record, {
+      dealType: 'sale',
+      propertyType: 'villa',
+      priceValue: 850000,
+      currency: 'EUR',
+      bedrooms: 4,
+      city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' },
+      district: { ru: 'Сьерра-Бланка', en: 'Sierra Blanca', es: 'Sierra Blanca' },
+      address: { ru: 'Calle Sol 5, Марбелья', en: 'Calle Sol 5, Marbella', es: 'Calle Sol 5, Marbella' },
+      description: {
+        ru: 'Светлая вилла с видом на море и большим садом.\n\n• Бассейн\n• Гараж на две машины\n\nРядом школы и магазины.',
+        en: 'A bright villa.', es: 'Una villa luminosa.',
+      },
+    });
+  }
+
+  test('the card is short and leads to a viewing', async () => {
+    furnish(bot.getData().objects[0]);
+    const chat = createChat();
+    const step = await chat.say(MENU.ru.objects);
+    const card = step.calls.find((call) => call.method === 'sendPhoto');
+    const caption = card.body.caption;
+    assert.match(caption, /💰 850\s000 €/, 'the currency is a symbol');
+    assert.match(caption, /📍 Марбелья, Сьерра-Бланка\n/, 'city and district only');
+    assert.ok(!caption.includes('Calle Sol'), 'the address is in Details');
+    assert.ok(!caption.includes('VILLA-MARBELLA-01'), 'the reference is in Details');
+    assert.ok(caption.endsWith('Светлая вилла с видом на море и большим садом.'), 'only the first paragraph');
+
+    const rows = card.body.reply_markup.inline_keyboard;
+    assert.deepEqual(rows[0].map((button) => button.callback_data), ['property:viewing:villa-marbella-01']);
+    assert.deepEqual(rows[1].map((button) => button.callback_data), ['property:details:villa-marbella-01', 'property:favorite:villa-marbella-01']);
+
+    const details = await chat.press('property:details:villa-marbella-01');
+    const full = details.replies.map((reply) => reply.text).join('\n');
+    assert.match(full, /📍 Сьерра-Бланка, Calle Sol 5, Марбелья/, 'the city is not repeated when the address names it');
+    assert.match(full, /VILLA-MARBELLA-01/);
+    assert.match(full, /• Гараж на две машины/);
+  });
+
+  test('a reserved property has no viewing button on the card', async () => {
+    const chat = createChat();
+    await chat.say(MENU.ru.objects);
+    const step = await chat.press('catalog:all:1');
+    const card = step.calls.find((call) => call.method === 'editMessageMedia' || call.method === 'sendPhoto');
+    const callbacks = callbacksOf(card.body.reply_markup);
+    assert.ok(callbacks.includes('property:details:flat-reserved-02'));
+    assert.ok(!callbacks.some((value) => value.startsWith('property:viewing:')));
+  });
+
+  test('the main menu has four short rows and still understands the old buttons', async () => {
+    const chat = createChat();
+    const step = await chat.say('/menu');
+    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 2, 2, 1]);
+    assert.ok(step.last.buttons.includes(MENU.ru.request), '«Call me back» is on the main keyboard');
+    const old = await chat.say('📞 Заказать звонок');
+    assert.equal(old.last.text, LEAD.ru.askName);
   });
 });

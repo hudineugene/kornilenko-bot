@@ -219,7 +219,7 @@ test.describe('admin', () => {
       'Новых обращений: 2',
       '',
       'Открывали разделы:',
-      '• Наши объекты — 4',
+      '• Объекты — 4',
       '• Акции — 1',
     ].join('\n'));
     assert.deepEqual(adminMessages().map((message) => message.text), [digest]);

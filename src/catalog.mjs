@@ -79,9 +79,14 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     const isFavorite = Boolean(user && Array.isArray(user.favorites) && user.favorites.includes(record.id));
     // Without a price the shortest path to a request is asking for it.
     if (priceOnRequest(record, language)) rows.push([{ text: '💰 ' + action.askPrice, callback_data: 'property:price:' + record.id }]);
-    rows.push([{ text: '📋 ' + action.details, callback_data: 'property:details:' + record.id }]);
+    // A viewing is what an agency wants from a card; a reserved property
+    // keeps "Check availability" in Details instead.
+    if (record.status === 'active') rows.push([{ text: '📅 ' + action.viewing, callback_data: 'property:viewing:' + record.id }]);
+    rows.push([
+      { text: '📋 ' + action.details, callback_data: 'property:details:' + record.id },
+      { text: isFavorite ? '💔 ' + action.cardFavoriteRemove : '❤️ ' + action.cardFavorite, callback_data: 'property:favorite:' + record.id },
+    ]);
     rows.push([{ text: '💬 ' + action.contactManager, callback_data: 'property:manager:' + record.id }]);
-    rows.push([{ text: isFavorite ? '💔 ' + action.favoriteRemoveButton : '❤️ ' + action.favoriteButton, callback_data: 'property:favorite:' + record.id }]);
   }
   const url = validHttpUrl(record.url);
   if (kind !== 'property' && url) {
@@ -122,6 +127,8 @@ function numericText(value) {
   return Number.isFinite(number) && number > 0 ? String(number).replace(/\.0+$/, '') : '';
 }
 
+const CURRENCY_SYMBOLS = { EUR: '€', USD: '$', GBP: '£' };
+
 function objectPriceText(record, language) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const priceValue = Number(record.priceValue);
@@ -133,7 +140,8 @@ function objectPriceText(record, language) {
       : record.pricePeriod === 'week'
         ? copy.priceWeek
         : '';
-    return [formatted, cleanText(record.currency, 10) || 'EUR', period].filter(Boolean).join(' ');
+    const currency = cleanText(record.currency, 10) || 'EUR';
+    return [formatted, CURRENCY_SYMBOLS[currency.toUpperCase()] || currency, period].filter(Boolean).join(' ');
   }
   return localizedExact(record.price, language, 120) || copy.priceOnRequest;
 }
@@ -144,6 +152,22 @@ function shortenedText(value, maximum) {
   const slice = text.slice(0, maximum + 1);
   const boundary = Math.max(slice.lastIndexOf('. '), slice.lastIndexOf(' '));
   return slice.slice(0, boundary > Math.floor(maximum * 0.65) ? boundary + (slice[boundary] === '.' ? 1 : 0) : maximum).trimEnd() + '…';
+}
+
+// The card shows the first paragraph of the description; bullet lists and
+// the rest are in Details.
+function descriptionTeaser(description) {
+  const paragraph = String(description || '').split('\n')
+    .map((line) => line.trim())
+    .find((line) => line && !/^[-–—•*·▪✓✔✅☑🔹🔸]/u.test(line)) || '';
+  return shortenedText(paragraph, 150);
+}
+
+// "Benidorm, Levante, Calle X 5, Benidorm" → the city is not repeated when
+// the address already names it.
+function locationText(parts, address) {
+  const lower = address.toLowerCase();
+  return parts.filter((part) => part && !(address && lower.includes(part.toLowerCase()))).concat(address ? [address] : []).join(', ');
 }
 
 function objectCaption(record, language, options = {}) {
@@ -157,7 +181,8 @@ function objectCaption(record, language, options = {}) {
   const deal = record.dealType === 'rent'
     ? copy.forRent
     : copy.forSale;
-  const location = [localizedExact(record.city, language, 160), localizedExact(record.district, language, 160), address].filter(Boolean).join(', ');
+  const place = [localizedExact(record.city, language, 160), localizedExact(record.district, language, 160)];
+  const location = full ? locationText(place, address) : place.filter(Boolean).join(', ');
   const badgeNames = record.badges instanceof Array
     ? record.badges.map((badge) => (PROPERTY_BADGE_LABELS[language] || PROPERTY_BADGE_LABELS.ru)[badge]).filter(Boolean)
     : [];
@@ -180,11 +205,16 @@ function objectCaption(record, language, options = {}) {
   if (price) lines.push('💰 ' + price);
   if (location) lines.push('📍 ' + location);
   if (specs.length) lines.push(specs.join('  ·  '));
+  if (!full) {
+    const teaser = descriptionTeaser(description);
+    if (teaser) lines.push('', teaser);
+    return lines.filter((line, index) => line !== '' || index > 0).join('\n').slice(0, 900);
+  }
   if (record.condition && (PROPERTY_CONDITION_LABELS[language] || PROPERTY_CONDITION_LABELS.ru)[record.condition]) {
     lines.push('🔑 ' + (PROPERTY_CONDITION_LABELS[language] || PROPERTY_CONDITION_LABELS.ru)[record.condition]);
   }
   if (record.reference) lines.push(copy.reference + ' ' + cleanText(record.reference, 80));
-  if (description) lines.push('', full ? description : shortenedText(description, 280));
+  if (description) lines.push('', description);
   if (full && record.updatedAt) {
     const date = new Date(record.updatedAt);
     if (Number.isFinite(date.getTime())) {

@@ -2,8 +2,9 @@
 
 import crypto from 'node:crypto';
 import { cleanText, clone } from './util.mjs';
+import { INTERFACE_TEXT_DEFAULTS } from './texts.mjs';
 
-const DATA_VERSION = 16;
+const DATA_VERSION = 17;
 // 0 turns reminders about unanswered inquiries off.
 const REMINDER_HOUR_OPTIONS = [0, 1, 2, 4, 8, 24];
 
@@ -18,17 +19,17 @@ const defaultData = {
     messages: {
       ru: {
         greeting: 'Здравствуйте, {first_name}! Рад вас видеть. Чем могу помочь?',
-        help: '👋 Чем я могу помочь?\n\n🏘 Наши объекты — посмотреть недвижимость\n✨ Помогите подобрать объект — оставить пожелания менеджеру\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — посмотреть специальные предложения\n💬 Связаться с менеджером — задать вопрос или заказать звонок\n☰ Ещё — открыть информацию о компании и помощь\n🌐 Сменить язык — выбрать другой язык\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
+        help: '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — специальные предложения\n📞 Позвоните мне — менеджер перезвонит в удобное время\n💬 Менеджер — задать вопрос, позвонить или написать в WhatsApp\n☰ Ещё — мои заявки, уведомления, о компании, смена языка\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
         fallback: 'Спасибо! Сообщение получено. Менеджер ответит в этом чате.',
       },
       en: {
         greeting: 'Hello, {first_name}! Glad to see you. How can I help?',
-        help: '👋 How can I help?\n\n🏘 Our properties — browse available real estate\n✨ Help me find a property — send your preferences to a manager\n❤️ Favorites — return to saved properties\n🔥 Offers — view current promotions\n💬 Contact a manager — ask a question or request a call\n☰ More — open company information and help\n🌐 Change language — select another language\n\nYou can also send a regular message. A manager will reply in this chat.',
+        help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n❤️ Favorites — return to saved properties\n🔥 Offers — current promotions\n📞 Call me back — a manager will call you at a convenient time\n💬 Manager — ask a question, call or write on WhatsApp\n☰ More — my requests, notifications, about us, language\n\nYou can also send a regular message. A manager will reply in this chat.',
         fallback: 'Thank you! Your message has been received. A manager will reply in this chat.',
       },
       es: {
         greeting: '¡Hola, {first_name}! Me alegra verte. ¿Cómo puedo ayudarte?',
-        help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Nuestros inmuebles — ver las propiedades disponibles\n✨ Ayúdame a elegir — enviar tus preferencias a un gestor\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — consultar las ofertas actuales\n💬 Contactar con un gestor — hacer una pregunta o solicitar una llamada\n☰ Más — abrir la información de la empresa y la ayuda\n🌐 Cambiar idioma — seleccionar otro idioma\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
+        help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — ofertas actuales\n📞 Llámame — un gestor te llamará cuando te venga bien\n💬 Gestor — hacer una pregunta, llamar o escribir por WhatsApp\n☰ Más — mis solicitudes, avisos, la empresa, idioma\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
         fallback: '¡Gracias! Hemos recibido tu mensaje. Un gestor responderá en este chat.',
       },
     },
@@ -202,6 +203,36 @@ function migrateSelectionSteps(interfaceText) {
     for (const [key, step] of Object.entries(SELECTION_STEP_NUMBERS)) {
       if (typeof texts[key] !== 'string') continue;
       texts[key] = texts[key].replace(/^\s*[1-4]\s+(из|of|de)\s+4\./u, (match, word) => step + ' ' + word + ' 5.');
+    }
+  }
+}
+
+// Version 17 shortened the main menu buttons and moved "Call me back" onto
+// the main keyboard. Saved labels and help texts (the defaults are stored
+// too) that still equal the old defaults get the new ones; wording the
+// administrator changed is kept.
+const PREVIOUS_MENU_DEFAULTS = {
+  ru: { objects: '🏘 Наши объекты', selection: '✨ Помогите подобрать объект', contacts: '💬 Связаться с менеджером', request: '📞 Заказать звонок' },
+  en: { objects: '🏘 Our properties', selection: '✨ Help me find a property', contacts: '💬 Contact a manager', request: '📞 Request a call' },
+  es: { objects: '🏘 Nuestros inmuebles', selection: '✨ Ayúdame a elegir', contacts: '💬 Contactar con un gestor', request: '📞 Solicitar una llamada' },
+};
+const PREVIOUS_HELP_DEFAULTS = {
+  ru: '👋 Чем я могу помочь?\n\n🏘 Наши объекты — посмотреть недвижимость\n✨ Помогите подобрать объект — оставить пожелания менеджеру\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — посмотреть специальные предложения\n💬 Связаться с менеджером — задать вопрос или заказать звонок\n☰ Ещё — открыть информацию о компании и помощь\n🌐 Сменить язык — выбрать другой язык\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
+  en: '👋 How can I help?\n\n🏘 Our properties — browse available real estate\n✨ Help me find a property — send your preferences to a manager\n❤️ Favorites — return to saved properties\n🔥 Offers — view current promotions\n💬 Contact a manager — ask a question or request a call\n☰ More — open company information and help\n🌐 Change language — select another language\n\nYou can also send a regular message. A manager will reply in this chat.',
+  es: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Nuestros inmuebles — ver las propiedades disponibles\n✨ Ayúdame a elegir — enviar tus preferencias a un gestor\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — consultar las ofertas actuales\n💬 Contactar con un gestor — hacer una pregunta o solicitar una llamada\n☰ Más — abrir la información de la empresa y la ayuda\n🌐 Cambiar idioma — seleccionar otro idioma\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
+};
+
+function migrateShortMenu(interfaceText, messages) {
+  const labels = interfaceText && interfaceText.menuLabels;
+  for (const language of ['ru', 'en', 'es']) {
+    const saved = labels && labels[language];
+    if (saved && typeof saved === 'object') {
+      for (const [key, previous] of Object.entries(PREVIOUS_MENU_DEFAULTS[language])) {
+        if (saved[key] === previous) saved[key] = INTERFACE_TEXT_DEFAULTS.menuLabels[language][key];
+      }
+    }
+    if (messages && messages[language] && messages[language].help === PREVIOUS_HELP_DEFAULTS[language]) {
+      messages[language].help = defaultData.config.messages[language].help;
     }
   }
 }
@@ -589,6 +620,7 @@ function normalizeLoadedData(parsed) {
     // daily digest instead of one message per click.
     if (storedVersion < 15) normalized.config.notifyMode = 'inquiries';
     if (storedVersion < 16) migrateSelectionSteps(normalized.interfaceText);
+    if (storedVersion < 17) migrateShortMenu(normalized.interfaceText, normalized.config.messages);
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
     normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
@@ -622,6 +654,8 @@ export {
   managerTerminology,
   migrateDefaultTexts,
   migrateSelectionSteps,
+  migrateShortMenu,
+  PREVIOUS_HELP_DEFAULTS,
   normalizeAdminReplyTargets,
   normalizeCalculator,
   normalizeManagers,

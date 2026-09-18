@@ -51,7 +51,7 @@ test.describe('language from Telegram', () => {
     assert.equal(client.user.preferredLanguage, 'ru');
     assert.equal(sent.length, 1);
     assert.match(sent[0].body.text, /^Здравствуйте, Новый!/);
-    assert.ok(buttonsOf(sent[0].body.reply_markup).includes(MENU.ru.language), 'the language can still be changed');
+    assert.ok(buttonsOf(sent[0].body.reply_markup).includes(MENU.ru.more), 'the language can still be changed in «More»');
   });
 
   test('regional codes such as en-US count as English', async () => {
@@ -212,7 +212,7 @@ test.describe('property alerts', () => {
     const deliveries = bot.propertyAlertDeliveries(record, { status: 'active', priceValue: 500000 });
     assert.deepEqual(deliveries.map((delivery) => delivery.user.id), [fan.id], 'opted out, blocked and clients without a card in their language are skipped');
     assert.match(deliveries[0].heading, new RegExp('^' + ALERTS.ru.priceDrop));
-    assert.match(deliveries[0].heading, /500\s000 EUR → 450\s000 EUR/);
+    assert.match(deliveries[0].heading, /500\s000 € → 450\s000 €/);
 
     telegram.calls = [];
     assert.equal(await bot.deliverPropertyAlerts(deliveries, TOKEN), 1);

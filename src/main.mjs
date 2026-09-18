@@ -5,14 +5,14 @@
 
 import './config.mjs';
 import { hashPassword } from './util.mjs';
-import { normalizeLoadedData } from './data-format.mjs';
+import { PREVIOUS_HELP_DEFAULTS, normalizeLoadedData } from './data-format.mjs';
 import { contentAddressImages, persistImage, referencedImageFiles } from './media.mjs';
 import { CATALOG_FILTER_TEXT, COMMAND_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, MENU_LABELS, PROPERTY_ACTION_TEXT, PROPERTY_ALERT_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { getData, loadData, replaceData, restoreMissingMedia, runDailyBackup, runtime, saveDataNow } from './store.mjs';
 import './analytics.mjs';
 import { leadSourceFromPayload, normalizeUser, rebuildUserIndex, userByChatId, userById } from './users.mjs';
 import { splitTelegramText, telegramRequest } from './telegram.mjs';
-import './menus.mjs';
+import { menuItemForText } from './menus.mjs';
 import { formReminderDue, runFormReminders, viewingDateValue } from './forms.mjs';
 import { createInquiry } from './inquiries.mjs';
 import { catalogFilterPanel, catalogRecords } from './catalog.mjs';
@@ -83,6 +83,7 @@ export {
   leadSourceFromPayload,
   loadData,
   loginAttempts,
+  menuItemForText,
   monthlyPayment,
   myRequestsView,
   normalizeLoadedData,
@@ -92,6 +93,7 @@ export {
   parseXml,
   planImport,
   planSummary,
+  PREVIOUS_HELP_DEFAULTS as previousHelpDefaults,
   propertyTypeOf,
   publicAddress,
   readFeed,
