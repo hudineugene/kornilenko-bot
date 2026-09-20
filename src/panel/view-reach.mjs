@@ -139,6 +139,21 @@ function connectGroupCard(compact) {
 }
 
 // Плашка рубрики и постоянная подпись — общие для всех групп и каналов.
+// [Надпись](ссылка) → кликабельная надпись в Telegram. В предпросмотре
+// показываем её же подчёркнутой.
+function linkedPreview(text) {
+  var pattern = /\[([^\]\n]{1,120})\]\((https?:\/\/[^\s()<>"']{4,500})\)/g;
+  var out = "";
+  var last = 0;
+  var match;
+  while ((match = pattern.exec(String(text || "")))) {
+    out += esc(String(text).slice(last, match.index));
+    out += '<a href="' + esc(match[2]) + '" target="_blank" rel="noreferrer">' + esc(match[1]) + "</a>";
+    last = match.index + match[0].length;
+  }
+  return out + esc(String(text || "").slice(last));
+}
+
 function publishing() {
   return state.publishing || { signature: "", signatureEnabled: true, rubrics: [] };
 }
@@ -191,7 +206,7 @@ function signatureNote() {
     ? current.signature
     : lines.join(current.signatureWrap === "dot" ? " · " : " ");
   return '<div class="field"><span class="field-label">Подпись под постом</span>' +
-    '<div class="msg small">' + esc(shown) + "</div>" +
+    '<div class="msg small">' + linkedPreview(shown) + "</div>" +
     '<label class="check"><input type="checkbox" id="groupNoSignature"> этот пост без подписи</label></div>';
 }
 
@@ -259,6 +274,7 @@ function renderGroupCard(host, group) {
     '<div class="split"><div class="stack">' +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Опубликовать в канале" : "Написать в группу") + '</h3></header><div class="card-body stack">' +
         '<textarea id="groupText" placeholder="' + (group.type === "channel" ? "Текст поста от имени канала" : "Текст сообщения от имени бота") + '" style="min-height:110px"></textarea>' +
+        '<div class="hint">Ссылка надписью: <code>[смотреть объекты](https://t.me/…)</code></div>' +
         '<div class="grid cols-2"><div class="field"><label for="groupButtonText">Кнопка (необязательно)</label><input id="groupButtonText" placeholder="Смотреть объекты"></div>' +
         '<div class="field"><label for="groupButtonUrl">Ссылка кнопки</label><input id="groupButtonUrl" placeholder="https://t.me/…"></div></div>' +
         '<div class="grid cols-2"><div class="field"><label for="groupImage">Фото</label><input id="groupImage" type="file" accept="image/jpeg,image/png"></div>' +
@@ -456,6 +472,7 @@ function renderPostStyle(host) {
           '<option value="space"' + (draft.signatureWrap === "space" ? " selected" : "") + '>одной строкой (перенос по ширине)</option>' +
           '<option value="dot"' + (draft.signatureWrap === "dot" ? " selected" : "") + '>одной строкой через «·»</option>' +
         "</select></div>" +
+        '<div class="hint">Ссылка надписью: <code>[ТикТок](https://tiktok.com/@ваш_аккаунт)</code> — в Telegram будет кликабельное слово «ТикТок». Так же можно сделать ссылкой значок: <code>[🎵](https://…)</code>.</div>' +
         '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div></div>' +
         '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
       "</div></div>" +
@@ -482,7 +499,7 @@ function renderPostStyle(host) {
     var preview = function () {
       var lines = String(draft.signature || "").split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
       var text = draft.signatureWrap === "keep" ? draft.signature : lines.join(draft.signatureWrap === "dot" ? " · " : " ");
-      host.querySelector("#signPreview").textContent = draft.signatureEnabled ? (text || "подпись пуста") : "подпись выключена";
+      host.querySelector("#signPreview").innerHTML = draft.signatureEnabled ? (linkedPreview(text) || "подпись пуста") : "подпись выключена";
     };
     host.querySelector("#signText").oninput = function (event) { draft.signature = event.target.value; preview(); };
     host.querySelector("#signWrap").onchange = function (event) { draft.signatureWrap = event.target.value; preview(); };

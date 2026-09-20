@@ -193,6 +193,36 @@ async function fetchAdministrators(group, token = data.config.botToken) {
   }));
 }
 
+// В панели ссылку пишут как [ТикТок](https://…). Для Telegram это
+// превращается в HTML, а весь остальной текст экранируется.
+const LINK_PATTERN = /\[([^\]\n]{1,120})\]\((https?:\/\/[^\s()<>"']{4,500})\)/g;
+
+function escapeHtml(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Возвращает готовый HTML и тот же текст без разметки — по нему считаются
+// ограничения Telegram на длину подписи.
+function formatLinks(text) {
+  const source = String(text || '');
+  let html = '';
+  let plain = '';
+  let last = 0;
+  let links = 0;
+  for (const match of source.matchAll(LINK_PATTERN)) {
+    const before = source.slice(last, match.index);
+    html += escapeHtml(before);
+    plain += before;
+    html += '<a href="' + escapeHtml(match[2]) + '">' + escapeHtml(match[1]) + '</a>';
+    plain += match[1];
+    last = match.index + match[0].length;
+    links += 1;
+  }
+  html += escapeHtml(source.slice(last));
+  plain += source.slice(last);
+  return { html, plain, links };
+}
+
 // Текст поста: то, что набрали, плюс постоянная подпись под ним.
 // Telegram переносит текст по ширине экрана сам, а набранные в панели
 // переносы остаются жёсткими. «Одной строкой» убирает их, чтобы подпись
@@ -241,7 +271,13 @@ function rememberOwnMessage(group, messageId, text, kind) {
 const CAPTION_LIMIT = 1024;
 
 async function postToGroup(group, post, token = data.config.botToken) {
-  const text = postText(post);
+  const written = postText(post);
+  const formatted = formatLinks(written);
+  // Разметка нужна только когда в тексте есть ссылки-надписи.
+  const useHtml = formatted.links > 0 && formatted.html.length <= 4000;
+  const text = useHtml ? formatted.html : written;
+  const plain = useHtml ? formatted.plain : written;
+  const parseMode = useHtml ? 'HTML' : undefined;
   const url = validHttpUrl(post.buttonUrl);
   const buttonText = cleanText(post.buttonText, 64);
   const markup = url && buttonText ? { inline_keyboard: [[{ text: buttonText, url }]] } : null;
@@ -250,25 +286,25 @@ async function postToGroup(group, post, token = data.config.botToken) {
   const topImage = ownImage || (rubric && rubric.placement === 'top' ? rubric.image : null);
   // Плашка внизу одним сообщением: текст ставится над картинкой. Так можно,
   // только если фотографии поста нет и текст помещается в подпись.
-  const plateInside = Boolean(rubric) && rubric.placement === 'bottom' && !ownImage && text && text.length <= CAPTION_LIMIT;
+  const plateInside = Boolean(rubric) && rubric.placement === 'bottom' && !ownImage && text && plain.length <= CAPTION_LIMIT;
   let sent;
   let plateSentInside = false;
   if (plateInside) {
-    sent = await sendPhotoMessage(group.id, rubric.image, text, token, markup, { captionAbove: true });
+    sent = await sendPhotoMessage(group.id, rubric.image, text, token, markup, { captionAbove: true, parseMode });
     plateSentInside = true;
   } else if (topImage) {
-    if (text && text.length <= CAPTION_LIMIT) {
-      sent = await sendPhotoMessage(group.id, topImage, text, token, markup);
+    if (text && plain.length <= CAPTION_LIMIT) {
+      sent = await sendPhotoMessage(group.id, topImage, text, token, markup, { parseMode });
     } else {
       sent = await sendPhotoMessage(group.id, topImage, '', token, null);
-      if (text) await sendMessage(group.id, text, token, { track: false, ...(markup ? { reply_markup: markup } : {}) });
+      if (text) await sendMessage(group.id, text, token, { track: false, ...(parseMode ? { parse_mode: parseMode } : {}), ...(markup ? { reply_markup: markup } : {}) });
     }
   } else {
     if (!text) throw new Error('Сообщение пустое');
-    sent = await sendMessage(group.id, text, token, { track: false, ...(markup ? { reply_markup: markup } : {}) });
+    sent = await sendMessage(group.id, text, token, { track: false, ...(parseMode ? { parse_mode: parseMode } : {}), ...(markup ? { reply_markup: markup } : {}) });
   }
   const messageId = sent && Number(sent.message_id);
-  rememberOwnMessage(group, messageId, text, topImage || plateSentInside ? 'photo' : 'text');
+  rememberOwnMessage(group, messageId, plain, topImage || plateSentInside ? 'photo' : 'text');
   // Длинный пост или своё фото: плашка уходит отдельным сообщением следом.
   if (rubric && rubric.placement !== 'top' && !plateSentInside) {
     const plate = await sendPhotoMessage(group.id, rubric.image, '', token, null).catch((error) => {
@@ -355,6 +391,7 @@ export {
   handleChatJoinRequest,
   handleMyChatMember,
   newGroupPost,
+  formatLinks,
   postText,
   postToGroup,
   signatureText,

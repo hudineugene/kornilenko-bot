@@ -363,3 +363,28 @@ test('рубрика «отдельным сообщением» не сжима
   assert.ok(plateCall && telegram.calls.indexOf(plateCall) > telegram.calls.indexOf(text), 'плашка следом');
   assert.equal(plateCall.body.show_caption_above_media, undefined);
 });
+
+test('надпись со ссылкой в подписи уходит кликабельной', async () => {
+  const group = await addBotAsAdmin();
+  const data = bot.getData();
+  data.config.publishing = {
+    signature: 'Мы в [ТикТок](https://tiktok.com/@kornilenko) · [сайт](https://kornilenko.es)',
+    signatureEnabled: true,
+    signatureWrap: 'keep',
+    rubrics: [],
+  };
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост <про> дом & сад' }, TOKEN);
+  const sent = telegram.calls.find((call) => call.method === 'sendMessage');
+  assert.equal(sent.body.parse_mode, 'HTML');
+  assert.match(sent.body.text, /<a href="https:\/\/tiktok\.com\/@kornilenko">ТикТок<\/a>/);
+  assert.match(sent.body.text, /Пост &lt;про&gt; дом &amp; сад/, 'остальной текст экранирован');
+
+  // Без ссылок разметка не включается — текст уходит как есть.
+  data.config.publishing.signature = 'Просто подпись';
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Текст <как есть>' }, TOKEN);
+  const plain = telegram.calls.find((call) => call.method === 'sendMessage');
+  assert.equal(plain.body.parse_mode, undefined);
+  assert.equal(plain.body.text, 'Текст <как есть>\n\nПросто подпись');
+});

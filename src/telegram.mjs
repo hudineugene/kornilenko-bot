@@ -158,6 +158,7 @@ function forgetTelegramFileIds(root) {
 async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, options = {}) {
   let result;
   const captionAbove = options.captionAbove ? true : undefined;
+  const parseMode = options.parseMode || undefined;
   const fileId = knownFileId(image);
   if (fileId) {
     try {
@@ -165,6 +166,7 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
         chat_id: chatId,
         photo: fileId,
         caption: caption || undefined,
+        parse_mode: parseMode,
         show_caption_above_media: captionAbove,
         reply_markup: replyMarkup,
       });
@@ -178,6 +180,7 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
       chat_id: String(chatId),
       photo: new Blob([bytes], { type: image.mimeType }),
       caption: caption || undefined,
+      parse_mode: parseMode,
       show_caption_above_media: captionAbove,
       reply_markup: replyMarkup,
     });
