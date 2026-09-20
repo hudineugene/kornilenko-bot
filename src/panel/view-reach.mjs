@@ -313,6 +313,8 @@ function renderGroupCard(host, group) {
         '<div class="grow"></div><button class="btn secondary" id="groupPreview" type="button">Себе для проверки</button>' +
         '<button class="btn" id="groupSend" type="button">Отправить</button></div>' +
       "</div></div>" +
+      '<div class="card"><header><h3>Предпросмотр</h3><div class="actions"><span class="small faint">так увидят подписчики</span></div></header>' +
+        '<div class="card-body"><div class="tg-preview" id="postPreview"></div></div></div>' +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small faint">историю Telegram не отдаёт</span></div></header>' +
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
@@ -351,15 +353,112 @@ function renderGroupCard(host, group) {
 
   var base = "/api/groups/" + encodeURIComponent(group.id);
   var image = null;
+  var previewImage = "";
   host.querySelector("#groupImage").onchange = function (event) {
     var file = event.target.files && event.target.files[0];
     if (!file) return;
     var reader = new FileReader();
-    reader.onload = function () { image = reader.result; };
+    reader.onload = function () {
+      image = reader.result;
+      previewImage = reader.result;
+      updatePreview();
+    };
     reader.readAsDataURL(file);
   };
   bindRubricPicker(host);
   bindMarkupToolbar(host);
+
+  // Предпросмотр повторяет правила отправки: подпись, плашка, кнопки.
+  function previewState() {
+    var current = publishing();
+    var lines = String(current.signature || "").split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
+    var signature = !current.signatureEnabled || (host.querySelector("#groupNoSignature") && host.querySelector("#groupNoSignature").checked)
+      ? ""
+      : current.signatureWrap === "keep" || !current.signatureWrap
+        ? current.signature
+        : lines.join(current.signatureWrap === "dot" ? " · " : " ");
+    var dividers = { thin: "─────────────────────", bold: "━━━━━━━━━━━━━━━━━━", dash: "- - - - - - - - - - - - - - - -", dots: "· · · · · · · · · · · · · · · ·" };
+    var divider = signature ? dividers[current.signatureDivider] : "";
+    var rubric = (current.rubrics || []).find(function (item) { return item.id === ((host.querySelector("#groupRubric") || {}).value || ""); });
+    return {
+      body: host.querySelector("#groupText").value,
+      signature: signature,
+      divider: divider,
+      quote: Boolean(current.signatureQuote),
+      rubric: rubric || null,
+      ownImage: previewImage,
+      buttonText: host.querySelector("#groupButtonText").value.trim(),
+      buttonUrl: host.querySelector("#groupButtonUrl").value.trim(),
+      permanent: (current.buttons || []).filter(function (button) { return button.text; }),
+      perRow: current.buttonsPerRow || 3,
+    };
+  }
+
+  function bubble(imageHtml, textHtml, imageBelow) {
+    if (!imageHtml && !textHtml) return "";
+    return '<div class="tg-bubble">' + (imageBelow ? textHtml + imageHtml : imageHtml + textHtml) + "</div>";
+  }
+
+  function updatePreview() {
+    var view = previewState();
+    var box = host.querySelector("#postPreview");
+    if (!box) return;
+    var plain = [view.body, [view.divider, view.signature].filter(Boolean).join("\n")].filter(Boolean).join("\n\n");
+    if (!plain && !view.ownImage && !view.rubric) {
+      box.innerHTML = '<span class="tg-note">Наберите текст — здесь появится готовое сообщение.</span>';
+      return;
+    }
+    var signatureHtml = view.signature
+      ? '<div class="' + (view.quote ? "tg-quote" : "") + '" ' + (view.quote ? "" : 'style="margin-top:8px"') + ">" +
+        (view.divider ? esc(view.divider) + "\n" : "") + linkedPreview(view.signature) + "</div>"
+      : "";
+    var textHtml = (view.body || signatureHtml)
+      ? '<div class="tg-text">' + linkedPreview(view.body) + signatureHtml + "</div>"
+      : "";
+    var plateUrl = view.rubric ? "/api/media/rubrics/" + encodeURIComponent(view.rubric.id) : "";
+    var plateHtml = plateUrl ? '<img src="' + plateUrl + '" alt="">' : "";
+    var ownHtml = view.ownImage ? '<img src="' + view.ownImage + '" alt="">' : "";
+    var placement = view.rubric ? view.rubric.placement || "bottom" : "";
+    var plateInside = placement === "bottom" && !view.ownImage && plain && plain.length <= 1024;
+    var html = "";
+    var note = "";
+    if (plateInside) {
+      html += bubble(plateHtml, textHtml, true);
+    } else if (view.ownImage || placement === "top") {
+      html += bubble(view.ownImage ? ownHtml : plateHtml, textHtml, false);
+      if (plain.length > 1024) note = "Текст длиннее 1024 знаков — он уйдёт отдельным сообщением под картинкой.";
+    } else {
+      html += bubble("", textHtml, false);
+    }
+    if (view.rubric && placement !== "top" && !plateInside) {
+      html += bubble(plateHtml, "", false);
+      note = note || (placement === "separate" ? "Плашка уходит сообщением сразу за постом." : "Плашка не помещается внутрь сообщения и уйдёт следом.");
+    }
+    var rows = [];
+    if (view.buttonText && view.buttonUrl) rows.push([view.buttonText]);
+    var row = [];
+    view.permanent.forEach(function (button) {
+      row.push(button.text);
+      if (row.length >= view.perRow) {
+        rows.push(row);
+        row = [];
+      }
+    });
+    if (row.length) rows.push(row);
+    if (rows.length) {
+      html += '<div class="tg-buttons">' + rows.map(function (buttons) {
+        return '<div class="row">' + buttons.map(function (text) { return '<span class="tg-button">' + esc(text) + "</span>"; }).join("") + "</div>";
+      }).join("") + "</div>";
+    }
+    box.innerHTML = html + (note ? '<span class="tg-note">' + esc(note) + "</span>" : "");
+  }
+
+  host.querySelector("#groupText").addEventListener("input", updatePreview);
+  host.querySelector("#groupButtonText").addEventListener("input", updatePreview);
+  host.querySelector("#groupButtonUrl").addEventListener("input", updatePreview);
+  if (host.querySelector("#groupRubric")) host.querySelector("#groupRubric").addEventListener("change", updatePreview);
+  if (host.querySelector("#groupNoSignature")) host.querySelector("#groupNoSignature").addEventListener("change", updatePreview);
+  updatePreview();
   function postPayload() {
     var when = host.querySelector("#groupWhen").value;
     return {

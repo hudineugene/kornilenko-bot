@@ -138,6 +138,17 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .msg{padding:8px 10px;border-radius:9px;background:var(--surface-soft);border:1px solid var(--line-soft);font-size:13px;white-space:pre-wrap;word-break:break-word}
 .msg.out{background:var(--brand-soft);border-color:#c7d7fe}
 .msg-meta{font-size:11px;color:var(--faint);margin-top:3px}
+/* Предпросмотр сообщения так, как его покажет Telegram */
+.tg-preview{background:#e8ecf1;padding:12px;border-radius:10px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.tg-bubble{background:#fff;border-radius:12px;box-shadow:0 1px 2px rgba(16,24,40,.12);overflow:hidden;max-width:min(420px,100%);width:100%}
+.tg-bubble img{display:block;width:100%;height:auto}
+.tg-text{padding:9px 11px;font-size:13.5px;line-height:1.42;white-space:pre-wrap;word-break:break-word}
+.tg-text a{color:#2f6fd0}
+.tg-quote{border-left:3px solid #2f6fd0;padding-left:9px;margin-top:8px;color:#222}
+.tg-buttons{display:grid;gap:3px;margin-top:3px;width:100%;max-width:min(420px,100%)}
+.tg-buttons .row{gap:3px}
+.tg-button{flex:1;text-align:center;padding:7px 8px;border-radius:8px;background:#fff;color:#2f6fd0;font-size:12.5px;box-shadow:0 1px 2px rgba(16,24,40,.12);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg-note{font-size:11.5px;color:var(--muted)}
 .markup-bar{gap:3px;padding:4px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)}
 .markup-bar .btn{padding:3px 8px;min-width:30px}
 code{padding:1px 5px;border-radius:5px;background:var(--surface-soft);border:1px solid var(--line);font-size:11.5px}
