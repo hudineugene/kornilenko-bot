@@ -441,9 +441,35 @@ function renderGroupCard(host, group) {
 }
 
 // --- Оформление постов ------------------------------------------------------------
+// Telegram вписывает картинку в свой блок и, если она слишком широкая и
+// низкая, дополняет пустоту размытой копией. Дорисованные поля нужного цвета
+// убирают это размытие.
+var PLATE_RATIO = 3;
+
+function padPlate(dataUrl, color) {
+  return new Promise(function (resolve) {
+    var picture = new Image();
+    picture.onload = function () {
+      var width = picture.naturalWidth;
+      var height = Math.round(width / PLATE_RATIO);
+      if (picture.naturalHeight >= height) return resolve(dataUrl);
+      var canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      var ctx = canvas.getContext("2d");
+      ctx.fillStyle = color || "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(picture, 0, Math.round((height - picture.naturalHeight) / 2));
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    picture.onerror = function () { resolve(dataUrl); };
+    picture.src = dataUrl;
+  });
+}
+
 // Ширина картинки задаёт ширину текста под ней, поэтому о узкой плашке
 // лучше предупредить сразу.
-function checkPlateWidth(row, index) {
+function checkPlateWidth(row, index, onPad) {
   var picture = row.querySelector("img");
   if (!picture) return;
   var show = function () {
@@ -453,11 +479,23 @@ function checkPlateWidth(row, index) {
       note = document.createElement("span");
       note.className = "small";
       note.dataset.size = "1";
+      note.style.flexBasis = "100%";
       row.appendChild(note);
     }
+    var ratio = picture.naturalWidth / picture.naturalHeight;
     var narrow = picture.naturalWidth < 1000;
-    note.textContent = picture.naturalWidth + "×" + picture.naturalHeight + (narrow ? " — узкая: текст под ней будет сжат" : "");
-    note.style.color = narrow ? "var(--warn)" : "var(--faint)";
+    var flat = ratio > PLATE_RATIO;
+    note.innerHTML = picture.naturalWidth + "×" + picture.naturalHeight + " (" + ratio.toFixed(1) + ":1)" +
+      (narrow ? " — узкая: текст под ней будет сжат." : "") +
+      (flat ? ' — слишком вытянутая: Telegram добавит размытый фон сверху и снизу. <button class="btn ghost small" data-pad="' + index + '" type="button">Дорисовать фон</button><input type="color" data-padcolor="' + index + '" value="#ffffff" style="width:34px;height:24px;padding:0;vertical-align:middle">' : "");
+    note.style.color = narrow || flat ? "var(--warn)" : "var(--faint)";
+    var padButton = note.querySelector("[data-pad]");
+    if (padButton) {
+      padButton.onclick = function () {
+        var color = note.querySelector("[data-padcolor]").value;
+        padPlate(picture.src, color).then(function (padded) { onPad(index, padded); });
+      };
+    }
   };
   if (picture.complete) show();
   else picture.onload = show;
@@ -501,7 +539,7 @@ function renderPostStyle(host) {
         '<div class="field"><span class="field-label">Так будет выглядеть</span><div id="btnPreview" class="row wrap"></div></div>' +
       "</div></div>" +
       '<div class="card"><header><h3>Рубрики</h3><div class="actions"><button class="btn secondary small" id="addRubric" type="button">＋ Рубрика</button></div></header><div class="card-body stack">' +
-        '<p class="muted small">Плашка — картинка с названием рубрики.<br>' +
+        '<p class="muted small">Плашка — картинка с названием рубрики. Telegram вписывает её в свой блок: если картинка вытянута шире 3:1, он дополняет пустоту размытым фоном. Кнопка «Дорисовать фон» добавляет поля нужного цвета вместо размытия.<br>' +
           '<b>Внизу сообщения</b> — картинка внутри поста, текст над ней. Важно: у сообщения с картинкой ширина равна ширине картинки, поэтому узкая плашка сжимает текст. Делайте плашку шириной от 1280 точек.<br>' +
           '<b>Отдельным сообщением</b> — текст уходит обычным сообщением во всю ширину, плашка приходит сразу следом.<br>' +
           '<b>Над текстом</b> — плашка становится картинкой поста, текст под ней.</p>' +
@@ -531,9 +569,15 @@ function renderPostStyle(host) {
     host.querySelector("#signOn").onchange = function (event) { draft.signatureEnabled = event.target.checked; preview(); };
     var drawButtonPreview = function () {
       var box = host.querySelector("#btnPreview");
-      box.innerHTML = buttons.filter(function (button) { return button.text; }).map(function (button) {
-        return '<span class="chip brand" style="padding:6px 12px">' + esc(button.text) + "</span>";
-      }).join("") || '<span class="muted small">кнопок нет</span>';
+      var visible = buttons.filter(function (button) { return button.text; });
+      // На телефоне ряд делится поровну: длинная подпись обрезается многоточием.
+      var limit = perRow === 3 ? 10 : perRow === 2 ? 16 : 28;
+      var tooLong = visible.filter(function (button) { return [...button.text].length > limit; });
+      box.innerHTML = (visible.map(function (button) {
+        var long = [...button.text].length > limit;
+        return '<span class="chip ' + (long ? "warn" : "brand") + '" style="padding:6px 12px">' + esc(button.text) + "</span>";
+      }).join("") || '<span class="muted small">кнопок нет</span>') +
+        (tooLong.length ? '<div class="hint" style="flex-basis:100%;color:var(--warn)">При ' + perRow + ' кнопках в ряд на телефоне помещается около ' + limit + ' знаков — подписи длиннее обрежутся многоточием. Уменьшите число кнопок в ряд или сократите названия.</div>' : "");
     };
     drawButtonPreview();
     host.querySelectorAll("[data-button]").forEach(function (row) {
@@ -549,7 +593,7 @@ function renderPostStyle(host) {
         draw();
       };
     });
-    host.querySelector("#btnPerRow").onchange = function (event) { perRow = Number(event.target.value); };
+    host.querySelector("#btnPerRow").onchange = function (event) { perRow = Number(event.target.value); drawButtonPreview(); };
     host.querySelector("#addButton").onclick = function () {
       buttons.push({ text: "", url: "" });
       draw();
@@ -575,7 +619,10 @@ function renderPostStyle(host) {
         reader.onload = function () { pendingImages[index] = reader.result; draw(); };
         reader.readAsDataURL(file);
       };
-      checkPlateWidth(row, index);
+      checkPlateWidth(row, index, function (position, padded) {
+        pendingImages[position] = padded;
+        draw();
+      });
     });
     host.querySelector("#saveStyle").onclick = async function () {
       try {
