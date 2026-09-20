@@ -388,3 +388,44 @@ test('надпись со ссылкой в подписи уходит клик
   assert.equal(plain.body.parse_mode, undefined);
   assert.equal(plain.body.text, 'Текст <как есть>\n\nПросто подпись');
 });
+
+test('постоянные кнопки уходят под каждым постом', async () => {
+  const group = await addBotAsAdmin();
+  const data = bot.getData();
+  data.config.publishing = {
+    signature: 'Construcciones Kornilenko',
+    signatureEnabled: true,
+    signatureWrap: 'keep',
+    buttons: [
+      { text: '🎵 ТикТок', url: 'https://www.tiktok.com/@olegkorni' },
+      { text: '🌐 Сайт', url: 'https://construccioneskornilenko.com/' },
+      { text: '🤖 Бот', url: 'https://t.me/construcciones_kornilenko_bot' },
+    ],
+    buttonsPerRow: 3,
+    rubrics: [],
+  };
+
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  const rows = telegram.calls.find((call) => call.method === 'sendMessage').body.reply_markup.inline_keyboard;
+  assert.equal(rows.length, 1, 'три кнопки в один ряд');
+  assert.deepEqual(rows[0].map((button) => button.text), ['🎵 ТикТок', '🌐 Сайт', '🤖 Бот']);
+  assert.equal(rows[0][0].url, 'https://www.tiktok.com/@olegkorni');
+
+  // Кнопка самого поста идёт первой строкой, постоянные — под ней.
+  data.config.publishing.buttonsPerRow = 2;
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост', buttonText: 'Смотреть объект', buttonUrl: 'https://example.com/flat' }, TOKEN);
+  const withOwn = telegram.calls.find((call) => call.method === 'sendMessage').body.reply_markup.inline_keyboard;
+  assert.deepEqual(withOwn.map((row) => row.length), [1, 2, 1]);
+  assert.equal(withOwn[0][0].text, 'Смотреть объект');
+
+  // «Этот пост без подписи» убирает и кнопки.
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Чистый пост', withoutSignature: true }, TOKEN);
+  assert.equal(telegram.calls.find((call) => call.method === 'sendMessage').body.reply_markup, undefined);
+
+  // Ссылка без http не сохраняется как кнопка.
+  const saved = bot.normalizeLoadedData({ version: 17, config: { publishing: { buttons: [{ text: 'Плохая', url: 'tiktok.com' }] } } });
+  assert.deepEqual(saved.config.publishing.buttons, []);
+});

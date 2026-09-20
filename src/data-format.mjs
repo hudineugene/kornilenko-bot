@@ -242,6 +242,7 @@ function migrateShortMenu(interfaceText, messages) {
 // Оформление постов в группах и каналах: постоянная подпись под текстом и
 // рубричные плашки — картинки с названием рубрики.
 const MAX_RUBRICS = 12;
+const MAX_POST_BUTTONS = 6;
 
 function normalizePublishing(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -250,6 +251,12 @@ function normalizePublishing(value) {
     signatureEnabled: source.signatureEnabled !== false,
     // Как отправлять подпись: как набрана, одной строкой или через разделитель.
     signatureWrap: ['keep', 'space', 'dot'].includes(source.signatureWrap) ? source.signatureWrap : 'keep',
+    // Кнопки-ссылки под постом: по ним удобнее попадать, чем по значку в тексте.
+    buttons: (Array.isArray(source.buttons) ? source.buttons : []).slice(0, MAX_POST_BUTTONS).map((item) => ({
+      text: cleanText(item && item.text, 64),
+      url: cleanText(item && item.url, 500),
+    })).filter((item) => item.text && /^https?:\/\//i.test(item.url)),
+    buttonsPerRow: [1, 2, 3].includes(Number(source.buttonsPerRow)) ? Number(source.buttonsPerRow) : 3,
     rubrics: (Array.isArray(source.rubrics) ? source.rubrics : []).slice(0, MAX_RUBRICS).map((item) => ({
       id: cleanText(item && item.id, 60) || crypto.randomUUID(),
       name: cleanText(item && item.name, 60),
@@ -748,6 +755,7 @@ export {
   migrateDefaultTexts,
   migrateSelectionSteps,
   migrateShortMenu,
+  MAX_POST_BUTTONS,
   MAX_RUBRICS,
   normalizeGroupPosts,
   normalizeGroups,

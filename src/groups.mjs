@@ -242,6 +242,28 @@ function postText(post) {
   return body ? body + '\n\n' + signature : signature;
 }
 
+// Кнопка самого поста плюс постоянные кнопки из «Оформления постов».
+function postMarkup(post) {
+  const publishing = normalizePublishing(data.config.publishing);
+  const rows = [];
+  const url = validHttpUrl(post.buttonUrl);
+  const buttonText = cleanText(post.buttonText, 64);
+  if (url && buttonText) rows.push([{ text: buttonText, url }]);
+  if (!post.withoutSignature && publishing.signatureEnabled) {
+    const perRow = publishing.buttonsPerRow || 3;
+    let row = [];
+    for (const button of publishing.buttons) {
+      row.push({ text: button.text, url: button.url });
+      if (row.length >= perRow) {
+        rows.push(row);
+        row = [];
+      }
+    }
+    if (row.length) rows.push(row);
+  }
+  return rows.length ? { inline_keyboard: rows } : null;
+}
+
 function rubricOf(post) {
   const publishing = normalizePublishing(data.config.publishing);
   const rubric = post.rubricId ? publishing.rubrics.find((item) => item.id === post.rubricId) : null;
@@ -278,9 +300,7 @@ async function postToGroup(group, post, token = data.config.botToken) {
   const text = useHtml ? formatted.html : written;
   const plain = useHtml ? formatted.plain : written;
   const parseMode = useHtml ? 'HTML' : undefined;
-  const url = validHttpUrl(post.buttonUrl);
-  const buttonText = cleanText(post.buttonText, 64);
-  const markup = url && buttonText ? { inline_keyboard: [[{ text: buttonText, url }]] } : null;
+  const markup = postMarkup(post);
   const rubric = rubricOf(post);
   const ownImage = imageExists(post.image) ? post.image : null;
   const topImage = ownImage || (rubric && rubric.placement === 'top' ? rubric.image : null);
@@ -392,6 +412,7 @@ export {
   handleMyChatMember,
   newGroupPost,
   formatLinks,
+  postMarkup,
   postText,
   postToGroup,
   signatureText,

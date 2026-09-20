@@ -85,6 +85,8 @@ async function handleGroupApi(req, res, url) {
         signature: body.signature,
         signatureEnabled: body.signatureEnabled !== false,
         signatureWrap: body.signatureWrap,
+        buttons: Array.isArray(body.buttons) ? body.buttons : [],
+        buttonsPerRow: body.buttonsPerRow,
         rubrics,
       });
       saveDataNow();

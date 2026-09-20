@@ -196,6 +196,14 @@ function bindRubricPicker(host) {
   show();
 }
 
+function buttonsNote() {
+  var list = (publishing().buttons || []).filter(function (button) { return button.text; });
+  if (!list.length) return "";
+  return '<div class="field"><span class="field-label">Кнопки под постом</span><div class="row wrap">' +
+    list.map(function (button) { return '<span class="chip brand" style="padding:6px 12px">' + esc(button.text) + "</span>"; }).join("") +
+    '</div><div class="hint">Настраиваются во вкладке «Оформление постов».</div></div>';
+}
+
 function signatureNote() {
   var current = publishing();
   if (!current.signature || !current.signatureEnabled) {
@@ -281,6 +289,7 @@ function renderGroupCard(host, group) {
         '<div class="field"><label for="groupWhen">Отправить позже</label><input id="groupWhen" type="datetime-local"></div></div>' +
         rubricPicker() +
         signatureNote() +
+        buttonsNote() +
         '<div class="row wrap">' + (groupCan(group, "can_pin_messages") ? '<label class="check"><input type="checkbox" id="groupPin"> закрепить</label>' : "") +
         '<label class="check"><input type="checkbox" id="groupNotify" checked> со звуком</label>' +
         '<div class="grow"></div><button class="btn secondary" id="groupPreview" type="button">Себе для проверки</button>' +
@@ -460,6 +469,8 @@ function renderPostStyle(host) {
   var pendingImages = {};
   // Перерисовка не должна стирать то, что уже набрали.
   var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false, signatureWrap: current.signatureWrap || "keep" };
+  var buttons = (current.buttons || []).map(function (button) { return { text: button.text, url: button.url }; });
+  var perRow = current.buttonsPerRow || 3;
 
   function draw() {
     host.innerHTML = '<div class="grid cols-2">' +
@@ -475,6 +486,19 @@ function renderPostStyle(host) {
         '<div class="hint">Ссылка надписью: <code>[ТикТок](https://tiktok.com/@ваш_аккаунт)</code> — в Telegram будет кликабельное слово «ТикТок». Так же можно сделать ссылкой значок: <code>[🎵](https://…)</code>.</div>' +
         '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div></div>' +
         '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
+      "</div></div>" +
+      '<div class="card"><header><h3>Кнопки под постом</h3><div class="actions"><button class="btn secondary small" id="addButton" type="button">＋ Кнопка</button></div></header><div class="card-body stack">' +
+        '<p class="muted small">Кнопки идут под каждым постом и ведут по ссылке. По ним удобно попадать с телефона, и в них видно, куда ведёт ссылка. Значок ставится прямо в названии: «🎵 ТикТок».</p>' +
+        (buttons.length ? buttons.map(function (button, index) {
+          return '<div class="row wrap" data-button="' + index + '">' +
+            '<input data-bfield="text" value="' + esc(button.text || "") + '" placeholder="🎵 ТикТок" style="max-width:190px">' +
+            '<input data-bfield="url" value="' + esc(button.url || "") + '" placeholder="https://..." class="grow">' +
+            '<button class="btn ghost small" data-bdrop="' + index + '" type="button">✕</button></div>';
+        }).join("") : '<span class="muted small">Кнопок нет.</span>') +
+        '<div class="field"><label for="btnPerRow">Кнопок в ряд</label><select id="btnPerRow" style="max-width:140px">' +
+          [1, 2, 3].map(function (value) { return '<option value="' + value + '"' + (perRow === value ? " selected" : "") + ">" + value + "</option>"; }).join("") +
+        "</select></div>" +
+        '<div class="field"><span class="field-label">Так будет выглядеть</span><div id="btnPreview" class="row wrap"></div></div>' +
       "</div></div>" +
       '<div class="card"><header><h3>Рубрики</h3><div class="actions"><button class="btn secondary small" id="addRubric" type="button">＋ Рубрика</button></div></header><div class="card-body stack">' +
         '<p class="muted small">Плашка — картинка с названием рубрики.<br>' +
@@ -505,6 +529,31 @@ function renderPostStyle(host) {
     host.querySelector("#signWrap").onchange = function (event) { draft.signatureWrap = event.target.value; preview(); };
     preview();
     host.querySelector("#signOn").onchange = function (event) { draft.signatureEnabled = event.target.checked; preview(); };
+    var drawButtonPreview = function () {
+      var box = host.querySelector("#btnPreview");
+      box.innerHTML = buttons.filter(function (button) { return button.text; }).map(function (button) {
+        return '<span class="chip brand" style="padding:6px 12px">' + esc(button.text) + "</span>";
+      }).join("") || '<span class="muted small">кнопок нет</span>';
+    };
+    drawButtonPreview();
+    host.querySelectorAll("[data-button]").forEach(function (row) {
+      var index = Number(row.dataset.button);
+      row.querySelectorAll("[data-bfield]").forEach(function (input) {
+        input.oninput = function () {
+          buttons[index][input.dataset.bfield] = input.value;
+          drawButtonPreview();
+        };
+      });
+      row.querySelector("[data-bdrop]").onclick = function () {
+        buttons.splice(index, 1);
+        draw();
+      };
+    });
+    host.querySelector("#btnPerRow").onchange = function (event) { perRow = Number(event.target.value); };
+    host.querySelector("#addButton").onclick = function () {
+      buttons.push({ text: "", url: "" });
+      draw();
+    };
     host.querySelector("#addRubric").onclick = function () {
       rubrics.push({ id: "", name: "", placement: "bottom", image: null });
       draw();
@@ -534,6 +583,8 @@ function renderPostStyle(host) {
           signature: draft.signature,
           signatureEnabled: draft.signatureEnabled,
           signatureWrap: draft.signatureWrap,
+          buttons: buttons.filter(function (button) { return button.text && button.url; }),
+          buttonsPerRow: perRow,
           rubrics: rubrics.map(function (rubric, index) {
             return { id: rubric.id, name: rubric.name, placement: rubric.placement, imageDataUrl: pendingImages[index] || "" };
           }),
