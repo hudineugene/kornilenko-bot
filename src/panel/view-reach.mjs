@@ -139,6 +139,20 @@ function connectGroupCard(compact) {
 }
 
 // Плашка рубрики и постоянная подпись — общие для всех групп и каналов.
+// Иногда вместо значка копируется его запись кодом: «U+1F1EA U+1F1F8».
+// Такой текст Telegram покажет буквами, поэтому предлагаем его превратить.
+var CODEPOINT_PATTERN = /U+([0-9A-Fa-f]{4,6})/g;
+
+function hasCodepoints(text) {
+  return CODEPOINT_PATTERN.test(String(text || ""));
+}
+
+function decodeCodepoints(text) {
+  return String(text || "").replace(CODEPOINT_PATTERN, function (match, code) {
+    try { return String.fromCodePoint(parseInt(code, 16)); } catch (error) { return match; }
+  }).replace(/(\p{Regional_Indicator})\s+(\p{Regional_Indicator})/gu, "$1$2");
+}
+
 // [Надпись](ссылка) → кликабельная надпись в Telegram. В предпросмотре
 // показываем её же подчёркнутой.
 function linkedPreview(text) {
@@ -533,7 +547,7 @@ function renderPostStyle(host) {
             return '<option value="' + option[0] + '"' + (draft.signatureDivider === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
           }).join("") +
         '</select><div class="hint">Длинная линия задаёт ширину сообщения: блок подписи перестаёт быть узким и виден сразу.</div></div>' +
-        '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div></div>' +
+        '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div><div id="signCodes" class="hint" style="color:var(--warn)"></div></div>' +
         '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
       "</div></div>" +
       '<div class="card"><header><h3>Кнопки под постом</h3><div class="actions"><button class="btn secondary small" id="addButton" type="button">＋ Кнопка</button></div></header><div class="card-body stack">' +
@@ -578,6 +592,16 @@ function renderPostStyle(host) {
       box.innerHTML = draft.signatureEnabled ? (linkedPreview(text) || "подпись пуста") : "подпись выключена";
       box.style.borderLeft = draft.signatureQuote && draft.signatureEnabled ? "3px solid var(--brand)" : "";
       box.style.paddingLeft = draft.signatureQuote && draft.signatureEnabled ? "10px" : "";
+      var warn = host.querySelector("#signCodes");
+      warn.innerHTML = hasCodepoints(draft.signature)
+        ? 'Похоже, значок вставлен кодом (U+1F1EA) — Telegram покажет его буквами. <button class="btn ghost small" id="fixCodes" type="button">Преобразовать в значки</button>'
+        : "";
+      var fix = host.querySelector("#fixCodes");
+      if (fix) fix.onclick = function () {
+        draft.signature = decodeCodepoints(draft.signature);
+        host.querySelector("#signText").value = draft.signature;
+        preview();
+      };
     };
     host.querySelector("#signText").oninput = function (event) { draft.signature = event.target.value; preview(); };
     host.querySelector("#signWrap").onchange = function (event) { draft.signatureWrap = event.target.value; preview(); };
