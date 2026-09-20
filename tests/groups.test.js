@@ -491,3 +491,75 @@ test('линия над подписью задаёт ширину блока', 
   await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
   assert.ok(!telegram.calls.find((call) => call.method === 'sendMessage').body.text.includes('━'));
 });
+
+test('почта ссылкой-надписью, а если Telegram её не примет — адрес текстом', async () => {
+  const group = await addBotAsAdmin();
+  const data = bot.getData();
+  data.config.publishing = {
+    signature: '[Mail](mailto:construccioneskornilenko@gmail.com)',
+    signatureEnabled: true,
+    signatureWrap: 'keep',
+    rubrics: [],
+    buttons: [],
+  };
+
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  const sent = telegram.calls.find((call) => call.method === 'sendMessage');
+  assert.match(sent.body.text, /<a href="mailto:construccioneskornilenko@gmail\.com">Mail<\/a>/);
+
+  // Telegram отвечает отказом на ссылку — бот повторяет адресом в тексте.
+  let firstTry = true;
+  const previous = global.fetch;
+  global.fetch = (url, init) => {
+    if (String(url).endsWith('/sendMessage') && firstTry) {
+      firstTry = false;
+      return Promise.resolve(new Response(JSON.stringify({ ok: false, description: 'Bad Request: unsupported URL protocol' }), { status: 400, headers: { 'content-type': 'application/json' } }));
+    }
+    return previous(url, init);
+  };
+  telegram.calls = [];
+  try {
+    await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  } finally {
+    global.fetch = previous;
+  }
+  const retry = telegram.calls.filter((call) => call.method === 'sendMessage').pop();
+  assert.equal(retry.body.text, 'Пост\n\nconstruccioneskornilenko@gmail.com', 'адрес обычным текстом');
+  assert.equal(retry.body.parse_mode, undefined);
+});
+
+test('прозрачный PNG уходит файлом, чтобы прозрачность сохранилась', async () => {
+  const group = await addBotAsAdmin();
+  const data = bot.getData();
+  // PNG с альфа-каналом: цветовой тип 6 в заголовке IHDR.
+  const header = Buffer.alloc(26);
+  header.writeUInt32BE(0x89504e47, 0);
+  header.write('IHDR', 12);
+  header.writeUInt32BE(1280, 16);
+  header.writeUInt32BE(320, 20);
+  header[24] = 8;
+  header[25] = 6;
+  const transparent = { id: 'plate-alpha', name: 'plate.png', mimeType: 'image/png', size: header.length, dataBase64: header.toString('base64') };
+  const opaque = { id: 'plate-jpg', name: 'plate.jpg', mimeType: 'image/jpeg', size: 10, dataBase64: Buffer.from('fake').toString('base64') };
+  data.config.publishing = {
+    signature: '',
+    signatureEnabled: true,
+    rubrics: [
+      { id: 'r-alpha', name: 'Прозрачная', placement: 'bottom', image: transparent },
+      { id: 'r-jpg', name: 'Обычная', placement: 'bottom', image: opaque },
+    ],
+    buttons: [],
+  };
+
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост', rubricId: 'r-alpha' }, TOKEN);
+  assert.ok(telegram.calls.some((call) => call.method === 'sendDocument'), 'плашка ушла файлом');
+  assert.ok(telegram.calls.some((call) => call.method === 'sendMessage'), 'текст отдельным сообщением');
+  assert.ok(!telegram.calls.some((call) => call.method === 'sendPhoto'), 'фотографией не отправляем — прозрачность потерялась бы');
+
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост', rubricId: 'r-jpg' }, TOKEN);
+  assert.ok(telegram.calls.some((call) => call.method === 'sendPhoto'), 'непрозрачная плашка — как раньше, внутри сообщения');
+  assert.ok(!telegram.calls.some((call) => call.method === 'sendDocument'));
+});

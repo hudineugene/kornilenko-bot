@@ -33,6 +33,27 @@ function imageBytes(image) {
   return fs.readFileSync(filePath);
 }
 
+// Telegram пересобирает фотографии в JPEG и теряет прозрачность, поэтому
+// такие картинки отправляются файлом. Здесь — проверка самого PNG.
+function bytesHaveTransparency(bytes) {
+  if (!Buffer.isBuffer(bytes) || bytes.length < 26) return false;
+  if (bytes.readUInt32BE(0) !== 0x89504e47) return false;
+  const colorType = bytes[25];
+  if (colorType === 4 || colorType === 6) return true;
+  // Палитра с прозрачностью: ищем кусок tRNS в первых килобайтах файла.
+  return bytes.slice(0, Math.min(bytes.length, 65536)).includes('tRNS');
+}
+
+function imageHasTransparency(image) {
+  if (!image || typeof image !== 'object') return false;
+  if (image.mimeType && image.mimeType !== 'image/png') return false;
+  try {
+    return bytesHaveTransparency(imageBytes(image));
+  } catch (error) {
+    return false;
+  }
+}
+
 function forEachStoredImage(root, callback) {
   if (!root || typeof root !== 'object') return;
   for (const language of ['ru', 'en', 'es']) callback(root.welcomeImages && root.welcomeImages[language]);
@@ -197,6 +218,7 @@ export {
   forEachStoredImage,
   imageBytes,
   imageExists,
+  imageHasTransparency,
   imageStoragePath,
   needsContentAddressing,
   persistImage,

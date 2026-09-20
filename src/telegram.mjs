@@ -195,6 +195,24 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
   return result;
 }
 
+// PNG с прозрачностью Telegram сохраняет только как файл (документ).
+async function sendDocumentMessage(chatId, image, caption, token, replyMarkup, options = {}) {
+  const bytes = imageBytes(image);
+  const name = String(image.name || 'image.png').replace(/[^A-Za-z0-9._-]/g, '') || 'image.png';
+  const result = await telegramMultipartRequest(token, 'sendDocument', {
+    chat_id: String(chatId),
+    document: new Blob([bytes], { type: image.mimeType || 'image/png' }),
+    caption: caption || undefined,
+    parse_mode: options.parseMode || undefined,
+    reply_markup: replyMarkup,
+  });
+  data.stats.messagesSent += 1;
+  recordDaily('sent');
+  recordActivity(userByChatId(chatId), 'out', caption || '[Файл]', 'photo', { messageId: result && result.message_id });
+  scheduleSave();
+  return result;
+}
+
 async function sendPhotoAlbum(chatId, images, token, caption = '') {
   const album = (Array.isArray(images) ? images : [])
     .filter(imageExists)
@@ -334,6 +352,7 @@ export {
   normalizeTelegramError,
   rememberFileId,
   sendMessage,
+  sendDocumentMessage,
   sendPhotoAlbum,
   sendPhotoMessage,
   splitTelegramText,

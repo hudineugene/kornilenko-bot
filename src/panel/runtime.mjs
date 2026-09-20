@@ -143,6 +143,7 @@ function markupToolbar(target) {
     '<button class="btn ghost small" type="button" data-mark="bold" title="Жирный"><b>Ж</b></button>' +
     '<button class="btn ghost small" type="button" data-mark="italic" title="Курсив"><i>К</i></button>' +
     '<button class="btn ghost small" type="button" data-mark="link" title="Ссылка надписью">🔗 Ссылка</button>' +
+    '<button class="btn ghost small" type="button" data-mark="mail" title="Ссылка на почту">✉️ Почта</button>' +
     '<button class="btn ghost small" type="button" data-mark="line" title="Линия-разделитель">━━</button>' +
     '<span class="grow"></span>' +
     MARKUP_EMOJI.map(function (sign) {
@@ -169,6 +170,11 @@ function bindMarkupToolbar(root) {
         if (button.dataset.mark === "bold") insertAround(area, "**", "**", "текст");
         else if (button.dataset.mark === "italic") insertAround(area, "__", "__", "текст");
         else if (button.dataset.mark === "line") insertAround(area, "\n━━━━━━━━━━━━━━━━━━\n", "", "");
+        else if (button.dataset.mark === "mail") {
+          var address = prompt("Адрес электронной почты", "");
+          if (!address) return;
+          insertAround(area, "[", "](mailto:" + address.trim() + ")", "Mail");
+        }
         else {
           var url = prompt("Адрес ссылки", "https://");
           if (!url) return;

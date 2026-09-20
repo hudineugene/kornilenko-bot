@@ -10,8 +10,8 @@ import { cleanText } from './util.mjs';
 import { normalizePublishing } from './data-format.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
-import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
-import { imageExists } from './media.mjs';
+import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
+import { imageExists, imageHasTransparency } from './media.mjs';
 import { validHttpUrl } from './catalog.mjs';
 
 // What the bot saw in the group: enough to answer, delete or pin a message.
@@ -195,7 +195,18 @@ async function fetchAdministrators(group, token = data.config.botToken) {
 
 // В панели ссылку пишут как [ТикТок](https://…). Для Telegram это
 // превращается в HTML, а весь остальной текст экранируется.
-const LINK_PATTERN = /\[([^\]\n]{1,120})\]\((https?:\/\/[^\s()<>"']{4,500})\)/g;
+const LINK_PATTERN = /\[([^\]\n]{1,120})\]\(((?:https?:\/\/|mailto:)[^\s()<>"']{4,500})\)/g;
+const MAILTO_LINK_PATTERN = /\[([^\]\n]{1,120})\]\(mailto:([^\s()<>"']{4,500})\)/g;
+
+// Telegram у ботов может не принять ссылку mailto. Тогда пост уходит ещё раз,
+// где вместо надписи стоит сам адрес — его Telegram делает кликабельным сам.
+function flattenMailto(text) {
+  return String(text || '').replace(MAILTO_LINK_PATTERN, '$2');
+}
+
+function hasMailto(text) {
+  return MAILTO_LINK_PATTERN.test(String(text || ''));
+}
 
 function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -276,15 +287,16 @@ function postText(post) {
   const publishing = normalizePublishing(data.config.publishing);
   const body = cleanText(post.text, 4000);
   const signature = signatureBlock(publishing);
-  if (post.withoutSignature || !signature) return body;
-  return body ? body + '\n\n' + signature : signature;
+  const written = post.withoutSignature || !signature ? body : (body ? body + '\n\n' + signature : signature);
+  return post.plainMail ? flattenMailto(written) : written;
 }
 
 // Подпись цитатой отделяется полоской слева — заметный, но спокойный блок.
 function postHtml(post) {
   const publishing = normalizePublishing(data.config.publishing);
-  const body = cleanText(post.text, 4000);
-  const signature = post.withoutSignature ? '' : signatureBlock(publishing);
+  const body = post.plainMail ? flattenMailto(cleanText(post.text, 4000)) : cleanText(post.text, 4000);
+  const rawSignature = post.withoutSignature ? '' : signatureBlock(publishing);
+  const signature = post.plainMail ? flattenMailto(rawSignature) : rawSignature;
   const bodyPart = formatLinks(body);
   const signaturePart = formatLinks(signature);
   const quote = signature && publishing.signatureQuote;
@@ -345,7 +357,19 @@ function rememberOwnMessage(group, messageId, text, kind) {
 // поста вместе с постоянной подписью, когда плашка стоит внизу сообщения.
 const CAPTION_LIMIT = 1024;
 
+// Повтор без ссылки mailto, если Telegram её не принял.
 async function postToGroup(group, post, token = data.config.botToken) {
+  try {
+    return await sendPost(group, post, token);
+  } catch (error) {
+    const rejected = /url|entit|parse/i.test(String(error && error.message));
+    if (!rejected || post.plainMail || !hasMailto(postText(post))) throw error;
+    recordError('Ссылка mailto не принята, отправляем адрес текстом', error);
+    return sendPost(group, { ...post, plainMail: true }, token);
+  }
+}
+
+async function sendPost(group, post, token = data.config.botToken) {
   const written = postText(post);
   const formatted = postHtml(post);
   // Разметка нужна только когда в тексте есть ссылки, выделения или цитата.
@@ -356,20 +380,25 @@ async function postToGroup(group, post, token = data.config.botToken) {
   const markup = postMarkup(post);
   const rubric = rubricOf(post);
   const ownImage = imageExists(post.image) ? post.image : null;
-  const topImage = ownImage || (rubric && rubric.placement === 'top' ? rubric.image : null);
+  // Прозрачный PNG Telegram сохраняет только файлом, а файл нельзя поставить
+  // под текст внутри сообщения — такая плашка уходит отдельным сообщением.
+  const plateTransparent = Boolean(rubric) && imageHasTransparency(rubric.image);
+  const ownTransparent = Boolean(ownImage) && imageHasTransparency(ownImage);
+  const topImage = ownImage || (rubric && rubric.placement === 'top' && !plateTransparent ? rubric.image : null);
   // Плашка внизу одним сообщением: текст ставится над картинкой. Так можно,
   // только если фотографии поста нет и текст помещается в подпись.
-  const plateInside = Boolean(rubric) && rubric.placement === 'bottom' && !ownImage && text && plain.length <= CAPTION_LIMIT;
+  const plateInside = Boolean(rubric) && rubric.placement === 'bottom' && !ownImage && !plateTransparent && text && plain.length <= CAPTION_LIMIT;
   let sent;
   let plateSentInside = false;
   if (plateInside) {
     sent = await sendPhotoMessage(group.id, rubric.image, text, token, markup, { captionAbove: true, parseMode });
     plateSentInside = true;
   } else if (topImage) {
+    const sendImage = ownTransparent ? sendDocumentMessage : sendPhotoMessage;
     if (text && plain.length <= CAPTION_LIMIT) {
-      sent = await sendPhotoMessage(group.id, topImage, text, token, markup, { parseMode });
+      sent = await sendImage(group.id, topImage, text, token, markup, { parseMode });
     } else {
-      sent = await sendPhotoMessage(group.id, topImage, '', token, null);
+      sent = await sendImage(group.id, topImage, '', token, null);
       if (text) await sendMessage(group.id, text, token, { track: false, ...(parseMode ? { parse_mode: parseMode } : {}), ...(markup ? { reply_markup: markup } : {}) });
     }
   } else {
@@ -379,8 +408,9 @@ async function postToGroup(group, post, token = data.config.botToken) {
   const messageId = sent && Number(sent.message_id);
   rememberOwnMessage(group, messageId, plain, topImage || plateSentInside ? 'photo' : 'text');
   // Длинный пост или своё фото: плашка уходит отдельным сообщением следом.
-  if (rubric && rubric.placement !== 'top' && !plateSentInside) {
-    const plate = await sendPhotoMessage(group.id, rubric.image, '', token, null).catch((error) => {
+  if (rubric && (rubric.placement !== 'top' || plateTransparent) && !plateSentInside) {
+    const sendPlate = plateTransparent ? sendDocumentMessage : sendPhotoMessage;
+    const plate = await sendPlate(group.id, rubric.image, '', token, null).catch((error) => {
       recordError('Плашка рубрики «' + rubric.name + '»', error);
       return null;
     });
