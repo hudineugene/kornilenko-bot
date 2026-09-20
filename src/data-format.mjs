@@ -92,6 +92,8 @@ const defaultData = {
     text: { ru: '', en: '', es: '' },
   },
   interfaceText: {},
+  groups: [],
+  groupPosts: [],
   stats: {
     messagesReceived: 0,
     messagesSent: 0,
@@ -235,6 +237,70 @@ function migrateShortMenu(interfaceText, messages) {
       messages[language].help = defaultData.config.messages[language].help;
     }
   }
+}
+
+// Groups and channels the bot is in, and what it saw there. A chat id is
+// negative; messages are capped when loading too.
+const GROUP_STATUSES = ['creator', 'administrator', 'member', 'restricted', 'left', 'kicked'];
+
+function normalizeGroups(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => item && /^-?\d{4,20}$/.test(String(item.id))).slice(0, 50).map((item) => ({
+    id: String(item.id),
+    title: cleanText(item.title, 200),
+    type: cleanText(item.type, 20),
+    username: cleanText(item.username, 60),
+    status: GROUP_STATUSES.includes(item.status) ? item.status : 'member',
+    rights: item.rights && typeof item.rights === 'object' && !Array.isArray(item.rights)
+      ? Object.fromEntries(Object.entries(item.rights).slice(0, 20).map(([key, on]) => [cleanText(key, 40), Boolean(on)]))
+      : {},
+    memberCount: Math.max(0, Number(item.memberCount) || 0),
+    memberCountAt: cleanText(item.memberCountAt, 40),
+    description: cleanText(item.description, 1000),
+    inviteLink: cleanText(item.inviteLink, 200),
+    pinnedMessageId: Math.max(0, Number(item.pinnedMessageId) || 0),
+    messages: (Array.isArray(item.messages) ? item.messages : []).slice(-200).map((message) => ({
+      messageId: Math.max(0, Number(message.messageId) || 0),
+      userId: cleanText(message.userId, 40),
+      name: cleanText(message.name, 120),
+      username: cleanText(message.username, 60),
+      text: cleanText(message.text, 1000),
+      kind: cleanText(message.kind, 20) || 'text',
+      fromBot: Boolean(message.fromBot),
+      date: cleanText(message.date, 40),
+    })),
+    joinRequests: (Array.isArray(item.joinRequests) ? item.joinRequests : []).slice(-100).map((request) => ({
+      userId: cleanText(request.userId, 40),
+      name: cleanText(request.name, 120),
+      username: cleanText(request.username, 60),
+      at: cleanText(request.at, 40),
+    })),
+    addedAt: cleanText(item.addedAt, 40),
+    updatedAt: cleanText(item.updatedAt, 40),
+    lastMessageAt: cleanText(item.lastMessageAt, 40),
+    lastPostAt: cleanText(item.lastPostAt, 40),
+    lastError: cleanText(item.lastError, 500),
+  }));
+}
+
+function normalizeGroupPosts(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-100).map((item) => ({
+    id: cleanText(item.id, 60) || crypto.randomUUID(),
+    groupId: cleanText(item.groupId, 40),
+    text: cleanText(item.text, 4000),
+    buttonText: cleanText(item.buttonText, 64),
+    buttonUrl: cleanText(item.buttonUrl, 500),
+    image: item.image && typeof item.image === 'object' ? item.image : null,
+    pin: Boolean(item.pin),
+    notify: item.notify !== false,
+    status: ['scheduled', 'sent', 'failed', 'cancelled'].includes(item.status) ? item.status : 'scheduled',
+    sendAt: cleanText(item.sendAt, 40),
+    sentAt: cleanText(item.sentAt, 40),
+    createdAt: cleanText(item.createdAt, 40) || new Date().toISOString(),
+    messageId: Math.max(0, Number(item.messageId) || 0),
+    error: cleanText(item.error, 500),
+  })).filter((item) => item.groupId);
 }
 
 // Analytics buckets for deleted properties are never shown, so drop them.
@@ -628,6 +694,8 @@ function normalizeLoadedData(parsed) {
     normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
     normalized.lastWeeklyReportFor = cleanText(parsed.lastWeeklyReportFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
+    normalized.groups = normalizeGroups(parsed.groups);
+    normalized.groupPosts = normalizeGroupPosts(parsed.groupPosts);
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
     normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
@@ -657,6 +725,8 @@ export {
   migrateDefaultTexts,
   migrateSelectionSteps,
   migrateShortMenu,
+  normalizeGroupPosts,
+  normalizeGroups,
   PREVIOUS_HELP_DEFAULTS,
   normalizeAdminReplyTargets,
   normalizeCalculator,

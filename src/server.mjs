@@ -5,7 +5,8 @@ import { ADMIN_ASSETS, LOGIN_ASSETS, PORT } from './config.mjs';
 import { runDueBroadcasts } from './broadcasts.mjs';
 import { binaryLoginAsset, hostAllowed, html, json, securityHeaders } from './admin-http.mjs';
 import { handleApi } from './admin-api.mjs';
-import { ADMIN_HTML } from './admin-page.mjs';
+import { PANEL_HTML } from './panel/index.mjs';
+
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -21,7 +22,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/admin-assets/header-mobile.webp' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.headerMobile);
     if (url.pathname === '/admin-assets/sidebar-logo.png' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.sidebarLogo);
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
-    if (url.pathname === '/' && req.method === 'GET') return html(res, ADMIN_HTML);
+    if (url.pathname === '/' && req.method === 'GET') return html(res, PANEL_HTML);
     securityHeaders(res);
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('Не найдено');

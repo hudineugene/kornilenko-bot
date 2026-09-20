@@ -1,0 +1,318 @@
+// Рассылки клиентам и Telegram-группа, где бот администратор.
+
+const REACH_JS = String.raw`
+var selectedGroup = "";
+
+// --- Рассылки --------------------------------------------------------------------
+function renderCampaigns(host) {
+  var drafts = (state.broadcasts || []).filter(function (entry) { return entry.status === "draft" || entry.status === "scheduled"; });
+  var history = (state.broadcasts || []).filter(function (entry) { return entry.status !== "draft" && entry.status !== "scheduled"; });
+  pageAction("＋ Рассылка", function () { openCampaignEditor(null); });
+  host.innerHTML =
+    (drafts.length ? '<div class="card" style="margin-bottom:12px"><header><h3>Черновики и запланированные</h3></header><div class="table-wrap"><table><thead><tr><th>Текст</th><th>Когда</th><th>Аудитория</th><th></th></tr></thead><tbody>' +
+      drafts.map(function (entry) {
+        return '<tr data-id="' + esc(entry.id) + '"><td class="clickable" data-edit="1">' + esc(String(localized(entry.messages, "ru")).slice(0, 70)) + "</td>" +
+          "<td>" + (entry.status === "scheduled" ? dateTime(entry.scheduledAt) : "черновик") + "</td>" +
+          "<td>" + esc((entry.languages || []).join(", ").toUpperCase() || "—") + "</td>" +
+          '<td class="right"><button class="btn ghost small" data-delete="1">✕</button></td></tr>';
+      }).join("") + "</tbody></table></div></div>" : "") +
+    '<div class="card"><header><h3>История рассылок</h3><div class="actions"><span class="small faint">получатели · отклики · отписки</span></div></header><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Текст</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
+    (history.length ? history.map(function (entry) {
+      return "<tr><td class=\"nowrap\">" + dateShort(entry.startedAt) + "</td><td>" + esc(String(localized(entry.messages, "ru")).slice(0, 60)) + "</td>" +
+        '<td class="right">' + num(entry.sent) + '</td><td class="right">' + num(entry.responses) + '</td><td class="right">' + num(entry.unsubscribes) + "</td>" +
+        "<td>" + (entry.status === "failed" ? '<span class="chip bad">ошибка</span>' : entry.status === "queued" || entry.status === "running" ? '<span class="chip warn">идёт</span>' : '<span class="chip ok">отправлена</span>') + "</td></tr>";
+    }).join("") : '<tr><td colspan="6"><div class="empty"><b>Рассылок ещё не было</b>Сообщение получат клиенты, которые не отписались</div></td></tr>') +
+    "</tbody></table></div></div>";
+  host.querySelectorAll("tr[data-id]").forEach(function (row) {
+    var id = row.dataset.id;
+    var edit = row.querySelector("[data-edit]");
+    if (edit) edit.onclick = function () { openCampaignEditor(id); };
+    var remove = row.querySelector("[data-delete]");
+    if (remove) remove.onclick = async function () {
+      if (!(await confirmDialog("Удалить рассылку?", "Черновик будет удалён.", "Удалить", true))) return;
+      try { await api("/api/broadcasts/" + encodeURIComponent(id), { method: "DELETE" }); await reload(); } catch (error) { fail(error); }
+    };
+  });
+}
+
+function openCampaignEditor(id) {
+  var entry = id ? (state.broadcasts || []).find(function (item) { return item.id === id; }) : null;
+  var tags = [];
+  (state.users || []).forEach(function (user) { (user.tags || []).forEach(function (tag) { if (tags.indexOf(tag) < 0) tags.push(tag); }); });
+  openDialog({
+    title: entry ? "Рассылка" : "Новая рассылка",
+    drawer: true,
+    body: '<div class="stack">' + languageTabs() +
+      '<div class="field"><label>Текст сообщения</label>' + LANGUAGES.map(function (language) {
+        return '<textarea data-tr="messages" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" style="min-height:140px">' + esc((entry && entry.messages && entry.messages[language[0]]) || "") + "</textarea>";
+      }).join("") + '<div class="hint">Можно использовать {first_name}</div></div>' +
+      '<div class="field"><span class="field-label">Кому отправить</span><div class="row wrap">' + LANGUAGES.map(function (language) {
+        var checked = !entry || (entry.languages || []).indexOf(language[0]) >= 0;
+        return '<label class="check"><input type="checkbox" data-audience="' + language[0] + '"' + (checked ? " checked" : "") + "> " + language[1] + "</label>";
+      }).join("") + "</div></div>" +
+      (tags.length ? '<div class="field"><label for="campTags">Только с тегами</label><input id="campTags" value="' + esc((entry && entry.tags || []).join(", ")) + '" placeholder="' + esc(tags.join(", ")) + '"></div>' : "") +
+      '<div class="grid cols-2"><div class="field"><label>Кнопка: текст</label>' + LANGUAGES.map(function (language) {
+        return '<input data-tr="buttonText" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc((entry && entry.buttonText && entry.buttonText[language[0]]) || "") + '">';
+      }).join("") + "</div>" +
+      '<div class="field"><label for="campUrl">Кнопка: ссылка</label><input id="campUrl" value="' + esc(entry && entry.buttonUrl || "") + '"></div></div>' +
+      '<div class="field"><label for="campImage">Картинка</label><input id="campImage" type="file" accept="image/jpeg,image/png"></div>' +
+      '<div class="field"><label for="campDate">Отправить позже</label><input id="campDate" type="datetime-local" value="' + esc(entry && entry.scheduledAt ? String(entry.scheduledAt).slice(0, 16) : "") + '"></div>' +
+      '<div id="campEstimate" class="small muted"></div></div>',
+    footer: '<button class="btn secondary" id="campTest" type="button">Себе для проверки</button><div class="grow"></div>' +
+      '<button class="btn secondary" id="campDraft" type="button">В черновик</button><button class="btn" id="campSend" type="button">Отправить</button>',
+    ready: function (dialog) {
+      bindLanguageTabs(dialog);
+      var image = null;
+      dialog.querySelector("#campImage").onchange = function (event) {
+        var file = event.target.files && event.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function () { image = { dataUrl: reader.result, name: file.name }; };
+        reader.readAsDataURL(file);
+      };
+      function payload(mode) {
+        var body = {
+          mode: mode,
+          messages: collectTranslated(dialog, "messages"),
+          buttonText: collectTranslated(dialog, "buttonText"),
+          buttonUrl: dialog.querySelector("#campUrl").value,
+          languages: Array.from(dialog.querySelectorAll("[data-audience]")).filter(function (box) { return box.checked; }).map(function (box) { return box.dataset.audience; }),
+          tags: (dialog.querySelector("#campTags") ? dialog.querySelector("#campTags").value : "").split(",").map(function (tag) { return tag.trim(); }).filter(Boolean),
+        };
+        var when = dialog.querySelector("#campDate").value;
+        if (when && mode !== "draft") { body.mode = "schedule"; body.scheduledAt = new Date(when).toISOString(); }
+        if (image) { body.imageDataUrl = image.dataUrl; body.imageName = image.name; }
+        return body;
+      }
+      async function estimate() {
+        try {
+          var result = await send("/api/broadcast/estimate", "POST", payload("draft"));
+          dialog.querySelector("#campEstimate").textContent = "Получателей: " + result.total;
+        } catch (error) { dialog.querySelector("#campEstimate").textContent = ""; }
+      }
+      estimate();
+      dialog.querySelectorAll("[data-audience]").forEach(function (box) { box.onchange = estimate; });
+      dialog.querySelector("#campTest").onclick = async function () {
+        try {
+          await send("/api/broadcast/test", "POST", Object.assign(payload("draft"), { userId: String(state.config.adminChatId) }));
+          toast("Отправлено вам в Telegram");
+        } catch (error) { fail(error); }
+      };
+      dialog.querySelector("#campDraft").onclick = async function () {
+        try {
+          if (entry) await send("/api/broadcasts/" + encodeURIComponent(entry.id), "PATCH", payload("draft"));
+          else await send("/api/broadcast", "POST", payload("draft"));
+          dialog.close(); toast("Черновик сохранён"); await reload();
+        } catch (error) { fail(error); }
+      };
+      dialog.querySelector("#campSend").onclick = async function () {
+        var when = dialog.querySelector("#campDate").value;
+        if (!when && !(await confirmDialog("Отправить рассылку?", "Сообщение получат все выбранные клиенты. Отменить отправку нельзя.", "Отправить"))) return;
+        try {
+          var result = entry && entry.status !== "sent"
+            ? await send("/api/broadcasts/" + encodeURIComponent(entry.id), "PATCH", payload(when ? "schedule" : "send"))
+            : await send("/api/broadcast", "POST", payload(when ? "schedule" : "send"));
+          dialog.close();
+          toast(when ? "Запланировано" : "Рассылка пошла, получателей: " + (result.total || 0));
+          await reload();
+        } catch (error) { fail(error); }
+      };
+    },
+  });
+}
+
+// --- Группа ------------------------------------------------------------------------
+function groupRights(group) {
+  return group.rights || {};
+}
+function groupCan(group, right) {
+  return group.status === "creator" || Boolean(groupRights(group)[right]);
+}
+
+function renderGroups(host) {
+  var groups = state.groups || [];
+  var active = groups.filter(function (group) { return ["member", "administrator", "creator"].indexOf(group.status) >= 0; });
+  if (!selectedGroup && active.length) selectedGroup = active[0].id;
+  var group = groups.find(function (item) { return item.id === selectedGroup; });
+  if (!groups.length) {
+    host.innerHTML = '<div class="card"><div class="empty"><b>Бот пока не состоит в группах</b>' +
+      "Добавьте бота в группу и назначьте администратором — группа появится здесь автоматически.<br>" +
+      'Если бот уже в группе, напишите там любое сообщение или переназначьте права, чтобы Telegram сообщил об этом боту.</div></div>';
+    return;
+  }
+  pageAction("Обновить", async function () {
+    try { await send("/api/groups/refresh", "POST", {}); await reload(); toast("Обновлено"); } catch (error) { fail(error); }
+  }, "secondary");
+  host.innerHTML = (groups.length > 1 ? '<div class="toolbar"><div class="tabs" id="groupPicker">' + groups.map(function (item) {
+      return '<button type="button" data-group="' + esc(item.id) + '" class="' + (item.id === selectedGroup ? "active" : "") + '">' + esc(item.title || item.id) + "</button>";
+    }).join("") + "</div></div>" : "") + '<div id="groupBody"></div>';
+  host.querySelectorAll("#groupPicker button").forEach(function (button) {
+    button.onclick = function () { selectedGroup = button.dataset.group; renderGroups(host); };
+  });
+  renderGroupCard(host.querySelector("#groupBody"), group || groups[0]);
+}
+
+function renderGroupCard(host, group) {
+  var admin = group.status === "administrator" || group.status === "creator";
+  var pinned = (group.messages || []).find(function (message) { return message.messageId === group.pinnedMessageId; });
+  host.innerHTML =
+    '<div class="grid cols-4" style="margin-bottom:12px">' +
+      kpiCard("Участников", num(group.memberCount), group.type === "supergroup" ? "супергруппа" : group.type) +
+      kpiCard("Права бота", admin ? "администратор" : "участник", admin ? "" : "назначьте администратором", admin ? "up" : "down") +
+      kpiCard("Сообщений видно", num((group.messages || []).length), "из последних " + 200) +
+      kpiCard("Заявок на вступление", num((group.joinRequests || []).length), (group.joinRequests || []).length ? "ждут решения" : "") +
+    "</div>" +
+    (group.lastError ? '<div class="card" style="margin-bottom:12px"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
+    '<div class="split"><div class="stack">' +
+      '<div class="card"><header><h3>Написать в группу</h3></header><div class="card-body stack">' +
+        '<textarea id="groupText" placeholder="Текст сообщения от имени бота" style="min-height:110px"></textarea>' +
+        '<div class="grid cols-2"><div class="field"><label for="groupButtonText">Кнопка (необязательно)</label><input id="groupButtonText" placeholder="Смотреть объекты"></div>' +
+        '<div class="field"><label for="groupButtonUrl">Ссылка кнопки</label><input id="groupButtonUrl" placeholder="https://t.me/…"></div></div>' +
+        '<div class="grid cols-2"><div class="field"><label for="groupImage">Фото</label><input id="groupImage" type="file" accept="image/jpeg,image/png"></div>' +
+        '<div class="field"><label for="groupWhen">Отправить позже</label><input id="groupWhen" type="datetime-local"></div></div>' +
+        '<div class="row wrap"><label class="check"><input type="checkbox" id="groupPin"> закрепить</label>' +
+        '<label class="check"><input type="checkbox" id="groupNotify" checked> со звуком</label>' +
+        '<div class="grow"></div><button class="btn" id="groupSend" type="button">Отправить</button></div>' +
+      "</div></div>" +
+      '<div class="card"><header><h3>Что бот видел в группе</h3><div class="actions"><span class="small faint">историю Telegram не отдаёт</span></div></header>' +
+        ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
+          return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
+            '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">бот</span>' : "") +
+            (message.kind !== "text" ? ' <span class="chip">' + esc(message.kind) + "</span>" : "") +
+            '<br><span class="muted small">' + esc(String(message.text || "").slice(0, 120)) + "</span></span>" +
+            '<span class="small faint nowrap">' + dateShort(message.date) + "</span>" +
+            (admin ? '<button class="btn ghost small" data-pin="' + message.messageId + '" title="Закрепить">📌</button>' +
+              '<button class="btn ghost small" data-del="' + message.messageId + '" title="Удалить">✕</button>' : "") + "</div>";
+        }).join("") + "</div>" : '<div class="empty"><b>Сообщений пока нет</b>Бот видит сообщения группы, если в BotFather выключен privacy mode</div>') +
+      "</div>" +
+    "</div>" +
+    '<div class="stack">' +
+      '<div class="card"><header><h3>' + esc(group.title || "Группа") + "</h3></header><div class=\"card-body stack\">" +
+        '<div class="small muted">ID ' + esc(group.id) + (group.username ? " · @" + esc(group.username) : "") + "</div>" +
+        (pinned ? '<div class="msg">📌 ' + esc(String(pinned.text || "").slice(0, 160)) + '<div class="msg-meta"><button class="btn ghost small" id="unpin" type="button">Открепить</button></div></div>' : '<div class="small faint">Закреплённого сообщения нет</div>') +
+        (admin ? '<div class="field"><label for="groupTitle">Название</label><input id="groupTitle" value="' + esc(group.title || "") + '"></div>' +
+          '<div class="field"><label for="groupDescription">Описание</label><textarea id="groupDescription">' + esc(group.description || "") + "</textarea></div>" +
+          '<button class="btn secondary small" id="groupSaveInfo" type="button">Сохранить название и описание</button>' : '<div class="chip warn">Бот не администратор: доступна только отправка сообщений</div>') +
+      "</div></div>" +
+      ((group.joinRequests || []).length ? '<div class="card"><header><h3>Заявки на вступление</h3></header><div class="list">' + group.joinRequests.map(function (request) {
+        return '<div class="list-item"><span class="grow"><b>' + esc(request.name) + "</b>" + (request.username ? ' <span class="small faint">@' + esc(request.username) + "</span>" : "") + "</span>" +
+          '<button class="btn small" data-approve="' + esc(request.userId) + '" type="button">Принять</button>' +
+          '<button class="btn ghost small" data-decline="' + esc(request.userId) + '" type="button">Отклонить</button></div>';
+      }).join("") + "</div></div>" : "") +
+      '<div class="card"><header><h3>Ссылка-приглашение</h3></header><div class="card-body stack">' +
+        (group.inviteLink ? '<div class="row"><input value="' + esc(group.inviteLink) + '" readonly id="inviteLink"><button class="btn ghost small" id="copyInvite" type="button">Копировать</button></div>' : '<span class="muted small">Ссылки нет</span>') +
+        '<div class="row wrap"><button class="btn secondary small" id="makeInvite" type="button">Создать новую</button>' +
+        (group.inviteLink ? '<button class="btn ghost small" id="revokeInvite" type="button">Отозвать</button>' : "") + "</div></div></div>" +
+      '<div class="card"><header><h3>Администраторы</h3><div class="actions"><button class="btn ghost small" id="loadAdmins" type="button">Показать</button></div></header><div class="card-body" id="adminsBox"><span class="muted small">Список участников Telegram не отдаёт — только администраторов.</span></div></div>' +
+      '<div class="card"><header><h3>Опасная зона</h3></header><div class="card-body row wrap">' +
+        '<button class="btn ghost small" id="unpinAll" type="button">Открепить всё</button>' +
+        '<button class="btn danger small" id="leaveGroup" type="button">Выйти из группы</button></div></div>' +
+    "</div></div>";
+
+  var base = "/api/groups/" + encodeURIComponent(group.id);
+  var image = null;
+  host.querySelector("#groupImage").onchange = function (event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () { image = reader.result; };
+    reader.readAsDataURL(file);
+  };
+  host.querySelector("#groupSend").onclick = async function () {
+    var when = host.querySelector("#groupWhen").value;
+    var payload = {
+      text: host.querySelector("#groupText").value,
+      buttonText: host.querySelector("#groupButtonText").value,
+      buttonUrl: host.querySelector("#groupButtonUrl").value,
+      pin: host.querySelector("#groupPin").checked,
+      notify: host.querySelector("#groupNotify").checked,
+      image: image,
+      sendAt: when ? new Date(when).toISOString() : "",
+    };
+    try {
+      await send(base + "/post", "POST", payload);
+      toast(when ? "Публикация запланирована" : "Отправлено в группу");
+      await reload();
+    } catch (error) { fail(error); }
+  };
+  host.querySelectorAll("[data-pin]").forEach(function (button) {
+    button.onclick = async function () {
+      try { await send(base + "/pin", "POST", { messageId: button.dataset.pin, notify: false }); toast("Закреплено"); await reload(); } catch (error) { fail(error); }
+    };
+  });
+  host.querySelectorAll("[data-del]").forEach(function (button) {
+    button.onclick = async function () {
+      if (!(await confirmDialog("Удалить сообщение?", "Сообщение исчезнет у всех участников группы.", "Удалить", true))) return;
+      try { await api(base + "/messages/" + button.dataset.del, { method: "DELETE" }); await reload(); } catch (error) { fail(error); }
+    };
+  });
+  var unpin = host.querySelector("#unpin");
+  if (unpin) unpin.onclick = async function () {
+    try { await send(base + "/unpin", "POST", { messageId: group.pinnedMessageId }); await reload(); } catch (error) { fail(error); }
+  };
+  host.querySelector("#unpinAll").onclick = async function () {
+    if (!(await confirmDialog("Открепить все сообщения?", "В группе не останется закреплённых сообщений.", "Открепить", true))) return;
+    try { await send(base + "/unpin", "POST", { all: true }); await reload(); } catch (error) { fail(error); }
+  };
+  var saveInfo = host.querySelector("#groupSaveInfo");
+  if (saveInfo) saveInfo.onclick = async function () {
+    try {
+      await send(base + "/info", "PUT", { title: host.querySelector("#groupTitle").value, description: host.querySelector("#groupDescription").value });
+      toast("Сохранено");
+      await reload();
+    } catch (error) { fail(error); }
+  };
+  host.querySelectorAll("[data-approve]").forEach(function (button) {
+    button.onclick = async function () {
+      try { await send(base + "/join-requests/" + button.dataset.approve, "POST", { approve: true }); toast("Принят"); await reload(); } catch (error) { fail(error); }
+    };
+  });
+  host.querySelectorAll("[data-decline]").forEach(function (button) {
+    button.onclick = async function () {
+      try { await send(base + "/join-requests/" + button.dataset.decline, "POST", { approve: false }); await reload(); } catch (error) { fail(error); }
+    };
+  });
+  host.querySelector("#makeInvite").onclick = async function () {
+    try { var result = await send(base + "/invite-link", "POST", {}); toast("Ссылка готова"); await reload(); } catch (error) { fail(error); }
+  };
+  var revoke = host.querySelector("#revokeInvite");
+  if (revoke) revoke.onclick = async function () {
+    try { await send(base + "/invite-link", "POST", { revoke: true }); await reload(); } catch (error) { fail(error); }
+  };
+  var copy = host.querySelector("#copyInvite");
+  if (copy) copy.onclick = function () {
+    navigator.clipboard.writeText(host.querySelector("#inviteLink").value).then(function () { toast("Скопировано"); });
+  };
+  host.querySelector("#loadAdmins").onclick = async function () {
+    try {
+      var result = await api(base + "/admins");
+      host.querySelector("#adminsBox").innerHTML = '<div class="list">' + result.admins.map(function (admin) {
+        return '<div class="list-item"><span class="avatar">' + esc(initials(admin.name)) + '</span><span class="grow"><b>' + esc(admin.name) + "</b>" +
+          (admin.username ? ' <span class="small faint">@' + esc(admin.username) + "</span>" : "") + (admin.isBot ? ' <span class="chip">бот</span>' : "") +
+          '<br><span class="small faint">' + esc(admin.status === "creator" ? "владелец" : "администратор") + (admin.customTitle ? " · " + esc(admin.customTitle) : "") + "</span></span>" +
+          (admin.status !== "creator" && !admin.isBot ? '<button class="btn ghost small" data-ban="' + esc(admin.userId) + '" type="button">Забанить</button>' : "") + "</div>";
+      }).join("") + "</div>";
+      host.querySelectorAll("[data-ban]").forEach(function (button) {
+        button.onclick = async function () {
+          if (!(await confirmDialog("Забанить участника?", "Он не сможет вернуться в группу, пока вы не снимете бан.", "Забанить", true))) return;
+          try { await send(base + "/members/" + button.dataset.ban + "/ban", "POST", { revokeMessages: false }); toast("Забанен"); } catch (error) { fail(error); }
+        };
+      });
+    } catch (error) { fail(error); }
+  };
+  host.querySelector("#leaveGroup").onclick = async function () {
+    if (!(await confirmDialog("Выйти из группы?", "Бот покинет группу. Вернуть его сможет только администратор группы.", "Выйти", true))) return;
+    try { await send(base + "/leave", "POST", {}); toast("Бот вышел из группы"); await reload(); } catch (error) { fail(error); }
+  };
+}
+
+VIEWS.reach = {
+  subtitle: function () { return "Сообщения клиентам и работа с группой"; },
+  render: function (host, tab) {
+    if (tab === "group") return renderGroups(host);
+    renderCampaigns(host);
+  },
+};
+`;
+
+export { REACH_JS };

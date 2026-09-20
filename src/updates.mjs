@@ -21,6 +21,7 @@ import { withOffHoursNote } from './hours.mjs';
 import { handleCalculatorCallback } from './calculator.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
 import { ADMIN_CHAT_HINT, handleAdminChatMessage } from './admin-commands.mjs';
+import { handleChatJoinRequest, handleMyChatMember, rememberGroupMessage } from './groups.mjs';
 
 function findRule(text, language) {
   const input = text.toLocaleLowerCase('ru-RU').trim();
@@ -34,6 +35,16 @@ function findRule(text, language) {
 }
 
 async function handleUpdate(update, token) {
+  // The bot was added to a group, promoted or removed.
+  if (update.my_chat_member) {
+    handleMyChatMember(update.my_chat_member);
+    return;
+  }
+  if (update.chat_join_request) {
+    handleChatJoinRequest(update.chat_join_request);
+    return;
+  }
+  if (update.message && update.message.chat && update.message.chat.type !== 'private') rememberGroupMessage(update.message);
   if (update.message_reaction) {
     await handleMessageReaction(update.message_reaction);
     return;
@@ -515,7 +526,7 @@ async function pollingLoop(generation, token) {
       const updates = await telegramRequest(token, 'getUpdates', {
         offset: runtime.offset,
         timeout: 25,
-        allowed_updates: ['message', 'callback_query', 'message_reaction'],
+        allowed_updates: ['message', 'callback_query', 'message_reaction', 'my_chat_member', 'chat_join_request'],
       }, controller.signal);
       if (generation !== runtime.generation) break;
       markTelegramSuccess();

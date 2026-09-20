@@ -24,6 +24,7 @@ import { confirmViewing } from './viewings.mjs';
 import { announceActiveChange } from './status.mjs';
 import { MIN_BACKUP_PASSWORD_LENGTH, sendTelegramBackup, setBackupPassword, telegramBackupSettings } from './offsite.mjs';
 import { applyImport, feedSettings, fetchFeed, planImport, planSummary, readFeed } from './feed-import.mjs';
+import { handleGroupApi } from './group-api.mjs';
 
 function portableBackupData() {
   const payload = clone(data);
@@ -67,6 +68,8 @@ function refreshStaffCommands(previousChatIds = []) {
 }
 
 async function handleApi(req, res, url) {
+  // Groups live in their own module: publishing, members, rights, links.
+  if (await handleGroupApi(req, res, url)) return;
   if (url.pathname === '/api/status' && req.method === 'GET') {
     return json(res, 200, {
       configured: configured(),

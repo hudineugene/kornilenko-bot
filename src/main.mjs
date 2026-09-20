@@ -28,13 +28,13 @@ import { offHoursNote } from './hours.mjs';
 import { monthlyPayment, purchaseEstimate } from './calculator.mjs';
 import { decryptBackup, encryptBackup, runTelegramBackup, setBackupPassword } from './offsite.mjs';
 import { applyImport, parseXml, planImport, planSummary, propertyTypeOf, publicAddress, readFeed, runDailyFeedImport } from './feed-import.mjs';
+import { postToGroup, runDueGroupPosts } from './groups.mjs';
 import { announceError, announceStart, sendStatusNotice, startNoticeText, stopNoticeText, telegramContactLost, telegramContactRestored } from './status.mjs';
 import { hostAllowed, loginAttempts, requestIsRemote, sessions } from './admin-http.mjs';
 import './admin-input.mjs';
 import { xlsxWorkbook } from './excel.mjs';
 import { startTunnel, stopTunnel, tunnelErrorFrom, tunnelUrlFrom } from './remote.mjs';
 import { handleApi } from './admin-api.mjs';
-import './admin-page.mjs';
 import { server } from './server.mjs';
 import { abruptStopNotice, clearRunMarker, previousRunEndedAbruptly, reportAbruptStop, start, writeRunMarker } from './lifecycle.mjs';
 
@@ -95,6 +95,7 @@ export {
   parseXml,
   planImport,
   planSummary,
+  postToGroup,
   PREVIOUS_HELP_DEFAULTS as previousHelpDefaults,
   propertyTypeOf,
   publicAddress,
@@ -111,6 +112,7 @@ export {
   restoreMissingMedia,
   runBroadcast,
   runDailyBackup,
+  runDueGroupPosts,
   runDailyDigest,
   runDailyFeedImport,
   runFollowUpReminders,

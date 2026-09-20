@@ -463,6 +463,8 @@ function safeState(session) {
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
     broadcastOptOutCount: Object.values(data.users).filter((user) => user.broadcastsOptOut && !user.blocked && user.chatId).length,
     sources: sourceReport(),
+    groups: Array.isArray(data.groups) ? data.groups : [],
+    groupPosts: Array.isArray(data.groupPosts) ? data.groupPosts.filter((post) => post.status === 'scheduled') : [],
   };
 }
 
