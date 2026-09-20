@@ -138,6 +138,8 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .msg{padding:8px 10px;border-radius:9px;background:var(--surface-soft);border:1px solid var(--line-soft);font-size:13px;white-space:pre-wrap;word-break:break-word}
 .msg.out{background:var(--brand-soft);border-color:#c7d7fe}
 .msg-meta{font-size:11px;color:var(--faint);margin-top:3px}
+.markup-bar{gap:3px;padding:4px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)}
+.markup-bar .btn{padding:3px 8px;min-width:30px}
 code{padding:1px 5px;border-radius:5px;background:var(--surface-soft);border:1px solid var(--line);font-size:11.5px}
 
 /* --- Панель сохранения, тосты, диалоги -------------------------------------- */

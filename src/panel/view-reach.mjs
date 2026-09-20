@@ -298,6 +298,7 @@ function renderGroupCard(host, group) {
     (group.lastError ? '<div class="card" style="margin-bottom:12px"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
     '<div class="split"><div class="stack">' +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Опубликовать в канале" : "Написать в группу") + '</h3></header><div class="card-body stack">' +
+        markupToolbar("groupText") +
         '<textarea id="groupText" placeholder="' + (group.type === "channel" ? "Текст поста от имени канала" : "Текст сообщения от имени бота") + '" style="min-height:110px"></textarea>' +
         '<div class="hint">Ссылка надписью: <code>[смотреть объекты](https://t.me/…)</code></div>' +
         '<div class="grid cols-2"><div class="field"><label for="groupButtonText">Кнопка (необязательно)</label><input id="groupButtonText" placeholder="Смотреть объекты"></div>' +
@@ -358,6 +359,7 @@ function renderGroupCard(host, group) {
     reader.readAsDataURL(file);
   };
   bindRubricPicker(host);
+  bindMarkupToolbar(host);
   function postPayload() {
     var when = host.querySelector("#groupWhen").value;
     return {
@@ -534,7 +536,7 @@ function renderPostStyle(host) {
       '<div class="card"><header><h3>Постоянная подпись</h3></header><div class="card-body stack">' +
         '<p class="muted small">Добавляется в конце каждого поста в группу или канал. Сюда обычно ставят контакты, сайт и ссылки на соцсети — ссылки Telegram сделает кликабельными сам.</p>' +
         '<label class="switch"><input type="checkbox" id="signOn"' + (draft.signatureEnabled ? " checked" : "") + '><span class="track"></span><span>Подпись включена</span></label>' +
-        '<div class="field"><label for="signText">Текст подписи</label><textarea id="signText" style="min-height:130px" placeholder="Construcciones Kornilenko&#10;+34 664 17 96 37&#10;https://t.me/имя_бота">' + esc(draft.signature) + "</textarea></div>" +
+        '<div class="field"><label for="signText">Текст подписи</label>' + markupToolbar("signText") + '<textarea id="signText" style="min-height:130px" placeholder="Construcciones Kornilenko&#10;+34 664 17 96 37&#10;https://t.me/имя_бота">' + esc(draft.signature) + "</textarea></div>" +
         '<div class="field"><label for="signWrap">Переносы строк</label><select id="signWrap">' +
           '<option value="keep"' + (draft.signatureWrap === "keep" ? " selected" : "") + '>как набрано</option>' +
           '<option value="space"' + (draft.signatureWrap === "space" ? " selected" : "") + '>одной строкой (перенос по ширине)</option>' +
@@ -603,6 +605,7 @@ function renderPostStyle(host) {
         preview();
       };
     };
+    bindMarkupToolbar(host);
     host.querySelector("#signText").oninput = function (event) { draft.signature = event.target.value; preview(); };
     host.querySelector("#signWrap").onchange = function (event) { draft.signatureWrap = event.target.value; preview(); };
     host.querySelector("#signQuote").onchange = function (event) { draft.signatureQuote = event.target.checked; preview(); };

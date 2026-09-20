@@ -134,6 +134,54 @@ function openDialog(options) {
   return dialog;
 }
 
+// Кнопки разметки над полем. Работают там, где бот понимает разметку:
+// подпись и текст поста в группу или канал.
+var MARKUP_EMOJI = ["🇪🇸", "🏗", "📍", "📞", "🌐", "🎵", "💬", "✅", "🔥", "❤️", "👉", "·"];
+
+function markupToolbar(target) {
+  return '<div class="row wrap markup-bar" data-markup="' + target + '">' +
+    '<button class="btn ghost small" type="button" data-mark="bold" title="Жирный"><b>Ж</b></button>' +
+    '<button class="btn ghost small" type="button" data-mark="italic" title="Курсив"><i>К</i></button>' +
+    '<button class="btn ghost small" type="button" data-mark="link" title="Ссылка надписью">🔗 Ссылка</button>' +
+    '<button class="btn ghost small" type="button" data-mark="line" title="Линия-разделитель">━━</button>' +
+    '<span class="grow"></span>' +
+    MARKUP_EMOJI.map(function (sign) {
+      return '<button class="btn ghost small" type="button" data-sign="' + esc(sign) + '">' + esc(sign) + "</button>";
+    }).join("") + "</div>";
+}
+
+function insertAround(area, before, after, placeholder) {
+  var start = area.selectionStart == null ? area.value.length : area.selectionStart;
+  var end = area.selectionEnd == null ? start : area.selectionEnd;
+  var selected = area.value.slice(start, end) || placeholder || "";
+  area.value = area.value.slice(0, start) + before + selected + after + area.value.slice(end);
+  area.focus();
+  area.setSelectionRange(start + before.length, start + before.length + selected.length);
+  area.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function bindMarkupToolbar(root) {
+  root.querySelectorAll("[data-markup]").forEach(function (bar) {
+    var area = root.querySelector("#" + bar.dataset.markup);
+    if (!area) return;
+    bar.querySelectorAll("[data-mark]").forEach(function (button) {
+      button.onclick = function () {
+        if (button.dataset.mark === "bold") insertAround(area, "**", "**", "текст");
+        else if (button.dataset.mark === "italic") insertAround(area, "__", "__", "текст");
+        else if (button.dataset.mark === "line") insertAround(area, "\n━━━━━━━━━━━━━━━━━━\n", "", "");
+        else {
+          var url = prompt("Адрес ссылки", "https://");
+          if (!url) return;
+          insertAround(area, "[", "](" + url + ")", "название");
+        }
+      };
+    });
+    bar.querySelectorAll("[data-sign]").forEach(function (button) {
+      button.onclick = function () { insertAround(area, button.dataset.sign, "", ""); };
+    });
+  });
+}
+
 // Панель сохранения: форма сообщает, что изменилась и как сохраниться.
 function watchForm(root, save, label) {
   var changed = false;
