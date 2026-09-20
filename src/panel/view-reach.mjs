@@ -200,7 +200,7 @@ function renderGroupCard(host, group) {
     "</div>" +
     (group.lastError ? '<div class="card" style="margin-bottom:12px"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
     '<div class="split"><div class="stack">' +
-      '<div class="card"><header><h3>' + (group.type === "channel" ? "Опубликовать в канале" : "Написать в группу") + "</h3></header><div class="card-body stack">" +
+      '<div class="card"><header><h3>' + (group.type === "channel" ? "Опубликовать в канале" : "Написать в группу") + '</h3></header><div class="card-body stack">' +
         '<textarea id="groupText" placeholder="' + (group.type === "channel" ? "Текст поста от имени канала" : "Текст сообщения от имени бота") + '" style="min-height:110px"></textarea>' +
         '<div class="grid cols-2"><div class="field"><label for="groupButtonText">Кнопка (необязательно)</label><input id="groupButtonText" placeholder="Смотреть объекты"></div>' +
         '<div class="field"><label for="groupButtonUrl">Ссылка кнопки</label><input id="groupButtonUrl" placeholder="https://t.me/…"></div></div>' +
