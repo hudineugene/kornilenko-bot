@@ -178,7 +178,7 @@ function navItems() {
     { id: "inquiries", icon: "✉", title: "Обращения", count: waiting, tabs: [["inbox", "Обращения"], ["viewings", "Просмотры"], ["clients", "Клиенты"]] },
     { id: "catalog", icon: "⌂", title: "Каталог", tabs: [["objects", "Объекты"], ["offers", "Акции"], ["feed", "Загрузка с сайта"]] },
     { id: "texts", icon: "✎", title: "Тексты бота", tabs: [["welcome", "Приветствие"], ["sections", "Разделы"], ["contacts", "Контакты"], ["rules", "Автоответы"], ["interface", "Интерфейс"]] },
-    { id: "reach", icon: "➤", title: "Рассылки и каналы", tabs: [["campaigns", "Рассылки"], ["group", "Группы и каналы"]] },
+    { id: "reach", icon: "➤", title: "Рассылки и каналы", tabs: [["campaigns", "Рассылки"], ["group", "Группы и каналы"], ["style", "Оформление постов"]] },
     { id: "stats", icon: "▦", title: "Статистика" },
     { id: "settings", icon: "⚙", title: "Настройки", tabs: [["connection", "Подключение"], ["work", "Работа с клиентами"], ["data", "Данные"], ["access", "Доступ"]] },
   ];

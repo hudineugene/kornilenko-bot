@@ -7,7 +7,7 @@ import net from 'node:net';
 import zlib from 'node:zlib';
 import { ADMIN_ALLOWED_HOSTS, DATA_FILE, MAX_BACKUP_BODY_BYTES, MAX_BACKUP_OUTPUT_BYTES, MAX_BODY_BYTES, MAX_IMAGE_BYTES, SESSION_TTL_MS } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { normalizeCalculator, normalizeTelegramBackup, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
+import { normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { decryptBackup, isEncryptedBackup } from './offsite.mjs';
 import { imageBytes, imageExists } from './media.mjs';
 import { normalizedInterfaceText } from './texts.mjs';
@@ -463,6 +463,11 @@ function safeState(session) {
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
     broadcastOptOutCount: Object.values(data.users).filter((user) => user.broadcastsOptOut && !user.blocked && user.chatId).length,
     sources: sourceReport(),
+    publishing: (({ signature, signatureEnabled, rubrics }) => ({
+      signature,
+      signatureEnabled,
+      rubrics: rubrics.map((rubric) => ({ id: rubric.id, name: rubric.name, placement: rubric.placement, image: imageMeta(rubric.image) })),
+    }))(normalizePublishing(data.config.publishing)),
     groups: Array.isArray(data.groups) ? data.groups : [],
     groupPosts: Array.isArray(data.groupPosts) ? data.groupPosts.filter((post) => post.status === 'scheduled') : [],
   };

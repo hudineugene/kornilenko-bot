@@ -138,6 +138,46 @@ function connectGroupCard(compact) {
   "</div></div>";
 }
 
+// Плашка рубрики и постоянная подпись — общие для всех групп и каналов.
+function publishing() {
+  return state.publishing || { signature: "", signatureEnabled: true, rubrics: [] };
+}
+
+function rubricPicker() {
+  var rubrics = publishing().rubrics || [];
+  if (!rubrics.length) {
+    return '<div class="hint">Плашки рубрик можно завести во вкладке «Оформление постов» — они добавляются к посту картинкой.</div>';
+  }
+  return '<div class="field"><label for="groupRubric">Рубрика</label><select id="groupRubric"><option value="">без плашки</option>' +
+    rubrics.map(function (rubric) {
+      return '<option value="' + esc(rubric.id) + '">' + esc(rubric.name) + (rubric.placement === "top" ? " (сверху)" : " (снизу)") + "</option>";
+    }).join("") + '</select><div id="rubricPreview" class="hint"></div></div>';
+}
+
+function bindRubricPicker(host) {
+  var select = host.querySelector("#groupRubric");
+  if (!select) return;
+  var show = function () {
+    var rubric = (publishing().rubrics || []).find(function (item) { return item.id === select.value; });
+    host.querySelector("#rubricPreview").innerHTML = rubric
+      ? '<img class="thumb" style="width:120px;height:auto;border-radius:6px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + '" alt=""> ' +
+        (rubric.placement === "top" ? "плашка встанет над текстом" : "плашка уйдёт отдельным сообщением под постом")
+      : "";
+  };
+  select.onchange = show;
+  show();
+}
+
+function signatureNote() {
+  var current = publishing();
+  if (!current.signature || !current.signatureEnabled) {
+    return '<div class="hint">Постоянная подпись выключена или пуста — включить её можно во вкладке «Оформление постов».</div>';
+  }
+  return '<div class="field"><span class="field-label">Подпись под постом</span>' +
+    '<div class="msg small">' + esc(current.signature) + "</div>" +
+    '<label class="check"><input type="checkbox" id="groupNoSignature"> этот пост без подписи</label></div>';
+}
+
 function groupKindName(group) {
   return group.type === "channel" ? "канал" : group.type === "supergroup" ? "супергруппа" : "группа";
 }
@@ -206,6 +246,8 @@ function renderGroupCard(host, group) {
         '<div class="field"><label for="groupButtonUrl">Ссылка кнопки</label><input id="groupButtonUrl" placeholder="https://t.me/…"></div></div>' +
         '<div class="grid cols-2"><div class="field"><label for="groupImage">Фото</label><input id="groupImage" type="file" accept="image/jpeg,image/png"></div>' +
         '<div class="field"><label for="groupWhen">Отправить позже</label><input id="groupWhen" type="datetime-local"></div></div>' +
+        rubricPicker() +
+        signatureNote() +
         '<div class="row wrap">' + (groupCan(group, "can_pin_messages") ? '<label class="check"><input type="checkbox" id="groupPin"> закрепить</label>' : "") +
         '<label class="check"><input type="checkbox" id="groupNotify" checked> со звуком</label>' +
         '<div class="grow"></div><button class="btn" id="groupSend" type="button">Отправить</button></div>' +
@@ -255,12 +297,15 @@ function renderGroupCard(host, group) {
     reader.onload = function () { image = reader.result; };
     reader.readAsDataURL(file);
   };
+  bindRubricPicker(host);
   host.querySelector("#groupSend").onclick = async function () {
     var when = host.querySelector("#groupWhen").value;
     var payload = {
       text: host.querySelector("#groupText").value,
       buttonText: host.querySelector("#groupButtonText").value,
       buttonUrl: host.querySelector("#groupButtonUrl").value,
+      rubricId: (host.querySelector("#groupRubric") || {}).value || "",
+      withoutSignature: Boolean(host.querySelector("#groupNoSignature") && host.querySelector("#groupNoSignature").checked),
       pin: Boolean(host.querySelector("#groupPin") && host.querySelector("#groupPin").checked),
       notify: host.querySelector("#groupNotify").checked,
       image: image,
@@ -343,10 +388,80 @@ function renderGroupCard(host, group) {
   };
 }
 
+// --- Оформление постов ------------------------------------------------------------
+function renderPostStyle(host) {
+  var current = publishing();
+  var rubrics = (current.rubrics || []).map(function (rubric) { return Object.assign({}, rubric); });
+  var pendingImages = {};
+  // Перерисовка не должна стирать то, что уже набрали.
+  var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false };
+
+  function draw() {
+    host.innerHTML = '<div class="grid cols-2">' +
+      '<div class="card"><header><h3>Постоянная подпись</h3></header><div class="card-body stack">' +
+        '<p class="muted small">Добавляется в конце каждого поста в группу или канал. Сюда обычно ставят контакты, сайт и ссылки на соцсети — ссылки Telegram сделает кликабельными сам.</p>' +
+        '<label class="switch"><input type="checkbox" id="signOn"' + (draft.signatureEnabled ? " checked" : "") + '><span class="track"></span><span>Подпись включена</span></label>' +
+        '<div class="field"><label for="signText">Текст подписи</label><textarea id="signText" style="min-height:130px" placeholder="Construcciones Kornilenko&#10;+34 664 17 96 37&#10;https://t.me/имя_бота">' + esc(draft.signature) + "</textarea></div>" +
+        '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
+      "</div></div>" +
+      '<div class="card"><header><h3>Рубрики</h3><div class="actions"><button class="btn secondary small" id="addRubric" type="button">＋ Рубрика</button></div></header><div class="card-body stack">' +
+        '<p class="muted small">Плашка — картинка с названием рубрики. При публикации вы выбираете рубрику, и плашка уходит вместе с постом: снизу отдельным сообщением или сверху вместо фото.</p>' +
+        (rubrics.length ? rubrics.map(function (rubric, index) {
+          return '<div class="row wrap" data-rubric="' + index + '" style="border-top:1px solid var(--line-soft);padding-top:8px">' +
+            (rubric.image && rubric.image.exists ? '<img class="thumb" style="width:74px;height:52px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + "?rev=" + encodeURIComponent(rubric.image.updatedAt || "") + '" alt="">' : pendingImages[index] ? '<img class="thumb" style="width:74px;height:52px" src="' + pendingImages[index] + '" alt="">' : '<span class="thumb" style="width:74px;height:52px"></span>') +
+            '<input data-field="name" value="' + esc(rubric.name || "") + '" placeholder="Название рубрики" style="max-width:220px">' +
+            '<select data-field="placement" style="max-width:130px"><option value="bottom"' + (rubric.placement === "top" ? "" : " selected") + '>снизу</option><option value="top"' + (rubric.placement === "top" ? " selected" : "") + ">сверху</option></select>" +
+            '<input type="file" accept="image/jpeg,image/png" data-file="' + index + '" style="max-width:190px">' +
+            '<button class="btn ghost small" data-drop="' + index + '" type="button">✕</button></div>';
+        }).join("") : '<span class="muted small">Рубрик пока нет.</span>') +
+      "</div></div></div>";
+
+    host.querySelector("#signText").oninput = function (event) { draft.signature = event.target.value; };
+    host.querySelector("#signOn").onchange = function (event) { draft.signatureEnabled = event.target.checked; };
+    host.querySelector("#addRubric").onclick = function () {
+      rubrics.push({ id: "", name: "", placement: "bottom", image: null });
+      draw();
+    };
+    host.querySelectorAll("[data-rubric]").forEach(function (row) {
+      var index = Number(row.dataset.rubric);
+      row.querySelectorAll("[data-field]").forEach(function (input) {
+        input.oninput = input.onchange = function () { rubrics[index][input.dataset.field] = input.value; };
+      });
+      row.querySelector("[data-drop]").onclick = function () {
+        rubrics.splice(index, 1);
+        delete pendingImages[index];
+        draw();
+      };
+      row.querySelector("[data-file]").onchange = function (event) {
+        var file = event.target.files && event.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function () { pendingImages[index] = reader.result; draw(); };
+        reader.readAsDataURL(file);
+      };
+    });
+    host.querySelector("#saveStyle").onclick = async function () {
+      try {
+        await send("/api/publishing", "PUT", {
+          signature: draft.signature,
+          signatureEnabled: draft.signatureEnabled,
+          rubrics: rubrics.map(function (rubric, index) {
+            return { id: rubric.id, name: rubric.name, placement: rubric.placement, imageDataUrl: pendingImages[index] || "" };
+          }),
+        });
+        toast("Сохранено");
+        await reload();
+      } catch (error) { fail(error); }
+    };
+  }
+  draw();
+}
+
 VIEWS.reach = {
   subtitle: function () { return "Сообщения клиентам, группы и каналы бота"; },
   render: function (host, tab) {
     if (tab === "group") return renderGroups(host);
+    if (tab === "style") return renderPostStyle(host);
     renderCampaigns(host);
   },
 };

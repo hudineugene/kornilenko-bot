@@ -7,6 +7,7 @@
 
 import crypto from 'node:crypto';
 import { cleanText } from './util.mjs';
+import { normalizePublishing } from './data-format.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
@@ -192,41 +193,70 @@ async function fetchAdministrators(group, token = data.config.botToken) {
   }));
 }
 
-// A post from the panel: text, optionally a photo and a link button.
+// Текст поста: то, что набрали, плюс постоянная подпись под ним.
+function postText(post) {
+  const publishing = normalizePublishing(data.config.publishing);
+  const body = cleanText(post.text, 4000);
+  const signature = publishing.signatureEnabled ? publishing.signature : '';
+  if (post.withoutSignature || !signature) return body;
+  return body ? body + '\n\n' + signature : signature;
+}
+
+function rubricOf(post) {
+  const publishing = normalizePublishing(data.config.publishing);
+  const rubric = post.rubricId ? publishing.rubrics.find((item) => item.id === post.rubricId) : null;
+  return rubric && imageExists(rubric.image) ? rubric : null;
+}
+
+function rememberOwnMessage(group, messageId, text, kind) {
+  if (!messageId) return;
+  group.messages.push({
+    messageId,
+    userId: String(data.bot && data.bot.id || ''),
+    name: group.type === 'channel' ? (group.title || 'Канал') : 'Бот',
+    username: cleanText(data.bot && data.bot.username, 60),
+    text: String(text || '').slice(0, 1000),
+    kind: kind || 'text',
+    fromBot: true,
+    date: new Date().toISOString(),
+  });
+  if (group.messages.length > GROUP_MESSAGE_LIMIT) group.messages = group.messages.slice(-GROUP_MESSAGE_LIMIT);
+}
+
+// Пост из панели: текст с подписью, своё фото, кнопка-ссылка и плашка рубрики.
+// Telegram всегда показывает фото над текстом, поэтому плашка «снизу» уходит
+// отдельным сообщением сразу за постом.
 async function postToGroup(group, post, token = data.config.botToken) {
-  const text = cleanText(post.text, 4000);
+  const text = postText(post);
   const url = validHttpUrl(post.buttonUrl);
   const buttonText = cleanText(post.buttonText, 64);
   const markup = url && buttonText ? { inline_keyboard: [[{ text: buttonText, url }]] } : null;
+  const rubric = rubricOf(post);
+  const topImage = imageExists(post.image) ? post.image : rubric && rubric.placement === 'top' ? rubric.image : null;
   let sent;
-  if (imageExists(post.image)) {
-    if (text.length <= 1000) {
-      sent = await sendPhotoMessage(group.id, post.image, text, token, markup);
+  if (topImage) {
+    if (text && text.length <= 1000) {
+      sent = await sendPhotoMessage(group.id, topImage, text, token, markup);
     } else {
-      sent = await sendPhotoMessage(group.id, post.image, '', token, null);
-      await sendMessage(group.id, text, token, { track: false, ...(markup ? { reply_markup: markup } : {}) });
+      sent = await sendPhotoMessage(group.id, topImage, '', token, null);
+      if (text) await sendMessage(group.id, text, token, { track: false, ...(markup ? { reply_markup: markup } : {}) });
     }
   } else {
     if (!text) throw new Error('Сообщение пустое');
     sent = await sendMessage(group.id, text, token, { track: false, ...(markup ? { reply_markup: markup } : {}) });
   }
   const messageId = sent && Number(sent.message_id);
-  if (messageId) {
-    group.messages.push({
-      messageId,
-      userId: String(data.bot && data.bot.id || ''),
-      name: 'Бот',
-      username: cleanText(data.bot && data.bot.username, 60),
-      text: text.slice(0, 1000),
-      kind: imageExists(post.image) ? 'photo' : 'text',
-      fromBot: true,
-      date: new Date().toISOString(),
+  rememberOwnMessage(group, messageId, text, topImage ? 'photo' : 'text');
+  if (rubric && rubric.placement === 'bottom' && rubric.image !== topImage) {
+    const plate = await sendPhotoMessage(group.id, rubric.image, '', token, null).catch((error) => {
+      recordError('Плашка рубрики «' + rubric.name + '»', error);
+      return null;
     });
-    if (group.messages.length > GROUP_MESSAGE_LIMIT) group.messages = group.messages.slice(-GROUP_MESSAGE_LIMIT);
-    if (post.pin) {
-      await telegramRequest(token, 'pinChatMessage', { chat_id: group.id, message_id: messageId, disable_notification: !post.notify });
-      group.pinnedMessageId = messageId;
-    }
+    rememberOwnMessage(group, plate && Number(plate.message_id), '🏷 ' + rubric.name, 'photo');
+  }
+  if (messageId && post.pin) {
+    await telegramRequest(token, 'pinChatMessage', { chat_id: group.id, message_id: messageId, disable_notification: !post.notify });
+    group.pinnedMessageId = messageId;
   }
   group.lastPostAt = new Date().toISOString();
   scheduleSave();
@@ -279,6 +309,8 @@ function newGroupPost(fields) {
     buttonText: cleanText(fields.buttonText, 64),
     buttonUrl: cleanText(fields.buttonUrl, 500),
     image: fields.image || null,
+    rubricId: cleanText(fields.rubricId, 60),
+    withoutSignature: Boolean(fields.withoutSignature),
     pin: Boolean(fields.pin),
     notify: fields.notify !== false,
     status: 'scheduled',
@@ -300,6 +332,7 @@ export {
   handleChatJoinRequest,
   handleMyChatMember,
   newGroupPost,
+  postText,
   postToGroup,
   refreshGroup,
   refreshGroups,

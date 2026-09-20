@@ -1,7 +1,9 @@
 // API панели для групп: публикации, закрепление, участники, права,
 // приглашения, заявки на вступление. Все действия — от имени бота.
 
+import crypto from 'node:crypto';
 import { cleanText } from './util.mjs';
+import { MAX_RUBRICS, normalizePublishing } from './data-format.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { telegramRequest } from './telegram.mjs';
@@ -41,7 +43,9 @@ function token() {
 
 function postImage(body) {
   if (!body.image) return null;
-  return persistImage(parseUploadedImage(body.image, 'group'));
+  const image = parseUploadedImage(body.image, 'group');
+  persistImage(image);
+  return image;
 }
 
 function futureDate(value) {
@@ -53,9 +57,40 @@ function futureDate(value) {
 
 // Every route here is /api/groups/... and needs an authenticated session.
 async function handleGroupApi(req, res, url) {
-  if (!url.pathname.startsWith('/api/groups') && !url.pathname.startsWith('/api/group-posts')) return false;
+  if (!url.pathname.startsWith('/api/groups') && !url.pathname.startsWith('/api/group-posts') && url.pathname !== '/api/publishing') return false;
   const session = requireAuth(req, res, true);
   if (!session) return true;
+
+  // Постоянная подпись под постами и рубричные плашки.
+  if (url.pathname === '/api/publishing' && req.method === 'PUT') {
+    const body = await readJson(req);
+    const current = normalizePublishing(data.config.publishing);
+    const incoming = Array.isArray(body.rubrics) ? body.rubrics.slice(0, MAX_RUBRICS) : [];
+    try {
+      const rubrics = incoming.map((item) => {
+        const existing = current.rubrics.find((rubric) => rubric.id === cleanText(item.id, 60));
+        const name = cleanText(item.name, 60);
+        if (!name) throw new Error('У каждой рубрики должно быть название');
+        let image = existing ? existing.image : null;
+        if (item.imageDataUrl) {
+          // persistImage кладёт файл на диск и правит объект на месте.
+          image = parseUploadedImage(item.imageDataUrl, name + '.jpg');
+          persistImage(image);
+        }
+        if (!image) throw new Error('Загрузите плашку для рубрики «' + name + '»');
+        return { id: existing ? existing.id : crypto.randomUUID(), name, placement: item.placement === 'top' ? 'top' : 'bottom', image };
+      });
+      data.config.publishing = normalizePublishing({
+        signature: body.signature,
+        signatureEnabled: body.signatureEnabled !== false,
+        rubrics,
+      });
+      saveDataNow();
+      return json(res, 200, { ok: true, publishing: data.config.publishing }), true;
+    } catch (error) {
+      return json(res, 400, { error: error.message }), true;
+    }
+  }
 
   if (url.pathname === '/api/groups' && req.method === 'GET') {
     await refreshGroups().catch((error) => recordError('Обновление групп', error));

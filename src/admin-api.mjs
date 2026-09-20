@@ -309,6 +309,17 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  // Плашка рубрики лежит в настройках, а не в коллекции.
+  const rubricMatch = url.pathname.match(/^\/api\/media\/rubrics\/([^/]+)$/);
+  if (rubricMatch && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const rubrics = (data.config.publishing && data.config.publishing.rubrics) || [];
+    const rubric = rubrics.find((item) => item.id === decodeURIComponent(rubricMatch[1]));
+    if (!rubric || !imageExists(rubric.image)) return json(res, 404, { error: 'Изображение не найдено' });
+    return binaryImage(res, rubric.image);
+  }
+
   const mediaMatch = url.pathname.match(/^\/api\/media\/(objects|promotions|broadcasts)\/([^/]+)$/);
   if (mediaMatch && req.method === 'GET') {
     const session = requireAuth(req, res);

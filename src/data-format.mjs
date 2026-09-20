@@ -239,6 +239,24 @@ function migrateShortMenu(interfaceText, messages) {
   }
 }
 
+// Оформление постов в группах и каналах: постоянная подпись под текстом и
+// рубричные плашки — картинки с названием рубрики.
+const MAX_RUBRICS = 12;
+
+function normalizePublishing(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    signature: cleanText(source.signature, 1000),
+    signatureEnabled: source.signatureEnabled !== false,
+    rubrics: (Array.isArray(source.rubrics) ? source.rubrics : []).slice(0, MAX_RUBRICS).map((item) => ({
+      id: cleanText(item && item.id, 60) || crypto.randomUUID(),
+      name: cleanText(item && item.name, 60),
+      placement: item && item.placement === 'top' ? 'top' : 'bottom',
+      image: item && item.image && typeof item.image === 'object' ? item.image : null,
+    })).filter((item) => item.name),
+  };
+}
+
 // Groups and channels the bot is in, and what it saw there. A chat id is
 // negative; messages are capped when loading too.
 const GROUP_STATUSES = ['creator', 'administrator', 'member', 'restricted', 'left', 'kicked'];
@@ -292,6 +310,8 @@ function normalizeGroupPosts(value) {
     buttonText: cleanText(item.buttonText, 64),
     buttonUrl: cleanText(item.buttonUrl, 500),
     image: item.image && typeof item.image === 'object' ? item.image : null,
+    rubricId: cleanText(item.rubricId, 60),
+    withoutSignature: Boolean(item.withoutSignature),
     pin: Boolean(item.pin),
     notify: item.notify !== false,
     status: ['scheduled', 'sent', 'failed', 'cancelled'].includes(item.status) ? item.status : 'scheduled',
@@ -694,6 +714,7 @@ function normalizeLoadedData(parsed) {
     normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
     normalized.lastWeeklyReportFor = cleanText(parsed.lastWeeklyReportFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
+    normalized.config.publishing = normalizePublishing(normalized.config.publishing);
     normalized.groups = normalizeGroups(parsed.groups);
     normalized.groupPosts = normalizeGroupPosts(parsed.groupPosts);
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
@@ -725,8 +746,10 @@ export {
   migrateDefaultTexts,
   migrateSelectionSteps,
   migrateShortMenu,
+  MAX_RUBRICS,
   normalizeGroupPosts,
   normalizeGroups,
+  normalizePublishing,
   PREVIOUS_HELP_DEFAULTS,
   normalizeAdminReplyTargets,
   normalizeCalculator,

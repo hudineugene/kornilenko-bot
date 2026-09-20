@@ -224,3 +224,81 @@ test('the panel state carries the groups', async () => {
     await new Promise((resolve) => bot.server.close(resolve));
   }
 });
+
+test('подпись и плашка рубрики добавляются к посту', async () => {
+  const group = await addBotAsAdmin();
+  const data = bot.getData();
+  const plate = { id: 'plate-1', name: 'plate.png', mimeType: 'image/png', size: 10, dataBase64: 'iVBORw0KGgo=' };
+  data.config.publishing = {
+    signature: 'Construcciones Kornilenko\n+34 664 17 96 37',
+    signatureEnabled: true,
+    rubrics: [
+      { id: 'r-bottom', name: 'Новостройки', placement: 'bottom', image: plate },
+      { id: 'r-top', name: 'Советы', placement: 'top', image: plate },
+    ],
+  };
+
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Новый дом в Бенидорме', rubricId: 'r-bottom' }, TOKEN);
+  const text = telegram.calls.find((call) => call.method === 'sendMessage');
+  assert.match(text.body.text, /^Новый дом в Бенидорме\n\nConstrucciones Kornilenko/, 'подпись под текстом');
+  const plateCall = telegram.calls.find((call) => call.method === 'sendPhoto');
+  assert.ok(plateCall, 'плашка ушла отдельным сообщением');
+  assert.equal(plateCall.body.caption || '', '', 'на плашке нет подписи');
+  assert.ok(telegram.calls.indexOf(plateCall) > telegram.calls.indexOf(text), 'плашка после текста');
+
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Как выбрать квартиру', rubricId: 'r-top' }, TOKEN);
+  const top = telegram.calls.find((call) => call.method === 'sendPhoto');
+  assert.match(top.body.caption, /^Как выбрать квартиру/, 'плашка сверху, текст подписью к ней');
+  assert.equal(telegram.calls.filter((call) => call.method === 'sendPhoto').length, 1, 'плашка одна');
+
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Без подписи', withoutSignature: true }, TOKEN);
+  assert.equal(telegram.calls.find((call) => call.method === 'sendMessage').body.text, 'Без подписи');
+
+  data.config.publishing.signatureEnabled = false;
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Подпись выключена' }, TOKEN);
+  assert.equal(telegram.calls.find((call) => call.method === 'sendMessage').body.text, 'Подпись выключена');
+});
+
+test('панель сохраняет подпись и рубрики', async () => {
+  const data = bot.getData();
+  const password = bot.hashPassword('correct-password');
+  data.config.passwordSalt = password.salt;
+  data.config.passwordHash = password.hash;
+  const png = 'data:image/png;base64,' + Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('plate')]).toString('base64');
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = 'http://127.0.0.1:' + bot.server.address().port;
+    const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
+    const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+    const save = (body) => realFetch(base + '/api/publishing', { method: 'PUT', headers, body: JSON.stringify(body) });
+
+    assert.equal((await save({ signature: 'Подпись', rubrics: [{ name: 'Без картинки' }] })).status, 400, 'рубрика без плашки не сохраняется');
+
+    const ok = await save({ signature: 'Подпись\nсайт: example.com', rubrics: [{ name: 'Новостройки', placement: 'bottom', imageDataUrl: png }] });
+    assert.equal(ok.status, 200);
+    const saved = data.config.publishing;
+    assert.equal(saved.signature, 'Подпись\nсайт: example.com');
+    assert.equal(saved.rubrics.length, 1);
+    assert.ok(saved.rubrics[0].id, 'рубрике выдан идентификатор');
+
+    // Повторное сохранение без файла оставляет прежнюю плашку.
+    const again = await save({ signature: 'Подпись', rubrics: [{ id: saved.rubrics[0].id, name: 'Новостройки', placement: 'top' }] });
+    assert.equal(again.status, 200);
+    assert.equal(data.config.publishing.rubrics[0].placement, 'top');
+    assert.ok(data.config.publishing.rubrics[0].image, 'плашка сохранилась');
+
+    const state = await (await realFetch(base + '/api/state', { headers: { cookie: headers.cookie } })).json();
+    assert.equal(state.publishing.rubrics[0].name, 'Новостройки');
+    assert.equal(state.publishing.rubrics[0].image.exists, true);
+    assert.equal(state.publishing.rubrics[0].image.dataBase64, undefined, 'файл в состояние не попадает');
+
+    const picture = await realFetch(base + '/api/media/rubrics/' + saved.rubrics[0].id, { headers: { cookie: headers.cookie } });
+    assert.equal(picture.status, 200);
+  } finally {
+    await new Promise((resolve) => bot.server.close(resolve));
+  }
+});

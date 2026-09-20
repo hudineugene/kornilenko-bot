@@ -26,8 +26,8 @@ function propertyImages(record, language) {
   var byLanguage = record.imagesByLanguage || {};
   return byLanguage[language] || [];
 }
-function imageUrl(kind, recordId, image, language) {
-  return "/api/media/" + kind + "/" + encodeURIComponent(recordId) + "/" + encodeURIComponent(language) + "/" + encodeURIComponent(image.id);
+function imageUrl(kind, recordId, image) {
+  return "/api/media/" + kind + "/" + encodeURIComponent(recordId) + "?imageId=" + encodeURIComponent(image.id);
 }
 
 // Поля с переводом: вкладки языков переключают все такие поля сразу.
