@@ -9,6 +9,7 @@ import { persistImage } from './media.mjs';
 import { json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
 import {
   fetchAdministrators,
+  upsertGroup,
   forgetGroupMessage,
   groupById,
   groupList,
@@ -60,6 +61,29 @@ async function handleGroupApi(req, res, url) {
     await refreshGroups().catch((error) => recordError('Обновление групп', error));
     json(res, 200, { groups: groupList(), posts: data.groupPosts || [] });
     return true;
+  }
+
+  // Telegram сообщает о группе только когда бота добавляют или меняют права,
+  // поэтому группу, где он уже состоит, подключают по её ID.
+  if (url.pathname === '/api/groups' && req.method === 'POST') {
+    const body = await readJson(req);
+    const chatId = cleanText(body.chatId, 60).replace(/^https?:\/\/t\.me\//i, '@');
+    if (!/^-?\d{4,20}$/.test(chatId) && !/^@[A-Za-z0-9_]{4,32}$/.test(chatId)) {
+      return json(res, 400, { error: 'Укажите ID вида -1001234567890 или @имя канала' }), true;
+    }
+    try {
+      const chat = await telegramRequest(token(), 'getChat', { chat_id: chatId });
+      if (!chat || chat.type === 'private') throw new Error('Это не группа и не канал');
+      const group = upsertGroup(chat, {});
+      if (!group) throw new Error('Слишком много групп');
+      await refreshGroup(group);
+      if (['left', 'kicked'].includes(group.status)) throw new Error('Бот не состоит в этой группе');
+      saveDataNow();
+      return json(res, 200, { ok: true, group }), true;
+    } catch (error) {
+      recordError('Подключение группы', error);
+      return json(res, 400, { error: error.message }), true;
+    }
   }
 
   if (url.pathname === '/api/groups/refresh' && req.method === 'POST') {

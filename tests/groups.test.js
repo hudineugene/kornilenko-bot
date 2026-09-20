@@ -9,7 +9,16 @@ const realFetch = global.fetch;
 const { bot, telegram, TOKEN, resetData, settle, cleanup } = require('./helpers/chat');
 
 const telegramStub = global.fetch;
-global.fetch = (url, init) => (String(url).startsWith('http://127.0.0.1') ? realFetch(url, init) : telegramStub(url, init));
+// Ответы Telegram, которые нужны именно этим тестам (getChat и соседи).
+const replies = new Map();
+global.fetch = (url, init) => {
+  if (String(url).startsWith('http://127.0.0.1')) return realFetch(url, init);
+  const method = String(url).split('/').pop();
+  if (replies.has(method)) {
+    return Promise.resolve(new Response(JSON.stringify({ ok: true, result: replies.get(method) }), { status: 200, headers: { 'content-type': 'application/json' } }));
+  }
+  return telegramStub(url, init);
+};
 
 const GROUP = '-1001234567890';
 let updateId = 5000;
@@ -149,6 +158,52 @@ test('the panel publishes, pins, deletes and answers join requests', async () =>
   } finally {
     await new Promise((resolve) => bot.server.close(resolve));
   }
+});
+
+test('a channel where the bot already is can be connected by its id', async () => {
+    const data = bot.getData();
+    const password = bot.hashPassword('correct-password');
+    data.config.passwordSalt = password.salt;
+    data.config.passwordHash = password.hash;
+    replies.set('getChat', { id: Number(GROUP), type: 'channel', title: 'Застройщик в Испании', username: 'kornilenko1' });
+    replies.set('getChatMemberCount', 59);
+    replies.set('getChatMember', { status: 'administrator', can_post_messages: true, can_delete_messages: true, can_invite_users: true });
+    await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+    try {
+      const base = 'http://127.0.0.1:' + bot.server.address().port;
+      const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
+      const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+
+      const bad = await realFetch(base + '/api/groups', { method: 'POST', headers, body: JSON.stringify({ chatId: 'клуб' }) });
+      assert.equal(bad.status, 400);
+
+      const response = await realFetch(base + '/api/groups', { method: 'POST', headers, body: JSON.stringify({ chatId: GROUP }) });
+      assert.equal(response.status, 200);
+      const group = data.groups[0];
+      assert.deepEqual([group.title, group.type, group.status, group.memberCount], ['Застройщик в Испании', 'channel', 'administrator', 59]);
+      assert.equal(group.rights.can_post_messages, true);
+      assert.equal(group.rights.can_pin_messages, false, 'право, которого нет, не выдумывается');
+    } finally {
+      replies.clear();
+      await new Promise((resolve) => bot.server.close(resolve));
+    }
+  });
+
+test('a post in a channel is remembered as the channel, not a person', async () => {
+  await addBotAsAdmin();
+  await deliver({
+    channel_post: {
+      message_id: 501, date: Math.floor(Date.now() / 1000),
+      chat: chat({ type: 'channel', title: 'Застройщик в Испании' }),
+      sender_chat: { id: Number(GROUP), title: 'Застройщик в Испании', type: 'channel' },
+      text: 'Новый дом в Бенидорме',
+    },
+  });
+  const group = bot.getData().groups[0];
+  assert.equal(group.messages.length, 1);
+  assert.equal(group.messages[0].name, 'Застройщик в Испании');
+  assert.equal(group.messages[0].fromBot, true);
+  assert.equal(bot.getData().inquiries.length, 0);
 });
 
 test('the panel state carries the groups', async () => {

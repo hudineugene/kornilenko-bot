@@ -6,7 +6,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const realFetch = global.fetch;
 const { bot, telegram, TOKEN, ADMIN_CHAT, createChat, property, resetData, settle, cleanup } = require('./helpers/chat');
+const telegramStub = global.fetch;
+global.fetch = (url, init) => (String(url).startsWith('http://127.0.0.1') ? realFetch(url, init) : telegramStub(url, init));
 
 test.beforeEach(() => resetData((data) => {
   data.objects.push(property('villa-sol-01', 'Вилла Сол', 'active'));
@@ -141,6 +144,36 @@ test('the notification about a photo is a reply to the copied photo', async () =
   const notification = sentTo(calls, ADMIN_CHAT)[0];
   assert.ok(notification.body.reply_parameters, 'linked to the photo');
   assert.equal(typeof notification.body.reply_parameters.message_id, 'number');
+});
+
+test('the panel deletes one inquiry and clears old ones', async () => {
+  const data = bot.getData();
+  const old = new Date(Date.now() - 200 * 864e5).toISOString();
+  data.inquiries = [
+    { id: 'i1', userId: '1', chatId: '1', type: 'general', text: 'новое', status: 'new', replies: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'i2', userId: '1', chatId: '1', type: 'general', text: 'закрытое старое', status: 'closed', replies: [], createdAt: old, updatedAt: old },
+    { id: 'i3', userId: '1', chatId: '1', type: 'general', text: 'закрытое свежее', status: 'closed', replies: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  ];
+  const password = bot.hashPassword('correct-password');
+  data.config.passwordSalt = password.salt;
+  data.config.passwordHash = password.hash;
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = 'http://127.0.0.1:' + bot.server.address().port;
+    const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
+    const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+
+    const cleanup = await realFetch(base + '/api/inquiries/cleanup', { method: 'POST', headers, body: JSON.stringify({ scope: 'closed', olderThanDays: 90 }) });
+    assert.equal((await cleanup.json()).removed, 1, 'только закрытое и старое');
+    assert.deepEqual(data.inquiries.map((item) => item.id), ['i1', 'i3']);
+
+    const dropped = await realFetch(base + '/api/inquiries/i3', { method: 'DELETE', headers });
+    assert.equal(dropped.status, 200);
+    assert.deepEqual(data.inquiries.map((item) => item.id), ['i1']);
+    assert.equal((await realFetch(base + '/api/inquiries/i3', { method: 'DELETE', headers })).status, 404);
+  } finally {
+    await new Promise((resolve) => bot.server.close(resolve));
+  }
 });
 
 test('the admin chat gets its own command menu', async () => {

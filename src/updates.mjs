@@ -44,6 +44,10 @@ async function handleUpdate(update, token) {
     handleChatJoinRequest(update.chat_join_request);
     return;
   }
+  if (update.channel_post) {
+    rememberGroupMessage(update.channel_post);
+    return;
+  }
   if (update.message && update.message.chat && update.message.chat.type !== 'private') rememberGroupMessage(update.message);
   if (update.message_reaction) {
     await handleMessageReaction(update.message_reaction);
@@ -526,7 +530,7 @@ async function pollingLoop(generation, token) {
       const updates = await telegramRequest(token, 'getUpdates', {
         offset: runtime.offset,
         timeout: 25,
-        allowed_updates: ['message', 'callback_query', 'message_reaction', 'my_chat_member', 'chat_join_request'],
+        allowed_updates: ['message', 'callback_query', 'message_reaction', 'my_chat_member', 'chat_join_request', 'channel_post'],
       }, controller.signal);
       if (generation !== runtime.generation) break;
       markTelegramSuccess();

@@ -614,7 +614,39 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // Уборка списка обращений: по одному или пачкой (закрытые, старше N дней).
+  if (url.pathname === '/api/inquiries/cleanup' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const days = Math.max(0, Math.min(3650, Number(body.olderThanDays) || 0));
+    const before = days ? Date.now() - days * 24 * 60 * 60 * 1000 : Infinity;
+    const scope = ['closed', 'answered', 'all'].includes(body.scope) ? body.scope : 'closed';
+    const keep = [];
+    let removed = 0;
+    for (const inquiry of data.inquiries) {
+      const old = (Date.parse(inquiry.updatedAt || inquiry.createdAt) || 0) < before;
+      const matches = scope === 'all' ? true : scope === 'closed' ? inquiry.status === 'closed' : inquiry.status !== 'new';
+      if (matches && old) removed += 1;
+      else keep.push(inquiry);
+    }
+    data.inquiries = keep;
+    saveDataNow();
+    return json(res, 200, { ok: true, removed, left: data.inquiries.length });
+  }
+
   const inquiryMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)$/);
+  if (inquiryMatch && req.method === 'DELETE') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const id = decodeURIComponent(inquiryMatch[1]);
+    const before = data.inquiries.length;
+    data.inquiries = data.inquiries.filter((item) => item.id !== id);
+    if (data.inquiries.length === before) return json(res, 404, { error: 'Обращение не найдено' });
+    saveDataNow();
+    return json(res, 200, { ok: true });
+  }
+
   if (inquiryMatch && req.method === 'PATCH') {
     const session = requireAuth(req, res, true);
     if (!session) return;

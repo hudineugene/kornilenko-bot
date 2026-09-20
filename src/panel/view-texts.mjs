@@ -141,7 +141,10 @@ function renderRules(host) {
     (rules.length ? rules.map(function (rule) {
       return '<tr data-id="' + esc(rule.id) + '"><td class="clickable" data-edit="1"><b>' + esc(rule.trigger) + '</b><br><span class="small faint">' + esc((RULE_TYPES.find(function (type) { return type[0] === rule.type; }) || ["", ""])[1]) + "</span></td>" +
         "<td>" + esc(String(rule.answer).slice(0, 80)) + "</td><td>" + esc(rule.language === "all" ? "все" : rule.language.toUpperCase()) + "</td>" +
-        '<td class="right nowrap">' + (rule.enabled === false ? '<span class="chip">выключен</span>' : "") + '<button class="btn ghost small" data-delete="1">✕</button></td></tr>';
+        '<td class="right nowrap">' + (rule.enabled === false ? '<span class="chip">выключен</span>' : "") +
+        '<button class="btn ghost small" data-move="up" title="Проверять раньше">↑</button>' +
+        '<button class="btn ghost small" data-move="down" title="Проверять позже">↓</button>' +
+        '<button class="btn ghost small" data-delete="1">✕</button></td></tr>';
     }).join("") : '<tr><td colspan="4"><div class="empty"><b>Автоответов нет</b>Бот передаёт такие сообщения менеджеру</div></td></tr>') +
     "</tbody></table></div></div>" +
     '<div class="card"><header><h3>Проверить сообщение</h3></header><div class="card-body stack">' +
@@ -152,6 +155,16 @@ function renderRules(host) {
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     var id = row.dataset.id;
     row.querySelector("[data-edit]").onclick = function () { openRuleEditor(id); };
+    row.querySelectorAll("[data-move]").forEach(function (button) {
+      button.onclick = async function () {
+        var ids = rules.map(function (rule) { return rule.id; });
+        var index = ids.indexOf(id);
+        var next = button.dataset.move === "up" ? index - 1 : index + 1;
+        if (next < 0 || next >= ids.length) return;
+        ids.splice(next, 0, ids.splice(index, 1)[0]);
+        try { await send("/api/rules/reorder", "POST", { ids: ids }); await reload(); } catch (error) { fail(error); }
+      };
+    });
     row.querySelector("[data-delete]").onclick = async function () {
       if (!(await confirmDialog("Удалить автоответ?", "Бот перестанет отвечать на это сообщение.", "Удалить", true))) return;
       try { await api("/api/rules/" + encodeURIComponent(id), { method: "DELETE" }); await reload(); } catch (error) { fail(error); }

@@ -96,6 +96,7 @@ function openTemplates() {
 function renderInquiryList(host) {
   var rows = inquiryRows();
   pageAction("✎ Шаблоны ответов", openTemplates, "secondary");
+  pageAction("🧹 Очистить", openCleanup, "ghost");
   var counts = {
     waiting: (state.inquiries || []).filter(awaitsReply).length,
     open: (state.inquiries || []).filter(function (item) { return item.status !== "closed"; }).length,
@@ -142,6 +143,53 @@ function renderInquiryList(host) {
     row.onclick = function () { selectedInquiry = row.dataset.id; renderInquiryList(host); };
   });
   renderInquiryCard(host.querySelector("#inquiryCard"));
+}
+
+// Уборка списка: закрытые, отвеченные или всё подряд, с отсечкой по возрасту.
+function openCleanup() {
+  var all = state.inquiries || [];
+  var closed = all.filter(function (item) { return item.status === "closed"; }).length;
+  openDialog({
+    title: "Очистить обращения",
+    body: '<div class="stack">' +
+      '<p class="muted small">Обращения удаляются из панели без возможности восстановления. Клиенты и переписка в Telegram остаются.</p>' +
+      '<div class="field"><label for="cleanScope">Какие удалить</label><select id="cleanScope">' +
+        '<option value="closed">Только закрытые (' + closed + ")</option>" +
+        '<option value="answered">Закрытые и отвеченные</option>' +
+        '<option value="all">Все, включая ждущие ответа (' + all.length + ")</option>" +
+      "</select></div>" +
+      '<div class="field"><label for="cleanAge">Старше чем</label><select id="cleanAge">' +
+        '<option value="0">любого возраста</option><option value="30">30 дней</option><option value="90" selected>90 дней</option><option value="180">180 дней</option><option value="365">года</option>' +
+      "</select></div>" +
+      '<div id="cleanPreview" class="chip warn"></div></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn danger" id="doClean" type="button">Удалить</button>',
+    ready: function (dialog) {
+      function matching() {
+        var scope = dialog.querySelector("#cleanScope").value;
+        var days = Number(dialog.querySelector("#cleanAge").value);
+        var before = days ? Date.now() - days * 864e5 : Infinity;
+        return all.filter(function (item) {
+          var old = (Date.parse(item.updatedAt || item.createdAt) || 0) < before;
+          var matches = scope === "all" ? true : scope === "closed" ? item.status === "closed" : item.status !== "new";
+          return matches && old;
+        }).length;
+      }
+      function preview() { dialog.querySelector("#cleanPreview").textContent = "Будет удалено: " + matching(); }
+      preview();
+      dialog.querySelector("#cleanScope").onchange = preview;
+      dialog.querySelector("#cleanAge").onchange = preview;
+      dialog.querySelector("#doClean").onclick = async function () {
+        if (!(await confirmDialog("Удалить обращения?", "Будет удалено: " + matching() + ". Отменить это нельзя.", "Удалить", true))) return;
+        try {
+          var result = await send("/api/inquiries/cleanup", "POST", { scope: dialog.querySelector("#cleanScope").value, olderThanDays: Number(dialog.querySelector("#cleanAge").value) });
+          dialog.close();
+          selectedInquiry = "";
+          toast("Удалено: " + result.removed + ", осталось: " + result.left);
+          await reload();
+        } catch (error) { fail(error); }
+      };
+    },
+  });
 }
 
 async function exportInquiries() {
@@ -192,7 +240,8 @@ function renderInquiryCard(host) {
       '<div class="field"><label>Заметка для себя</label><textarea id="inqNote">' + esc(item.note || "") + "</textarea></div>" +
       '<div class="row"><div class="field grow"><label>Связаться снова</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div>' +
       '<div class="field" style="max-width:110px"><label>Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div>' +
-      '<button class="btn secondary small" id="saveInq" type="button">Сохранить заметку и напоминание</button>' +
+      '<div class="row"><button class="btn secondary small" id="saveInq" type="button">Сохранить заметку и напоминание</button>' +
+      '<div class="grow"></div><button class="btn ghost small" id="deleteInq" type="button">Удалить обращение</button></div>' +
     "</div></div>";
 
   host.querySelector("#sendReply").onclick = async function () {
@@ -225,6 +274,15 @@ function renderInquiryCard(host) {
         followUpTime: host.querySelector("#followTime").value,
       });
       toast("Сохранено");
+      await reload();
+    } catch (error) { fail(error); }
+  };
+  host.querySelector("#deleteInq").onclick = async function () {
+    if (!(await confirmDialog("Удалить обращение?", "Оно исчезнет из панели. Переписка в Telegram останется.", "Удалить", true))) return;
+    try {
+      await api("/api/inquiries/" + encodeURIComponent(item.id), { method: "DELETE" });
+      selectedInquiry = "";
+      toast("Удалено");
       await reload();
     } catch (error) { fail(error); }
   };
@@ -313,7 +371,7 @@ function openClient(id) {
         return '<div class="list-item"><span class="grow"><b>' + esc(inquiryTypeName(item)) + "</b><br><span class=\"muted small\">" + esc(String(item.text || "").slice(0, 70)) + "</span></span><span class=\"small faint\">" + dateShort(item.createdAt) + "</span></div>";
       }).join("") + "</div></div>" : "") +
     "</div>",
-    footer: '<button class="btn danger" id="eraseClient" type="button">Удалить данные</button><div class="grow"></div><button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="saveClient" type="button">Сохранить</button>',
+      footer: '<button class="btn danger" id="eraseClient" type="button">Удалить данные</button><button class="btn ghost" id="exportClient" type="button">Выгрузить данные</button><div class="grow"></div><button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="saveClient" type="button">Сохранить</button>',
     ready: function (dialog) {
       dialog.querySelector("#saveClient").onclick = async function () {
         try {
@@ -326,6 +384,9 @@ function openClient(id) {
           toast("Сохранено");
           await reload();
         } catch (error) { fail(error); }
+      };
+      dialog.querySelector("#exportClient").onclick = function () {
+        window.location.href = "/api/users/" + encodeURIComponent(user.id) + "/export";
       };
       dialog.querySelector("#eraseClient").onclick = async function () {
         if (!(await confirmDialog("Удалить данные клиента?", "Переписка, заявки и контакты этого клиента будут удалены без возможности восстановления.", "Удалить", true))) return;

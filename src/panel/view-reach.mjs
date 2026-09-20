@@ -129,15 +129,49 @@ function groupCan(group, right) {
   return group.status === "creator" || Boolean(groupRights(group)[right]);
 }
 
+// Группу, где бот уже состоит, Telegram сам не покажет: подключаем по ID.
+function connectGroupCard(compact) {
+  return '<div class="card"' + (compact ? ' style="margin-bottom:12px"' : "") + '><header><h3>Подключить группу или канал</h3></header><div class="card-body stack">' +
+    '<div class="row wrap"><input id="newGroupId" placeholder="-1001234567890 или @channel" style="max-width:260px">' +
+    '<button class="btn" id="connectGroup" type="button">Подключить</button></div>' +
+    '<div class="hint">Бот уже должен состоять там администратором. ID начинается с -100; у канала подойдёт и @имя. Новую группу или канал, куда бота добавят позже, панель увидит сама.</div>' +
+  "</div></div>";
+}
+
+function groupKindName(group) {
+  return group.type === "channel" ? "канал" : group.type === "supergroup" ? "супергруппа" : "группа";
+}
+function membersWord(group) {
+  return group.type === "channel" ? "Подписчиков" : "Участников";
+}
+
+function bindConnectGroup(host) {
+  var button = host.querySelector("#connectGroup");
+  if (!button) return;
+  button.onclick = async function () {
+    var chatId = host.querySelector("#newGroupId").value.trim();
+    button.disabled = true;
+    try {
+      var result = await send("/api/groups", "POST", { chatId: chatId });
+      selectedGroup = result.group.id;
+      toast("Группа подключена: " + (result.group.title || result.group.id));
+      await reload();
+    } catch (error) { fail(error); }
+    button.disabled = false;
+  };
+}
+
 function renderGroups(host) {
   var groups = state.groups || [];
   var active = groups.filter(function (group) { return ["member", "administrator", "creator"].indexOf(group.status) >= 0; });
   if (!selectedGroup && active.length) selectedGroup = active[0].id;
   var group = groups.find(function (item) { return item.id === selectedGroup; });
   if (!groups.length) {
-    host.innerHTML = '<div class="card"><div class="empty"><b>Бот пока не состоит в группах</b>' +
-      "Добавьте бота в группу и назначьте администратором — группа появится здесь автоматически.<br>" +
-      'Если бот уже в группе, напишите там любое сообщение или переназначьте права, чтобы Telegram сообщил об этом боту.</div></div>';
+    host.innerHTML = connectGroupCard(true) +
+      '<div class="card"><div class="empty"><b>Группа пока не подключена</b>' +
+      "Добавьте бота в группу и назначьте администратором — новая группа появится здесь сама.<br>" +
+      "Если бот уже состоит в группе, укажите её ID выше.</div></div>";
+    bindConnectGroup(host);
     return;
   }
   pageAction("Обновить", async function () {
@@ -145,7 +179,9 @@ function renderGroups(host) {
   }, "secondary");
   host.innerHTML = (groups.length > 1 ? '<div class="toolbar"><div class="tabs" id="groupPicker">' + groups.map(function (item) {
       return '<button type="button" data-group="' + esc(item.id) + '" class="' + (item.id === selectedGroup ? "active" : "") + '">' + esc(item.title || item.id) + "</button>";
-    }).join("") + "</div></div>" : "") + '<div id="groupBody"></div>';
+    }).join("") + "</div></div>" : "") + '<div id="groupBody"></div>' +
+    '<div style="margin-top:12px">' + connectGroupCard(false) + "</div>";
+  bindConnectGroup(host);
   host.querySelectorAll("#groupPicker button").forEach(function (button) {
     button.onclick = function () { selectedGroup = button.dataset.group; renderGroups(host); };
   });
@@ -157,56 +193,57 @@ function renderGroupCard(host, group) {
   var pinned = (group.messages || []).find(function (message) { return message.messageId === group.pinnedMessageId; });
   host.innerHTML =
     '<div class="grid cols-4" style="margin-bottom:12px">' +
-      kpiCard("Участников", num(group.memberCount), group.type === "supergroup" ? "супергруппа" : group.type) +
+      kpiCard(membersWord(group), num(group.memberCount), groupKindName(group)) +
       kpiCard("Права бота", admin ? "администратор" : "участник", admin ? "" : "назначьте администратором", admin ? "up" : "down") +
-      kpiCard("Сообщений видно", num((group.messages || []).length), "из последних " + 200) +
+      kpiCard("Сообщений видно", num((group.messages || []).length), "из последних 200") +
       kpiCard("Заявок на вступление", num((group.joinRequests || []).length), (group.joinRequests || []).length ? "ждут решения" : "") +
     "</div>" +
     (group.lastError ? '<div class="card" style="margin-bottom:12px"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
     '<div class="split"><div class="stack">' +
-      '<div class="card"><header><h3>Написать в группу</h3></header><div class="card-body stack">' +
-        '<textarea id="groupText" placeholder="Текст сообщения от имени бота" style="min-height:110px"></textarea>' +
+      '<div class="card"><header><h3>' + (group.type === "channel" ? "Опубликовать в канале" : "Написать в группу") + "</h3></header><div class="card-body stack">" +
+        '<textarea id="groupText" placeholder="' + (group.type === "channel" ? "Текст поста от имени канала" : "Текст сообщения от имени бота") + '" style="min-height:110px"></textarea>' +
         '<div class="grid cols-2"><div class="field"><label for="groupButtonText">Кнопка (необязательно)</label><input id="groupButtonText" placeholder="Смотреть объекты"></div>' +
         '<div class="field"><label for="groupButtonUrl">Ссылка кнопки</label><input id="groupButtonUrl" placeholder="https://t.me/…"></div></div>' +
         '<div class="grid cols-2"><div class="field"><label for="groupImage">Фото</label><input id="groupImage" type="file" accept="image/jpeg,image/png"></div>' +
         '<div class="field"><label for="groupWhen">Отправить позже</label><input id="groupWhen" type="datetime-local"></div></div>' +
-        '<div class="row wrap"><label class="check"><input type="checkbox" id="groupPin"> закрепить</label>' +
+        '<div class="row wrap">' + (groupCan(group, "can_pin_messages") ? '<label class="check"><input type="checkbox" id="groupPin"> закрепить</label>' : "") +
         '<label class="check"><input type="checkbox" id="groupNotify" checked> со звуком</label>' +
         '<div class="grow"></div><button class="btn" id="groupSend" type="button">Отправить</button></div>' +
       "</div></div>" +
-      '<div class="card"><header><h3>Что бот видел в группе</h3><div class="actions"><span class="small faint">историю Telegram не отдаёт</span></div></header>' +
+      '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small faint">историю Telegram не отдаёт</span></div></header>' +
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
             '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">бот</span>' : "") +
             (message.kind !== "text" ? ' <span class="chip">' + esc(message.kind) + "</span>" : "") +
             '<br><span class="muted small">' + esc(String(message.text || "").slice(0, 120)) + "</span></span>" +
             '<span class="small faint nowrap">' + dateShort(message.date) + "</span>" +
-            (admin ? '<button class="btn ghost small" data-pin="' + message.messageId + '" title="Закрепить">📌</button>' +
-              '<button class="btn ghost small" data-del="' + message.messageId + '" title="Удалить">✕</button>' : "") + "</div>";
-        }).join("") + "</div>" : '<div class="empty"><b>Сообщений пока нет</b>Бот видит сообщения группы, если в BotFather выключен privacy mode</div>') +
+            (groupCan(group, "can_pin_messages") ? '<button class="btn ghost small" data-pin="' + message.messageId + '" title="Закрепить">📌</button>' : "") +
+            (groupCan(group, "can_delete_messages") ? '<button class="btn ghost small" data-del="' + message.messageId + '" title="Удалить">✕</button>' : "") + "</div>";
+        }).join("") + "</div>" : '<div class="empty"><b>Пока пусто</b>' + (group.type === "channel" ? "Посты появятся здесь после первой публикации." : "Бот видит сообщения группы, если в BotFather выключен privacy mode.") + "</div>") +
       "</div>" +
     "</div>" +
     '<div class="stack">' +
       '<div class="card"><header><h3>' + esc(group.title || "Группа") + "</h3></header><div class=\"card-body stack\">" +
         '<div class="small muted">ID ' + esc(group.id) + (group.username ? " · @" + esc(group.username) : "") + "</div>" +
         (pinned ? '<div class="msg">📌 ' + esc(String(pinned.text || "").slice(0, 160)) + '<div class="msg-meta"><button class="btn ghost small" id="unpin" type="button">Открепить</button></div></div>' : '<div class="small faint">Закреплённого сообщения нет</div>') +
-        (admin ? '<div class="field"><label for="groupTitle">Название</label><input id="groupTitle" value="' + esc(group.title || "") + '"></div>' +
+        (groupCan(group, "can_change_info") ? '<div class="field"><label for="groupTitle">Название</label><input id="groupTitle" value="' + esc(group.title || "") + '"></div>' +
           '<div class="field"><label for="groupDescription">Описание</label><textarea id="groupDescription">' + esc(group.description || "") + "</textarea></div>" +
-          '<button class="btn secondary small" id="groupSaveInfo" type="button">Сохранить название и описание</button>' : '<div class="chip warn">Бот не администратор: доступна только отправка сообщений</div>') +
+          '<button class="btn secondary small" id="groupSaveInfo" type="button">Сохранить название и описание</button>' : '<div class="chip warn">' + (admin ? "Боту не выдано право менять описание" : "Бот не администратор: доступна только отправка сообщений") + "</div>") +
       "</div></div>" +
       ((group.joinRequests || []).length ? '<div class="card"><header><h3>Заявки на вступление</h3></header><div class="list">' + group.joinRequests.map(function (request) {
         return '<div class="list-item"><span class="grow"><b>' + esc(request.name) + "</b>" + (request.username ? ' <span class="small faint">@' + esc(request.username) + "</span>" : "") + "</span>" +
           '<button class="btn small" data-approve="' + esc(request.userId) + '" type="button">Принять</button>' +
           '<button class="btn ghost small" data-decline="' + esc(request.userId) + '" type="button">Отклонить</button></div>';
       }).join("") + "</div></div>" : "") +
+      (group.username ? '<div class="card"><header><h3>Публичная ссылка</h3></header><div class="card-body"><a href="https://t.me/' + esc(group.username) + '" target="_blank" rel="noreferrer">t.me/' + esc(group.username) + "</a></div></div>" : "") +
       '<div class="card"><header><h3>Ссылка-приглашение</h3></header><div class="card-body stack">' +
         (group.inviteLink ? '<div class="row"><input value="' + esc(group.inviteLink) + '" readonly id="inviteLink"><button class="btn ghost small" id="copyInvite" type="button">Копировать</button></div>' : '<span class="muted small">Ссылки нет</span>') +
         '<div class="row wrap"><button class="btn secondary small" id="makeInvite" type="button">Создать новую</button>' +
         (group.inviteLink ? '<button class="btn ghost small" id="revokeInvite" type="button">Отозвать</button>' : "") + "</div></div></div>" +
-      '<div class="card"><header><h3>Администраторы</h3><div class="actions"><button class="btn ghost small" id="loadAdmins" type="button">Показать</button></div></header><div class="card-body" id="adminsBox"><span class="muted small">Список участников Telegram не отдаёт — только администраторов.</span></div></div>' +
+      '<div class="card"><header><h3>Администраторы</h3><div class="actions"><button class="btn ghost small" id="loadAdmins" type="button">Показать</button></div></header><div class="card-body" id="adminsBox"><span class="muted small">Список ' + (group.type === "channel" ? "подписчиков" : "участников") + " Telegram не отдаёт — только администраторов.</span></div></div>" +
       '<div class="card"><header><h3>Опасная зона</h3></header><div class="card-body row wrap">' +
         '<button class="btn ghost small" id="unpinAll" type="button">Открепить всё</button>' +
-        '<button class="btn danger small" id="leaveGroup" type="button">Выйти из группы</button></div></div>' +
+        '<button class="btn danger small" id="leaveGroup" type="button">' + (group.type === "channel" ? "Покинуть канал" : "Выйти из группы") + "</button></div></div>" +
     "</div></div>";
 
   var base = "/api/groups/" + encodeURIComponent(group.id);
@@ -224,7 +261,7 @@ function renderGroupCard(host, group) {
       text: host.querySelector("#groupText").value,
       buttonText: host.querySelector("#groupButtonText").value,
       buttonUrl: host.querySelector("#groupButtonUrl").value,
-      pin: host.querySelector("#groupPin").checked,
+      pin: Boolean(host.querySelector("#groupPin") && host.querySelector("#groupPin").checked),
       notify: host.querySelector("#groupNotify").checked,
       image: image,
       sendAt: when ? new Date(when).toISOString() : "",
@@ -301,13 +338,13 @@ function renderGroupCard(host, group) {
     } catch (error) { fail(error); }
   };
   host.querySelector("#leaveGroup").onclick = async function () {
-    if (!(await confirmDialog("Выйти из группы?", "Бот покинет группу. Вернуть его сможет только администратор группы.", "Выйти", true))) return;
+    if (!(await confirmDialog("Выйти?", "Бот покинет " + groupKindName(group) + ". Вернуть его сможет только администратор.", "Выйти", true))) return;
     try { await send(base + "/leave", "POST", {}); toast("Бот вышел из группы"); await reload(); } catch (error) { fail(error); }
   };
 }
 
 VIEWS.reach = {
-  subtitle: function () { return "Сообщения клиентам и работа с группой"; },
+  subtitle: function () { return "Сообщения клиентам, группы и каналы бота"; },
   render: function (host, tab) {
     if (tab === "group") return renderGroups(host);
     renderCampaigns(host);

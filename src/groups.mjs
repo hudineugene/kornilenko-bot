@@ -54,7 +54,7 @@ function rightsOf(member) {
 }
 
 function normalizeGroupMessage(message) {
-  const from = message.from || {};
+  const from = message.from || message.sender_chat || {};
   return {
     messageId: Number(message.message_id),
     userId: from.id ? String(from.id) : '',
@@ -62,7 +62,7 @@ function normalizeGroupMessage(message) {
     username: cleanText(from.username, 60),
     text: cleanText(message.text || message.caption || '', 1000),
     kind: message.photo ? 'photo' : message.video ? 'video' : message.document ? 'document' : message.voice ? 'voice' : message.poll ? 'poll' : 'text',
-    fromBot: Boolean(from.is_bot),
+    fromBot: Boolean(from.is_bot) || (!message.from && Boolean(message.sender_chat)),
     date: new Date(Number(message.date || 0) * 1000 || Date.now()).toISOString(),
   };
 }
