@@ -446,12 +446,12 @@ function renderGroupCard(host, group) {
 // убирают это размытие.
 var PLATE_RATIO = 3;
 
-function padPlate(dataUrl, color) {
+function padPlate(dataUrl, color, ratio) {
   return new Promise(function (resolve) {
     var picture = new Image();
     picture.onload = function () {
       var width = picture.naturalWidth;
-      var height = Math.round(width / PLATE_RATIO);
+      var height = Math.round(width / (ratio || PLATE_RATIO));
       if (picture.naturalHeight >= height) return resolve(dataUrl);
       var canvas = document.createElement("canvas");
       canvas.width = width;
@@ -485,15 +485,17 @@ function checkPlateWidth(row, index, onPad) {
     var ratio = picture.naturalWidth / picture.naturalHeight;
     var narrow = picture.naturalWidth < 1000;
     var flat = ratio > PLATE_RATIO;
+    var small = picture.naturalWidth < 1280;
     note.innerHTML = picture.naturalWidth + "×" + picture.naturalHeight + " (" + ratio.toFixed(1) + ":1)" +
-      (narrow ? " — узкая: текст под ней будет сжат." : "") +
-      (flat ? ' — слишком вытянутая: Telegram добавит размытый фон сверху и снизу. <button class="btn ghost small" data-pad="' + index + '" type="button">Дорисовать фон</button><input type="color" data-padcolor="' + index + '" value="#ffffff" style="width:34px;height:24px;padding:0;vertical-align:middle">' : "");
+      (narrow ? " — узкая: текст под ней будет сжат." : small ? " — для чёткости лучше 1280 точек по ширине." : "") +
+      (flat ? ' — слишком вытянутая: Telegram добавит размытый фон сверху и снизу. <select data-padratio="' + index + '" style="width:auto;display:inline-block;padding:2px 6px"><option value="3">до 3:1</option><option value="2.5">до 2,5:1</option><option value="2">до 2:1</option><option value="1.78">до 16:9</option></select> <input type="color" data-padcolor="' + index + '" value="#ffffff" style="width:34px;height:24px;padding:0;vertical-align:middle"> <button class="btn ghost small" data-pad="' + index + '" type="button">Дорисовать фон</button>' : "");
     note.style.color = narrow || flat ? "var(--warn)" : "var(--faint)";
     var padButton = note.querySelector("[data-pad]");
     if (padButton) {
       padButton.onclick = function () {
         var color = note.querySelector("[data-padcolor]").value;
-        padPlate(picture.src, color).then(function (padded) { onPad(index, padded); });
+        var ratio = Number(note.querySelector("[data-padratio]").value) || PLATE_RATIO;
+        padPlate(picture.src, color, ratio).then(function (padded) { onPad(index, padded); });
       };
     }
   };
