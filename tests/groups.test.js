@@ -444,3 +444,27 @@ test('картинки плашек и отложенных постов не с
     assert.ok(referenced.has(file), 'файл ' + file + ' должен считаться используемым');
   }
 });
+
+test('жирный текст и подпись цитатой', async () => {
+  const group = await addBotAsAdmin();
+  const data = bot.getData();
+  data.config.publishing = {
+    signature: '🏗 **Стройка Без Фильтров**\n[🎵 TikTok](https://www.tiktok.com/@olegkorni)',
+    signatureEnabled: true,
+    signatureWrap: 'keep',
+    signatureQuote: true,
+    rubrics: [],
+    buttons: [],
+  };
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  const sent = telegram.calls.find((call) => call.method === 'sendMessage');
+  assert.equal(sent.body.parse_mode, 'HTML');
+  assert.match(sent.body.text, /^Пост\n\n<blockquote>🏗 <b>Стройка Без Фильтров<\/b>/);
+  assert.match(sent.body.text, /<a href="https:\/\/www\.tiktok\.com\/@olegkorni">🎵 TikTok<\/a><\/blockquote>$/);
+
+  data.config.publishing.signatureQuote = false;
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  assert.ok(!telegram.calls.find((call) => call.method === 'sendMessage').body.text.includes('blockquote'));
+});

@@ -151,7 +151,10 @@ function linkedPreview(text) {
     out += '<a href="' + esc(match[2]) + '" target="_blank" rel="noreferrer">' + esc(match[1]) + "</a>";
     last = match.index + match[0].length;
   }
-  return out + esc(String(text || "").slice(last));
+  out += esc(String(text || "").slice(last));
+  return out
+    .replace(/\*\*([^*\n]{1,200})\*\*/g, "<b>$1</b>")
+    .replace(/__([^_\n]{1,200})__/g, "<i>$1</i>");
 }
 
 function publishing() {
@@ -508,7 +511,7 @@ function renderPostStyle(host) {
   var rubrics = (current.rubrics || []).map(function (rubric) { return Object.assign({}, rubric); });
   var pendingImages = {};
   // Перерисовка не должна стирать то, что уже набрали.
-  var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false, signatureWrap: current.signatureWrap || "keep" };
+  var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false, signatureWrap: current.signatureWrap || "keep", signatureQuote: Boolean(current.signatureQuote) };
   var buttons = (current.buttons || []).map(function (button) { return { text: button.text, url: button.url }; });
   var perRow = current.buttonsPerRow || 3;
 
@@ -523,7 +526,8 @@ function renderPostStyle(host) {
           '<option value="space"' + (draft.signatureWrap === "space" ? " selected" : "") + '>одной строкой (перенос по ширине)</option>' +
           '<option value="dot"' + (draft.signatureWrap === "dot" ? " selected" : "") + '>одной строкой через «·»</option>' +
         "</select></div>" +
-        '<div class="hint">Ссылка надписью: <code>[ТикТок](https://tiktok.com/@ваш_аккаунт)</code> — в Telegram будет кликабельное слово «ТикТок». Так же можно сделать ссылкой значок: <code>[🎵](https://…)</code>.</div>' +
+        '<div class="hint">Ссылка надписью: <code>[ТикТок](https://tiktok.com/@ваш_аккаунт)</code>. Жирный: <code>**Название**</code>, курсив: <code>__текст__</code>. Значок тоже может быть ссылкой: <code>[🎵](https://…)</code>.</div>' +
+        '<label class="check"><input type="checkbox" id="signQuote"' + (draft.signatureQuote ? " checked" : "") + '> подпись отдельным блоком (цитатой с полоской слева)</label>' +
         '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div></div>' +
         '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
       "</div></div>" +
@@ -563,10 +567,14 @@ function renderPostStyle(host) {
     var preview = function () {
       var lines = String(draft.signature || "").split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
       var text = draft.signatureWrap === "keep" ? draft.signature : lines.join(draft.signatureWrap === "dot" ? " · " : " ");
-      host.querySelector("#signPreview").innerHTML = draft.signatureEnabled ? (linkedPreview(text) || "подпись пуста") : "подпись выключена";
+      var box = host.querySelector("#signPreview");
+      box.innerHTML = draft.signatureEnabled ? (linkedPreview(text) || "подпись пуста") : "подпись выключена";
+      box.style.borderLeft = draft.signatureQuote && draft.signatureEnabled ? "3px solid var(--brand)" : "";
+      box.style.paddingLeft = draft.signatureQuote && draft.signatureEnabled ? "10px" : "";
     };
     host.querySelector("#signText").oninput = function (event) { draft.signature = event.target.value; preview(); };
     host.querySelector("#signWrap").onchange = function (event) { draft.signatureWrap = event.target.value; preview(); };
+    host.querySelector("#signQuote").onchange = function (event) { draft.signatureQuote = event.target.checked; preview(); };
     preview();
     host.querySelector("#signOn").onchange = function (event) { draft.signatureEnabled = event.target.checked; preview(); };
     var drawButtonPreview = function () {
@@ -632,6 +640,7 @@ function renderPostStyle(host) {
           signature: draft.signature,
           signatureEnabled: draft.signatureEnabled,
           signatureWrap: draft.signatureWrap,
+          signatureQuote: draft.signatureQuote,
           buttons: buttons.filter(function (button) { return button.text && button.url; }),
           buttonsPerRow: perRow,
           rubrics: rubrics.map(function (rubric, index) {

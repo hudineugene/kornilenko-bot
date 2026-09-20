@@ -463,10 +463,11 @@ function safeState(session) {
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
     broadcastOptOutCount: Object.values(data.users).filter((user) => user.broadcastsOptOut && !user.blocked && user.chatId).length,
     sources: sourceReport(),
-    publishing: (({ signature, signatureEnabled, signatureWrap, buttons, buttonsPerRow, rubrics }) => ({
+    publishing: (({ signature, signatureEnabled, signatureWrap, signatureQuote, buttons, buttonsPerRow, rubrics }) => ({
       signature,
       signatureEnabled,
       signatureWrap,
+      signatureQuote,
       buttons,
       buttonsPerRow,
       rubrics: rubrics.map((rubric) => ({ id: rubric.id, name: rubric.name, placement: rubric.placement, image: imageMeta(rubric.image) })),

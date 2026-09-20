@@ -201,26 +201,48 @@ function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// **жирный** и __курсив__. Двойные знаки выбраны, чтобы обычный текст со
+// звёздочкой или подчёркиванием случайно не превратился в разметку.
+const BOLD_PATTERN = /\*\*([^*\n]{1,200})\*\*/g;
+const ITALIC_PATTERN = /__([^_\n]{1,200})__/g;
+
+function applyMarks(escaped, counter) {
+  return escaped
+    .replace(BOLD_PATTERN, (match, inner) => {
+      counter.marks += 1;
+      return '<b>' + inner + '</b>';
+    })
+    .replace(ITALIC_PATTERN, (match, inner) => {
+      counter.marks += 1;
+      return '<i>' + inner + '</i>';
+    });
+}
+
+function withoutMarks(text) {
+  return String(text).replace(BOLD_PATTERN, '$1').replace(ITALIC_PATTERN, '$1');
+}
+
 // Возвращает готовый HTML и тот же текст без разметки — по нему считаются
 // ограничения Telegram на длину подписи.
 function formatLinks(text) {
   const source = String(text || '');
+  const counter = { marks: 0 };
   let html = '';
   let plain = '';
   let last = 0;
   let links = 0;
   for (const match of source.matchAll(LINK_PATTERN)) {
     const before = source.slice(last, match.index);
-    html += escapeHtml(before);
-    plain += before;
-    html += '<a href="' + escapeHtml(match[2]) + '">' + escapeHtml(match[1]) + '</a>';
-    plain += match[1];
+    html += applyMarks(escapeHtml(before), counter);
+    plain += withoutMarks(before);
+    html += '<a href="' + escapeHtml(match[2]) + '">' + applyMarks(escapeHtml(match[1]), counter) + '</a>';
+    plain += withoutMarks(match[1]);
     last = match.index + match[0].length;
     links += 1;
   }
-  html += escapeHtml(source.slice(last));
-  plain += source.slice(last);
-  return { html, plain, links };
+  html += applyMarks(escapeHtml(source.slice(last)), counter);
+  plain += withoutMarks(source.slice(last));
+  return { html, plain, links, marks: counter.marks };
 }
 
 // Текст поста: то, что набрали, плюс постоянная подпись под ним.
@@ -240,6 +262,21 @@ function postText(post) {
   const signature = signatureText(publishing);
   if (post.withoutSignature || !signature) return body;
   return body ? body + '\n\n' + signature : signature;
+}
+
+// Подпись цитатой отделяется полоской слева — заметный, но спокойный блок.
+function postHtml(post) {
+  const publishing = normalizePublishing(data.config.publishing);
+  const body = cleanText(post.text, 4000);
+  const signature = post.withoutSignature ? '' : signatureText(publishing);
+  const bodyPart = formatLinks(body);
+  const signaturePart = formatLinks(signature);
+  const quote = signature && publishing.signatureQuote;
+  const html = [bodyPart.html, quote ? '<blockquote>' + signaturePart.html + '</blockquote>' : signaturePart.html]
+    .filter(Boolean).join('\n\n');
+  const plain = [bodyPart.plain, signaturePart.plain].filter(Boolean).join('\n\n');
+  const rich = bodyPart.links + signaturePart.links + bodyPart.marks + signaturePart.marks + (quote ? 1 : 0);
+  return { html, plain, rich };
 }
 
 // Кнопка самого поста плюс постоянные кнопки из «Оформления постов».
@@ -294,9 +331,9 @@ const CAPTION_LIMIT = 1024;
 
 async function postToGroup(group, post, token = data.config.botToken) {
   const written = postText(post);
-  const formatted = formatLinks(written);
-  // Разметка нужна только когда в тексте есть ссылки-надписи.
-  const useHtml = formatted.links > 0 && formatted.html.length <= 4000;
+  const formatted = postHtml(post);
+  // Разметка нужна только когда в тексте есть ссылки, выделения или цитата.
+  const useHtml = formatted.rich > 0 && formatted.html.length <= 4000;
   const text = useHtml ? formatted.html : written;
   const plain = useHtml ? formatted.plain : written;
   const parseMode = useHtml ? 'HTML' : undefined;
@@ -412,6 +449,7 @@ export {
   handleMyChatMember,
   newGroupPost,
   formatLinks,
+  postHtml,
   postMarkup,
   postText,
   postToGroup,

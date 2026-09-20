@@ -251,6 +251,7 @@ function normalizePublishing(value) {
     signatureEnabled: source.signatureEnabled !== false,
     // Как отправлять подпись: как набрана, одной строкой или через разделитель.
     signatureWrap: ['keep', 'space', 'dot'].includes(source.signatureWrap) ? source.signatureWrap : 'keep',
+    signatureQuote: Boolean(source.signatureQuote),
     // Кнопки-ссылки под постом: по ним удобнее попадать, чем по значку в тексте.
     buttons: (Array.isArray(source.buttons) ? source.buttons : []).slice(0, MAX_POST_BUTTONS).map((item) => ({
       text: cleanText(item && item.text, 64),
