@@ -194,10 +194,20 @@ async function fetchAdministrators(group, token = data.config.botToken) {
 }
 
 // Текст поста: то, что набрали, плюс постоянная подпись под ним.
+// Telegram переносит текст по ширине экрана сам, а набранные в панели
+// переносы остаются жёсткими. «Одной строкой» убирает их, чтобы подпись
+// подстраивалась под ширину.
+function signatureText(publishing) {
+  const signature = publishing.signatureEnabled ? publishing.signature : '';
+  if (!signature || publishing.signatureWrap === 'keep') return signature;
+  const parts = signature.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  return parts.join(publishing.signatureWrap === 'dot' ? ' · ' : ' ');
+}
+
 function postText(post) {
   const publishing = normalizePublishing(data.config.publishing);
   const body = cleanText(post.text, 4000);
-  const signature = publishing.signatureEnabled ? publishing.signature : '';
+  const signature = signatureText(publishing);
   if (post.withoutSignature || !signature) return body;
   return body ? body + '\n\n' + signature : signature;
 }
@@ -347,6 +357,7 @@ export {
   newGroupPost,
   postText,
   postToGroup,
+  signatureText,
   refreshGroup,
   refreshGroups,
   rememberGroupMessage,

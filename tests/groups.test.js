@@ -315,3 +315,31 @@ test('панель сохраняет подпись и рубрики', async (
     await new Promise((resolve) => bot.server.close(resolve));
   }
 });
+
+test('подпись можно собрать в одну строку, чтобы Telegram переносил её по ширине', async () => {
+  const group = await addBotAsAdmin();
+  const data = bot.getData();
+  data.config.publishing = {
+    signature: 'Construcciones Kornilenko\n+34 664 17 96 37\nhttps://t.me/kornilenko1',
+    signatureEnabled: true,
+    signatureWrap: 'keep',
+    rubrics: [],
+  };
+
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  assert.match(telegram.calls.find((call) => call.method === 'sendMessage').body.text, /Kornilenko\n\+34/, 'как набрано — переносы остаются');
+
+  data.config.publishing.signatureWrap = 'space';
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  assert.equal(
+    telegram.calls.find((call) => call.method === 'sendMessage').body.text,
+    'Пост\n\nConstrucciones Kornilenko +34 664 17 96 37 https://t.me/kornilenko1',
+  );
+
+  data.config.publishing.signatureWrap = 'dot';
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  assert.match(telegram.calls.find((call) => call.method === 'sendMessage').body.text, /Kornilenko · \+34 664 17 96 37 · https/);
+});

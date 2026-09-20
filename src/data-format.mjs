@@ -248,6 +248,8 @@ function normalizePublishing(value) {
   return {
     signature: cleanText(source.signature, 1000),
     signatureEnabled: source.signatureEnabled !== false,
+    // Как отправлять подпись: как набрана, одной строкой или через разделитель.
+    signatureWrap: ['keep', 'space', 'dot'].includes(source.signatureWrap) ? source.signatureWrap : 'keep',
     rubrics: (Array.isArray(source.rubrics) ? source.rubrics : []).slice(0, MAX_RUBRICS).map((item) => ({
       id: cleanText(item && item.id, 60) || crypto.randomUUID(),
       name: cleanText(item && item.name, 60),

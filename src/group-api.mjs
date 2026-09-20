@@ -83,6 +83,7 @@ async function handleGroupApi(req, res, url) {
       data.config.publishing = normalizePublishing({
         signature: body.signature,
         signatureEnabled: body.signatureEnabled !== false,
+        signatureWrap: body.signatureWrap,
         rubrics,
       });
       saveDataNow();

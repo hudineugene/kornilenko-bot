@@ -183,8 +183,12 @@ function signatureNote() {
   if (!current.signature || !current.signatureEnabled) {
     return '<div class="hint">Постоянная подпись выключена или пуста — включить её можно во вкладке «Оформление постов».</div>';
   }
+  var lines = String(current.signature).split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
+  var shown = current.signatureWrap === "keep" || !current.signatureWrap
+    ? current.signature
+    : lines.join(current.signatureWrap === "dot" ? " · " : " ");
   return '<div class="field"><span class="field-label">Подпись под постом</span>' +
-    '<div class="msg small">' + esc(current.signature) + "</div>" +
+    '<div class="msg small">' + esc(shown) + "</div>" +
     '<label class="check"><input type="checkbox" id="groupNoSignature"> этот пост без подписи</label></div>';
 }
 
@@ -414,7 +418,7 @@ function renderPostStyle(host) {
   var rubrics = (current.rubrics || []).map(function (rubric) { return Object.assign({}, rubric); });
   var pendingImages = {};
   // Перерисовка не должна стирать то, что уже набрали.
-  var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false };
+  var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false, signatureWrap: current.signatureWrap || "keep" };
 
   function draw() {
     host.innerHTML = '<div class="grid cols-2">' +
@@ -422,6 +426,12 @@ function renderPostStyle(host) {
         '<p class="muted small">Добавляется в конце каждого поста в группу или канал. Сюда обычно ставят контакты, сайт и ссылки на соцсети — ссылки Telegram сделает кликабельными сам.</p>' +
         '<label class="switch"><input type="checkbox" id="signOn"' + (draft.signatureEnabled ? " checked" : "") + '><span class="track"></span><span>Подпись включена</span></label>' +
         '<div class="field"><label for="signText">Текст подписи</label><textarea id="signText" style="min-height:130px" placeholder="Construcciones Kornilenko&#10;+34 664 17 96 37&#10;https://t.me/имя_бота">' + esc(draft.signature) + "</textarea></div>" +
+        '<div class="field"><label for="signWrap">Переносы строк</label><select id="signWrap">' +
+          '<option value="keep"' + (draft.signatureWrap === "keep" ? " selected" : "") + '>как набрано</option>' +
+          '<option value="space"' + (draft.signatureWrap === "space" ? " selected" : "") + '>одной строкой (перенос по ширине)</option>' +
+          '<option value="dot"' + (draft.signatureWrap === "dot" ? " selected" : "") + '>одной строкой через «·»</option>' +
+        "</select></div>" +
+        '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div></div>' +
         '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
       "</div></div>" +
       '<div class="card"><header><h3>Рубрики</h3><div class="actions"><button class="btn secondary small" id="addRubric" type="button">＋ Рубрика</button></div></header><div class="card-body stack">' +
@@ -436,8 +446,15 @@ function renderPostStyle(host) {
         }).join("") : '<span class="muted small">Рубрик пока нет.</span>') +
       "</div></div></div>";
 
-    host.querySelector("#signText").oninput = function (event) { draft.signature = event.target.value; };
-    host.querySelector("#signOn").onchange = function (event) { draft.signatureEnabled = event.target.checked; };
+    var preview = function () {
+      var lines = String(draft.signature || "").split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
+      var text = draft.signatureWrap === "keep" ? draft.signature : lines.join(draft.signatureWrap === "dot" ? " · " : " ");
+      host.querySelector("#signPreview").textContent = draft.signatureEnabled ? (text || "подпись пуста") : "подпись выключена";
+    };
+    host.querySelector("#signText").oninput = function (event) { draft.signature = event.target.value; preview(); };
+    host.querySelector("#signWrap").onchange = function (event) { draft.signatureWrap = event.target.value; preview(); };
+    preview();
+    host.querySelector("#signOn").onchange = function (event) { draft.signatureEnabled = event.target.checked; preview(); };
     host.querySelector("#addRubric").onclick = function () {
       rubrics.push({ id: "", name: "", placement: "bottom", image: null });
       draw();
@@ -465,6 +482,7 @@ function renderPostStyle(host) {
         await send("/api/publishing", "PUT", {
           signature: draft.signature,
           signatureEnabled: draft.signatureEnabled,
+          signatureWrap: draft.signatureWrap,
           rubrics: rubrics.map(function (rubric, index) {
             return { id: rubric.id, name: rubric.name, placement: rubric.placement, imageDataUrl: pendingImages[index] || "" };
           }),
