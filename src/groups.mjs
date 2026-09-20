@@ -270,7 +270,7 @@ async function postToGroup(group, post, token = data.config.botToken) {
   const messageId = sent && Number(sent.message_id);
   rememberOwnMessage(group, messageId, text, topImage || plateSentInside ? 'photo' : 'text');
   // Длинный пост или своё фото: плашка уходит отдельным сообщением следом.
-  if (rubric && rubric.placement === 'bottom' && !plateSentInside) {
+  if (rubric && rubric.placement !== 'top' && !plateSentInside) {
     const plate = await sendPhotoMessage(group.id, rubric.image, '', token, null).catch((error) => {
       recordError('Плашка рубрики «' + rubric.name + '»', error);
       return null;

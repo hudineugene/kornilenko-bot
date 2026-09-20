@@ -343,3 +343,23 @@ test('подпись можно собрать в одну строку, что�
   await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
   assert.match(telegram.calls.find((call) => call.method === 'sendMessage').body.text, /Kornilenko · \+34 664 17 96 37 · https/);
 });
+
+test('рубрика «отдельным сообщением» не сжимает текст картинкой', async () => {
+  const group = await addBotAsAdmin();
+  const data = bot.getData();
+  const plate = { id: 'plate-2', name: 'plate.png', mimeType: 'image/png', size: 10, dataBase64: 'iVBORw0KGgo=' };
+  data.config.publishing = {
+    signature: '',
+    signatureEnabled: true,
+    signatureWrap: 'keep',
+    rubrics: [{ id: 'r-sep', name: 'Новости', placement: 'separate', image: plate }],
+  };
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Короткий пост', rubricId: 'r-sep' }, TOKEN);
+  const text = telegram.calls.find((call) => call.method === 'sendMessage');
+  const plateCall = telegram.calls.find((call) => call.method === 'sendPhoto');
+  assert.ok(text, 'текст ушёл обычным сообщением — во всю ширину');
+  assert.equal(text.body.text, 'Короткий пост');
+  assert.ok(plateCall && telegram.calls.indexOf(plateCall) > telegram.calls.indexOf(text), 'плашка следом');
+  assert.equal(plateCall.body.show_caption_above_media, undefined);
+});

@@ -150,7 +150,8 @@ function rubricPicker() {
   }
   return '<div class="field"><label for="groupRubric">Рубрика</label><select id="groupRubric"><option value="">без плашки</option>' +
     rubrics.map(function (rubric) {
-      return '<option value="' + esc(rubric.id) + '">' + esc(rubric.name) + (rubric.placement === "top" ? " (сверху)" : " (снизу)") + "</option>";
+      var where = rubric.placement === "top" ? "сверху" : rubric.placement === "separate" ? "отдельным сообщением" : "внизу";
+      return '<option value="' + esc(rubric.id) + '">' + esc(rubric.name) + " (" + where + ")</option>";
     }).join("") + '</select><div id="rubricPreview" class="hint"></div></div>';
 }
 
@@ -165,9 +166,11 @@ function bindRubricPicker(host) {
       ? '<img class="thumb" style="width:120px;height:auto;border-radius:6px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + '" alt=""> ' +
         (rubric.placement === "top"
           ? "плашка встанет над текстом"
-          : ownPhoto || longText
-            ? "плашка уйдёт сообщением сразу под постом (у поста своё фото или длинный текст)"
-            : "плашка будет внизу самого сообщения, текст над ней")
+          : rubric.placement === "separate"
+            ? "текст уйдёт во всю ширину, плашка — сообщением сразу за ним"
+            : ownPhoto || longText
+              ? "плашка уйдёт сообщением сразу под постом (у поста своё фото или длинный текст)"
+              : "плашка будет внизу самого сообщения; ширина текста — по ширине плашки")
       : "";
   };
   select.onchange = show;
@@ -413,6 +416,28 @@ function renderGroupCard(host, group) {
 }
 
 // --- Оформление постов ------------------------------------------------------------
+// Ширина картинки задаёт ширину текста под ней, поэтому о узкой плашке
+// лучше предупредить сразу.
+function checkPlateWidth(row, index) {
+  var picture = row.querySelector("img");
+  if (!picture) return;
+  var show = function () {
+    if (!picture.naturalWidth) return;
+    var note = row.querySelector("[data-size]");
+    if (!note) {
+      note = document.createElement("span");
+      note.className = "small";
+      note.dataset.size = "1";
+      row.appendChild(note);
+    }
+    var narrow = picture.naturalWidth < 1000;
+    note.textContent = picture.naturalWidth + "×" + picture.naturalHeight + (narrow ? " — узкая: текст под ней будет сжат" : "");
+    note.style.color = narrow ? "var(--warn)" : "var(--faint)";
+  };
+  if (picture.complete) show();
+  else picture.onload = show;
+}
+
 function renderPostStyle(host) {
   var current = publishing();
   var rubrics = (current.rubrics || []).map(function (rubric) { return Object.assign({}, rubric); });
@@ -435,12 +460,20 @@ function renderPostStyle(host) {
         '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
       "</div></div>" +
       '<div class="card"><header><h3>Рубрики</h3><div class="actions"><button class="btn secondary small" id="addRubric" type="button">＋ Рубрика</button></div></header><div class="card-body stack">' +
-        '<p class="muted small">Плашка — картинка с названием рубрики. «Снизу» — картинка стоит внутри сообщения под текстом; если текст длиннее 1024 знаков или у поста своё фото, плашка уходит сообщением сразу за постом. «Сверху» — плашка становится картинкой поста, текст под ней.</p>' +
+        '<p class="muted small">Плашка — картинка с названием рубрики.<br>' +
+          '<b>Внизу сообщения</b> — картинка внутри поста, текст над ней. Важно: у сообщения с картинкой ширина равна ширине картинки, поэтому узкая плашка сжимает текст. Делайте плашку шириной от 1280 точек.<br>' +
+          '<b>Отдельным сообщением</b> — текст уходит обычным сообщением во всю ширину, плашка приходит сразу следом.<br>' +
+          '<b>Над текстом</b> — плашка становится картинкой поста, текст под ней.</p>' +
+        '<div id="plateSizes" class="hint"></div>' +
         (rubrics.length ? rubrics.map(function (rubric, index) {
           return '<div class="row wrap" data-rubric="' + index + '" style="border-top:1px solid var(--line-soft);padding-top:8px">' +
             (rubric.image && rubric.image.exists ? '<img class="thumb" style="width:74px;height:52px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + "?rev=" + encodeURIComponent(rubric.image.updatedAt || "") + '" alt="">' : pendingImages[index] ? '<img class="thumb" style="width:74px;height:52px" src="' + pendingImages[index] + '" alt="">' : '<span class="thumb" style="width:74px;height:52px"></span>') +
             '<input data-field="name" value="' + esc(rubric.name || "") + '" placeholder="Название рубрики" style="max-width:220px">' +
-            '<select data-field="placement" style="max-width:130px"><option value="bottom"' + (rubric.placement === "top" ? "" : " selected") + '>снизу</option><option value="top"' + (rubric.placement === "top" ? " selected" : "") + ">сверху</option></select>" +
+            '<select data-field="placement" style="max-width:210px">' +
+              '<option value="bottom"' + (rubric.placement === "bottom" || !rubric.placement ? " selected" : "") + '>внизу сообщения</option>' +
+              '<option value="separate"' + (rubric.placement === "separate" ? " selected" : "") + '>отдельным сообщением</option>' +
+              '<option value="top"' + (rubric.placement === "top" ? " selected" : "") + ">над текстом</option>" +
+            "</select>" +
             '<input type="file" accept="image/jpeg,image/png" data-file="' + index + '" style="max-width:190px">' +
             '<button class="btn ghost small" data-drop="' + index + '" type="button">✕</button></div>';
         }).join("") : '<span class="muted small">Рубрик пока нет.</span>') +
@@ -476,6 +509,7 @@ function renderPostStyle(host) {
         reader.onload = function () { pendingImages[index] = reader.result; draw(); };
         reader.readAsDataURL(file);
       };
+      checkPlateWidth(row, index);
     });
     host.querySelector("#saveStyle").onclick = async function () {
       try {

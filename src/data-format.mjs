@@ -253,7 +253,7 @@ function normalizePublishing(value) {
     rubrics: (Array.isArray(source.rubrics) ? source.rubrics : []).slice(0, MAX_RUBRICS).map((item) => ({
       id: cleanText(item && item.id, 60) || crypto.randomUUID(),
       name: cleanText(item && item.name, 60),
-      placement: item && item.placement === 'top' ? 'top' : 'bottom',
+      placement: ['top', 'separate'].includes(item && item.placement) ? item.placement : 'bottom',
       image: item && item.image && typeof item.image === 'object' ? item.image : null,
     })).filter((item) => item.name),
   };

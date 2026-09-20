@@ -78,7 +78,8 @@ async function handleGroupApi(req, res, url) {
           persistImage(image);
         }
         if (!image) throw new Error('Загрузите плашку для рубрики «' + name + '»');
-        return { id: existing ? existing.id : crypto.randomUUID(), name, placement: item.placement === 'top' ? 'top' : 'bottom', image };
+        const placement = ['top', 'separate'].includes(item.placement) ? item.placement : 'bottom';
+        return { id: existing ? existing.id : crypto.randomUUID(), name, placement, image };
       });
       data.config.publishing = normalizePublishing({
         signature: body.signature,
