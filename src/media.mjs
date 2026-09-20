@@ -36,6 +36,11 @@ function imageBytes(image) {
 function forEachStoredImage(root, callback) {
   if (!root || typeof root !== 'object') return;
   for (const language of ['ru', 'en', 'es']) callback(root.welcomeImages && root.welcomeImages[language]);
+  // Плашки рубрик лежат в настройках, а отложенные посты — своим списком:
+  // без них уборка ничейных файлов удалила бы их картинки.
+  const publishing = root.config && root.config.publishing;
+  for (const rubric of publishing && Array.isArray(publishing.rubrics) ? publishing.rubrics : []) callback(rubric && rubric.image);
+  for (const post of Array.isArray(root.groupPosts) ? root.groupPosts : []) callback(post && post.image);
   for (const record of Array.isArray(root.objects) ? root.objects : []) {
     callback(record && record.image);
     for (const image of record && Array.isArray(record.images) ? record.images : []) callback(image);

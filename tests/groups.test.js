@@ -429,3 +429,18 @@ test('постоянные кнопки уходят под каждым пос�
   const saved = bot.normalizeLoadedData({ version: 17, config: { publishing: { buttons: [{ text: 'Плохая', url: 'tiktok.com' }] } } });
   assert.deepEqual(saved.config.publishing.buttons, []);
 });
+
+test('картинки плашек и отложенных постов не считаются ничейными', async () => {
+  // Уборка ничейных файлов удаляет всё, чего нет в этом обходе: плашки рубрик
+  // лежат в настройках, а не в коллекции, и однажды были из-за этого потеряны.
+  const media = await import('../src/media.mjs');
+  const referenced = media.referencedImageFiles({
+    config: { publishing: { rubrics: [{ name: 'Рубрика', image: { storageFile: 'plate.jpg' } }] } },
+    groupPosts: [{ image: { storageFile: 'post.jpg' } }],
+    objects: [{ imagesByLanguage: { ru: [{ storageFile: 'object.jpg' }] } }],
+    welcomeImages: { ru: { storageFile: 'welcome.jpg' } },
+  });
+  for (const file of ['plate.jpg', 'post.jpg', 'object.jpg', 'welcome.jpg']) {
+    assert.ok(referenced.has(file), 'файл ' + file + ' должен считаться используемым');
+  }
+});
