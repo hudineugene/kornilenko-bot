@@ -226,16 +226,28 @@ function rememberOwnMessage(group, messageId, text, kind) {
 // Пост из панели: текст с подписью, своё фото, кнопка-ссылка и плашка рубрики.
 // Telegram всегда показывает фото над текстом, поэтому плашка «снизу» уходит
 // отдельным сообщением сразу за постом.
+// Подпись к фотографии помещается в 1024 знака — столько же занимает текст
+// поста вместе с постоянной подписью, когда плашка стоит внизу сообщения.
+const CAPTION_LIMIT = 1024;
+
 async function postToGroup(group, post, token = data.config.botToken) {
   const text = postText(post);
   const url = validHttpUrl(post.buttonUrl);
   const buttonText = cleanText(post.buttonText, 64);
   const markup = url && buttonText ? { inline_keyboard: [[{ text: buttonText, url }]] } : null;
   const rubric = rubricOf(post);
-  const topImage = imageExists(post.image) ? post.image : rubric && rubric.placement === 'top' ? rubric.image : null;
+  const ownImage = imageExists(post.image) ? post.image : null;
+  const topImage = ownImage || (rubric && rubric.placement === 'top' ? rubric.image : null);
+  // Плашка внизу одним сообщением: текст ставится над картинкой. Так можно,
+  // только если фотографии поста нет и текст помещается в подпись.
+  const plateInside = Boolean(rubric) && rubric.placement === 'bottom' && !ownImage && text && text.length <= CAPTION_LIMIT;
   let sent;
-  if (topImage) {
-    if (text && text.length <= 1000) {
+  let plateSentInside = false;
+  if (plateInside) {
+    sent = await sendPhotoMessage(group.id, rubric.image, text, token, markup, { captionAbove: true });
+    plateSentInside = true;
+  } else if (topImage) {
+    if (text && text.length <= CAPTION_LIMIT) {
       sent = await sendPhotoMessage(group.id, topImage, text, token, markup);
     } else {
       sent = await sendPhotoMessage(group.id, topImage, '', token, null);
@@ -246,8 +258,9 @@ async function postToGroup(group, post, token = data.config.botToken) {
     sent = await sendMessage(group.id, text, token, { track: false, ...(markup ? { reply_markup: markup } : {}) });
   }
   const messageId = sent && Number(sent.message_id);
-  rememberOwnMessage(group, messageId, text, topImage ? 'photo' : 'text');
-  if (rubric && rubric.placement === 'bottom' && rubric.image !== topImage) {
+  rememberOwnMessage(group, messageId, text, topImage || plateSentInside ? 'photo' : 'text');
+  // Длинный пост или своё фото: плашка уходит отдельным сообщением следом.
+  if (rubric && rubric.placement === 'bottom' && !plateSentInside) {
     const plate = await sendPhotoMessage(group.id, rubric.image, '', token, null).catch((error) => {
       recordError('Плашка рубрики «' + rubric.name + '»', error);
       return null;

@@ -240,18 +240,31 @@ test('подпись и плашка рубрики добавляются к п
 
   telegram.calls = [];
   await bot.postToGroup(group, { text: 'Новый дом в Бенидорме', rubricId: 'r-bottom' }, TOKEN);
-  const text = telegram.calls.find((call) => call.method === 'sendMessage');
-  assert.match(text.body.text, /^Новый дом в Бенидорме\n\nConstrucciones Kornilenko/, 'подпись под текстом');
+  assert.equal(telegram.calls.filter((call) => call.method === 'sendMessage').length, 0, 'пост уходит одним сообщением');
+  const inside = telegram.calls.find((call) => call.method === 'sendPhoto');
+  assert.match(inside.body.caption, /^Новый дом в Бенидорме\n\nConstrucciones Kornilenko/, 'текст с подписью');
+  assert.equal(String(inside.body.show_caption_above_media), 'true', 'текст над плашкой, плашка внизу сообщения');
+
+  // Длинный текст в подпись не помещается: плашка уходит следом.
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Д'.repeat(1100), rubricId: 'r-bottom' }, TOKEN);
+  const long = telegram.calls.find((call) => call.method === 'sendMessage');
   const plateCall = telegram.calls.find((call) => call.method === 'sendPhoto');
-  assert.ok(plateCall, 'плашка ушла отдельным сообщением');
+  assert.ok(long && plateCall, 'текст и плашка отдельными сообщениями');
+  assert.ok(telegram.calls.indexOf(plateCall) > telegram.calls.indexOf(long), 'плашка после текста');
   assert.equal(plateCall.body.caption || '', '', 'на плашке нет подписи');
-  assert.ok(telegram.calls.indexOf(plateCall) > telegram.calls.indexOf(text), 'плашка после текста');
 
   telegram.calls = [];
   await bot.postToGroup(group, { text: 'Как выбрать квартиру', rubricId: 'r-top' }, TOKEN);
   const top = telegram.calls.find((call) => call.method === 'sendPhoto');
   assert.match(top.body.caption, /^Как выбрать квартиру/, 'плашка сверху, текст подписью к ней');
   assert.equal(telegram.calls.filter((call) => call.method === 'sendPhoto').length, 1, 'плашка одна');
+
+  // Своё фото поста остаётся главным, плашка идёт следом.
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'С фотографией', rubricId: 'r-bottom', image: plate }, TOKEN);
+  assert.equal(telegram.calls.filter((call) => call.method === 'sendPhoto').length, 2, 'фото поста и плашка');
+  assert.match(telegram.calls.find((call) => call.method === 'sendPhoto').body.caption, /^С фотографией/);
 
   telegram.calls = [];
   await bot.postToGroup(group, { text: 'Без подписи', withoutSignature: true }, TOKEN);

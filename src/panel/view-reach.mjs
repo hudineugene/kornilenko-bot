@@ -159,12 +159,22 @@ function bindRubricPicker(host) {
   if (!select) return;
   var show = function () {
     var rubric = (publishing().rubrics || []).find(function (item) { return item.id === select.value; });
+    var ownPhoto = host.querySelector("#groupImage") && host.querySelector("#groupImage").files.length;
+    var longText = ((host.querySelector("#groupText") || {}).value || "").length > 900;
     host.querySelector("#rubricPreview").innerHTML = rubric
       ? '<img class="thumb" style="width:120px;height:auto;border-radius:6px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + '" alt=""> ' +
-        (rubric.placement === "top" ? "плашка встанет над текстом" : "плашка уйдёт отдельным сообщением под постом")
+        (rubric.placement === "top"
+          ? "плашка встанет над текстом"
+          : ownPhoto || longText
+            ? "плашка уйдёт сообщением сразу под постом (у поста своё фото или длинный текст)"
+            : "плашка будет внизу самого сообщения, текст над ней")
       : "";
   };
   select.onchange = show;
+  var text = host.querySelector("#groupText");
+  if (text) text.oninput = show;
+  var photo = host.querySelector("#groupImage");
+  if (photo) photo.addEventListener("change", show);
   show();
 }
 
@@ -250,7 +260,8 @@ function renderGroupCard(host, group) {
         signatureNote() +
         '<div class="row wrap">' + (groupCan(group, "can_pin_messages") ? '<label class="check"><input type="checkbox" id="groupPin"> закрепить</label>' : "") +
         '<label class="check"><input type="checkbox" id="groupNotify" checked> со звуком</label>' +
-        '<div class="grow"></div><button class="btn" id="groupSend" type="button">Отправить</button></div>' +
+        '<div class="grow"></div><button class="btn secondary" id="groupPreview" type="button">Себе для проверки</button>' +
+        '<button class="btn" id="groupSend" type="button">Отправить</button></div>' +
       "</div></div>" +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small faint">историю Telegram не отдаёт</span></div></header>' +
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
@@ -298,9 +309,9 @@ function renderGroupCard(host, group) {
     reader.readAsDataURL(file);
   };
   bindRubricPicker(host);
-  host.querySelector("#groupSend").onclick = async function () {
+  function postPayload() {
     var when = host.querySelector("#groupWhen").value;
-    var payload = {
+    return {
       text: host.querySelector("#groupText").value,
       buttonText: host.querySelector("#groupButtonText").value,
       buttonUrl: host.querySelector("#groupButtonUrl").value,
@@ -311,9 +322,18 @@ function renderGroupCard(host, group) {
       image: image,
       sendAt: when ? new Date(when).toISOString() : "",
     };
+  }
+  host.querySelector("#groupPreview").onclick = async function () {
+    try {
+      await send(base + "/post", "POST", Object.assign(postPayload(), { preview: true, sendAt: "" }));
+      toast("Отправили вам в Telegram — посмотрите, как встанет плашка");
+    } catch (error) { fail(error); }
+  };
+  host.querySelector("#groupSend").onclick = async function () {
+    var payload = postPayload();
     try {
       await send(base + "/post", "POST", payload);
-      toast(when ? "Публикация запланирована" : "Отправлено в группу");
+      toast(payload.sendAt ? "Публикация запланирована" : group.type === "channel" ? "Опубликовано в канале" : "Отправлено в группу");
       await reload();
     } catch (error) { fail(error); }
   };
@@ -405,7 +425,7 @@ function renderPostStyle(host) {
         '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
       "</div></div>" +
       '<div class="card"><header><h3>Рубрики</h3><div class="actions"><button class="btn secondary small" id="addRubric" type="button">＋ Рубрика</button></div></header><div class="card-body stack">' +
-        '<p class="muted small">Плашка — картинка с названием рубрики. При публикации вы выбираете рубрику, и плашка уходит вместе с постом: снизу отдельным сообщением или сверху вместо фото.</p>' +
+        '<p class="muted small">Плашка — картинка с названием рубрики. «Снизу» — картинка стоит внутри сообщения под текстом; если текст длиннее 1024 знаков или у поста своё фото, плашка уходит сообщением сразу за постом. «Сверху» — плашка становится картинкой поста, текст под ней.</p>' +
         (rubrics.length ? rubrics.map(function (rubric, index) {
           return '<div class="row wrap" data-rubric="' + index + '" style="border-top:1px solid var(--line-soft);padding-top:8px">' +
             (rubric.image && rubric.image.exists ? '<img class="thumb" style="width:74px;height:52px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + "?rev=" + encodeURIComponent(rubric.image.updatedAt || "") + '" alt="">' : pendingImages[index] ? '<img class="thumb" style="width:74px;height:52px" src="' + pendingImages[index] + '" alt="">' : '<span class="thumb" style="width:74px;height:52px"></span>') +

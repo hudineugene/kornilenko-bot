@@ -153,8 +153,11 @@ function forgetTelegramFileIds(root) {
   });
 }
 
-async function sendPhotoMessage(chatId, image, caption, token, replyMarkup) {
+// options.captionAbove ставит подпись над фотографией: так картинка-плашка
+// оказывается внизу сообщения (Telegram Bot API, show_caption_above_media).
+async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, options = {}) {
   let result;
+  const captionAbove = options.captionAbove ? true : undefined;
   const fileId = knownFileId(image);
   if (fileId) {
     try {
@@ -162,6 +165,7 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup) {
         chat_id: chatId,
         photo: fileId,
         caption: caption || undefined,
+        show_caption_above_media: captionAbove,
         reply_markup: replyMarkup,
       });
     } catch {
@@ -174,6 +178,7 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup) {
       chat_id: String(chatId),
       photo: new Blob([bytes], { type: image.mimeType }),
       caption: caption || undefined,
+      show_caption_above_media: captionAbove,
       reply_markup: replyMarkup,
     });
     if (result && Array.isArray(result.photo) && result.photo.length) {

@@ -161,6 +161,13 @@ async function handleGroupApi(req, res, url) {
         saveDataNow();
         return json(res, 200, { ok: true, post }), true;
       }
+      if (body.preview) {
+        // Проверка вида: тот же пост, но в админ-чат, а не в группу.
+        const adminChatId = cleanText(data.config.adminChatId, 40);
+        if (!adminChatId) throw new Error("Админ-чат не настроен");
+        await postToGroup({ ...group, id: adminChatId, messages: [] }, { ...fields, pin: false });
+        return json(res, 200, { ok: true, preview: true }), true;
+      }
       const messageId = await postToGroup(group, fields);
       saveDataNow();
       return json(res, 200, { ok: true, messageId }), true;
