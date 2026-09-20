@@ -511,7 +511,7 @@ function renderPostStyle(host) {
   var rubrics = (current.rubrics || []).map(function (rubric) { return Object.assign({}, rubric); });
   var pendingImages = {};
   // Перерисовка не должна стирать то, что уже набрали.
-  var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false, signatureWrap: current.signatureWrap || "keep", signatureQuote: Boolean(current.signatureQuote) };
+  var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false, signatureWrap: current.signatureWrap || "keep", signatureQuote: Boolean(current.signatureQuote), signatureDivider: current.signatureDivider || "none" };
   var buttons = (current.buttons || []).map(function (button) { return { text: button.text, url: button.url }; });
   var perRow = current.buttonsPerRow || 3;
 
@@ -528,6 +528,11 @@ function renderPostStyle(host) {
         "</select></div>" +
         '<div class="hint">Ссылка надписью: <code>[ТикТок](https://tiktok.com/@ваш_аккаунт)</code>. Жирный: <code>**Название**</code>, курсив: <code>__текст__</code>. Значок тоже может быть ссылкой: <code>[🎵](https://…)</code>.</div>' +
         '<label class="check"><input type="checkbox" id="signQuote"' + (draft.signatureQuote ? " checked" : "") + '> подпись отдельным блоком (цитатой с полоской слева)</label>' +
+        '<div class="field"><label for="signDivider">Линия над подписью</label><select id="signDivider">' +
+          [["none", "без линии"], ["thin", "тонкая ─────"], ["bold", "жирная ━━━━━"], ["dash", "пунктир - - - -"], ["dots", "точки · · · ·"]].map(function (option) {
+            return '<option value="' + option[0] + '"' + (draft.signatureDivider === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
+          }).join("") +
+        '</select><div class="hint">Длинная линия задаёт ширину сообщения: блок подписи перестаёт быть узким и виден сразу.</div></div>' +
         '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div></div>' +
         '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
       "</div></div>" +
@@ -567,6 +572,8 @@ function renderPostStyle(host) {
     var preview = function () {
       var lines = String(draft.signature || "").split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
       var text = draft.signatureWrap === "keep" ? draft.signature : lines.join(draft.signatureWrap === "dot" ? " · " : " ");
+      var dividers = { thin: "─────────────────────", bold: "━━━━━━━━━━━━━━━━━━", dash: "- - - - - - - - - - - - - - - -", dots: "· · · · · · · · · · · · · · · ·" };
+      if (dividers[draft.signatureDivider] && text) text = dividers[draft.signatureDivider] + "\n" + text;
       var box = host.querySelector("#signPreview");
       box.innerHTML = draft.signatureEnabled ? (linkedPreview(text) || "подпись пуста") : "подпись выключена";
       box.style.borderLeft = draft.signatureQuote && draft.signatureEnabled ? "3px solid var(--brand)" : "";
@@ -575,6 +582,7 @@ function renderPostStyle(host) {
     host.querySelector("#signText").oninput = function (event) { draft.signature = event.target.value; preview(); };
     host.querySelector("#signWrap").onchange = function (event) { draft.signatureWrap = event.target.value; preview(); };
     host.querySelector("#signQuote").onchange = function (event) { draft.signatureQuote = event.target.checked; preview(); };
+    host.querySelector("#signDivider").onchange = function (event) { draft.signatureDivider = event.target.value; preview(); };
     preview();
     host.querySelector("#signOn").onchange = function (event) { draft.signatureEnabled = event.target.checked; preview(); };
     var drawButtonPreview = function () {
@@ -641,6 +649,7 @@ function renderPostStyle(host) {
           signatureEnabled: draft.signatureEnabled,
           signatureWrap: draft.signatureWrap,
           signatureQuote: draft.signatureQuote,
+          signatureDivider: draft.signatureDivider,
           buttons: buttons.filter(function (button) { return button.text && button.url; }),
           buttonsPerRow: perRow,
           rubrics: rubrics.map(function (rubric, index) {

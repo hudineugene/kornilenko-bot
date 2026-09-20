@@ -468,3 +468,26 @@ test('жирный текст и подпись цитатой', async () => {
   await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
   assert.ok(!telegram.calls.find((call) => call.method === 'sendMessage').body.text.includes('blockquote'));
 });
+
+test('линия над подписью задаёт ширину блока', async () => {
+  const group = await addBotAsAdmin();
+  const data = bot.getData();
+  data.config.publishing = {
+    signature: '🏗 Стройка Без Фильтров',
+    signatureEnabled: true,
+    signatureWrap: 'keep',
+    signatureQuote: true,
+    signatureDivider: 'bold',
+    rubrics: [],
+    buttons: [],
+  };
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  const text = telegram.calls.find((call) => call.method === 'sendMessage').body.text;
+  assert.match(text, /<blockquote>━{10,}\n🏗 Стройка Без Фильтров<\/blockquote>$/);
+
+  data.config.publishing.signatureDivider = 'none';
+  telegram.calls = [];
+  await bot.postToGroup(group, { text: 'Пост' }, TOKEN);
+  assert.ok(!telegram.calls.find((call) => call.method === 'sendMessage').body.text.includes('━'));
+});

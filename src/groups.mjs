@@ -249,6 +249,14 @@ function formatLinks(text) {
 // Telegram переносит текст по ширине экрана сам, а набранные в панели
 // переносы остаются жёсткими. «Одной строкой» убирает их, чтобы подпись
 // подстраивалась под ширину.
+// Строка-разделитель: она же задаёт ширину блока.
+const DIVIDERS = {
+  thin: '─────────────────────',
+  bold: '━━━━━━━━━━━━━━━━━━',
+  dash: '- - - - - - - - - - - - - - - -',
+  dots: '· · · · · · · · · · · · · · · ·',
+};
+
 function signatureText(publishing) {
   const signature = publishing.signatureEnabled ? publishing.signature : '';
   if (!signature || publishing.signatureWrap === 'keep') return signature;
@@ -256,10 +264,18 @@ function signatureText(publishing) {
   return parts.join(publishing.signatureWrap === 'dot' ? ' · ' : ' ');
 }
 
+// Подпись вместе с разделителем — в таком виде она уходит в сообщение.
+function signatureBlock(publishing) {
+  const signature = signatureText(publishing);
+  if (!signature) return '';
+  const divider = DIVIDERS[publishing.signatureDivider];
+  return divider ? divider + '\n' + signature : signature;
+}
+
 function postText(post) {
   const publishing = normalizePublishing(data.config.publishing);
   const body = cleanText(post.text, 4000);
-  const signature = signatureText(publishing);
+  const signature = signatureBlock(publishing);
   if (post.withoutSignature || !signature) return body;
   return body ? body + '\n\n' + signature : signature;
 }
@@ -268,7 +284,7 @@ function postText(post) {
 function postHtml(post) {
   const publishing = normalizePublishing(data.config.publishing);
   const body = cleanText(post.text, 4000);
-  const signature = post.withoutSignature ? '' : signatureText(publishing);
+  const signature = post.withoutSignature ? '' : signatureBlock(publishing);
   const bodyPart = formatLinks(body);
   const signaturePart = formatLinks(signature);
   const quote = signature && publishing.signatureQuote;
@@ -453,6 +469,7 @@ export {
   postMarkup,
   postText,
   postToGroup,
+  signatureBlock,
   signatureText,
   refreshGroup,
   refreshGroups,
