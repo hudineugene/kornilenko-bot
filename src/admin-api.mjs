@@ -4,7 +4,8 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
 import { normalizeLoadedData } from './data-format.mjs';
-import { dropMissingImages, forEachStoredImage, imageBytes } from './media.mjs';
+import { backupChunks } from './backup-file.mjs';
+import { dropMissingImages, storedMediaFiles } from './media.mjs';
 import { applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
 import { configured, data, replaceData, restoreMissingMedia, runtime, saveDataNow, snapshotBeforeRestore, verifyPassword, verifyPasswordAsync } from './store.mjs';
 import { mediaReport, runSelfCheck } from './selfcheck.mjs';
@@ -30,26 +31,21 @@ function portableBackupData() {
   // The key of the Telegram copy stays on this computer: with it, anyone
   // holding this file could open every weekly copy in the admin chat.
   if (payload.config && payload.config.telegramBackup) payload.config.telegramBackup = { enabled: false };
-  forEachStoredImage(payload, (image) => {
-    if (!image) return;
-    const bytes = imageBytes(image);
-    image.dataBase64 = bytes.toString('base64');
-    image.size = bytes.length;
-    delete image.storageFile;
-  });
   return payload;
 }
 
+// Копия собирается по кусочкам и сразу уходит в ответ: данные, потом
+// фотографии по одной. Раньше бот держал в памяти и снимки в base64, и строку
+// JSON, и её байты — для 50 МБ фотографий это под три сотни мегабайт.
 function sendBackupDownload(res, filename) {
-  const compressed = zlib.gzipSync(Buffer.from(JSON.stringify(portableBackupData()), 'utf8'), { level: 6 });
   securityHeaders(res);
   res.writeHead(200, {
-    'content-type': 'application/gzip',
+    'content-type': 'application/octet-stream',
     'content-disposition': 'attachment; filename="' + filename + '"',
-    'content-length': compressed.length,
     'cache-control': 'no-store',
   });
-  res.end(compressed);
+  for (const chunk of backupChunks(portableBackupData(), storedMediaFiles(data))) res.write(chunk);
+  res.end();
 }
 
 
@@ -289,7 +285,7 @@ async function handleApi(req, res, url) {
       return json(res, 403, { error: 'Ссылка на копию устарела. Запросите копию заново и введите пароль.' });
     }
     try {
-      return sendBackupDownload(res, 'telegram-bot-backup-' + dayKey() + '.json.gz');
+      return sendBackupDownload(res, 'telegram-bot-backup-' + dayKey() + '.kbz');
     } catch (error) {
       recordError('Создание резервной копии', error);
       return json(res, 500, { error: 'Не удалось создать резервную копию: ' + error.message });

@@ -186,6 +186,18 @@ function referencedImageFiles(root) {
   return referenced;
 }
 
+// Файлы фотографий, на которые ссылаются данные: для резервной копии их
+// читают по одному, а не держат все сразу в памяти.
+function storedMediaFiles(root) {
+  const files = [];
+  for (const name of referencedImageFiles(root)) {
+    const full = path.join(MEDIA_DIRECTORY, name);
+    if (!fs.existsSync(full)) continue;
+    files.push({ name, read: () => fs.readFileSync(full) });
+  }
+  return files;
+}
+
 function cleanupOrphanImages(root, referenced = referencedImageFiles(root)) {
   if (!fs.existsSync(MEDIA_DIRECTORY)) return;
   for (const entry of fs.readdirSync(MEDIA_DIRECTORY, { withFileTypes: true })) {
@@ -224,5 +236,6 @@ export {
   persistImage,
   referencedImageFiles,
   storedImageFile,
+  storedMediaFiles,
   writeMediaFile,
 };

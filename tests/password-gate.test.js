@@ -56,7 +56,8 @@ test.describe('скачивание копии данных', () => {
 
     const first = await realFetch(base + '/api/backup?ticket=' + ticket, { headers });
     assert.equal(first.status, 200);
-    const backup = JSON.parse(zlib.gunzipSync(Buffer.from(await first.arrayBuffer())).toString('utf8'));
+    const { readBackupContainer } = await import('../src/backup-file.mjs');
+    const backup = readBackupContainer(Buffer.from(await first.arrayBuffer())).payload;
     assert.ok(backup.config, 'копия пришла целиком');
 
     const second = await realFetch(base + '/api/backup?ticket=' + ticket, { headers });

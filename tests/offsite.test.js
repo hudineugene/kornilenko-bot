@@ -124,7 +124,8 @@ test('the panel backup file does not carry the key of the Telegram copy', async 
     method: 'POST', headers, body: JSON.stringify({ currentPassword: 'admin-password-1' }),
   })).json();
   const response = await realFetch(base + '/api/backup?ticket=' + ticket.ticket, { headers });
-  const backup = JSON.parse(zlib.gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8'));
+  const { readBackupContainer } = await import('../src/backup-file.mjs');
+  const backup = readBackupContainer(Buffer.from(await response.arrayBuffer())).payload;
   assert.deepEqual(backup.config.telegramBackup, { enabled: false });
   assert.ok(bot.getData().config.telegramBackup.key, 'the bot itself keeps it');
 });

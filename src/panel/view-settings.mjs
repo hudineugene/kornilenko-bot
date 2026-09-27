@@ -310,10 +310,10 @@ function renderData(host) {
   var backup = state.config.telegramBackup || {};
   host.innerHTML = '<div class="grid cols-2">' +
     '<div class="card"><header><h3>Резервная копия</h3></header><div class="card-body stack">' +
-      '<p class="muted small">Копия содержит объекты, тексты, клиентов и обращения. Храните её в надёжном месте.</p>' +
+      '<p class="muted small">Копия содержит объекты, тексты, клиентов, обращения и фотографии. Храните её в надёжном месте.</p>' +
       '<div class="row wrap"><button class="btn secondary" id="downloadBackup" type="button">⬇ Скачать копию</button>' +
-      '<label class="btn ghost" style="cursor:pointer">⬆ Восстановить<input type="file" id="restoreFile" accept=".json,.gz,.kbk,application/json,application/gzip" class="hidden"></label></div>' +
-      '<div class="hint">Подходит файл этой кнопки (.json.gz), обычный .json и зашифрованная копия из Telegram (.kbk — понадобится её пароль). Ежедневная копия создаётся сама в папке backups рядом с ботом. Перед восстановлением прежние данные складываются туда же файлом pre-restore-…json.</div>' +
+      '<label class="btn ghost" style="cursor:pointer">⬆ Восстановить<input type="file" id="restoreFile" accept=".kbz,.json,.gz,.kbk,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
+      '<div class="hint">Подходит файл этой кнопки (.kbz — данные и фотографии), прежние копии (.json.gz и .json) и зашифрованная копия из Telegram (.kbk — понадобится её пароль). Ежедневная копия создаётся сама в папке backups рядом с ботом. Перед восстановлением прежние данные складываются туда же файлом pre-restore-…json.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> присылать зашифрованную копию раз в неделю</label>" +

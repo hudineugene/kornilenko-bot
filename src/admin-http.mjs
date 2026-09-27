@@ -9,10 +9,11 @@ import { ADMIN_ALLOWED_HOSTS, DATA_FILE, MAX_BACKUP_BODY_BYTES, MAX_BACKUP_OUTPU
 import { cleanText } from './util.mjs';
 import { normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { decryptBackup, isEncryptedBackup } from './offsite.mjs';
-import { imageBytes, imageExists } from './media.mjs';
+import { imageBytes, imageExists, storedImageFile, writeMediaFile } from './media.mjs';
 import { data, runtime, verifyPassword } from './store.mjs';
 import { publicRuntime } from './menus.mjs';
 import { propertyPublicationReadiness, recordImages } from './catalog.mjs';
+import { isContainerBackup, readBackupContainer } from './backup-file.mjs';
 import { adminNotifications } from './admin-notifications.mjs';
 
 const SESSIONS_FILE = path.join(path.dirname(DATA_FILE), 'bot-sessions.json');
@@ -384,6 +385,16 @@ async function readBackup(req) {
     const password = header ? Buffer.from(header, 'base64').toString('utf8') : '';
     if (!password) throw new Error('Это зашифрованная копия из Telegram — введите её пароль');
     bytes = decryptBackup(bytes, password);
+  }
+  // Новый формат копии: данные и фотографии лежат в одном контейнере, каждая
+  // фотография — отдельной записью. Разбирается по одной, без огромных строк.
+  if (isContainerBackup(bytes)) {
+    const { payload, media } = readBackupContainer(bytes);
+    for (const file of media) {
+      const name = storedImageFile({ storageFile: file.name });
+      if (name) writeMediaFile(name, file.bytes);
+    }
+    return payload && payload.backup && typeof payload.backup === 'object' ? payload.backup : payload;
   }
   let decoded = bytes;
   if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
