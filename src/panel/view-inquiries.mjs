@@ -1005,14 +1005,22 @@ function openClient(id) {
         reader.onload = function () { messageImage = { dataUrl: reader.result, name: file.name }; messageChanged = true; dialog.querySelector("#clientMessageImageName").textContent = file.name; };
         reader.readAsDataURL(file);
       };
+      // Один идентификатор на одно сообщение: если нажать дважды или повторить
+      // отправку после обрыва, клиент получит сообщение один раз.
+      var messageRequestId = "";
       dialog.querySelector("#sendClientMessage").onclick = async function () {
         var text = dialog.querySelector("#clientMessageText").value.trim();
         if (!text && !messageImage) return toast("Введите сообщение или добавьте изображение", true);
+        if (!messageRequestId) {
+          messageRequestId = window.crypto && window.crypto.randomUUID
+            ? window.crypto.randomUUID()
+            : "message-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+        }
         try {
           if (profileChanged) await saveProfile();
-          var result = await send("/api/users/" + encodeURIComponent(user.id) + "/message", "POST", { text: text, buttonText: dialog.querySelector("#clientButtonText").value, buttonUrl: dialog.querySelector("#clientButtonUrl").value, imageDataUrl: messageImage && messageImage.dataUrl, imageName: messageImage && messageImage.name });
+          var result = await send("/api/users/" + encodeURIComponent(user.id) + "/message", "POST", { text: text, buttonText: dialog.querySelector("#clientButtonText").value, buttonUrl: dialog.querySelector("#clientButtonUrl").value, imageDataUrl: messageImage && messageImage.dataUrl, imageName: messageImage && messageImage.name, clientRequestId: messageRequestId });
           dialog.closeClean();
-          toast("Сообщение отправлено");
+          toast(result.duplicate ? "Сообщение уже было отправлено" : "Сообщение отправлено");
           await reload(false);
           selectedInquiry = result.inquiryId || (active && active.id) || "";
           await go("inquiries", "inbox");

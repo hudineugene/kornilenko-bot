@@ -43,6 +43,15 @@ async function handleClientsApi(req, res, url) {
     try {
       const body = await readJson(req);
       const text = cleanText(body.text, 4000);
+      // Тот же идентификатор отправки, что и у ответа в переписке: повторный
+      // запрос (двойное нажатие, «отправить ещё раз» после обрыва) не шлёт
+      // клиенту второе сообщение.
+      const requestedId = cleanText(body.clientRequestId, 100);
+      if (requestedId && !/^[A-Za-z0-9._:-]{8,100}$/.test(requestedId)) return json(res, 400, { error: 'Некорректный идентификатор отправки' });
+      const clientRequestId = requestedId || crypto.randomUUID();
+      const alreadySent = data.inquiries.find((item) => String(item.userId) === String(user.id)
+        && (Array.isArray(item.replies) ? item.replies : []).some((reply) => reply.clientRequestId === clientRequestId));
+      if (alreadySent) return json(res, 200, { ok: true, duplicate: true, inquiryId: alreadySent.id });
       const buttonText = cleanText(body.buttonText, 80);
       const buttonUrl = cleanText(body.buttonUrl, 500);
       if (!text && !body.imageDataUrl) return json(res, 400, { error: 'Введите сообщение или добавьте изображение' });
@@ -87,6 +96,7 @@ async function handleClientsApi(req, res, url) {
       inquiry.replies.push({
         id: crypto.randomUUID(), text: replyText, source: 'panel', by: cleanText(data.config.adminName, 60) || 'Администратор',
         createdAt: now, deliveredAt: now, telegramMessageId: lastMessage && lastMessage.message_id ? Number(lastMessage.message_id) : null,
+        clientRequestId,
       });
       inquiry.replies = inquiry.replies.slice(-50);
       for (const delivery of delivered) {

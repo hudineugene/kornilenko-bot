@@ -113,16 +113,45 @@ function ago(value) {
 function initials(name) { return String(name || "?").trim().slice(0, 1).toUpperCase(); }
 function localized(value, language) { return value && typeof value === "object" ? String(value[language || "ru"] || value.ru || "") : String(value || ""); }
 
+// Считаем запросы, которые что-то меняют: пока такой запрос в пути, кнопка,
+// которой его запустили, не нажимается — иначе второе нажатие отправило бы
+// второе сообщение, создало второй объект или вторую публикацию.
+var pendingChanges = 0;
+
 function api(url, options) {
   options = options || {};
   options.headers = Object.assign({ "content-type": "application/json" }, options.headers || {});
-  if (options.method && options.method !== "GET") options.headers["x-csrf-token"] = csrf;
+  var changing = Boolean(options.method) && options.method !== "GET";
+  if (changing) options.headers["x-csrf-token"] = csrf;
+  if (changing) pendingChanges += 1;
   return fetch(url, options).then(async function (response) {
     var body = {};
     try { body = await response.json(); } catch (e) {}
     if (!response.ok) { var error = new Error(body.error || "Ошибка запроса"); error.status = response.status; throw error; }
     return body;
+  }).finally(function () {
+    if (changing) pendingChanges = Math.max(0, pendingChanges - 1);
   });
+}
+
+// Блокируем кнопку не в момент нажатия, а сразу после: иначе отправка формы
+// (кнопка входа) не состоялась бы вовсе. Кнопка оживает, когда запросы,
+// начатые этим нажатием, закончились.
+function guardDoubleClicks() {
+  document.addEventListener("click", function (event) {
+    var node = event.target;
+    var button = node && node.closest ? node.closest("button") : null;
+    if (!button || button.disabled) return;
+    setTimeout(function () {
+      if (!pendingChanges || button.disabled) return;
+      button.disabled = true;
+      var timer = setInterval(function () {
+        if (pendingChanges) return;
+        clearInterval(timer);
+        button.disabled = false;
+      }, 60);
+    }, 0);
+  }, true);
 }
 function send(url, method, payload) { return api(url, { method: method, body: JSON.stringify(payload || {}) }); }
 
@@ -603,6 +632,7 @@ function bindShell() {
       error.classList.remove("hidden");
     }
   };
+  guardDoubleClicks();
   window.addEventListener("beforeunload", function (event) {
     if (!isDirty()) return;
     event.preventDefault();
