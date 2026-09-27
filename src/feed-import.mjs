@@ -5,6 +5,7 @@
 // заполнил в панели, не перезаписываются.
 
 import crypto from 'node:crypto';
+import dns from 'node:dns/promises';
 import { cleanText } from './util.mjs';
 import { PROPERTY_TYPE_LABELS } from './texts.mjs';
 import { data, saveDataNow } from './store.mjs';
@@ -274,8 +275,55 @@ function planSummary(plan) {
   };
 }
 
+// Разрешение имени с коротким сроком: если сеть молчит, ждать нечего — по
+// такому имени всё равно ничего не скачается, а проверка не должна подвешивать
+// загрузку выгрузки.
+const DNS_TIMEOUT_MS = 1500;
+
+function dnsLookup(host, options) {
+  return Promise.race([
+    dns.lookup(host, options),
+    new Promise((resolve, reject) => { setTimeout(() => reject(new Error('DNS timeout')), DNS_TIMEOUT_MS).unref(); }),
+  ]);
+}
+
 // Photo links come from the feed, so they may not point into this computer
 // or the local network.
+//
+// Адрес из выгрузки — это адрес с чужой стороны. Проверять только то, что
+// написано в файле, мало: ссылка на обычный сайт может увести перенаправлением
+// на 127.0.0.1 или 192.168.…, а обычное имя — указывать на домашний адрес. Тут
+// собраны все три проверки: сам адрес, куда он разрешается и куда ведут
+// перенаправления (их бот проходит сам, а не доверяет браузерной автоматике).
+function privateIp(value) {
+  let host = String(value || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/^::ffff:/, '');
+  if (!host) return true;
+  // Адрес IPv4 внутри IPv6 браузерная нормализация пишет шестнадцатеричным
+  // («::ffff:7f00:1» — это 127.0.0.1): разворачиваем обратно.
+  const mapped = host.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (mapped) {
+    const high = parseInt(mapped[1], 16);
+    const low = parseInt(mapped[2], 16);
+    host = [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join('.');
+  }
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) {
+    const [first, second] = host.split('.').map(Number);
+    if (first === 127 || first === 0 || first === 10) return true;
+    if (first === 169 && second === 254) return true;
+    if (first === 192 && second === 168) return true;
+    if (first === 172 && second >= 16 && second <= 31) return true;
+    // Адреса провайдерских сетей: снаружи по ним ничего полезного нет.
+    if (first === 100 && second >= 64 && second <= 127) return true;
+    return false;
+  }
+  if (host.includes(':')) {
+    if (host === '::' || host === '::1') return true;
+    if (/^f[cd][0-9a-f]{2}:/.test(host) || /^fe80:/.test(host)) return true;
+    return false;
+  }
+  return false;
+}
+
 function publicAddress(address) {
   let url;
   try {
@@ -285,10 +333,24 @@ function publicAddress(address) {
   }
   if (!['http:', 'https:'].includes(url.protocol)) return false;
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === '0.0.0.0') return false;
-  if (/^(127|10|0)\./.test(host) || /^169\.254\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
-  if (host === '::1' || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe80:/.test(host)) return false;
-  return true;
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) return false;
+  return !privateIp(host);
+}
+
+// Имя может указывать куда угодно, в том числе на адрес внутри сети. Если
+// разрешить его не удалось — пропускаем: скачать по такому имени всё равно не
+// выйдет, а лишний отказ только запутает.
+async function addressResolvesOutside(address, lookup) {
+  const host = new URL(address).hostname.replace(/^\[|\]$/g, '');
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':')) return !privateIp(host);
+  let records = [];
+  try {
+    records = await lookup(host, { all: true });
+  } catch {
+    return true;
+  }
+  if (!Array.isArray(records) || !records.length) return true;
+  return records.every((record) => !privateIp(record && record.address));
 }
 
 // The body up to a limit, without first taking a huge answer into memory.
@@ -316,12 +378,27 @@ async function readLimited(response, limit, what) {
   return Buffer.concat(chunks);
 }
 
-async function downloadImage(address, fetcher) {
-  if (!publicAddress(address)) throw new Error('адрес фото недоступен');
+const MAX_IMAGE_REDIRECTS = 5;
+const REDIRECT_CODES = new Set([301, 302, 303, 307, 308]);
+
+async function downloadImage(address, fetcher, lookup = dnsLookup) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
   try {
-    const response = await fetcher(address, { signal: controller.signal, redirect: 'follow' });
+    let current = address;
+    let response = null;
+    for (let hop = 0; ; hop += 1) {
+      if (!publicAddress(current)) throw new Error('адрес фото недоступен');
+      if (!(await addressResolvesOutside(current, lookup))) throw new Error('адрес фото ведёт во внутреннюю сеть');
+      // Перенаправления проходим сами: каждый следующий адрес проверяется так
+      // же, как первый.
+      response = await fetcher(current, { signal: controller.signal, redirect: 'manual' });
+      if (!REDIRECT_CODES.has(Number(response.status))) break;
+      if (hop >= MAX_IMAGE_REDIRECTS) throw new Error('слишком много перенаправлений');
+      const location = response.headers.get('location');
+      if (!location) throw new Error('перенаправление без адреса');
+      current = new URL(location, current).toString();
+    }
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const type = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     const bytes = await readLimited(response, MAX_IMAGE_BYTES, 'Фото');
@@ -452,6 +529,8 @@ async function runImport(items, options) {
   return result;
 }
 
+// Сам файл выгрузки — тоже адрес со стороны: настройку мог поменять кто угодно
+// с доступом к панели.
 async function fetchFeed(address, fetcher = fetch) {
   if (!/^https?:\/\//i.test(String(address || ''))) throw new Error('Ссылка на выгрузку должна начинаться с http:// или https://');
   const controller = new AbortController();
@@ -503,6 +582,8 @@ async function runDailyFeedImport(now = new Date(), fetcher = fetch) {
 
 export {
   applyImport,
+  downloadImage,
+  privateIp,
   feedItemOf,
   feedSettings,
   fetchFeed,
