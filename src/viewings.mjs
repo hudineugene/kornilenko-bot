@@ -13,7 +13,7 @@ import { menuKeyboard } from './menus.mjs';
 import { adminCallbackAllowed, createInquiry, inquiryStatusMarkup, notifyAdministratorAction } from './inquiries.mjs';
 import { localized, localizedExact, validHttpUrl } from './catalog.mjs';
 import { acknowledgeCallback, propertyRequestText, sendSimilarProperty } from './sections.mjs';
-import { userUnavailableError } from './broadcasts.mjs';
+import { temporaryDeliveryError, userUnavailableError } from './broadcasts.mjs';
 import { adminMorningHour } from './hours.mjs';
 
 const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
@@ -415,6 +415,7 @@ async function runViewingNotices(now = new Date(), token = data.config.botToken)
     if (!reminder && !feedback) continue;
     const user = inquiryUser(inquiry);
     // Sent at most once, even if Telegram refuses: no retries every 15 minutes.
+    const markedBefore = reminder ? inquiry.viewing.remindedAt : inquiry.viewing.feedbackAskedAt;
     if (reminder) inquiry.viewing.remindedAt = now.toISOString();
     else inquiry.viewing.feedbackAskedAt = now.toISOString();
     scheduleSave();
@@ -430,18 +431,34 @@ async function runViewingNotices(now = new Date(), token = data.config.botToken)
       }
     } catch (error) {
       if (userUnavailableError(error)) markUnavailable(user);
-      else recordError(reminder ? 'Напоминание о просмотре' : 'Вопрос после просмотра', error);
+      else if (temporaryDeliveryError(error)) {
+        // Связь пропала не по вине клиента: снимаем отметку, чтобы следующая
+        // проверка (через 15 минут) попробовала снова. Окно напоминания
+        // ограничено — устаревшее напоминание всё равно не уйдёт.
+        if (reminder) inquiry.viewing.remindedAt = markedBefore || '';
+        else inquiry.viewing.feedbackAskedAt = markedBefore || '';
+        scheduleSave();
+      } else recordError(reminder ? 'Напоминание о просмотре' : 'Вопрос после просмотра', error);
     }
     await delay(40);
   }
   const adminChatId = cleanText(data.config.adminChatId, 40);
   const today = localDayKey(now);
   if (adminChatId && now.getHours() >= adminMorningHour(VIEWING_AGENDA_HOUR) && data.lastViewingAgendaFor !== today) {
+    const agendaMarkedBefore = data.lastViewingAgendaFor;
     data.lastViewingAgendaFor = today;
     const agenda = viewingAgenda(now);
     if (agenda) {
-      await sendMessage(adminChatId, agenda, token, { track: false });
-      result.agenda = agenda;
+      try {
+        await sendMessage(adminChatId, agenda, token, { track: false });
+        result.agenda = agenda;
+      } catch (error) {
+        // Список дел на день нужен утром: при обрыве связи отметка снимается,
+        // и список уйдёт со следующей проверкой.
+        if (temporaryDeliveryError(error)) data.lastViewingAgendaFor = agendaMarkedBefore;
+        saveDataNow();
+        throw error;
+      }
     }
   }
   saveDataNow();

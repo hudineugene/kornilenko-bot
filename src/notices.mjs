@@ -9,6 +9,7 @@ import { sendMessage } from './telegram.mjs';
 import { awaitingReply, inquiryChats, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
 import { localized, shortenedText } from './catalog.mjs';
 import { runViewingNotices } from './viewings.mjs';
+import { temporaryDeliveryError } from './broadcasts.mjs';
 import { adminMessagesAllowed, adminMorningHour } from './hours.mjs';
 import { runFormReminders } from './forms.mjs';
 import { runTelegramBackup } from './offsite.mjs';
@@ -54,9 +55,21 @@ async function runDailyDigest(now = new Date()) {
   const key = dayKey(yesterday);
   if (data.lastDigestFor === key) return '';
   const text = activityDigest(key);
+  const markedBefore = data.lastDigestFor;
   data.lastDigestFor = key;
   scheduleSave();
-  if (text) await sendMessage(adminChatId, text, data.config.botToken, { track: false });
+  if (text) {
+    try {
+      await sendMessage(adminChatId, text, data.config.botToken, { track: false });
+    } catch (error) {
+      // Обрыв связи не должен стоить владельцу сводки: пробуем ещё раз.
+      if (temporaryDeliveryError(error)) {
+        data.lastDigestFor = markedBefore;
+        saveDataNow();
+      }
+      throw error;
+    }
+  }
   return text;
 }
 
@@ -262,10 +275,19 @@ async function runWeeklyReport(now = new Date()) {
   if (!adminChatId || !data.config.botToken || now.getDay() !== WEEKLY_REPORT_DAY || now.getHours() < adminMorningHour(DIGEST_HOUR)) return '';
   const today = localDayKey(now);
   if (data.lastWeeklyReportFor === today) return '';
+  const markedBefore = data.lastWeeklyReportFor;
   data.lastWeeklyReportFor = today;
   scheduleSave();
   const text = weeklyReport(now);
-  await sendMessage(adminChatId, text, data.config.botToken, { track: false });
+  try {
+    await sendMessage(adminChatId, text, data.config.botToken, { track: false });
+  } catch (error) {
+    if (temporaryDeliveryError(error)) {
+      data.lastWeeklyReportFor = markedBefore;
+      saveDataNow();
+    }
+    throw error;
+  }
   return text;
 }
 

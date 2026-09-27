@@ -216,5 +216,6 @@ export {
   rememberBroadcastDelivery,
   runBroadcast,
   runDueBroadcasts,
+  temporaryDeliveryError,
   userUnavailableError,
 };

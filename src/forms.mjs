@@ -11,6 +11,7 @@ import { menuKeyboard, sendMainMenu } from './menus.mjs';
 import { createInquiry } from './inquiries.mjs';
 import { localizedExact, publishedCatalog, sendCatalogPage, sendUiMessage, showCatalogPricePrompt, startCatalogPriceInput } from './catalog.mjs';
 import { currentSelectionRanking } from './alerts.mjs';
+import { temporaryDeliveryError } from './broadcasts.mjs';
 import { propertyRequestText } from './sections.mjs';
 import { parseViewingDate, sendViewingConfirmation, viewingDayForOption } from './viewings.mjs';
 import { withOffHoursNote } from './hours.mjs';
@@ -851,6 +852,7 @@ async function runFormReminders(now = new Date(), token = data.config.botToken) 
     const language = user.preferredLanguage || 'ru';
     const copy = INTERACTION_TEXT[language] || INTERACTION_TEXT.ru;
     // Marked first: a refusal from Telegram must not be retried every run.
+    const markedBefore = user.pendingAction.remindedAt;
     user.pendingAction.remindedAt = now.toISOString();
     scheduleSave();
     try {
@@ -858,6 +860,11 @@ async function runFormReminders(now = new Date(), token = data.config.botToken) 
       sent.push(user.id);
     } catch (error) {
       if (Number(error && error.telegramCode) === 403) markUnavailable(user);
+      else if (temporaryDeliveryError(error) && user.pendingAction) {
+        // Связи не было — напомним при следующей проверке, пока форма жива.
+        user.pendingAction.remindedAt = markedBefore || '';
+        scheduleSave();
+      }
     }
   }
   if (sent.length) saveDataNow();
