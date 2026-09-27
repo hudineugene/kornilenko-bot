@@ -13,7 +13,7 @@ import { restartPolling } from './updates.mjs';
 import { startTunnel, stopTunnel } from './remote.mjs';
 import { server } from './server.mjs';
 import { announceError, announceStart, rememberShutdown, sendStatusNotice, statusNoticesOn, stopNoticeText } from './status.mjs';
-import { runSelfCheck, selfCheckLines, selfCheckNotice } from './selfcheck.mjs';
+import { diskSpaceNotice, runSelfCheck, selfCheckLines, selfCheckNotice } from './selfcheck.mjs';
 
 const RUN_MARKER_FILE = path.join(path.dirname(DATA_FILE), 'bot-running.json');
 const RUN_HEARTBEAT_MS = 60 * 1000;
@@ -131,6 +131,18 @@ async function reportAbruptStop(previous, token = data.config.botToken) {
 const FIRST_SCHEDULE_CHECK_MS = 30 * 1000;
 const SELF_CHECK_DELAY_MS = 20 * 1000;
 
+function watchDiskSpace() {
+  try {
+    const notice = diskSpaceNotice();
+    if (!notice) return;
+    console.log(notice);
+    recordError('Свободное место', new Error(notice.split('\n')[0]));
+    void sendStatusNotice(notice).catch(() => {});
+  } catch (error) {
+    console.error('Не удалось проверить свободное место:', error.message);
+  }
+}
+
 function reportSelfCheck() {
   try {
     const report = runSelfCheck();
@@ -219,6 +231,10 @@ function start() {
     if (data.config.remoteAccess) startTunnel();
     runDailyBackupSafely();
     setInterval(runDailyBackupSafely, 60 * 60 * 1000).unref();
+    // Запас места смотрим раз в час: предупредить нужно до того, как данные
+    // не сохранятся, а не после.
+    watchDiskSpace();
+    setInterval(watchDiskSpace, 60 * 60 * 1000).unref();
     // Первая проверка — вскоре после запуска, а не через 15 минут: пост,
     // время которого пришло, пока бот был выключен, не должен ждать четверть
     // часа. Небольшая задержка нужна, чтобы связь с Telegram успела ожить.

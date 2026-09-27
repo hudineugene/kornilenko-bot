@@ -3,10 +3,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { MEDIA_DIRECTORY } from './config.mjs';
+import { DATA_FILE, MEDIA_DIRECTORY } from './config.mjs';
 import { DATA_VERSION } from './data-format.mjs';
-import { cleanText } from './util.mjs';
-import { data, runtime } from './store.mjs';
+import { cleanText, localDayKey } from './util.mjs';
+import { data, runtime, scheduleSave } from './store.mjs';
 import { propertyReadyForLanguage } from './catalog.mjs';
 import { forEachStoredImage, imageExists, referencedImageFiles } from './media.mjs';
 import { policyIsDraft } from './privacy.mjs';
@@ -89,6 +89,77 @@ function connectionDetail() {
 
 // Каждая проверка: ok — всё хорошо, warn — стоит посмотреть, bad — клиенты
 // или администратор это почувствуют.
+// --- Свободное место ---------------------------------------------------------
+// 27.09 диск заполнился до нуля, и бот узнал бы об этом только в момент записи
+// данных. Запас места проверяется заранее: в самопроверке он виден всегда, а
+// когда места мало — администратор получает сообщение раз в сутки.
+const DISK_LOW_BYTES = 1024 * 1024 * 1024;
+const DISK_CRITICAL_BYTES = 300 * 1024 * 1024;
+
+function fileSizeText(bytes) {
+  const value = Number(bytes) || 0;
+  if (value >= 1024 * 1024 * 1024) return (value / (1024 * 1024 * 1024)).toFixed(1).replace('.', ',') + ' ГБ';
+  if (value >= 1024 * 1024) return Math.round(value / (1024 * 1024)) + ' МБ';
+  return Math.max(1, Math.round(value / 1024)) + ' КБ';
+}
+
+// Размер папки бота: данные, фотографии, копии и сама программа. Считаем с
+// ограничением, чтобы проверка оставалась быстрой на любой папке.
+function folderSize(directory, budget = { files: 20000 }) {
+  let total = 0;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    if (budget.files <= 0) break;
+    budget.files -= 1;
+    const full = path.join(directory, entry.name);
+    try {
+      if (entry.isDirectory()) total += folderSize(full, budget);
+      else if (entry.isFile()) total += fs.statSync(full).size;
+    } catch {
+      // Файл занят или исчез — на итог это почти не влияет.
+    }
+  }
+  return total;
+}
+
+function diskReport() {
+  const folder = path.dirname(DATA_FILE);
+  try {
+    const stat = fs.statfsSync(folder);
+    return {
+      free: Number(stat.bsize) * Number(stat.bavail),
+      total: Number(stat.bsize) * Number(stat.blocks),
+      used: folderSize(folder),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Сообщение администратору о нехватке места — не чаще раза в сутки.
+function diskSpaceNotice(now = new Date()) {
+  const disk = diskReport();
+  if (!disk || disk.free >= DISK_LOW_BYTES) return '';
+  const today = localDayKey(now);
+  if (data.lastDiskWarningFor === today) return '';
+  data.lastDiskWarningFor = today;
+  scheduleSave();
+  const critical = disk.free < DISK_CRITICAL_BYTES;
+  return [
+    critical ? '🛑 На диске почти не осталось места' : '⚠️ На диске мало места',
+    '',
+    'Свободно: ' + fileSizeText(disk.free) + '. Папка бота занимает ' + fileSizeText(disk.used) + '.',
+    critical
+      ? 'Когда место закончится, бот не сможет сохранить данные: заявки и переписка останутся только в памяти до перезапуска.'
+      : 'Пока всё работает, но лучше освободить место заранее: ежедневные копии данных и фотографии занимают всё больше.',
+  ].join('\n');
+}
+
 function runSelfCheck(now = new Date()) {
   const checks = [];
   const add = (id, title, status, detail, hint = '') => checks.push({ id, title, status, detail, hint });
@@ -130,6 +201,16 @@ function runSelfCheck(now = new Date()) {
     add('media', 'Файлы картинок', 'ok', 'все на месте: ' + media.total);
   }
 
+  const disk = diskReport();
+  if (!disk) add('disk', 'Свободное место', 'warn', 'не удалось узнать запас места на диске');
+  else if (disk.free < DISK_CRITICAL_BYTES) {
+    add('disk', 'Свободное место', 'bad', 'осталось ' + fileSizeText(disk.free) + ' — данные могут не сохраниться', 'Освободите место на диске');
+  } else if (disk.free < DISK_LOW_BYTES) {
+    add('disk', 'Свободное место', 'warn', 'осталось ' + fileSizeText(disk.free) + ', папка бота занимает ' + fileSizeText(disk.used), 'Освободите место на диске');
+  } else {
+    add('disk', 'Свободное место', 'ok', 'свободно ' + fileSizeText(disk.free) + ', папка бота занимает ' + fileSizeText(disk.used));
+  }
+
   if (Number(data.version) !== DATA_VERSION) {
     add('version', 'Версия данных', 'bad', 'в файле ' + data.version + ', программа ждёт ' + DATA_VERSION, 'Обновите программу или восстановите копию');
   } else {
@@ -161,6 +242,11 @@ function selfCheckNotice(report) {
 }
 
 export {
+  DISK_CRITICAL_BYTES,
+  DISK_LOW_BYTES,
+  diskReport,
+  diskSpaceNotice,
+  fileSizeText,
   mediaReport,
   runSelfCheck,
   selfCheckLines,

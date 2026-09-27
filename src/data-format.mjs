@@ -1015,6 +1015,7 @@ function normalizeLoadedData(parsed) {
     if (storedVersion < 20) migrateSavedSearch(normalized.interfaceText, normalized.config.messages);
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
+    normalized.lastDiskWarningFor = cleanText(parsed.lastDiskWarningFor, 10);
     normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
     normalized.lastWeeklyReportFor = cleanText(parsed.lastWeeklyReportFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
