@@ -10,7 +10,7 @@ import { contentAddressImages, persistImage, referencedImageFiles } from './medi
 import { BOT_COMMAND_DESCRIPTIONS, CATALOG_FILTER_TEXT, COMMAND_TEXT, COMPARISON_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, MENU_LABELS, MY_AREA_TEXT, PRIVACY_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_ALERT_TEXT, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { getData, loadData, onSaveFailure, replaceData, restoreMissingMedia, runDailyBackup, runtime, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
-import { leadSourceFromPayload, normalizeUser, rebuildUserIndex, userByChatId, userById } from './users.mjs';
+import { eraseUserData, leadSourceFromPayload, normalizeUser, rebuildUserIndex, userByChatId, userById, userDataExport, userTraces } from './users.mjs';
 import { splitTelegramText, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, menuItemForText } from './menus.mjs';
 import { formReminderDue, runFormReminders, viewingDateValue } from './forms.mjs';
@@ -152,6 +152,7 @@ export {
   queuePropertyAlerts,
   referencedImageFiles,
   reportAbruptStop,
+  eraseUserData,
   retentionPlan,
   runRetentionCleanup,
   runSelfCheck,
@@ -172,6 +173,8 @@ export {
   runWeeklyReport,
   runtime,
   saveDataNow,
+  userDataExport,
+  userTraces,
   savedSearchMatches,
   savedSearchResults,
   savedSearchText,

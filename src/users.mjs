@@ -163,13 +163,45 @@ function normalizeUser(from, chatId, countMessage = true) {
 }
 
 // Everything the bot stores about one person, for a data access request.
-function userDataExport(user) {
+// Всё, что бот хранит о клиенте: карточка, обращения, его сообщения в группах,
+// заявки на вступление и записи о нём в центре уведомлений. По запросу клиента
+// это должно быть полным, иначе выгрузка не отвечает на вопрос «что у вас есть
+// обо мне».
+function userTraces(user) {
   const id = String(user.id);
   const chatId = String(user.chatId);
+  const inquiries = data.inquiries.filter((item) => String(item.userId) === id || String(item.chatId) === chatId);
+  const inquiryIds = new Set(inquiries.map((item) => String(item.id)));
+  const groupMessages = [];
+  const joinRequests = [];
+  for (const group of Array.isArray(data.groups) ? data.groups : []) {
+    for (const message of Array.isArray(group.messages) ? group.messages : []) {
+      if (String(message.userId) === id) groupMessages.push({ groupId: group.id, groupTitle: group.title, ...message });
+    }
+    for (const request of Array.isArray(group.joinRequests) ? group.joinRequests : []) {
+      if (String(request.userId) === id) joinRequests.push({ groupId: group.id, groupTitle: group.title, ...request });
+    }
+  }
+  // Ключи центра уведомлений начинаются с вида «message:<клиент>:…», остальные
+  // ссылаются на обращение — оба случая относятся к этому клиенту.
+  const notificationKeys = Object.keys(data.adminNotificationStates || {}).filter((key) => {
+    if (key.startsWith('message:' + id + ':')) return true;
+    const stored = data.adminNotificationStates[key] || {};
+    const route = stored.snapshot && stored.snapshot.route;
+    return Boolean(route && route.inquiryId && inquiryIds.has(String(route.inquiryId)));
+  });
+  return { id, chatId, inquiries, groupMessages, joinRequests, notificationKeys };
+}
+
+function userDataExport(user) {
+  const traces = userTraces(user);
   return {
     exportedAt: new Date().toISOString(),
     user: clone(user),
-    inquiries: data.inquiries.filter((item) => item.userId === id || String(item.chatId) === chatId).map(clone),
+    inquiries: traces.inquiries.map(clone),
+    groupMessages: traces.groupMessages.map(clone),
+    groupJoinRequests: traces.joinRequests.map(clone),
+    adminNotifications: traces.notificationKeys.map((key) => clone({ key, ...(data.adminNotificationStates[key] || {}) })),
   };
 }
 
@@ -177,8 +209,9 @@ function userDataExport(user) {
 // and every reference to them. Snapshots in backups/ keep the data until they
 // are rotated out.
 function eraseUserData(user) {
-  const id = String(user.id);
-  const chatId = String(user.chatId);
+  const traces = userTraces(user);
+  const id = traces.id;
+  const chatId = traces.chatId;
   delete data.users[id];
   usersByChatId.delete(chatId);
   inquiryTimes.delete(id);
@@ -197,7 +230,27 @@ function eraseUserData(user) {
   for (const [messageId, target] of Object.entries(data.adminReplyTargets || {})) {
     if (String(target.chatId) === chatId) delete data.adminReplyTargets[messageId];
   }
-  return { inquiriesRemoved: inquiriesBefore - data.inquiries.length };
+  // Центр уведомлений хранит снимки с именем и текстом клиента.
+  for (const key of traces.notificationKeys) delete data.adminNotificationStates[key];
+  // Сообщения клиента в группах и его заявки на вступление — тоже его данные.
+  let groupTraces = 0;
+  for (const group of Array.isArray(data.groups) ? data.groups : []) {
+    if (Array.isArray(group.messages)) {
+      const before = group.messages.length;
+      group.messages = group.messages.filter((message) => String(message.userId) !== id);
+      groupTraces += before - group.messages.length;
+    }
+    if (Array.isArray(group.joinRequests)) {
+      const before = group.joinRequests.length;
+      group.joinRequests = group.joinRequests.filter((request) => String(request.userId) !== id);
+      groupTraces += before - group.joinRequests.length;
+    }
+  }
+  return {
+    inquiriesRemoved: inquiriesBefore - data.inquiries.length,
+    notificationsRemoved: traces.notificationKeys.length,
+    groupTracesRemoved: groupTraces,
+  };
 }
 
 export {
@@ -213,5 +266,6 @@ export {
   userByChatId,
   userById,
   userDataExport,
+  userTraces,
   usersByChatId,
 };
