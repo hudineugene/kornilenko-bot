@@ -284,8 +284,8 @@ function renderData(host) {
     '<div class="card"><header><h3>Резервная копия</h3></header><div class="card-body stack">' +
       '<p class="muted small">Копия содержит объекты, тексты, клиентов и обращения. Храните её в надёжном месте.</p>' +
       '<div class="row wrap"><button class="btn secondary" id="downloadBackup" type="button">⬇ Скачать копию</button>' +
-      '<label class="btn ghost" style="cursor:pointer">⬆ Восстановить<input type="file" id="restoreFile" accept=".json,.kbk" class="hidden"></label></div>' +
-      '<div class="hint">Ежедневная копия создаётся автоматически в папке backups рядом с ботом.</div>' +
+      '<label class="btn ghost" style="cursor:pointer">⬆ Восстановить<input type="file" id="restoreFile" accept=".json,.gz,.kbk,application/json,application/gzip" class="hidden"></label></div>' +
+      '<div class="hint">Подходит файл этой кнопки (.json.gz), обычный .json и зашифрованная копия из Telegram (.kbk — понадобится её пароль). Ежедневная копия создаётся сама в папке backups рядом с ботом.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> присылать зашифрованную копию раз в неделю</label>" +
@@ -316,20 +316,26 @@ function renderData(host) {
     "</div></div></div>";
 
   host.querySelector("#downloadBackup").onclick = function () { window.location.href = "/api/backup"; };
-  host.querySelector("#restoreFile").onchange = function (event) {
-    var file = event.target.files && event.target.files[0];
+  host.querySelector("#restoreFile").onchange = async function (event) {
+    var input = event.target;
+    var file = input.files && input.files[0];
     if (!file) return;
-    var reader = new FileReader();
-    reader.onload = async function () {
-      var password = file.name.endsWith(".kbk") ? prompt("Пароль от копии") : "";
-      if (!(await confirmDialog("Восстановить данные?", "Текущие данные бота будут заменены содержимым файла.", "Восстановить", true))) return;
-      try {
-        await api("/api/restore", { method: "POST", headers: password ? { "x-backup-password": btoa(unescape(encodeURIComponent(password))) } : {}, body: reader.result });
-        toast("Данные восстановлены");
-        location.reload();
-      } catch (error) { fail(error); }
-    };
-    reader.readAsText(file);
+    input.value = "";
+    var encrypted = /\.kbk$/i.test(file.name);
+    if (!(await confirmDialog("Восстановить данные?", "Текущие данные бота будут заменены содержимым файла «" + file.name + "».", "Восстановить", true))) return;
+    var password = encrypted ? prompt("Пароль от зашифрованной копии") : "";
+    if (encrypted && !password) return toast("Без пароля зашифрованную копию не прочитать", true);
+    try {
+      // Файл уходит байтами: копия .json.gz и .kbk двоичные, а чтение текстом
+      // их портит — сервер потом не может ни распаковать, ни расшифровать.
+      var result = await api("/api/restore", {
+        method: "POST",
+        headers: Object.assign({ "content-type": "application/octet-stream" }, password ? { "x-backup-password": btoa(unescape(encodeURIComponent(password))) } : {}),
+        body: file,
+      });
+      toast(result && result.missingPhotos ? "Данные восстановлены, не найдено фотографий: " + result.missingPhotos : "Данные восстановлены");
+      setTimeout(function () { location.reload(); }, 1200);
+    } catch (error) { fail(error); }
   };
   host.querySelector("#saveTgBackup").onclick = async function () {
     try {

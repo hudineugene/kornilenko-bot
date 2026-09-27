@@ -102,7 +102,13 @@ function fakeFetch(state, texts, requests = []) {
     const path = String(url);
     let body = null;
     try { body = options && options.body ? JSON.parse(options.body) : null; } catch { body = String(options.body); }
-    requests.push({ url: path, method: (options && options.method) || 'GET', body });
+    requests.push({
+      url: path,
+      method: (options && options.method) || 'GET',
+      body,
+      raw: options ? options.body : null,
+      headers: (options && options.headers) || {},
+    });
     const answer = (payload) => ({
       ok: true,
       status: 200,
@@ -139,7 +145,11 @@ async function panelSandbox() {
     fetch: fakeFetch(state, texts, requests),
     setTimeout, clearTimeout, setInterval: () => 0, clearInterval,
     requestAnimationFrame: (fn) => setTimeout(fn, 0),
-    Intl, URL, URLSearchParams, Blob, FormData, Promise, JSON, Math, Date, Number, String, Boolean, Array, Object, RegExp, Error, Map, Set, isNaN, isFinite, parseInt, parseFloat, encodeURIComponent, decodeURIComponent, btoa, atob, escape: encodeURIComponent, unescape: decodeURIComponent,
+    Intl, URL, URLSearchParams, Blob, FormData, Promise, JSON, Math, Date, Number, String, Boolean, Array, Object, RegExp, Error, Map, Set, isNaN, isFinite, parseInt, parseFloat, encodeURIComponent, decodeURIComponent, btoa, atob,
+    // Браузерные escape/unescape работают с процентными последовательностями
+    // побайтно: подмена на decodeURIComponent ломала бы кодирование пароля.
+    escape: (value) => String(value).replace(/[^A-Za-z0-9@*_+\-./]/g, (char) => '%' + char.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')),
+    unescape: (value) => String(value).replace(/%([0-9A-Fa-f]{2})/g, (match, hex) => String.fromCharCode(parseInt(hex, 16))),
     FileReader: class { readAsDataURL() {} readAsText() {} },
     alert() {}, confirm: () => true, prompt: () => '',
     matchMedia: () => ({ matches: false, addEventListener() {} }),
@@ -265,4 +275,76 @@ test('без токена или пароля запрос не уходит', a
   requests.length = 0;
   await button.onclick.call(button);
   assert.deepEqual(requests.filter((request) => request.url.includes('/api/settings')), [], 'без пароля запрос не уходит');
+});
+
+test.describe('восстановление копии из панели', () => {
+  // Копия .json.gz и .kbk двоичные: чтение текстом их портит, поэтому файл
+  // должен уходить как есть.
+  function pickFile(sandbox, host, name, bytes) {
+    const input = host.querySelector('#restoreFile');
+    const file = new Blob([bytes]);
+    file.name = name;
+    input.files = [file];
+    return input.onchange({ target: input });
+  }
+
+  test('файл уходит байтами, а не текстом', async () => {
+    resetData((data) => { data.config.active = true; });
+    const { sandbox, requests } = await panelSandbox();
+    const host = fakeElement('main');
+    await sandbox.VIEWS.settings.render(host, 'data');
+    const input = host.querySelector('#restoreFile');
+    assert.equal(typeof input.onchange, 'function', 'выбор файла подключён');
+
+    requests.length = 0;
+    const gzipBytes = Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0x01, 0x02, 0x03]);
+    await pickFile(sandbox, host, 'telegram-bot-backup-2026-09-27.json.gz', gzipBytes);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const sent = requests.find((request) => request.url.includes('/api/restore'));
+    assert.ok(sent, 'запрос на восстановление ушёл');
+    assert.equal(typeof sent.raw, 'object', 'тело запроса — файл, а не строка');
+    assert.ok(typeof sent.raw.arrayBuffer === 'function', 'отправлен сам файл');
+    assert.equal(sent.headers['content-type'], 'application/octet-stream');
+  });
+
+  test('для зашифрованной копии спрашивается пароль и уходит в заголовке', async () => {
+    resetData((data) => { data.config.active = true; });
+    const { sandbox, requests } = await panelSandbox();
+    sandbox.prompt = () => 'пароль-копии';
+    const host = fakeElement('main');
+    await sandbox.VIEWS.settings.render(host, 'data');
+
+    requests.length = 0;
+    await pickFile(sandbox, host, 'bot-backup.kbk', Buffer.from('KBK1зашифровано'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const sent = requests.find((request) => request.url.includes('/api/restore'));
+    assert.ok(sent, 'запрос ушёл');
+    assert.ok(sent.headers['x-backup-password'], 'пароль передан отдельным заголовком');
+    assert.equal(Buffer.from(sent.headers['x-backup-password'], 'base64').toString('utf8'), 'пароль-копии');
+  });
+
+  test('без пароля зашифрованная копия не отправляется', async () => {
+    resetData((data) => { data.config.active = true; });
+    const { sandbox, requests } = await panelSandbox();
+    sandbox.prompt = () => '';
+    const host = fakeElement('main');
+    await sandbox.VIEWS.settings.render(host, 'data');
+
+    requests.length = 0;
+    await pickFile(sandbox, host, 'bot-backup.kbk', Buffer.from('KBK1зашифровано'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(requests.filter((request) => request.url.includes('/api/restore')), []);
+  });
+
+  test('в выборе файла видны все три вида копии', async () => {
+    const { PANEL_HTML } = await import('../src/panel/index.mjs');
+    const script = PANEL_HTML.slice(PANEL_HTML.indexOf('<script'));
+    const accept = script.match(/id="restoreFile" accept="([^"]+)"/);
+    assert.ok(accept, 'поле выбора файла на месте');
+    for (const kind of ['.json', '.gz', '.kbk']) {
+      assert.ok(accept[1].includes(kind), 'в выборе файла нет ' + kind);
+    }
+  });
 });
