@@ -24,7 +24,10 @@ function renderConnection(host) {
       '<label class="switch"><input type="checkbox" id="setActive"' + (config.active ? " checked" : "") + '><span class="track"></span><span>Бот ' + (config.active ? "включён" : "выключен") + "</span></label>" +
       '<div class="small muted">' + esc(bot.firstName || "Бот") + (bot.username ? " · @" + esc(bot.username) : "") + " · " + esc(connectionText()) + "</div>" +
       '<div class="field"><label for="setToken">Новый токен из BotFather</label><input id="setToken" placeholder="оставьте пустым, чтобы не менять" autocomplete="off"></div>' +
-      '<div class="row"><button class="btn secondary small" id="testToken" type="button">Проверить токен</button><span id="tokenResult" class="small muted"></span></div>' +
+      '<div class="field"><label for="setTokenPass">Текущий пароль панели</label><input id="setTokenPass" type="password" placeholder="нужен для смены токена" autocomplete="current-password"></div>' +
+      '<div class="row wrap"><button class="btn secondary small" id="testToken" type="button">Проверить токен</button>' +
+        '<button class="btn small" id="saveToken" type="button">Сменить токен</button><span id="tokenResult" class="small muted"></span></div>' +
+      '<div class="hint">Токен меняется отдельной кнопкой: остальные настройки сохраняются сами, а подключение к Telegram — только по паролю.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Админ-чат в Telegram</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="setAdminChat">Chat ID администратора</label><input id="setAdminChat" value="' + esc(config.adminChatId || "") + '" placeholder="узнать: напишите боту /myid"></div>' +
@@ -56,6 +59,33 @@ function renderConnection(host) {
     }));
   }, "Настройки подключения изменены");
 
+  host.querySelector("#saveToken").onclick = async function () {
+    var token = host.querySelector("#setToken").value.trim();
+    var password = host.querySelector("#setTokenPass").value;
+    if (!token) return toast("Введите новый токен", true);
+    if (!password) return toast("Введите текущий пароль панели", true);
+    if (!(await confirmDialog("Сменить токен бота?", "Бот переподключится к Telegram с новым токеном. Прежние ссылки на загруженные фотографии перестанут действовать, бот загрузит их заново.", "Сменить", true))) return;
+    var button = this;
+    button.disabled = true;
+    try {
+      await send("/api/settings", "PUT", Object.assign(settingsPayload(), {
+        token: token,
+        currentPassword: password,
+        adminChatId: host.querySelector("#setAdminChat").value.trim(),
+        notifyMode: host.querySelector("#setNotify").value,
+        statusNotices: host.querySelector("#setStatusNotices").checked,
+        active: host.querySelector("#setActive").checked,
+      }));
+      host.querySelector("#setToken").value = "";
+      host.querySelector("#setTokenPass").value = "";
+      toast("Токен изменён, бот переподключается");
+      await reload();
+    } catch (error) {
+      fail(error);
+    } finally {
+      button.disabled = false;
+    }
+  };
   host.querySelector("#testToken").onclick = async function () {
     var token = host.querySelector("#setToken").value.trim();
     host.querySelector("#tokenResult").textContent = "Проверяем…";

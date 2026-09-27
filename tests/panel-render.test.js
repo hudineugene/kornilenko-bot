@@ -15,6 +15,9 @@ test.after(cleanup);
 // Умеет ровно то, что нужно отрисовке: собрать разметку строкой, найти в ней
 // элемент, повесить обработчик. Списки возвращает пустыми.
 function fakeElement(tag = 'div') {
+  // Один и тот же селектор должен возвращать один и тот же элемент: иначе
+  // назначенный обработчик тут же терялся бы, и проверить нажатие было нельзя.
+  const found = new Map();
   const node = {
     tagName: String(tag).toUpperCase(),
     innerHTML: '',
@@ -33,7 +36,11 @@ function fakeElement(tag = 'div') {
     dataset: {},
     style: {},
     classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
-    querySelector: () => fakeElement(),
+    querySelector: (selector) => {
+      const key = String(selector);
+      if (!found.has(key)) found.set(key, fakeElement());
+      return found.get(key);
+    },
     querySelectorAll: () => [],
     getElementsByTagName: () => [],
     closest: () => fakeElement(),
@@ -63,13 +70,21 @@ function fakeElement(tag = 'div') {
 
 function fakeDocument() {
   const body = fakeElement('body');
+  const byId = new Map();
+  const bySelector = new Map();
   return {
     body,
     documentElement: fakeElement('html'),
     head: fakeElement('head'),
     readyState: 'complete',
-    getElementById: () => fakeElement(),
-    querySelector: () => fakeElement(),
+    getElementById: (id) => {
+      if (!byId.has(String(id))) byId.set(String(id), fakeElement());
+      return byId.get(String(id));
+    },
+    querySelector: (selector) => {
+      if (!bySelector.has(String(selector))) bySelector.set(String(selector), fakeElement());
+      return bySelector.get(String(selector));
+    },
     querySelectorAll: () => [],
     createElement: (tag) => fakeElement(tag),
     createDocumentFragment: () => fakeElement('fragment'),
@@ -82,9 +97,12 @@ function fakeDocument() {
 }
 
 // Ответы сервера, которые панель ждёт при загрузке.
-function fakeFetch(state, texts) {
-  return async (url) => {
+function fakeFetch(state, texts, requests = []) {
+  return async (url, options) => {
     const path = String(url);
+    let body = null;
+    try { body = options && options.body ? JSON.parse(options.body) : null; } catch { body = String(options.body); }
+    requests.push({ url: path, method: (options && options.method) || 'GET', body });
     const answer = (payload) => ({
       ok: true,
       status: 200,
@@ -109,6 +127,7 @@ async function panelSandbox() {
   const state = safeState({ csrf: 'test-csrf' });
   const texts = normalizedInterfaceText(bot.getData().interfaceText);
   const errors = [];
+  const requests = [];
   const sandbox = {
     console: { log() {}, warn() {}, error(...args) { errors.push(String(args[0])); } },
     document: fakeDocument(),
@@ -117,7 +136,7 @@ async function panelSandbox() {
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     navigator: { userAgent: 'test', clipboard: { writeText: async () => {} } },
-    fetch: fakeFetch(state, texts),
+    fetch: fakeFetch(state, texts, requests),
     setTimeout, clearTimeout, setInterval: () => 0, clearInterval,
     requestAnimationFrame: (fn) => setTimeout(fn, 0),
     Intl, URL, URLSearchParams, Blob, FormData, Promise, JSON, Math, Date, Number, String, Boolean, Array, Object, RegExp, Error, Map, Set, isNaN, isFinite, parseInt, parseFloat, encodeURIComponent, decodeURIComponent, btoa, atob, escape: encodeURIComponent, unescape: decodeURIComponent,
@@ -136,7 +155,9 @@ async function panelSandbox() {
   await new Promise((resolve) => setTimeout(resolve, 60));
   sandbox.state = state;
   sandbox.csrf = 'test-csrf';
-  return { sandbox, errors, state };
+  // Диалоги подтверждения в заглушке никто не нажмёт, поэтому отвечаем «да».
+  sandbox.confirmDialog = async () => true;
+  return { sandbox, errors, state, requests };
 }
 
 test('каждый экран панели рисуется без ошибок', async () => {
@@ -205,4 +226,43 @@ test('каждый экран панели рисуется без ошибок'
   }
   assert.deepEqual(brokenDialogs, [], 'диалоги с ошибками');
   assert.deepEqual(errors.filter((line) => /ReferenceError|TypeError|not defined/.test(line)), [], 'ошибок в консоли нет');
+});
+
+test('смена токена бота действительно отправляет токен и пароль', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.settings.render(host, '');
+
+  const button = host.querySelector('#saveToken');
+  assert.equal(typeof button.onclick, 'function', 'на экране есть кнопка смены токена');
+  host.querySelector('#setToken').value = '123456789:AAHnewTokenForTheBotAAAAAAAAAAAAAAA';
+  host.querySelector('#setTokenPass').value = 'пароль-панели';
+  requests.length = 0;
+  await button.onclick.call(button);
+
+  const sent = requests.filter((request) => request.url.includes('/api/settings') && request.method === 'PUT');
+  assert.equal(sent.length, 1, 'запрос ушёл на сервер');
+  assert.equal(sent[0].body.token, '123456789:AAHnewTokenForTheBotAAAAAAAAAAAAAAA', 'токен передан');
+  assert.equal(sent[0].body.currentPassword, 'пароль-панели', 'текущий пароль передан — сервер без него откажет');
+});
+
+test('без токена или пароля запрос не уходит', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.settings.render(host, '');
+  const button = host.querySelector('#saveToken');
+
+  host.querySelector('#setToken').value = '';
+  host.querySelector('#setTokenPass').value = 'пароль-панели';
+  requests.length = 0;
+  await button.onclick.call(button);
+  assert.deepEqual(requests.filter((request) => request.url.includes('/api/settings')), [], 'пустой токен не отправляется');
+
+  host.querySelector('#setToken').value = '123456789:AAHnewTokenForTheBotAAAAAAAAAAAAAAA';
+  host.querySelector('#setTokenPass').value = '';
+  requests.length = 0;
+  await button.onclick.call(button);
+  assert.deepEqual(requests.filter((request) => request.url.includes('/api/settings')), [], 'без пароля запрос не уходит');
 });
