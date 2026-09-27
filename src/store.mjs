@@ -106,16 +106,92 @@ let saveTimer = null;
 let lastReferencedImages = null;
 let lastDataBackupAt = 0;
 
+// Живое состояние бота: связь, рассылка, последний сбой записи. Объявлено до
+// функций сохранения — они пишут сюда, а первое сохранение бывает уже при
+// загрузке данных.
+const runtime = {
+  generation: 0,
+  abortController: null,
+  status: 'stopped',
+  lastError: '',
+  lastErrorAt: null,
+  lastSuccessfulContactAt: null,
+  consecutiveFailures: 0,
+  nextRetryAt: null,
+  offset: Number(data.telegramOffset || 0),
+  pollingStartedAt: null,
+  broadcastRunning: false,
+  tunnel: { status: 'off', url: '', host: '', error: '' },
+  // Последний сбой записи данных: видно в панели и в самопроверке.
+  lastSaveError: '',
+  lastSaveErrorAt: null,
+  nextSaveRetryAt: null,
+  // Status messages to the admin (see status.mjs).
+  pendingStartNotice: '',
+  outageSince: null,
+};
+let saveRetryPause = 0;
+
 // Keeps a known-good copy of the data file that loadData can fall back to.
+// Неудачная копия не должна мешать самой записи: лучше сохранить данные без
+// свежего .bak, чем не сохранить вовсе.
 function rotateDataBackup() {
   if (Date.now() - lastDataBackupAt < DATA_BACKUP_INTERVAL_MS || !fs.existsSync(DATA_FILE)) return;
   try {
     JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  } catch {
-    return;
+    fs.copyFileSync(DATA_FILE, DATA_BACKUP_FILE);
+    lastDataBackupAt = Date.now();
+  } catch (error) {
+    // Файл занят антивирусом или повреждён: пропускаем копию до следующего раза.
+    lastDataBackupAt = Date.now() - DATA_BACKUP_INTERVAL_MS + 60 * 1000;
   }
-  fs.copyFileSync(DATA_FILE, DATA_BACKUP_FILE);
-  lastDataBackupAt = Date.now();
+}
+
+// Антивирус, программа резервного копирования или индексатор Windows держат
+// файл занятым доли секунды. Такую запись достаточно повторить.
+const SAVE_ATTEMPTS = 4;
+const SAVE_RETRY_PAUSE_MS = 120;
+const RETRYABLE_WRITE_CODES = ['EPERM', 'EACCES', 'EBUSY', 'EAGAIN', 'EMFILE', 'ENFILE', 'UNKNOWN'];
+
+function retryableWriteError(error) {
+  return Boolean(error && RETRYABLE_WRITE_CODES.includes(String(error.code || '')));
+}
+
+function pauseSync(ms) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    const until = Date.now() + ms;
+    while (Date.now() < until) { /* короткая пауза без таймеров */ }
+  }
+}
+
+// О сбое записи сообщает тот, кто умеет писать в журнал и в Telegram
+// (регистрируется в main.mjs) — store остаётся нижним слоем без зависимостей.
+let saveFailureReporter = null;
+let reportingSaveFailure = false;
+
+function onSaveFailure(reporter) {
+  saveFailureReporter = typeof reporter === 'function' ? reporter : null;
+}
+
+function reportSaveFailure(error, attempts) {
+  runtime.lastSaveError = cleanTextSafe(error && error.message);
+  runtime.lastSaveErrorAt = new Date().toISOString();
+  console.error('Не удалось сохранить данные (попыток: ' + attempts + '):', error && error.message);
+  if (!saveFailureReporter || reportingSaveFailure) return;
+  reportingSaveFailure = true;
+  try {
+    saveFailureReporter(error, attempts);
+  } catch {
+    // Сообщить не удалось — данные всё равно остаются в памяти.
+  } finally {
+    reportingSaveFailure = false;
+  }
+}
+
+function cleanTextSafe(value) {
+  return String(value == null ? '' : value).slice(0, 300);
 }
 
 function saveDataNow() {
@@ -128,8 +204,28 @@ function saveDataNow() {
   if (needsContentAddressing(data)) contentAddressImages(data);
   rotateDataBackup();
   const temporary = DATA_FILE + '.tmp';
-  fs.writeFileSync(temporary, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 });
-  fs.renameSync(temporary, DATA_FILE);
+  const content = JSON.stringify(data, null, 2);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      fs.writeFileSync(temporary, content, { encoding: 'utf8', mode: 0o600 });
+      fs.renameSync(temporary, DATA_FILE);
+      if (attempt > 1) console.log('Данные сохранены с ' + attempt + '-й попытки.');
+      runtime.lastSaveError = '';
+      break;
+    } catch (error) {
+      if (attempt < SAVE_ATTEMPTS && retryableWriteError(error)) {
+        pauseSync(SAVE_RETRY_PAUSE_MS * attempt);
+        continue;
+      }
+      try {
+        fs.rmSync(temporary, { force: true });
+      } catch {
+        // Черновик останется рядом — он не мешает работе.
+      }
+      reportSaveFailure(error, attempt);
+      throw error;
+    }
+  }
   // Scanning the media folder is only needed when the set of referenced files changed.
   const referenced = referencedImageFiles(data);
   const signature = Array.from(referenced).sort().join('|');
@@ -151,8 +247,14 @@ function scheduleSave() {
     saveTimer = null;
     try {
       saveDataNow();
-    } catch (error) {
-      console.error('Ошибка сохранения:', error.message);
+      saveRetryPause = 0;
+    } catch {
+      // Сообщение о сбое уже отправлено; здесь — повтор с растущей паузой,
+      // чтобы данные попали на диск, когда файл освободится.
+      saveRetryPause = Math.min(saveRetryPause ? saveRetryPause * 3 : 2000, 60000);
+      runtime.nextSaveRetryAt = new Date(Date.now() + saveRetryPause).toISOString();
+      saveTimer = setTimeout(() => { saveTimer = null; scheduleSave(); }, saveRetryPause);
+      if (saveTimer.unref) saveTimer.unref();
     }
   }, 150);
 }
@@ -269,23 +371,6 @@ function verifyPassword(password) {
   }
 }
 
-const runtime = {
-  generation: 0,
-  abortController: null,
-  status: 'stopped',
-  lastError: '',
-  lastErrorAt: null,
-  lastSuccessfulContactAt: null,
-  consecutiveFailures: 0,
-  nextRetryAt: null,
-  offset: Number(data.telegramOffset || 0),
-  pollingStartedAt: null,
-  broadcastRunning: false,
-  tunnel: { status: 'off', url: '', host: '', error: '' },
-  // Status messages to the admin (see status.mjs).
-  pendingStartNotice: '',
-  outageSince: null,
-};
 
 data.interfaceText = applyInterfaceText(data.interfaceText);
 
@@ -300,6 +385,7 @@ function replaceData(next) {
 }
 
 export {
+  onSaveFailure,
   BACKUP_DIRECTORY,
   applyConfiguredTimeZone,
   DAILY_BACKUPS_KEPT,

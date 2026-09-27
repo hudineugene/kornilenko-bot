@@ -8,8 +8,8 @@ import { hashPassword } from './util.mjs';
 import { PREVIOUS_HELP_DEFAULTS, normalizeLoadedData } from './data-format.mjs';
 import { contentAddressImages, persistImage, referencedImageFiles } from './media.mjs';
 import { CATALOG_FILTER_TEXT, COMMAND_TEXT, COMPARISON_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, MENU_LABELS, MY_AREA_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_ALERT_TEXT, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
-import { getData, loadData, replaceData, restoreMissingMedia, runDailyBackup, runtime, saveDataNow } from './store.mjs';
-import './analytics.mjs';
+import { getData, loadData, onSaveFailure, replaceData, restoreMissingMedia, runDailyBackup, runtime, saveDataNow } from './store.mjs';
+import { recordError } from './analytics.mjs';
 import { leadSourceFromPayload, normalizeUser, rebuildUserIndex, userByChatId, userById } from './users.mjs';
 import { splitTelegramText, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, menuItemForText } from './menus.mjs';
@@ -44,6 +44,15 @@ import { mediaReport, runSelfCheck, selfCheckNotice } from './selfcheck.mjs';
 import { abruptStopNotice, clearRunMarker, previousRunEndedAbruptly, reportAbruptStop, runningCopy, secondCopyNotice, start, writeRunMarker } from './lifecycle.mjs';
 
 if (process.argv.includes('--no-auto-open')) process.env.NO_AUTO_OPEN = '1';
+
+// Сбой записи данных виден не только в окне: он попадает в журнал ошибок и
+// уходит администратору (не чаще раза в час). Само сохранение повторяется.
+onSaveFailure((error, attempts) => {
+  recordError('Сохранение данных', 'Файл не сохранён с ' + attempts + ' попытки: ' + (error && error.message ? error.message : 'неизвестная ошибка')
+    + '. Обычно виноват антивирус, программа резервного копирования или нехватка места на диске.');
+  announceError('сохранение данных на диск', error);
+});
+
 if (process.env.BOT_NO_START !== '1') start();
 
 function setData(next) {
