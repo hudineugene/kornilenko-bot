@@ -47,9 +47,28 @@ const ALBUM_WINDOW_MS = 2500;
 const ALBUM_MAX_PARTS = 50;
 const pendingAlbums = new Map();
 
+// Части альбома собираются сразу при получении, не дожидаясь очереди чата:
+// иначе первая часть, которая ждёт сборки, не пустила бы в очередь остальные.
+// В очередь встаёт только первая часть — она держит место альбома, поэтому
+// то, что клиент написал следом, обрабатывается уже после альбома, а не
+// вперёд него.
+function albumKey(message) {
+  return String(message.chat.id) + ':' + String(message.media_group_id);
+}
+
+function albumMessage(update) {
+  const message = update && update.message;
+  if (!message || !message.media_group_id || message.albumMessageIds) return null;
+  if (!message.chat || message.chat.type !== 'private' || adminChatFor(message.chat.id)) return null;
+  return message;
+}
+
+// Возвращает true, если это первая часть альбома: с неё начинается ожидание.
 function collectAlbumMessage(message, handle, update) {
-  const key = String(message.chat.id) + ':' + String(message.media_group_id);
-  const album = pendingAlbums.get(key) || { parts: [], updates: [], timer: null };
+  const key = albumKey(message);
+  const known = pendingAlbums.get(key);
+  const album = known || { parts: [], updates: [], timer: null, done: null, finish: null };
+  if (!known) album.done = new Promise((resolve) => { album.finish = resolve; });
   if (album.parts.length < ALBUM_MAX_PARTS) {
     album.parts.push(message);
     // Пока альбом собирается, его части считаются незаконченными: если бота
@@ -63,16 +82,27 @@ function collectAlbumMessage(message, handle, update) {
   album.timer = setTimeout(() => {
     pendingAlbums.delete(key);
     const [first, ...rest] = album.parts;
-    if (!first) return;
+    if (!first) {
+      album.finish();
+      return;
+    }
     const caption = album.parts.map((part) => cleanText(part.caption, 4000)).filter(Boolean).join('\n');
     Promise.resolve(handle({ ...first, caption, albumMessageIds: rest.map((part) => part.message_id) }))
       .catch((error) => recordError('Альбом от клиента', error))
       .finally(() => {
         for (const part of album.updates) releaseUpdate(part);
+        album.finish();
       });
   }, ALBUM_WINDOW_MS);
   if (album.timer.unref) album.timer.unref();
   pendingAlbums.set(key, album);
+  return !known;
+}
+
+// Место альбома в очереди чата: ждём, пока он соберётся и обработается.
+function waitForAlbum(message) {
+  const album = pendingAlbums.get(albumKey(message));
+  return album ? album.done : Promise.resolve();
 }
 
 async function handleUpdate(update, token) {
@@ -167,12 +197,6 @@ async function handleUpdate(update, token) {
   const adminOwnChat = Boolean(adminChatFor(message.chat.id));
 
   const user = normalizeUser(message.from, message.chat.id);
-  // Части альбома собираются в одно сообщение и приходят сюда ещё раз уже
-  // вместе (albumMessageIds), поэтому проверку повторов они проходят один раз.
-  if (message.media_group_id && !message.albumMessageIds && !adminOwnChat) {
-    collectAlbumMessage(message, (assembled) => handleUpdate({ ...update, message: assembled, update_id: 0 }, token), update);
-    return;
-  }
   if (duplicateInboundMessage(user, message.message_id)) return;
   recordBroadcastResponse(user, 'response');
   const expiredPending = pendingActionExpired(user) ? user.pendingAction : null;
@@ -661,7 +685,18 @@ function enqueueUpdate(update, token, handler) {
 
 function processUpdates(allUpdates, token, handler = handleUpdate) {
   const updates = (Array.isArray(allUpdates) ? allUpdates : []).filter((update) => !wasHandled(update));
-  const work = updates.map((update) => enqueueUpdate(update, token, handler));
+  const work = [];
+  for (const update of updates) {
+    const part = albumMessage(update);
+    if (!part) {
+      work.push(enqueueUpdate(update, token, handler));
+      continue;
+    }
+    // Часть альбома: собираем сразу, а очередь чата занимает только первая —
+    // она и дождётся собранного альбома.
+    const first = collectAlbumMessage(part, (assembled) => handler({ ...update, message: assembled, update_id: 0 }, token), update);
+    if (first) work.push(enqueueUpdate(update, token, () => waitForAlbum(part)));
+  }
   // Отметка в памяти идёт вперёд сразу — иначе Telegram будет присылать те же
   // сообщения по кругу, пока бот их разбирает. Сохраняемая отметка ждёт, пока
   // обработка закончится: незаконченное вернётся после перезапуска.

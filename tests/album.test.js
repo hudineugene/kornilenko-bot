@@ -44,10 +44,13 @@ test('альбом из пяти фотографий — одно обраще�
   const chat = createChat();
   telegram.calls = [];
   const group = 'album-1';
-  await bot.processUpdates([photo(chat, { media_group_id: group, caption: 'Вот наш дом' })], TOKEN);
+  // Телеграм присылает части подряд, а бот не ждёт их обработки — как в
+  // живом цикле опроса.
+  void bot.processUpdates([photo(chat, { media_group_id: group, caption: 'Вот наш дом' })], TOKEN);
   for (let index = 0; index < 4; index += 1) {
-    await bot.processUpdates([photo(chat, { media_group_id: group })], TOKEN);
+    void bot.processUpdates([photo(chat, { media_group_id: group })], TOKEN);
   }
+  await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(chat.inquiries.length, 0, 'пока части летят, бот ничего не делает');
   await albumSettled();
 
@@ -81,7 +84,7 @@ test('два альбома подряд остаются двумя сообщ�
   telegram.calls = [];
   for (const group of ['album-2', 'album-3']) {
     for (let index = 0; index < 10; index += 1) {
-      await bot.processUpdates([photo(chat, { media_group_id: group, caption: index ? '' : 'Альбом ' + group })], TOKEN);
+      void bot.processUpdates([photo(chat, { media_group_id: group, caption: index ? '' : 'Альбом ' + group })], TOKEN);
     }
     await albumSettled();
   }
@@ -89,4 +92,35 @@ test('два альбома подряд остаются двумя сообщ�
   assert.equal(toClient(chat).length, 1, 'клиент услышал ответ один раз: второе сообщение подряд не подтверждается заново');
   assert.equal(toAdmin().length, 2, 'менеджеру — по уведомлению на альбом');
   assert.equal(telegram.calls.filter((call) => call.method === 'copyMessages').length, 2, 'по одному запросу на альбом');
+});
+
+test('сообщение после альбома не влезает вперёд него', async () => {
+  const chat = createChat();
+  telegram.calls = [];
+  const group = 'album-order';
+  // Клиент отправил альбом и сразу написал — как это и бывает.
+  void bot.processUpdates([photo(chat, { media_group_id: group, caption: 'Наш дом' })], TOKEN);
+  void bot.processUpdates([photo(chat, { media_group_id: group })], TOKEN);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  messageId += 1;
+  void bot.processUpdates([{
+    update_id: (updateId += 1),
+    message: {
+      message_id: messageId,
+      date: Math.floor(Date.now() / 1000),
+      from: { id: chat.id, first_name: 'Анна', language_code: 'ru' },
+      chat: { id: chat.id, type: 'private' },
+      text: '📞 Позвоните мне',
+    },
+  }], TOKEN);
+  await albumSettled();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  const inquiries = chat.inquiries;
+  assert.ok(inquiries.some((item) => /Альбом, фотографий: 2/.test(item.text)), 'альбом стал обращением: ' + inquiries.map((item) => item.text).join(' | '));
+  // Анкета «Позвоните мне» спрашивает имя. Подпись альбома не должна стать
+  // ответом на этот вопрос: раньше альбом обрабатывался мимо очереди и
+  // попадал в анкету.
+  const pending = chat.user.pendingAction;
+  assert.ok(!pending || !pending.data || pending.data.name !== 'Наш дом', 'подпись альбома не ушла в анкету как имя');
 });

@@ -99,7 +99,8 @@ test('незаконченный альбом возвращается посл�
     };
   };
   const parts = [part(0), part(1)];
-  await bot.processUpdates(parts, TOKEN);
+  void bot.processUpdates(parts, TOKEN);
+  await wait(50);
   // Альбом ещё собирается (окно 2,5 секунды) — бота останавливают именно сейчас.
   assert.ok(bot.getData().telegramOffset <= parts[0].update_id, 'части альбома не считаются принятыми');
   // Даём альбому собраться: после обработки отметка догоняет.
