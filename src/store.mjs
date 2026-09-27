@@ -315,6 +315,10 @@ function reportSaveFailure(error, attempts) {
   runtime.lastSaveError = cleanTextSafe(error && error.message);
   runtime.lastSaveErrorAt = new Date().toISOString();
   console.error('Не удалось сохранить данные (попыток: ' + attempts + '):', error && error.message);
+  // Повтор назначается всегда, кто бы ни сохранял: панель, рассылка или сам
+  // бот. Раньше во время рассылки повтор не назначался вовсе, и изменения
+  // оставались только в памяти до перезапуска.
+  retrySaveLater();
   if (!saveFailureReporter || reportingSaveFailure) return;
   reportingSaveFailure = true;
   try {
@@ -350,6 +354,9 @@ function saveDataNow() {
       fs.renameSync(temporary, DATA_FILE);
       if (attempt > 1) console.log('Данные сохранены с ' + attempt + '-й попытки.');
       runtime.lastSaveError = '';
+      // Запись удалась — повтор больше не нужен.
+      runtime.nextSaveRetryAt = null;
+      saveRetryPause = 0;
       break;
     } catch (error) {
       if (attempt < SAVE_ATTEMPTS && retryableWriteError(error)) {
@@ -372,6 +379,26 @@ function saveDataNow() {
     cleanupOrphanImages(data, referenced);
     lastReferencedImages = signature;
   }
+}
+
+// Повтор записи после сбоя: с растущей паузой, пока файл не освободится.
+// Работает и во время рассылки — там обычное «сохранить попозже» отключено,
+// чтобы не переписывать файл на каждого получателя.
+function retrySaveLater() {
+  // Если запись уже была назначена, переносим её: только что стало известно,
+  // что диск занят, и повторять через 150 мс бессмысленно.
+  if (saveTimer) clearTimeout(saveTimer);
+  saveRetryPause = Math.min(saveRetryPause ? saveRetryPause * 3 : 2000, 60000);
+  runtime.nextSaveRetryAt = new Date(Date.now() + saveRetryPause).toISOString();
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    try {
+      saveDataNow();
+    } catch {
+      // Сообщение о сбое уже записано, повтор назначен заново.
+    }
+  }, saveRetryPause);
+  if (saveTimer.unref) saveTimer.unref();
 }
 
 // Throttled rather than debounced: a steady stream of updates must not

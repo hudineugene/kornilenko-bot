@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { bot, telegram, dataFile, resetData, adminNotifications, settle, cleanup } = require('./helpers/chat');
+const { bot, telegram, TOKEN, dataFile, resetData, adminNotifications, settle, cleanup } = require('./helpers/chat');
 
 const dataName = path.basename(dataFile);
 const isDataWrite = (file) => String(file).includes(dataName);
@@ -131,4 +131,40 @@ test('черновик .tmp не остаётся после неудачной 
   }
   assert.equal(fs.existsSync(temporary), false, 'недописанный файл убран');
   assert.ok(fs.existsSync(dataFile), 'прежние данные на месте');
+});
+
+test('сбой записи не обрывает рассылку', async () => {
+  const data = bot.getData();
+  data.config.botToken = TOKEN;
+  for (let index = 0; index < 4; index += 1) {
+    const id = '8000' + index;
+    data.users[id] = {
+      id, chatId: id, firstName: 'Клиент ' + index, preferredLanguage: 'ru',
+      activity: [], newsConsentAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(),
+    };
+  }
+  const entry = {
+    id: 'bc-disk', text: { ru: 'Новости недели', en: '', es: '' }, audience: 'all',
+    status: 'queued', createdAt: new Date().toISOString(), processedUserIds: [], failures: [], total: 0,
+  };
+  data.broadcasts = [entry];
+  telegram.calls = [];
+
+  // Диск занят всё время рассылки: запись не удаётся ни разу.
+  const lock = lockDataFile({ failures: 1000 });
+  try {
+    await bot.runBroadcast(entry);
+  } finally {
+    lock.restore();
+  }
+
+  assert.equal(entry.status, 'done', 'рассылка дошла до конца, а не «не удалось»');
+  assert.equal(entry.sent, 4, 'все получатели получили сообщение');
+  assert.ok(bot.runtime.nextSaveRetryAt, 'повтор записи назначен, хотя шла рассылка');
+  assert.ok(bot.runtime.lastSaveError, 'сбой записи виден в состоянии бота');
+
+  // Когда диск освободился, данные сохраняются и отметка повтора снимается.
+  bot.saveDataNow();
+  assert.equal(bot.runtime.nextSaveRetryAt, null, 'после удачной записи повтор не нужен');
+  assert.equal(bot.runtime.lastSaveError, '', 'и ошибка снята');
 });

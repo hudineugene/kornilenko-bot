@@ -126,6 +126,19 @@ function temporaryDeliveryError(error) {
   return !Number.isFinite(code) && !Number.isFinite(status);
 }
 
+// Сохранение хода рассылки не должно её обрывать: если диск занят, бот уже
+// записал это в журнал и назначил повтор, а рассылка идёт дальше. Раньше
+// сбой записи выбрасывал ошибку из цикла, рассылка получала статус «не
+// удалось», и остальные получатели не получали ничего.
+function saveBroadcastProgress() {
+  try {
+    saveDataNow();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function runBroadcast(entry) {
   if (runtime.broadcastRunning) throw new Error('Рассылка уже выполняется');
   runtime.broadcastRunning = true;
@@ -140,7 +153,7 @@ async function runBroadcast(entry) {
   const processed = new Set(entry.processedUserIds);
   const users = broadcastUsers(entry);
   entry.total = Math.max(Number(entry.total || 0), users.length);
-  saveDataNow();
+  saveBroadcastProgress();
   let lastProgressSaveAt = Date.now();
 
   try {
@@ -158,7 +171,7 @@ async function runBroadcast(entry) {
           entry.pausedAt = new Date().toISOString();
           entry.error = cleanText('Связь с Telegram потеряна, рассылка продолжится сама: ' + error.message, 400);
           recordError('Рассылка приостановлена', error);
-          saveDataNow();
+          saveBroadcastProgress();
           return;
         }
         entry.failed += 1;
@@ -176,7 +189,7 @@ async function runBroadcast(entry) {
       // Progress is written at most every few seconds; the full file write is
       // too expensive to repeat for every recipient of a large broadcast.
       if (Date.now() - lastProgressSaveAt >= 5000) {
-        saveDataNow();
+        saveBroadcastProgress();
         lastProgressSaveAt = Date.now();
       }
       await delay(45);
@@ -187,7 +200,7 @@ async function runBroadcast(entry) {
     entry.finishedAt = new Date().toISOString();
   } finally {
     runtime.broadcastRunning = false;
-    saveDataNow();
+    saveBroadcastProgress();
   }
 }
 
