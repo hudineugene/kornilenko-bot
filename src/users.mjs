@@ -140,6 +140,8 @@ function normalizeUser(from, chatId, countMessage = true) {
     // The client turned broadcasts off (the "Unsubscribe" button or settings).
     broadcastsOptOut: Boolean(previous.broadcastsOptOut),
     broadcastsOptOutAt: cleanText(previous.broadcastsOptOutAt, 40),
+    // Явное согласие на новости и акции: без него рассылка не уходит.
+    newsConsentAt: cleanText(previous.newsConsentAt, 40),
     // The last broadcast this client received, to count their response to it.
     lastBroadcast: previous.lastBroadcast && typeof previous.lastBroadcast === 'object' ? {
       id: cleanText(previous.lastBroadcast.id, 100),

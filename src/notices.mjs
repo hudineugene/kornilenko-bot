@@ -14,6 +14,7 @@ import { runFormReminders } from './forms.mjs';
 import { runTelegramBackup } from './offsite.mjs';
 import { runDailyFeedImport } from './feed-import.mjs';
 import { runDueGroupPosts } from './groups.mjs';
+import { runRetentionCleanup } from './retention.mjs';
 
 const DIGEST_HOUR = 9;
 
@@ -278,6 +279,7 @@ function runScheduledNotices() {
   runTelegramBackup().catch((error) => recordError('Копия данных в Telegram', error));
   runDailyFeedImport().catch((error) => recordError('Загрузка объектов с сайта', error));
   runDueGroupPosts().catch((error) => recordError('Отложенная публикация в группу', error));
+  runRetentionCleanup().catch((error) => recordError('Срок хранения данных', error));
 }
 
 export {

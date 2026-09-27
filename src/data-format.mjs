@@ -8,6 +8,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 const DATA_VERSION = 28;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
+const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
 const REMINDER_HOUR_OPTIONS = [0, 1, 2, 4, 8, 24];
 const TIME_ZONES = ['Europe/Madrid', 'Atlantic/Canary', 'Europe/Kyiv', 'Europe/Moscow', 'UTC'];
 
@@ -818,6 +819,9 @@ function normalizeLoadedData(parsed) {
         // администратор галочкой «не писать этому клиенту». Первое снимается
         // само, когда клиент возвращается, второе — только руками.
         blockedBy: ['admin', 'telegram'].includes(user.blockedBy) ? user.blockedBy : (user.blocked ? 'telegram' : ''),
+        // Согласие на рассылки: у данных прежних версий его нет — значит нет и
+        // согласия, рассылать таким клиентам нельзя, пока сами не включат.
+        newsConsentAt: cleanText(user.newsConsentAt, 40),
         selectionMatchIds: Array.isArray(user.selectionMatchIds) ? user.selectionMatchIds.map(String).slice(0, 20) : [],
         selectionMatchDetails: normalizeSelectionMatchDetails(user.selectionMatchDetails),
         similarPropertyIds: Array.isArray(user.similarPropertyIds)
@@ -1015,6 +1019,9 @@ function normalizeLoadedData(parsed) {
     normalized.groups = normalizeGroups(parsed.groups);
     normalized.groupPosts = normalizeGroupPosts(parsed.groupPosts);
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
+    // Срок хранения данных клиента: 0 — хранить без срока (так работали раньше).
+    normalized.config.retentionMonths = RETENTION_MONTH_OPTIONS.includes(Number(normalized.config.retentionMonths)) ? Number(normalized.config.retentionMonths) : 0;
+    normalized.lastRetentionRunFor = cleanText(parsed.lastRetentionRunFor, 10);
     normalized.config.timeZone = normalizeTimeZone(normalized.config.timeZone);
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
     normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
@@ -1040,6 +1047,7 @@ export {
   MAX_INQUIRY_MESSAGES,
   PIPELINE_STAGES,
   REMINDER_HOUR_OPTIONS,
+  RETENTION_MONTH_OPTIONS,
   TIME_ZONES,
   defaultData,
   legacyConfigRemoved,

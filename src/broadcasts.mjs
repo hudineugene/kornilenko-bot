@@ -41,7 +41,8 @@ function broadcastUsers(entry) {
     return signals;
   }
   return Object.values(data.users).filter((user) => {
-    if (user.blocked || !user.chatId || user.broadcastsOptOut) return false;
+    // Рассылка уходит только тем, кто сам включил «Новости и акции».
+    if (user.blocked || !user.chatId || user.broadcastsOptOut || !user.newsConsentAt) return false;
     if (languages.length && !languages.includes(user.preferredLanguage || 'ru')) return false;
     if (requiredTags.length) {
       const userTags = (user.tags || []).map((tag) => String(tag).toLocaleLowerCase('ru-RU'));

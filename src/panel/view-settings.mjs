@@ -216,6 +216,11 @@ function renderWork(host) {
           return '<option value="' + option[0] + '"' + (Number(state.config.reminderHours) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + "</select></div>" +
       '<div class="hint">Напоминания и сводки приходят только в рабочее время, если оно включено.</div>' +
+      '<div class="field"><label for="retentionMonths">Сколько хранить данные клиента</label><select id="retentionMonths">' +
+        [[0, "без срока"], [12, "12 месяцев"], [18, "18 месяцев"], [24, "24 месяца"], [36, "36 месяцев"], [48, "48 месяцев"]].map(function (option) {
+          return '<option value="' + option[0] + '"' + (Number(state.config.retentionMonths) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
+        }).join("") + "</select></div>" +
+      '<div class="hint">Отсчёт от последнего обращения клиента. Раз в сутки бот удаляет данные тех, от кого давно ничего не было, и сообщает об этом. Открытые дела и предстоящие просмотры не удаляются. Срок нужно указать в политике конфиденциальности.</div>' +
       '<button class="btn secondary small" id="saveReminders" type="button">Сохранить</button>' +
     "</div></div></div>";
 
@@ -252,7 +257,10 @@ function renderWork(host) {
   };
   host.querySelector("#saveReminders").onclick = async function () {
     try {
-      await send("/api/settings", "PUT", Object.assign(settingsPayload(), { reminderHours: Number(host.querySelector("#remindHours").value) }));
+      await send("/api/settings", "PUT", Object.assign(settingsPayload(), {
+        reminderHours: Number(host.querySelector("#remindHours").value),
+        retentionMonths: Number(host.querySelector("#retentionMonths").value),
+      }));
       toast("Сохранено"); await reload();
     } catch (error) { fail(error); }
   };

@@ -79,6 +79,10 @@ function createChat({ language = 'ru', firstName = 'Анна' } = {}) {
   const from = { id: userId, first_name: firstName, language_code: language };
   bot.getData().users[String(userId)] = {
     id: String(userId), chatId: userId, firstName, preferredLanguage: language, activity: [],
+    // Согласие на рассылки: большинство проверок про механику рассылок, а не
+    // про согласие, поэтому клиент в помощнике его уже дал. Само согласие
+    // проверяется отдельно в tests/subscriptions.test.js.
+    newsConsentAt: new Date().toISOString(),
   };
   let messageId = 1;
   const chat = { id: userId, type: 'private' };

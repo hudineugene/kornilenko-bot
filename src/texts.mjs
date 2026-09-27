@@ -735,6 +735,7 @@ const SUBSCRIPTION_TEXT = {
     newsOff: 'Вы отписались от рассылок. Включить их снова можно в «👤 Моё → 🔔 Уведомления».',
     newsOn: 'Рассылки снова включены.',
     undo: '↩️ Вернуть рассылки',
+    newsConsent: 'Новости и акции приходят только с вашего согласия: нажмите «Новости и акции», чтобы их получать. Отключить можно в любой момент.',
   },
   en: {
     menuButton: '🔔 Notifications',
@@ -745,6 +746,7 @@ const SUBSCRIPTION_TEXT = {
     newsOff: 'You have unsubscribed from our news. You can turn it back on in “👤 My space → 🔔 Notifications”.',
     newsOn: 'News messages are on again.',
     undo: '↩️ Resubscribe',
+    newsConsent: 'News and offers are sent only with your consent: tap “News and offers” to receive them. You can turn them off at any time.',
   },
   es: {
     menuButton: '🔔 Avisos',
@@ -755,6 +757,7 @@ const SUBSCRIPTION_TEXT = {
     newsOff: 'Te has dado de baja de las novedades. Puedes activarlas de nuevo en «👤 Mi espacio → 🔔 Avisos».',
     newsOn: 'Las novedades vuelven a estar activadas.',
     undo: '↩️ Volver a suscribirme',
+    newsConsent: 'Las novedades y ofertas se envían solo con tu consentimiento: pulsa «Novedades y ofertas» para recibirlas. Puedes desactivarlas cuando quieras.',
   },
 };
 

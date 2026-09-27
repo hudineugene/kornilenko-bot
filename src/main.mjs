@@ -41,6 +41,7 @@ import { autostartStatus, autostartTaskName, autostartTaskXml, currentWindowsUse
 import { handleApi } from './admin-api.mjs';
 import { server } from './server.mjs';
 import { mediaReport, runSelfCheck, selfCheckNotice } from './selfcheck.mjs';
+import { retentionPlan, runRetentionCleanup } from './retention.mjs';
 import { abruptStopNotice, clearRunMarker, previousRunEndedAbruptly, reportAbruptStop, runningCopy, secondCopyNotice, start, writeRunMarker } from './lifecycle.mjs';
 
 if (process.argv.includes('--no-auto-open')) process.env.NO_AUTO_OPEN = '1';
@@ -151,6 +152,8 @@ export {
   queuePropertyAlerts,
   referencedImageFiles,
   reportAbruptStop,
+  retentionPlan,
+  runRetentionCleanup,
   runSelfCheck,
   selfCheckNotice,
   mediaReport,

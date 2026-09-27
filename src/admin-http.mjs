@@ -494,6 +494,7 @@ function safeState(session) {
       tunnelTokenSet: Boolean(data.config.tunnelToken),
       tunnelHostname: data.config.tunnelHostname || '',
       reminderHours: Number.isFinite(Number(data.config.reminderHours)) ? Number(data.config.reminderHours) : 2,
+      retentionMonths: Number(data.config.retentionMonths) || 0,
       timeZone: normalizeTimeZone(data.config.timeZone),
       workingHours: normalizeWorkingHours(data.config.workingHours),
       statusNotices: data.config.statusNotices !== false,
@@ -536,6 +537,8 @@ function safeState(session) {
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
     unreadConversationCount: unreadUsers.size,
     broadcastOptOutCount: Object.values(data.users).filter((user) => user.broadcastsOptOut && !user.blocked && user.chatId).length,
+    // Рассылка уходит только согласившимся: панель показывает, сколько их.
+    newsConsentCount: Object.values(data.users).filter((user) => user.newsConsentAt && !user.broadcastsOptOut && !user.blocked && user.chatId).length,
     sources: sourceReport(),
     publishing: (({ signature, signatureEnabled, signatureWrap, signatureQuote, signatureDivider, buttons, buttonsPerRow, rubrics }) => ({
       signature,

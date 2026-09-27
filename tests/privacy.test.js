@@ -119,6 +119,7 @@ test.describe('политика как черновик', () => {
     const { PRIVACY_TEXT } = await import('../src/texts.mjs');
     const before = { ru: PRIVACY_TEXT.ru.policy, en: PRIVACY_TEXT.en.policy, es: PRIVACY_TEXT.es.policy };
     for (const language of ['ru', 'en', 'es']) PRIVACY_TEXT[language].policy = 'Данные обрабатывает Construcciones Kornilenko, NIF B12345678. Хранение 24 месяца. Жалобы — AEPD.';
+    bot.getData().config.retentionMonths = 24;
     try {
       const check = bot.runSelfCheck().checks.find((entry) => entry.id === 'privacy');
       assert.equal(check.status, 'ok');

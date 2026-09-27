@@ -12,10 +12,10 @@ import { acknowledgeCallback } from './sections.mjs';
 function subscriptionPanel(user) {
   const language = user.preferredLanguage || 'ru';
   const copy = SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru;
-  const newsOn = !user.broadcastsOptOut;
+  const newsOn = Boolean(user.newsConsentAt) && !user.broadcastsOptOut;
   const alertsOn = user.propertyAlerts !== false;
   return {
-    text: copy.title,
+    text: copy.title + (newsOn ? '' : '\n\n' + copy.newsConsent),
     markup: { inline_keyboard: [
       [{ text: (newsOn ? '✅ ' : '⬜ ') + copy.news, callback_data: 'subs:news:' + (newsOn ? 'off' : 'on') }],
       [{ text: (alertsOn ? '✅ ' : '⬜ ') + copy.alerts, callback_data: 'subs:alerts:' + (alertsOn ? 'off' : 'on') }],
@@ -41,10 +41,13 @@ async function handleSubscriptionCallback(query, token) {
   const language = user.preferredLanguage || 'ru';
   const copy = SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru;
   if (kind === 'news' && ['on', 'off'].includes(value)) {
-    const changed = Boolean(user.broadcastsOptOut) !== (value === 'off');
+    const hadConsent = Boolean(user.newsConsentAt) && !user.broadcastsOptOut;
+    const changed = hadConsent !== (value === 'on');
     user.broadcastsOptOut = value === 'off';
     user.broadcastsOptOutAt = value === 'off' ? new Date().toISOString() : '';
-    if (changed) void notifyAdministratorAction(user, value === 'off' ? 'Отписался от рассылок' : 'Снова подписался на рассылки');
+    // Время согласия храним как доказательство: его требует и RGPD, и LSSI.
+    user.newsConsentAt = value === 'on' ? new Date().toISOString() : '';
+    if (changed) void notifyAdministratorAction(user, value === 'off' ? 'Отписался от рассылок' : 'Согласился получать рассылки');
   } else if (kind === 'alerts' && ['on', 'off'].includes(value)) {
     const changed = (user.propertyAlerts !== false) !== (value === 'on');
     user.propertyAlerts = value === 'on';
