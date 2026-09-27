@@ -98,3 +98,77 @@ test('признак пустых данных не путает пустые с
   withUser.users['5'] = { id: '5' };
   assert.equal(bot.looksEmpty(withUser), false, 'есть клиенты — не пустые');
 });
+
+// Отдельный запуск бота на подготовленной папке: так видно, запустился он
+// или отказался, и что осталось в файле данных.
+function startBotIn(box) {
+  const script = 'const bot = require(' + JSON.stringify(require('node:path').resolve(__dirname, '..', 'bot.js')) + ');'
+    + 'console.log("ЗАПУСТИЛСЯ:" + bot.getData().config.adminChatId);';
+  try {
+    const output = require('node:child_process').execFileSync(process.execPath, ['-e', script], {
+      env: {
+        ...process.env,
+        BOT_NO_START: '1',
+        NO_AUTO_OPEN: '1',
+        BOT_DATA_FILE: require('node:path').join(box, 'bot-data.json'),
+        BOT_MEDIA_DIRECTORY: require('node:path').join(box, 'bot-media'),
+        BOT_LOG_FILE: require('node:path').join(box, 'logs', 'bot.log'),
+      },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { started: true, output };
+  } catch (error) {
+    return { started: false, output: String(error.stdout || '') + String(error.stderr || '') };
+  }
+}
+
+function prepare(files) {
+  const box = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-recovery-'));
+  for (const [name, content] of Object.entries(files)) {
+    const target = path.join(box, name);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, typeof content === 'string' ? content : JSON.stringify(content), 'utf8');
+  }
+  return box;
+}
+
+test('повреждённый файл поднимается из свежей копии', () => {
+  const box = prepare({
+    'bot-data.json': '{"config": ',
+    'bot-data.json.bak': realData('777010'),
+  });
+  const result = startBotIn(box);
+  assert.equal(result.started, true, result.output);
+  assert.match(result.output, /ЗАПУСТИЛСЯ:777010/, 'данные взяты из копии');
+  assert.ok(fs.readdirSync(box).some((name) => name.includes('.corrupt-')), 'повреждённый файл сохранён рядом');
+  fs.rmSync(box, { recursive: true, force: true });
+});
+
+test('занятый файл не подменяется копией — бот просто не запускается', () => {
+  const box = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-recovery-'));
+  // Папка вместо файла: прочитать нельзя, но и повреждением это не является.
+  fs.mkdirSync(path.join(box, 'bot-data.json'));
+  fs.writeFileSync(path.join(box, 'bot-data.json.bak'), JSON.stringify(realData('777011')), 'utf8');
+  const result = startBotIn(box);
+  assert.equal(result.started, false, 'запуск остановлен');
+  assert.match(result.output, /Не удалось прочитать файл данных/);
+  assert.match(result.output, /не тронут/i, 'сказано, что файл цел');
+  assert.ok(fs.existsSync(path.join(box, 'bot-data.json')), 'файл на месте');
+  fs.rmSync(box, { recursive: true, force: true });
+});
+
+test('старую копию бот сам не подставляет', () => {
+  const box = prepare({ 'bot-data.json': '{сломано' });
+  const old = path.join(box, 'backups', 'daily', 'bot-data-2025-01-01.json');
+  fs.mkdirSync(path.dirname(old), { recursive: true });
+  fs.writeFileSync(old, JSON.stringify(realData('777012')), 'utf8');
+  const longAgo = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
+  fs.utimesSync(old, longAgo, longAgo);
+
+  const result = startBotIn(box);
+  assert.equal(result.started, false, 'бот не поднялся на данных трёхмесячной давности');
+  assert.match(result.output, /повреждён/i);
+  assert.match(result.output, /backups/, 'подсказано, где искать копию');
+  fs.rmSync(box, { recursive: true, force: true });
+});

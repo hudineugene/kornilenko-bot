@@ -38,10 +38,46 @@ function jsonFilesIn(directory) {
 
 // The hourly .bak copy first, then the snapshots in backups/ and
 // backups/daily/, newest first.
-function recoveryCandidates() {
+//
+// Слишком старый снимок сам не подставляется: поднять бота на данных
+// месячной давности — это тихо потерять всё, что было после, вместе с
+// заявками клиентов. Такие копии показываем владельцу, но ставим только по
+// его решению.
+const RECOVERY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+function recoveryCandidates(now = Date.now()) {
   const snapshots = jsonFilesIn(BACKUP_DIRECTORY).concat(jsonFilesIn(DAILY_BACKUP_DIRECTORY))
     .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-  return [DATA_BACKUP_FILE, ...snapshots].filter((candidate) => fs.existsSync(candidate));
+  return [DATA_BACKUP_FILE, ...snapshots]
+    .filter((candidate) => fs.existsSync(candidate))
+    .filter((candidate) => now - fs.statSync(candidate).mtimeMs <= RECOVERY_MAX_AGE_MS);
+}
+
+// Файл занят антивирусом или программой копий: это не повреждение, читаем
+// ещё раз. Коды перечислены здесь, потому что загрузка данных происходит
+// раньше, чем объявлены общие константы записи.
+const LOCKED_FILE_CODES = ['EPERM', 'EACCES', 'EBUSY', 'EAGAIN', 'UNKNOWN'];
+const DATA_READ_ATTEMPTS = 4;
+
+function readDataFileText() {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return { text: fs.readFileSync(DATA_FILE, 'utf8') };
+    } catch (error) {
+      if (attempt < DATA_READ_ATTEMPTS && LOCKED_FILE_CODES.includes(String(error.code || ''))) {
+        pauseSync(200 * attempt);
+        continue;
+      }
+      return { error };
+    }
+  }
+}
+
+function refuseToStart(lines) {
+  console.error('');
+  for (const line of lines) console.error(line);
+  console.error('');
+  process.exit(1);
 }
 
 // Data written by an older version is upgraded while it loads. The file as
@@ -98,39 +134,68 @@ function loadData() {
     noteRecovery(recovered.data, 'Файл данных не найден рядом с ботом. Данные восстановлены из копии ' + recovered.name + ' — последние изменения могли потеряться. Проверьте, не перемещали ли папку бота.');
     return recovered.data;
   }
+  // Прочитать файл не дали: занят антивирусом, программой копий или правами.
+  // Это не повреждение — файл цел, и подменять его копией нельзя: следующая
+  // запись затёрла бы настоящие данные старым состоянием.
+  const read = readDataFileText();
+  if (read.error) {
+    refuseToStart([
+      'Не удалось прочитать файл данных: ' + read.error.message,
+      'Файл на месте и не тронут. Обычно так бывает, когда его держит антивирус',
+      'или программа резервного копирования. Подождите минуту и запустите бота снова.',
+    ]);
+  }
+  let raw = null;
   try {
-    const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    // Данные новее самой программы: так бывает, если рядом положили старый
-    // bot.exe. Раньше он молча приводил файл к своему формату — всё, чего он
-    // не знает, терялось без следа. Лучше не запускаться.
-    const storedVersion = Number(raw && raw.version) || 0;
-    if (storedVersion > DATA_VERSION) {
-      console.error('');
-      console.error('Файл данных создан более новой версией бота: в файле ' + storedVersion
-        + ', эта программа понимает ' + DATA_VERSION + '.');
-      console.error('Запуск остановлен, чтобы не потерять данные. Поставьте свежую версию bot.exe');
-      console.error('или восстановите копию, сделанную этой версией программы.');
-      console.error('');
-      process.exit(1);
+    raw = JSON.parse(read.text);
+  } catch (error) {
+    // Настоящее повреждение: файл есть, но это не данные. Только здесь имеет
+    // смысл подниматься из копии.
+    console.error('Файл данных повреждён:', error.message);
+    const recovered = recoverFromCopy();
+    if (recovered) {
+      const corruptCopy = DATA_FILE + '.corrupt-' + fileStamp();
+      fs.copyFileSync(DATA_FILE, corruptCopy);
+      console.error('Данные восстановлены из копии:', recovered.name);
+      console.error('Повреждённый файл сохранён как:', corruptCopy);
+      noteRecovery(recovered.data, 'Файл данных был повреждён. Данные восстановлены из копии ' + recovered.name + ', последние изменения могли потеряться. Повреждённый файл: ' + path.basename(corruptCopy));
+      return recovered.data;
     }
+    refuseToStart([
+      'Файл данных повреждён, а свежей копии рядом нет.',
+      'Копии не старше двух недель бот ставит сам; всё, что старше, — только по вашему решению.',
+      'Посмотрите папку backups и поставьте подходящий файл как bot-data.json,',
+      'либо восстановите копию через панель после запуска.',
+      'Повреждённый файл: ' + DATA_FILE,
+    ]);
+  }
+  // Данные новее самой программы: так бывает, если рядом положили старый
+  // bot.exe. Раньше он молча приводил файл к своему формату — всё, чего он
+  // не знает, терялось без следа. Лучше не запускаться.
+  const storedVersion = Number(raw && raw.version) || 0;
+  if (storedVersion > DATA_VERSION) {
+    refuseToStart([
+      'Файл данных создан более новой версией бота: в файле ' + storedVersion
+        + ', эта программа понимает ' + DATA_VERSION + '.',
+      'Запуск остановлен, чтобы не потерять данные. Поставьте свежую версию bot.exe',
+      'или восстановите копию, сделанную этой версией программы.',
+    ]);
+  }
+  try {
     const snapshot = backupBeforeUpgrade(raw);
     if (snapshot) console.log('Формат данных обновляется до версии ' + DATA_VERSION + '. Копия прежних данных:', snapshot);
     loadedVersion = storedVersion;
     return normalizeLoadedData(raw);
   } catch (error) {
-    console.error('Не удалось прочитать файл данных:', error.message);
+    // Файл читается, разбирается — значит дело в самой программе. Подставлять
+    // копию нельзя: данные целы, а вот версия бота, похоже, нет.
+    refuseToStart([
+      'Не удалось разобрать данные этой версией бота: ' + error.message,
+      'Файл данных не тронут. Поставьте прежнюю версию bot.exe из папки backups',
+      'или свежую, если она уже есть.',
+    ]);
   }
-  const recovered = recoverFromCopy();
-  if (recovered) {
-    const corruptCopy = DATA_FILE + '.corrupt-' + fileStamp();
-    fs.copyFileSync(DATA_FILE, corruptCopy);
-    console.error('Данные восстановлены из копии:', recovered.name);
-    console.error('Повреждённый файл сохранён как:', corruptCopy);
-    noteRecovery(recovered.data, 'Файл данных был повреждён. Данные восстановлены из копии ' + recovered.name + ', последние изменения могли потеряться. Повреждённый файл: ' + path.basename(corruptCopy));
-    return recovered.data;
-  }
-  console.error('Подходящая резервная копия не найдена. Исправьте или удалите файл:', DATA_FILE);
-  process.exit(1);
+  return clone(defaultData);
 }
 
 let data = loadData();
