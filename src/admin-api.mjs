@@ -6,7 +6,7 @@ import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
 import { normalizeLoadedData } from './data-format.mjs';
 import { dropMissingImages, forEachStoredImage, imageBytes } from './media.mjs';
 import { applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
-import { configured, data, replaceData, restoreMissingMedia, runtime, saveDataNow, verifyPassword } from './store.mjs';
+import { configured, data, replaceData, restoreMissingMedia, runtime, saveDataNow, verifyPassword, verifyPasswordAsync } from './store.mjs';
 import { mediaReport, runSelfCheck } from './selfcheck.mjs';
 import { handleContentApi } from './admin-api-content.mjs';
 import { handleClientsApi } from './admin-api-clients.mjs';
@@ -19,8 +19,8 @@ import { validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { restartPolling } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
 import { BOT_TOKEN_PATTERN, DOWNLOAD_TICKET_MS, MAX_UNAUTHENTICATED_BODY_BYTES, clientAddress, headerPassword, issueDownloadTicket, passwordAccepted, useDownloadTicket, createSession, isLocalRequest, json, loginAttempts, parseUploadedImage, readBackup, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
-import { REMOTE_LOGIN_CODE_ATTEMPTS, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
-import { loginAllowed, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
+import { REMOTE_LOGIN_CODE_ATTEMPTS, pendingRemoteLogins, remoteLoginCodeHash, startDecoyRemoteLogin, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
+import { attemptKey, loginAllowed, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { handleGroupApi } from './group-api.mjs';
 import { autostartStatus, setAutostart } from './autostart.mjs';
 import { readAllAdminNotifications, updateAdminNotification } from './admin-notifications.mjs';
@@ -99,12 +99,22 @@ async function handleApi(req, res, url) {
     const ip = clientAddress(req);
     if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
-    if (!verifyPassword(String(body.password || ''))) {
+    const correct = await verifyPasswordAsync(String(body.password || ''));
+    const remote = requestIsRemote(req);
+    // Из интернета ответ одинаковый и на верный, и на неверный пароль: иначе
+    // перебор узнавал бы пароль, не имея доступа к коду из Telegram.
+    if (remote) {
+      if (!correct) {
+        await delay(250);
+        return startDecoyRemoteLogin(res);
+      }
+      return startRemoteLogin(res, ip);
+    }
+    if (!correct) {
       await delay(250);
       return json(res, 401, { error: 'Неверный пароль' });
     }
-    if (requestIsRemote(req)) return startRemoteLogin(res, ip);
-    loginAttempts.delete(ip);
+    loginAttempts.delete(attemptKey(ip));
     const session = createSession(res, req);
     return json(res, 200, { ok: true, csrf: session.csrf });
   }
@@ -130,7 +140,12 @@ async function handleApi(req, res, url) {
       return json(res, 401, { error: 'Неверный код' });
     }
     pendingRemoteLogins.delete(challenge);
-    loginAttempts.delete(ip);
+    // Подставной вход: пароль был неверным, код совпасть не может.
+    if (pending.decoy) {
+      await delay(250);
+      return json(res, 401, { error: 'Неверный код' });
+    }
+    loginAttempts.delete(attemptKey(ip));
     const session = createSession(res, req);
     return json(res, 200, { ok: true, csrf: session.csrf });
   }

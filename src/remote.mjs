@@ -49,6 +49,21 @@ async function startRemoteLogin(res, ip) {
   return json(res, 200, { twoFactor: true, challenge });
 }
 
+// Неверный пароль из интернета получает такой же ответ, как верный: мы просим
+// код, которого никто не получал. Так перебор не узнаёт пароль.
+function startDecoyRemoteLogin(res) {
+  const now = Date.now();
+  for (const [key, pending] of pendingRemoteLogins) if (pending.expiresAt < now) pendingRemoteLogins.delete(key);
+  const challenge = crypto.randomBytes(24).toString('hex');
+  pendingRemoteLogins.set(challenge, {
+    codeHash: crypto.randomBytes(32).toString('hex'),
+    expiresAt: now + REMOTE_LOGIN_CODE_TTL_MS,
+    attempts: 0,
+    decoy: true,
+  });
+  return json(res, 200, { twoFactor: true, challenge });
+}
+
 function tunnelInstalled() {
   return fs.existsSync(CLOUDFLARED_PATH);
 }
@@ -177,6 +192,7 @@ export {
   announceTunnel,
   pendingRemoteLogins,
   remoteLoginCodeHash,
+  startDecoyRemoteLogin,
   startRemoteLogin,
   startTunnel,
   stopTunnel,

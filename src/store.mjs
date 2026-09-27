@@ -371,6 +371,27 @@ function verifyPassword(password) {
   }
 }
 
+// Проверка пароля считается специально медленно (scrypt). В синхронном виде она
+// останавливает бота на это время: поток попыток из интернета означал бы, что
+// клиенты не получают ответов. Асинхронный вариант считает в рабочем потоке,
+// а бот продолжает отвечать.
+function verifyPasswordAsync(password) {
+  return new Promise((resolve) => {
+    const salt = data.config.passwordSalt;
+    const hash = data.config.passwordHash;
+    if (!salt || !hash) return resolve(false);
+    crypto.scrypt(String(password == null ? '' : password), salt, 64, (error, derived) => {
+      if (error) return resolve(false);
+      try {
+        const expected = Buffer.from(hash, 'hex');
+        resolve(derived.length === expected.length && crypto.timingSafeEqual(derived, expected));
+      } catch {
+        resolve(false);
+      }
+    });
+  });
+}
+
 
 data.interfaceText = applyInterfaceText(data.interfaceText);
 
@@ -385,6 +406,7 @@ function replaceData(next) {
 }
 
 export {
+  verifyPasswordAsync,
   onSaveFailure,
   BACKUP_DIRECTORY,
   applyConfiguredTimeZone,
