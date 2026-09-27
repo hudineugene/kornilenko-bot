@@ -47,10 +47,18 @@ const ALBUM_WINDOW_MS = 2500;
 const ALBUM_MAX_PARTS = 50;
 const pendingAlbums = new Map();
 
-function collectAlbumMessage(message, handle) {
+function collectAlbumMessage(message, handle, update) {
   const key = String(message.chat.id) + ':' + String(message.media_group_id);
-  const album = pendingAlbums.get(key) || { parts: [], timer: null };
-  if (album.parts.length < ALBUM_MAX_PARTS) album.parts.push(message);
+  const album = pendingAlbums.get(key) || { parts: [], updates: [], timer: null };
+  if (album.parts.length < ALBUM_MAX_PARTS) {
+    album.parts.push(message);
+    // Пока альбом собирается, его части считаются незаконченными: если бота
+    // остановят в эти секунды, Telegram пришлёт их снова.
+    if (update) {
+      album.updates.push(update);
+      holdUpdate(update);
+    }
+  }
   if (album.timer) clearTimeout(album.timer);
   album.timer = setTimeout(() => {
     pendingAlbums.delete(key);
@@ -58,7 +66,10 @@ function collectAlbumMessage(message, handle) {
     if (!first) return;
     const caption = album.parts.map((part) => cleanText(part.caption, 4000)).filter(Boolean).join('\n');
     Promise.resolve(handle({ ...first, caption, albumMessageIds: rest.map((part) => part.message_id) }))
-      .catch((error) => recordError('Альбом от клиента', error));
+      .catch((error) => recordError('Альбом от клиента', error))
+      .finally(() => {
+        for (const part of album.updates) releaseUpdate(part);
+      });
   }, ALBUM_WINDOW_MS);
   if (album.timer.unref) album.timer.unref();
   pendingAlbums.set(key, album);
@@ -159,7 +170,7 @@ async function handleUpdate(update, token) {
   // Части альбома собираются в одно сообщение и приходят сюда ещё раз уже
   // вместе (albumMessageIds), поэтому проверку повторов они проходят один раз.
   if (message.media_group_id && !message.albumMessageIds && !adminOwnChat) {
-    collectAlbumMessage(message, (assembled) => handleUpdate({ ...update, message: assembled }, token));
+    collectAlbumMessage(message, (assembled) => handleUpdate({ ...update, message: assembled, update_id: 0 }, token), update);
     return;
   }
   if (duplicateInboundMessage(user, message.message_id)) return;
@@ -553,16 +564,64 @@ function updateChatKey(update) {
 // обновлений хранятся в данных, и дважды никто не отвечает.
 const HANDLED_UPDATES_KEPT = 200;
 
-function alreadyHandled(update) {
+// Номера, которые прямо сейчас в работе: стоят в очереди чата или ждут, пока
+// соберётся альбом. Пока обновление здесь, оно не считается обработанным, а
+// сохраняемая отметка его не обгоняет — если бота остановят, Telegram пришлёт
+// это сообщение снова.
+// Значение — сколько раз обновление «удерживают»: очередь чата держит его,
+// пока разбирает, а собираемый альбом — пока не соберётся. Отпустить его
+// можно только когда отпустили все.
+const inFlightUpdates = new Map();
+
+function updateId(update) {
   const id = Number(update && update.update_id);
-  if (!Number.isFinite(id)) return false;
+  return Number.isFinite(id) ? id : 0;
+}
+
+function wasHandled(update) {
+  const id = updateId(update);
+  if (!id) return false;
   if (!Array.isArray(data.handledUpdateIds)) data.handledUpdateIds = [];
-  if (data.handledUpdateIds.includes(id)) return true;
-  data.handledUpdateIds.push(id);
+  return data.handledUpdateIds.includes(id) || inFlightUpdates.has(id);
+}
+
+function markHandled(update) {
+  const id = updateId(update);
+  if (!id) return;
+  if (!Array.isArray(data.handledUpdateIds)) data.handledUpdateIds = [];
+  if (!data.handledUpdateIds.includes(id)) data.handledUpdateIds.push(id);
   if (data.handledUpdateIds.length > HANDLED_UPDATES_KEPT) {
     data.handledUpdateIds = data.handledUpdateIds.slice(-HANDLED_UPDATES_KEPT);
   }
-  return false;
+}
+
+// Сохраняемая отметка — это номер самого раннего незаконченного обновления.
+// Отметка в памяти (runtime.offset) идёт вперёд сразу, чтобы Telegram не
+// присылал одно и то же по кругу, пока бот работает.
+function rememberOffset() {
+  let lowest = runtime.offset;
+  for (const id of inFlightUpdates.keys()) lowest = Math.min(lowest, id);
+  data.telegramOffset = lowest;
+}
+
+function holdUpdate(update) {
+  const id = updateId(update);
+  if (!id) return;
+  inFlightUpdates.set(id, (inFlightUpdates.get(id) || 0) + 1);
+  rememberOffset();
+}
+
+function releaseUpdate(update) {
+  const id = updateId(update);
+  if (!id) return;
+  const holds = (inFlightUpdates.get(id) || 1) - 1;
+  if (holds > 0) {
+    inFlightUpdates.set(id, holds);
+    return;
+  }
+  markHandled(update);
+  inFlightUpdates.delete(id);
+  rememberOffset();
 }
 
 // Очередь на каждый чат: сообщения одного клиента обрабатываются по порядку,
@@ -577,17 +636,20 @@ function queuedUpdates() {
 
 function enqueueUpdate(update, token, handler) {
   const key = updateChatKey(update);
-  const generation = runtime.generation;
   const previous = chatQueues.get(key) || Promise.resolve();
+  holdUpdate(update);
   const work = previous.then(async () => {
-    // Токен сменили или бота перезапустили: старую пачку доигрывать не нужно.
-    if (generation !== runtime.generation) return;
     try {
-      await handler(update, token);
+      // Токен могли сменить, пока сообщение стояло в очереди: отвечаем
+      // текущим. Раньше такое сообщение просто выбрасывалось — клиент писал,
+      // а в панели не появлялось ничего.
+      await handler(update, data.config.botToken || token);
     } catch (error) {
       runtime.lastError = error.message;
       recordError('Обработка сообщения', error);
       console.error('Не удалось обработать обновление ' + update.update_id + ':', error.message);
+    } finally {
+      releaseUpdate(update);
     }
   });
   const tracked = work.finally(() => {
@@ -598,17 +660,15 @@ function enqueueUpdate(update, token, handler) {
 }
 
 function processUpdates(allUpdates, token, handler = handleUpdate) {
-  const generation = runtime.generation;
-  const updates = (Array.isArray(allUpdates) ? allUpdates : []).filter((update) => !alreadyHandled(update));
+  const updates = (Array.isArray(allUpdates) ? allUpdates : []).filter((update) => !wasHandled(update));
   const work = updates.map((update) => enqueueUpdate(update, token, handler));
-  // Сдвигаем отметку сразу: Telegram не пришлёт эти обновления снова, а если
-  // всё-таки пришлёт (перезапуск), повтор отсеется по номеру обновления.
-  if (generation === runtime.generation) {
-    for (const update of Array.isArray(allUpdates) ? allUpdates : []) {
-      runtime.offset = Math.max(runtime.offset, Number(update.update_id) + 1);
-    }
-    data.telegramOffset = runtime.offset;
+  // Отметка в памяти идёт вперёд сразу — иначе Telegram будет присылать те же
+  // сообщения по кругу, пока бот их разбирает. Сохраняемая отметка ждёт, пока
+  // обработка закончится: незаконченное вернётся после перезапуска.
+  for (const update of Array.isArray(allUpdates) ? allUpdates : []) {
+    runtime.offset = Math.max(runtime.offset, updateId(update) + 1);
   }
+  rememberOffset();
   // Ожидание возвращаем тем, кому оно нужно (проверки и тесты); сам бот его
   // не ждёт.
   return Promise.all(work);
@@ -709,6 +769,7 @@ function restartPolling() {
 }
 
 export {
+  inFlightUpdates,
   queuedUpdates,
   findRule,
   handleUpdate,

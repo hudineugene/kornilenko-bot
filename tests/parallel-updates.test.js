@@ -68,10 +68,14 @@ test('бот не ждёт обработку, чтобы спросить Teleg
   const work = bot.processUpdates([message(4, 'долгое')], TOKEN, handler);
   const returned = Date.now() - started;
   assert.ok(returned < 100, 'разбор пачки возвращает управление сразу, потрачено ' + returned + ' мс');
-  // Отметка уже сдвинута: следующий запрос к Telegram принесёт новые
+  // Отметка в памяти уже сдвинута: следующий запрос к Telegram принесёт новые
   // обновления, а не эти же.
-  assert.ok(bot.getData().telegramOffset >= updateId + 1, 'отметка сдвинута, не дожидаясь обработки');
+  assert.ok(bot.runtime.offset >= updateId + 1, 'спрашиваем Telegram дальше, не дожидаясь обработки');
+  // А сохраняемая отметка ждёт окончания: если бота остановят сейчас, это
+  // сообщение придёт снова, а не потеряется.
+  assert.ok(bot.getData().telegramOffset <= updateId, 'незаконченное сообщение не считается принятым');
   await work;
+  assert.ok(bot.getData().telegramOffset >= updateId + 1, 'после обработки отметка сохраняется');
 });
 
 test('обновления следующей пачки встают в ту же очередь клиента', async () => {
