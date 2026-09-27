@@ -9,6 +9,7 @@ import { cleanText } from './util.mjs';
 import { data, runtime } from './store.mjs';
 import { propertyReadyForLanguage } from './catalog.mjs';
 import { forEachStoredImage, imageExists, referencedImageFiles } from './media.mjs';
+import { policyIsDraft } from './privacy.mjs';
 
 const LANGUAGES = ['ru', 'en', 'es'];
 // Тот же вид токена, что принимает панель (admin-http не импортируем, чтобы
@@ -111,6 +112,11 @@ function runSelfCheck(now = new Date()) {
   else if (!catalog.visible) add('catalog', 'Каталог', 'bad', (catalog.active === 1 ? 'единственный объект не проходит правила публикации' : 'ни один из ' + catalog.active + ' объектов не проходит правила публикации') + ' — у клиентов каталог пустой', 'Каталог → Объекты');
   else if (catalog.visible < catalog.active) add('catalog', 'Каталог', 'warn', 'клиенты видят ' + catalog.visible + ' из ' + catalog.active + ' объектов', 'Каталог → Объекты');
   else add('catalog', 'Каталог', 'ok', 'клиенты видят все ' + objects(catalog.active) + (catalog.visibleRu < catalog.active ? ', но не на всех языках' : ''));
+
+  // Политика конфиденциальности с подстановками в квадратных скобках — это
+  // черновик: клиенту его показывать нельзя.
+  if (policyIsDraft()) add('privacy', 'Политика конфиденциальности', 'warn', 'в тексте остались подстановки в [квадратных скобках] — подставьте данные компании и срок хранения', 'Тексты бота → Интерфейс → privacy');
+  else add('privacy', 'Политика конфиденциальности', 'ok', 'заполнена');
 
   const media = mediaReport();
   if (media.missing.length) {

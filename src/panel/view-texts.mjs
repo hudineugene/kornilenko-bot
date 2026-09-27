@@ -242,6 +242,7 @@ var INTERFACE_GROUPS = [
   ["propertyTypes", "Типы недвижимости"],
   ["propertyBadges", "Метки объектов"],
   ["propertyConditions", "Состояние объекта"],
+  ["privacy", "Данные клиента и политика"],
   ["emptyStates", "Пустые разделы"],
   ["interaction", "Служебные сообщения"],
   ["commands", "Ответы на команды"],

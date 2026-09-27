@@ -19,6 +19,7 @@ import { handleMyRequestsCallback, sendMyRequests } from './requests.mjs';
 import { handleSubscriptionCallback } from './subscriptions.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { handleCalculatorCallback } from './calculator.mjs';
+import { handlePrivacyCallback, sendPrivacyCentre } from './privacy.mjs';
 import { handleComparisonCallback } from './comparison.mjs';
 import { handleSavedSearchCallback } from './saved-search.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
@@ -105,6 +106,7 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('vfb:')) await handleViewingFeedbackCallback(update.callback_query, token);
       else if (callbackData.startsWith('subs:')) await handleSubscriptionCallback(update.callback_query, token);
       else if (callbackData.startsWith('calc:')) await handleCalculatorCallback(update.callback_query, token);
+      else if (callbackData.startsWith('privacy:')) await handlePrivacyCallback(update.callback_query, token);
       else {
         const copy = INTERACTION_TEXT[callbackUser.preferredLanguage] || INTERACTION_TEXT.ru;
         await acknowledgeCallback(update.callback_query, token, copy.stale);
@@ -226,6 +228,15 @@ async function handleUpdate(update, token) {
       runtime.lastError = error.message;
       console.error('Не удалось показать главное меню:', error.message);
     }
+    return;
+  }
+  else if (command === '/privacy') {
+    user.pendingAction = null;
+    user.expiredAction = null;
+    scheduleSave();
+    void notifyAdministratorAction(user, 'Открыл раздел «Мои данные»', summary);
+    await clearUiMessages(message.chat.id, user, token);
+    await sendPrivacyCentre(message.chat.id, user, token);
     return;
   }
   else if (command === '/help') {

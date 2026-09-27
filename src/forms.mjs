@@ -2,7 +2,7 @@
 
 import { PENDING_ACTION_TTL_MS } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { CATALOG_FILTER_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, MANAGER_CONTACT_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
+import { CATALOG_FILTER_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, PRIVACY_TEXT, MANAGER_CONTACT_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { markUnavailable } from './users.mjs';
@@ -137,7 +137,7 @@ async function showPendingActionStep(user, token) {
       await sendLeadReview(user, pending, token, language);
       return true;
     }
-    const prompt = step === 'phone' ? copy.askPhone : step === 'time' ? copy.askTime : copy.askName;
+    const prompt = step === 'phone' ? phonePrompt(copy, language) : step === 'time' ? copy.askTime : copy.askName;
     await sendMessage(user.chatId, prompt, token, { reply_markup: leadFormKeyboard(language, step, user) });
     return true;
   }
@@ -211,6 +211,14 @@ function duplicateCallback(user, key, intervalMs = 1400) {
   return false;
 }
 
+// К вопросу о телефоне всегда добавляется, зачем он нужен и где посмотреть,
+// что бот хранит: этого требует RGPD при сборе персональных данных.
+function phonePrompt(copy, language) {
+  const notice = cleanText((PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).phoneNotice, 300);
+  const prompt = String(copy.askPhone || '');
+  return notice && !prompt.includes('/privacy') ? prompt + '\n\n' + notice : prompt;
+}
+
 function isStaleFormControl(text) {
   const value = String(text || '').trim();
   if (!value) return false;
@@ -266,7 +274,7 @@ async function handleLeadFormMessage(message, user, token) {
     }
     pending.step = 'phone';
     scheduleSave();
-    await sendMessage(user.chatId, copy.askPhone, token, { reply_markup: leadFormKeyboard(language, 'phone', user) });
+    await sendMessage(user.chatId, phonePrompt(copy, language), token, { reply_markup: leadFormKeyboard(language, 'phone', user) });
     return true;
   }
   if (pending.step === 'phone') {
@@ -293,7 +301,7 @@ async function handleLeadFormMessage(message, user, token) {
       pending.editing = editStep;
       pending.createdAt = new Date().toISOString();
       scheduleSave();
-      const prompt = editStep === 'phone' ? copy.askPhone : editStep === 'time' ? copy.askTime : copy.askName;
+      const prompt = editStep === 'phone' ? phonePrompt(copy, language) : editStep === 'time' ? copy.askTime : copy.askName;
       await sendMessage(user.chatId, prompt, token, { reply_markup: leadFormKeyboard(language, editStep, user) });
       return true;
     }

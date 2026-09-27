@@ -583,9 +583,69 @@ const LANGUAGE_PICKER_TEXT = {
 };
 
 const BOT_COMMAND_DESCRIPTIONS = {
-  ru: { start: 'Запустить бота', menu: 'Открыть главное меню', requests: 'Мои заявки', language: 'Сменить язык', help: 'Помощь', cancel: 'Отменить текущее действие' },
-  en: { start: 'Start the bot', menu: 'Open main menu', requests: 'My requests', language: 'Change language', help: 'Help', cancel: 'Cancel current action' },
-  es: { start: 'Iniciar el bot', menu: 'Abrir el menú principal', requests: 'Mis solicitudes', language: 'Cambiar idioma', help: 'Ayuda', cancel: 'Cancelar la acción actual' },
+  ru: { start: 'Запустить бота', menu: 'Открыть главное меню', requests: 'Мои заявки', language: 'Сменить язык', privacy: 'Мои данные и политика', help: 'Помощь', cancel: 'Отменить текущее действие' },
+  en: { start: 'Start the bot', menu: 'Open main menu', requests: 'My requests', language: 'Change language', privacy: 'My data and policy', help: 'Help', cancel: 'Cancel current action' },
+  es: { start: 'Iniciar el bot', menu: 'Abrir el menú principal', requests: 'Mis solicitudes', language: 'Cambiar idioma', privacy: 'Mis datos y política', help: 'Ayuda', cancel: 'Cancelar la acción actual' },
+};
+
+// Данные клиента и политика конфиденциальности: раздел «Мои данные», где
+// видно, что бот хранит, и где клиент сам удаляет всё о себе. Черновик
+// политики владелец дополняет своими данными в панели.
+const PRIVACY_TEXT = {
+  ru: {
+    menuButton: '🔒 Мои данные',
+    title: '🔒 Ваши данные',
+    intro: 'Здесь видно, что бот о вас хранит, и здесь же можно всё удалить.',
+    storedTitle: 'Сейчас хранится:',
+    policyButton: '📄 Как мы обращаемся с данными',
+    policyTitle: '📄 Как мы обращаемся с данными',
+    policy: 'Кто обрабатывает данные: [название компании], NIF [номер], [адрес], вопросы — [e-mail].\n\nКакие данные бот хранит: имя и имя пользователя в Telegram, номер чата, выбранный язык; имя, телефон и удобное время, если вы оставили их в заявке; ваши сообщения боту и наши ответы; избранное, сравнение, сохранённый поиск, историю просмотренных объектов; записи на просмотр.\n\nЗачем: ответить на ваш запрос, подобрать подходящие объекты, договориться о просмотре.\n\nОснование: ваше обращение к нам. Рассылки — только по вашему отдельному согласию, его можно отозвать в любой момент.\n\nСколько храним: [срок, например 24 месяца] с последнего обращения, затем удаляем.\n\nКому передаём: никому. Сообщения идут через Telegram как канал связи, данные хранятся на компьютере компании.\n\nВаши права: узнать, что о вас хранится, исправить, удалить, отозвать согласие, пожаловаться в AEPD (www.aepd.es). Удалить всё можно самому: «👤 Моё» → «🔒 Мои данные» → «🗑 Удалить мои данные».',
+    eraseButton: '🗑 Удалить мои данные',
+    eraseTitle: 'Удалить все ваши данные?',
+    eraseWarning: 'Будут удалены: ваши заявки и переписка с менеджером, избранное, сравнение, сохранённый поиск, история просмотров, телефон и имя. Это нельзя отменить. Вы сможете начать заново в любой момент.',
+    eraseConfirm: '🗑 Да, удалить всё',
+    eraseCancel: '← Оставить как есть',
+    erased: 'Готово: всё, что бот о вас хранил, удалено. Если захотите вернуться — просто напишите /start.',
+    phoneNotice: 'Телефон нужен только для ответа на вашу заявку. Что мы храним и как удалить — команда /privacy.',
+    back: '⬅️ 👤 Моё',
+    nothing: 'Кроме языка общения, бот пока ничего о вас не хранит.',
+  },
+  en: {
+    menuButton: '🔒 My data',
+    title: '🔒 Your data',
+    intro: 'Here you can see what the bot keeps about you, and delete all of it.',
+    storedTitle: 'Stored right now:',
+    policyButton: '📄 How we handle your data',
+    policyTitle: '📄 How we handle your data',
+    policy: 'Who processes the data: [company name], NIF [number], [address], questions — [e-mail].\n\nWhat the bot stores: your Telegram first name and username, chat number, chosen language; name, phone and preferred time if you left them in a request; your messages to the bot and our replies; favorites, comparison, saved search, viewing history; booked viewings.\n\nWhy: to answer your request, find suitable properties and arrange a viewing.\n\nLegal basis: your request to us. Newsletters only with your separate consent, which you can withdraw at any time.\n\nHow long: [period, for example 24 months] after your last contact, then the data is deleted.\n\nWho else sees it: nobody. Messages travel through Telegram as the channel; the data is kept on the company computer.\n\nYour rights: to know what is stored, correct it, delete it, withdraw consent, complain to the AEPD (www.aepd.es). You can delete everything yourself: “👤 My space” → “🔒 My data” → “🗑 Delete my data”.',
+    eraseButton: '🗑 Delete my data',
+    eraseTitle: 'Delete all your data?',
+    eraseWarning: 'This removes your requests and the conversation with the manager, favorites, comparison, saved search, viewing history, phone and name. It cannot be undone. You can start again any time.',
+    eraseConfirm: '🗑 Yes, delete everything',
+    eraseCancel: '← Keep my data',
+    erased: 'Done: everything the bot kept about you is deleted. Send /start if you ever want to come back.',
+    phoneNotice: 'We only need the phone to answer your request. What we store and how to delete it — the /privacy command.',
+    back: '⬅️ 👤 My space',
+    nothing: 'Apart from your language, the bot keeps nothing about you yet.',
+  },
+  es: {
+    menuButton: '🔒 Mis datos',
+    title: '🔒 Tus datos',
+    intro: 'Aquí ves qué guarda el bot sobre ti y aquí mismo puedes borrarlo todo.',
+    storedTitle: 'Ahora mismo se guarda:',
+    policyButton: '📄 Cómo tratamos tus datos',
+    policyTitle: '📄 Cómo tratamos tus datos',
+    policy: 'Quién trata los datos: [nombre de la empresa], NIF [número], [dirección], consultas — [e-mail].\n\nQué guarda el bot: tu nombre y usuario de Telegram, número de chat, idioma elegido; nombre, teléfono y horario preferido si los dejaste en una solicitud; tus mensajes al bot y nuestras respuestas; favoritos, comparación, búsqueda guardada, historial de inmuebles vistos; visitas reservadas.\n\nPara qué: responder a tu solicitud, buscar inmuebles adecuados y concertar la visita.\n\nBase legal: tu solicitud. Los envíos comerciales, solo con tu consentimiento separado, que puedes retirar cuando quieras.\n\nCuánto tiempo: [plazo, por ejemplo 24 meses] desde tu último contacto; después se eliminan.\n\nCon quién se comparten: con nadie. Los mensajes van por Telegram como canal; los datos se guardan en el ordenador de la empresa.\n\nTus derechos: saber qué se guarda, corregirlo, eliminarlo, retirar el consentimiento y reclamar ante la AEPD (www.aepd.es). Puedes borrarlo todo tú mismo: «👤 Mi espacio» → «🔒 Mis datos» → «🗑 Eliminar mis datos».',
+    eraseButton: '🗑 Eliminar mis datos',
+    eraseTitle: '¿Eliminar todos tus datos?',
+    eraseWarning: 'Se eliminarán tus solicitudes y la conversación con el gestor, favoritos, comparación, búsqueda guardada, historial de vistos, teléfono y nombre. No se puede deshacer. Puedes empezar de nuevo cuando quieras.',
+    eraseConfirm: '🗑 Sí, eliminar todo',
+    eraseCancel: '← Dejarlo como está',
+    erased: 'Hecho: se ha eliminado todo lo que el bot guardaba sobre ti. Escribe /start si quieres volver.',
+    phoneNotice: 'El teléfono solo se usa para responder a tu solicitud. Qué guardamos y cómo borrarlo: el comando /privacy.',
+    back: '⬅️ 👤 Mi espacio',
+    nothing: 'Aparte del idioma, el bot todavía no guarda nada sobre ti.',
+  },
 };
 
 // "My requests": the client sees what happened to what they sent.
@@ -992,6 +1052,7 @@ const INTERFACE_TEXT_TARGETS = {
   propertyAlerts: { target: PROPERTY_ALERT_TEXT },
   catalogFilter: { target: CATALOG_FILTER_TEXT },
   myRequests: { target: MY_REQUESTS_TEXT },
+  privacy: { target: PRIVACY_TEXT },
   viewingNotices: { target: VIEWING_NOTICE_TEXT },
   subscriptions: { target: SUBSCRIPTION_TEXT },
   calculator: { target: CALCULATOR_TEXT },
@@ -1072,6 +1133,7 @@ export {
   MENU_LABELS,
   MY_AREA_TEXT,
   MY_REQUESTS_TEXT,
+  PRIVACY_TEXT,
   NAVIGATION_TEXT,
   PREVIOUS_MENU_LABELS,
   PROPERTY_ACTION_TEXT,

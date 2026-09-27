@@ -29,7 +29,8 @@ test.describe('callback request form', () => {
     assert.deepEqual(step.last.buttons, [ru.cancel]);
 
     step = await chat.say('Анна Петрова');
-    assert.equal(step.last.text, ru.askPhone);
+    assert.ok(step.last.text.startsWith(ru.askPhone), 'вопрос о телефоне на месте');
+    assert.match(step.last.text, /\/privacy/, 'и приписка, где посмотреть, что бот хранит');
     const phoneButton = step.last.markup.keyboard.flat().find((button) => button.request_contact);
     assert.equal(phoneButton.text, ru.phoneButton);
 
@@ -90,7 +91,8 @@ test.describe('callback request form', () => {
     await chat.say('+34 600 000 111');
     await chat.say('После обеда');
     let step = await chat.say(ru.editPhone);
-    assert.equal(step.last.text, ru.askPhone);
+    assert.ok(step.last.text.startsWith(ru.askPhone), 'вопрос о телефоне на месте');
+    assert.match(step.last.text, /\/privacy/, 'и приписка, где посмотреть, что бот хранит');
     step = await chat.say('+34 611 222 333');
     assert.match(step.last.text, new RegExp('^' + ru.review));
     assert.match(step.last.text, /Имя: Анна\n/);
@@ -416,7 +418,7 @@ test.describe('unfinished form reminder', () => {
     // The client comes back (the form is still valid: it was started "now").
     chat.user.pendingAction.createdAt = new Date().toISOString();
     const step = await chat.say(INTERACTION.ru.continueForm);
-    assert.equal(step.last.text, LEAD.ru.askPhone, 'the form goes on from the saved step');
+    assert.ok(step.last.text.startsWith(LEAD.ru.askPhone), 'the form goes on from the saved step');
   });
 
   test('no reminder too early, at night, after the form expired or when the bot is off', async () => {

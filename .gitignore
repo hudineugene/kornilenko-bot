@@ -23,3 +23,5 @@ bot-running.json.tmp
 
 # Программа туннеля (скачивается отдельно)
 cloudflared.exe
+# Песочница для проверок: создаётся node tools/sandbox.js
+.sandbox/
