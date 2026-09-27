@@ -6,7 +6,7 @@ import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAG
 import { MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
-import { eraseUserData, userByChatId, userById, userDataExport } from './users.mjs';
+import { eraseUserData, markUnavailable, userByChatId, userById, userDataExport } from './users.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
 import { appendInquiryMessage, inquiryTimelineMessage } from './inquiries.mjs';
@@ -89,7 +89,7 @@ async function handleClientsApi(req, res, url) {
       saveDataNow();
       return json(res, 200, { ok: true, inquiryId: inquiry.id });
     } catch (error) {
-      if (userUnavailableError(error)) user.blocked = true;
+      if (userUnavailableError(error)) markUnavailable(user);
       recordError('Личное сообщение пользователю', error);
       return json(res, 400, { error: 'Не удалось отправить сообщение: ' + error.message });
     }
@@ -132,7 +132,12 @@ async function handleClientsApi(req, res, url) {
     if (body.phone != null) user.phone = cleanText(body.phone, 80);
     if (body.preferredContactTime != null) user.preferredContactTime = cleanText(body.preferredContactTime, 160);
     if (['ru', 'en', 'es', ''].includes(body.preferredLanguage)) user.preferredLanguage = body.preferredLanguage;
-    if (typeof body.blocked === 'boolean') user.blocked = body.blocked;
+    if (typeof body.blocked === 'boolean') {
+      // Галочка «не писать этому клиенту» — решение администратора: входящее
+      // сообщение клиента её не снимает, в отличие от отказа Telegram.
+      user.blocked = body.blocked;
+      user.blockedBy = body.blocked ? 'admin' : '';
+    }
     saveDataNow();
     return json(res, 200, { ok: true });
   }
@@ -333,7 +338,7 @@ async function handleClientsApi(req, res, url) {
       return json(res, 200, { ok: true });
     } catch (error) {
       const user = userById(inquiry.userId);
-      if (user && userUnavailableError(error)) user.blocked = true;
+      if (user && userUnavailableError(error)) markUnavailable(user);
       if (error.telegramCode) recordError('Подтверждение просмотра', error);
       return json(res, 400, { error: 'Не удалось подтвердить просмотр: ' + error.message });
     }
@@ -447,7 +452,7 @@ async function handleClientsApi(req, res, url) {
       saveDataNow();
       return json(res, 200, { ok: true, deliveredAt: createdAt, messageId: sentMessage && sentMessage.message_id ? Number(sentMessage.message_id) : null });
     } catch (error) {
-      if (userUnavailableError(error)) user.blocked = true;
+      if (userUnavailableError(error)) markUnavailable(user);
       recordError('Ответ на обращение', error);
       return json(res, 400, { error: 'Не удалось отправить ответ: ' + error.message });
     }

@@ -7,7 +7,7 @@ import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, normalizeViewing } from './data-fo
 import { INTERACTION_TEXT, MY_REQUESTS_TEXT, PROPERTY_ACTION_TEXT, VIEWING_FORM_TEXT, VIEWING_NOTICE_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
-import { normalizeUser, userByChatId, userById } from './users.mjs';
+import { markUnavailable, normalizeUser, userByChatId, userById } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
 import { adminCallbackAllowed, createInquiry, inquiryStatusMarkup, notifyAdministratorAction } from './inquiries.mjs';
@@ -429,7 +429,7 @@ async function runViewingNotices(now = new Date(), token = data.config.botToken)
         result.feedback.push(inquiry.id);
       }
     } catch (error) {
-      if (userUnavailableError(error)) user.blocked = true;
+      if (userUnavailableError(error)) markUnavailable(user);
       else recordError(reminder ? 'Напоминание о просмотре' : 'Вопрос после просмотра', error);
     }
     await delay(40);

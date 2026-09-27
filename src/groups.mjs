@@ -13,6 +13,7 @@ import { recordError } from './analytics.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { imageExists, imageHasTransparency } from './media.mjs';
 import { validHttpUrl } from './catalog.mjs';
+import { applyPrivateChatStatus } from './users.mjs';
 
 // What the bot saw in the group: enough to answer, delete or pin a message.
 const GROUP_MESSAGE_LIMIT = 200;
@@ -105,7 +106,14 @@ function upsertGroup(chat, patch = {}) {
 // The bot was added, promoted, demoted or removed.
 function handleMyChatMember(update) {
   const chat = update && update.chat;
-  if (!chat || chat.type === 'private') return null;
+  if (!chat) return null;
+  // В личном чате это сообщение значит одно из двух: клиент заблокировал бота
+  // или вернулся и разблокировал. Второе снимает запрет на отправку.
+  if (chat.type === 'private') {
+    const member = update.new_chat_member || {};
+    applyPrivateChatStatus(chat.id, cleanText(member.status, 20));
+    return null;
+  }
   const member = update.new_chat_member || {};
   const status = cleanText(member.status, 20) || 'member';
   return upsertGroup(chat, { status, rights: rightsOf(member) });

@@ -166,3 +166,70 @@ test.describe('the notification centre in the panel', () => {
     assert.ok(after.some((entry) => entry.active && !entry.handledAt), 'но дело всё ещё в списке');
   });
 });
+
+test.describe('a client who blocked the bot and came back', () => {
+  test('Telegram refusing delivery closes the chat, an incoming message opens it again', async () => {
+    const chat = createChat();
+    await chat.say('/start');
+    const { markUnavailable } = await import('../src/users.mjs');
+    markUnavailable(chat.user);
+    assert.equal(chat.user.blocked, true);
+    assert.equal(chat.user.blockedBy, 'telegram');
+    assert.equal(bot.broadcastUsers({ languages: ['ru'] }).some((user) => String(user.id) === String(chat.id)), false, 'пока закрыто — рассылки не уходят');
+
+    await chat.say('Я вернулся, всё ещё интересует квартира');
+    assert.equal(chat.user.blocked, false, 'входящее сообщение снимает запрет');
+    assert.equal(chat.user.blockedBy, '');
+    assert.equal(bot.broadcastUsers({ languages: ['ru'] }).some((user) => String(user.id) === String(chat.id)), true, 'клиент снова в рассылках');
+  });
+
+  test('the Telegram signal about blocking and unblocking is heard', async () => {
+    const chat = createChat();
+    await chat.say('/start');
+    const botId = bot.getData().bot.id;
+    const signal = (status) => bot.processUpdates([{
+      update_id: 990000 + Math.floor(Math.random() * 1000),
+      my_chat_member: {
+        chat: { id: chat.id, type: 'private' },
+        from: { id: chat.id, first_name: 'Анна' },
+        date: Math.floor(Date.now() / 1000),
+        old_chat_member: { status: 'member', user: { id: botId, is_bot: true } },
+        new_chat_member: { status, user: { id: botId, is_bot: true } },
+      },
+    }], 'token');
+
+    await signal('kicked');
+    assert.equal(chat.user.blocked, true, 'бот узнал о блокировке сразу, не по отказу отправки');
+    assert.equal(chat.user.blockedBy, 'telegram');
+
+    await signal('member');
+    assert.equal(chat.user.blocked, false, 'разблокировка тоже слышна');
+    assert.equal(chat.user.blockedBy, '');
+  });
+
+  test('the panel decision "do not write" survives new messages', async () => {
+    const chat = createChat();
+    await chat.say('/start');
+    chat.user.blocked = true;
+    chat.user.blockedBy = 'admin';
+
+    await chat.say('А можно всё-таки подборку?');
+    assert.equal(chat.user.blocked, true, 'галочку администратора сообщение клиента не снимает');
+    assert.equal(chat.user.blockedBy, 'admin');
+
+    const { markUnavailable, applyPrivateChatStatus } = await import('../src/users.mjs');
+    applyPrivateChatStatus(chat.id, 'member');
+    assert.equal(chat.user.blocked, true, 'и сигнал Telegram тоже не снимает');
+    markUnavailable(chat.user);
+    assert.equal(chat.user.blockedBy, 'admin', 'источник запрета не подменяется');
+  });
+
+  test('old data without the marker keeps working', async () => {
+    const data = bot.normalizeLoadedData({
+      version: 27,
+      users: { '5001': { id: '5001', chatId: 5001, blocked: true }, '5002': { id: '5002', chatId: 5002 } },
+    });
+    assert.equal(data.users['5001'].blockedBy, 'telegram', 'прежний «заблокирован» считаем техническим');
+    assert.equal(data.users['5002'].blockedBy, '');
+  });
+});

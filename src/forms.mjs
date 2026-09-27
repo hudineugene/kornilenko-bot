@@ -5,6 +5,7 @@ import { cleanText } from './util.mjs';
 import { CATALOG_FILTER_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, MANAGER_CONTACT_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
+import { markUnavailable } from './users.mjs';
 import { sendMessage } from './telegram.mjs';
 import { menuKeyboard, sendMainMenu } from './menus.mjs';
 import { createInquiry } from './inquiries.mjs';
@@ -848,7 +849,7 @@ async function runFormReminders(now = new Date(), token = data.config.botToken) 
       await sendMessage(user.chatId, copy[FORM_REMINDER_TEXT_KEYS[user.pendingAction.type]], token, { reply_markup: unfinishedActionKeyboard(language) });
       sent.push(user.id);
     } catch (error) {
-      if (Number(error && error.telegramCode) === 403) user.blocked = true;
+      if (Number(error && error.telegramCode) === 403) markUnavailable(user);
     }
   }
   if (sent.length) saveDataNow();

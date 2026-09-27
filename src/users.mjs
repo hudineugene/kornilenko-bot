@@ -1,7 +1,7 @@
 // Пользователи: карточки, поиск, источник, выгрузка и удаление данных.
 
 import { cleanText, clone } from './util.mjs';
-import { data } from './store.mjs';
+import { data, scheduleSave } from './store.mjs';
 import { adminMuteNotices, adminNotifyTimes, inquiryTimes } from './inquiries.mjs';
 import { normalizedCatalogFilter, normalizedSavedSearch } from './catalog.mjs';
 import { normalizedSimilarPropertyDetails } from './similar.mjs';
@@ -63,6 +63,30 @@ function telegramInterfaceLanguage(user) {
   return ['ru', 'en', 'es'].includes(code) ? code : '';
 }
 
+// Telegram отказался доставлять: клиент заблокировал бота или удалил аккаунт.
+// Помечаем это как технический запрет — он снимется сам, когда клиент напишет.
+function markUnavailable(user) {
+  if (!user || user.blockedBy === 'admin') return;
+  user.blocked = true;
+  user.blockedBy = 'telegram';
+  scheduleSave();
+}
+
+// Сигнал Telegram о личном чате: клиент заблокировал бота или вернулся.
+function applyPrivateChatStatus(userId, status) {
+  const user = userById(String(userId));
+  if (!user || user.blockedBy === 'admin') return null;
+  if (['kicked', 'left'].includes(status)) {
+    user.blocked = true;
+    user.blockedBy = 'telegram';
+  } else if (status === 'member') {
+    user.blocked = false;
+    user.blockedBy = '';
+  } else return null;
+  scheduleSave();
+  return user;
+}
+
 function normalizeUser(from, chatId, countMessage = true) {
   const id = String(from.id);
   const previous = userById(id) || {};
@@ -80,7 +104,10 @@ function normalizeUser(from, chatId, countMessage = true) {
     firstSeenAt: previous.firstSeenAt || new Date().toISOString(),
     lastSeenAt: new Date().toISOString(),
     messages: Number(previous.messages || 0) + (countMessage ? 1 : 0),
-    blocked: Boolean(previous.blocked),
+    // Пришло сообщение или нажатие — значит клиент нас не блокирует. Галочку
+    // администратора «не писать этому клиенту» это не снимает.
+    blocked: previous.blockedBy === 'admin' ? true : false,
+    blockedBy: previous.blockedBy === 'admin' ? 'admin' : '',
     tags: Array.isArray(previous.tags) ? previous.tags : [],
     note: previous.note || '',
     favorites: Array.isArray(previous.favorites) ? previous.favorites : [],
@@ -173,7 +200,9 @@ function eraseUserData(user) {
 
 export {
   LEAD_SOURCE_PATTERN,
+  applyPrivateChatStatus,
   eraseUserData,
+  markUnavailable,
   indexUser,
   leadSourceFromPayload,
   normalizeUser,

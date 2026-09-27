@@ -814,6 +814,10 @@ function normalizeLoadedData(parsed) {
           ? user.comparisonIds.map(String).filter((value, index, values) => value && values.indexOf(value) === index).slice(0, 3)
           : [],
         savedSearch: normalizeSavedSearchData(user.savedSearch),
+        // Кто закрыл переписку: Telegram (клиент заблокировал бота) или
+        // администратор галочкой «не писать этому клиенту». Первое снимается
+        // само, когда клиент возвращается, второе — только руками.
+        blockedBy: ['admin', 'telegram'].includes(user.blockedBy) ? user.blockedBy : (user.blocked ? 'telegram' : ''),
         selectionMatchIds: Array.isArray(user.selectionMatchIds) ? user.selectionMatchIds.map(String).slice(0, 20) : [],
         selectionMatchDetails: normalizeSelectionMatchDetails(user.selectionMatchDetails),
         similarPropertyIds: Array.isArray(user.similarPropertyIds)

@@ -7,7 +7,7 @@ import { nextOpening } from './hours.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError } from './analytics.mjs';
-import { normalizeUser, userByChatId } from './users.mjs';
+import { markUnavailable, normalizeUser, userByChatId } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
 import { localized } from './catalog.mjs';
 import { acknowledgeCallback, propertyRequestText } from './sections.mjs';
@@ -744,7 +744,7 @@ async function handleAdministratorReply(message, token) {
     saveDataNow();
     await sendMessage(adminChatId, '✅ Сообщение отправлено пользователю' + (user ? ' ' + ([user.firstName, user.lastName].filter(Boolean).join(' ') || user.id) : '') + '.', token, { track: false });
   } catch (error) {
-    if (user && userUnavailableError(error)) user.blocked = true;
+    if (user && userUnavailableError(error)) markUnavailable(user);
     recordError('Ответ администратора из Telegram', error);
     await sendMessage(adminChatId, '❌ Не удалось отправить сообщение: ' + error.message, token, { track: false }).catch(() => {});
   }

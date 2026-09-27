@@ -5,7 +5,7 @@ import { imageExists } from './media.mjs';
 import { PROPERTY_ALERT_TEXT, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
 import { configured, data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError, recordPropertyEvent } from './analytics.mjs';
-import { normalizeUser, userById } from './users.mjs';
+import { markUnavailable, normalizeUser, userById } from './users.mjs';
 import { sendMessage, sendPhotoMessage } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
 import { notifyAdministratorAction } from './inquiries.mjs';
@@ -301,7 +301,7 @@ async function deliverPropertyAlerts(deliveries, token = data.config.botToken) {
       rememberAlert(delivery.user, delivery.key);
       sent += 1;
     } catch (error) {
-      if (userUnavailableError(error)) delivery.user.blocked = true;
+      if (userUnavailableError(error)) markUnavailable(delivery.user);
       recordError('Уведомление об объекте', error);
     }
     await delay(PROPERTY_ALERT_SPACING_MS);

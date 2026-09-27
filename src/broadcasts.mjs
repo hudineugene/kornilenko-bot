@@ -6,6 +6,7 @@ import { imageExists } from './media.mjs';
 import { SUBSCRIPTION_TEXT } from './texts.mjs';
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
+import { markUnavailable } from './users.mjs';
 import { sendMessage, sendPhotoMessage } from './telegram.mjs';
 import { localized, validHttpUrl } from './catalog.mjs';
 
@@ -136,7 +137,7 @@ async function runBroadcast(entry) {
         rememberBroadcastDelivery(user, entry);
       } catch (error) {
         entry.failed += 1;
-        if (userUnavailableError(error)) user.blocked = true;
+        if (userUnavailableError(error)) markUnavailable(user);
         entry.failures.push({
           userId: String(user.id),
           message: cleanText(error.message, 300),
