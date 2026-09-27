@@ -50,7 +50,15 @@ async function handleUpdate(update, token) {
     rememberGroupMessage(update.channel_post);
     return;
   }
-  if (update.message && update.message.chat && update.message.chat.type !== 'private') rememberGroupMessage(update.message);
+  // В группе и канале бот — только бот: сценарий клиента (меню, обращения,
+  // анкеты) живёт в личной переписке. Иначе сообщение участника завело бы ему
+  // «личный чат» с номером группы, и ответы менеджера ушли бы в группу.
+  // Исключение — группа, назначенная чатом администратора или менеджера: там
+  // работают команды и ответы на уведомления.
+  if (update.message && update.message.chat && update.message.chat.type && update.message.chat.type !== 'private') {
+    rememberGroupMessage(update.message);
+    if (!adminChatFor(update.message.chat.id)) return;
+  }
   if (update.message_reaction) {
     await handleMessageReaction(update.message_reaction);
     return;
@@ -65,9 +73,14 @@ async function handleUpdate(update, token) {
   }
   if (update.callback_query) {
     const callbackData = String(update.callback_query.data || '');
-    const callbackChatId = update.callback_query.message && update.callback_query.message.chat
-      ? update.callback_query.message.chat.id
-      : update.callback_query.from.id;
+    const callbackChat = update.callback_query.message && update.callback_query.message.chat;
+    // Кнопка, нажатая в группе или канале, не должна заводить клиента с
+    // номером группы: кнопки бота живут в личной переписке.
+    if (callbackChat && callbackChat.type && callbackChat.type !== 'private' && !adminChatFor(callbackChat.id)) {
+      await acknowledgeCallback(update.callback_query, token);
+      return;
+    }
+    const callbackChatId = callbackChat ? callbackChat.id : update.callback_query.from.id;
     const callbackUser = normalizeUser(update.callback_query.from, callbackChatId, false);
     recordBroadcastResponse(callbackUser, callbackData === 'subs:news:off:bc' ? 'unsubscribe' : 'response');
     if (duplicateCallback(callbackUser, callbackData)) {

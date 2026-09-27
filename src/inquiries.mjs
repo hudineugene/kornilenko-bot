@@ -556,6 +556,8 @@ function reactionInfo(reaction) {
 
 async function handleMessageReaction(change) {
   if (!change || !change.chat || !change.user) return;
+  // Реакция в группе или канале — не реакция клиента на наше сообщение ему.
+  if (change.chat.type && change.chat.type !== 'private') return;
   const user = normalizeUser(change.user, change.chat.id, false);
   const oldItems = (Array.isArray(change.old_reaction) ? change.old_reaction : []).map(reactionInfo).filter(Boolean);
   const newItems = (Array.isArray(change.new_reaction) ? change.new_reaction : []).map(reactionInfo).filter(Boolean);

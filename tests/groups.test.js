@@ -563,3 +563,76 @@ test('прозрачный PNG уходит файлом, чтобы прозр�
   assert.ok(telegram.calls.some((call) => call.method === 'sendPhoto'), 'непрозрачная плашка — как раньше, внутри сообщения');
   assert.ok(!telegram.calls.some((call) => call.method === 'sendDocument'));
 });
+
+// --- Сообщения участников группы ------------------------------------------
+// В группе бот молчит: сценарий клиента (меню, обращения, анкеты) живёт в
+// личной переписке. Иначе участнику завелся бы «личный чат» с номером группы.
+
+async function memberWrites(text, from) {
+  const before = telegram.calls.length;
+  await deliver({ message: { message_id: 8100 + updateId, date: Math.floor(Date.now() / 1000), from, chat: chat(), text } });
+  return telegram.calls.slice(before);
+}
+
+test('сообщение участника группы не идёт по сценарию клиента', async () => {
+  await addBotAsAdmin();
+  const newcomer = { id: 880011, first_name: 'Мария' };
+  const calls = await memberWrites('Здравствуйте, а есть что-то у моря?', newcomer);
+
+  assert.deepEqual(calls.filter((call) => ['sendMessage', 'sendPhoto'].includes(call.method)), [], 'бот не отвечает в группе');
+  assert.deepEqual(bot.getData().inquiries, [], 'обращение из группы не создаётся');
+  const stored = bot.userById(String(newcomer.id));
+  assert.ok(!stored || String(stored.chatId) !== GROUP, 'номер группы не становится личным чатом участника');
+});
+
+test('участник с выбранным языком тоже не получает меню в группе', async () => {
+  await addBotAsAdmin();
+  const member = { id: 880022, first_name: 'Иван', language_code: 'ru' };
+  const calls = await memberWrites('/start', member);
+  assert.deepEqual(calls.filter((call) => ['sendMessage', 'sendPhoto'].includes(call.method)), [], 'даже на /start в группе бот молчит');
+  assert.deepEqual(bot.getData().inquiries, []);
+});
+
+test('реакция в группе не создаёт клиента с номером группы', async () => {
+  await addBotAsAdmin();
+  await deliver({
+    message_reaction: {
+      chat: chat(),
+      user: { id: 880033, first_name: 'Ольга' },
+      message_id: 555,
+      date: Math.floor(Date.now() / 1000),
+      old_reaction: [],
+      new_reaction: [{ type: 'emoji', emoji: '👍' }],
+    },
+  });
+  const stored = bot.userById('880033');
+  assert.ok(!stored || String(stored.chatId) !== GROUP, 'реакция в группе не заводит клиента на группу');
+});
+
+test('нажатие кнопки в группе только подтверждается, без записи клиента', async () => {
+  await addBotAsAdmin();
+  const before = telegram.calls.length;
+  await deliver({
+    callback_query: {
+      id: 'cb-group-1',
+      from: { id: 880044, first_name: 'Пётр' },
+      data: 'catalog:all:0',
+      message: { message_id: 777, date: Math.floor(Date.now() / 1000), chat: chat(), text: '' },
+    },
+  });
+  const calls = telegram.calls.slice(before);
+  assert.ok(calls.some((call) => call.method === 'answerCallbackQuery'), 'нажатие подтверждается');
+  assert.deepEqual(calls.filter((call) => ['sendMessage', 'sendPhoto'].includes(call.method)), [], 'каталог в группу не уходит');
+  const stored = bot.userById('880044');
+  assert.ok(!stored || String(stored.chatId) !== GROUP);
+});
+
+test('группа, назначенная чатом администратора, продолжает отвечать на команды', async () => {
+  await addBotAsAdmin();
+  bot.getData().config.adminChatId = GROUP;
+  const before = telegram.calls.length;
+  await deliver({ message: { message_id: 8300, date: Math.floor(Date.now() / 1000), from: { id: 42, first_name: 'Олег' }, chat: chat(), text: '/stats' } });
+  const answers = telegram.calls.slice(before).filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === GROUP);
+  assert.equal(answers.length, 1, 'в админ-группе команда работает');
+  assert.match(answers[0].body.text, /Сегодня/);
+});
