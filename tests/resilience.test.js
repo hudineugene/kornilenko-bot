@@ -25,7 +25,7 @@ test.after(() => {
 
 test.describe('self-check', () => {
   test('a ready bot passes every check', () => {
-    bot.runtime.status = 'polling';
+    bot.runtime.status = 'online';
     const report = bot.runSelfCheck();
     assert.equal(checkOf(report, 'token').status, 'ok');
     assert.equal(checkOf(report, 'admin').status, 'ok');

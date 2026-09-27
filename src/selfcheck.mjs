@@ -75,8 +75,11 @@ function catalogReport() {
   return { active: active.length, visible: visible.length, visibleRu: visibleRu.length };
 }
 
+// Здоровое состояние опроса Telegram называется online (см. telegram.mjs).
+const ONLINE = 'online';
+
 function connectionDetail() {
-  if (runtime.status === 'polling') return 'связь с Telegram есть';
+  if (runtime.status === ONLINE) return 'связь с Telegram есть';
   if (runtime.status === 'stopped') return data.config.active ? 'подключение ещё не начиналось' : 'бот выключен в настройках';
   const failures = Number(runtime.consecutiveFailures) || 0;
   return 'связь: ' + runtime.status + (failures ? ', неудачных попыток подряд: ' + failures : '')
@@ -93,7 +96,7 @@ function runSelfCheck(now = new Date()) {
   if (!token) add('token', 'Токен бота', 'bad', 'не задан', 'Настройки → Подключение');
   else if (!TOKEN_SHAPE.test(token)) add('token', 'Токен бота', 'bad', 'формат не похож на токен BotFather', 'Настройки → Подключение');
   else if (!data.config.active) add('token', 'Токен бота', 'warn', 'задан, но бот выключен в настройках', 'Настройки → Подключение');
-  else if (runtime.status === 'polling') add('token', 'Токен бота', 'ok', 'принят Telegram, ' + connectionDetail());
+  else if (runtime.status === ONLINE) add('token', 'Токен бота', 'ok', 'принят Telegram, связь есть');
   // Несколько неудачных попыток подряд — бот не работает, а не «подключается».
   else if (runtime.status === 'error' || Number(runtime.consecutiveFailures) >= 3) add('token', 'Токен бота', 'bad', connectionDetail(), 'Настройки → Подключение');
   else add('token', 'Токен бота', 'warn', connectionDetail(), 'Настройки → Подключение');
