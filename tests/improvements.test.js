@@ -995,15 +995,37 @@ test.describe('access from the internet', () => {
     assert.equal(bot.hostAllowed({ headers: { host: 'quiet-river-1234.trycloudflare.com' } }), false, 'not after it is stopped');
   });
 
+  // Доступ из интернета и туннель — по текущему паролю: украденной сессии
+  // мало, чтобы подставить свой туннель и открыть дорогу в домашнюю сеть.
+  const withPassword = (password = 'correct-password') => ({ 'x-current-password': Buffer.from(password).toString('base64') });
+
   test('turning the access on requires a verified admin chat', async () => {
     const login = await local('POST', '/api/login', { body: { password: 'correct-password' } });
     const cookie = String(login.headers['set-cookie']).split(';')[0];
     bot.getData().config.adminNotificationVerifiedAt = '';
-    const refused = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, body: { enabled: true } });
+    const refused = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, headers: withPassword(), body: { enabled: true } });
     assert.equal(refused.status, 400);
     assert.equal(bot.getData().config.remoteAccess, false);
-    const off = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, body: { enabled: false } });
+    const off = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, headers: withPassword(), body: { enabled: false } });
     assert.equal(off.status, 200);
+  });
+
+  test('доступ из интернета и туннель меняются только по текущему паролю', async () => {
+    const login = await local('POST', '/api/login', { body: { password: 'correct-password' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    const token = 'eyJhIjoiOTk5IiwidCI6Ijg4OCIsInMiOiJjaHV6aG9qLXR1bm5lbC12YWx1ZS10ZXN0In0=';
+
+    const noPassword = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, body: { enabled: false, tunnelToken: token } });
+    assert.equal(noPassword.status, 403, 'без пароля туннель не подменить');
+    assert.notEqual(bot.getData().config.tunnelToken, token);
+
+    const wrongPassword = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, headers: withPassword('не тот пароль'), body: { enabled: false, tunnelToken: token } });
+    assert.equal(wrongPassword.status, 403);
+    assert.notEqual(bot.getData().config.tunnelToken, token);
+
+    const ok = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, headers: withPassword(), body: { enabled: false, tunnelToken: token } });
+    assert.equal(ok.status, 200, 'с паролем — можно');
+    assert.equal(bot.getData().config.tunnelToken, token);
   });
 
   test('cloudflared URLs are read from its log lines', () => {
@@ -1056,9 +1078,9 @@ test.describe('access from the internet', () => {
     const login = await local('POST', '/api/login', { body: { password: 'correct-password' } });
     const cookie = String(login.headers['set-cookie']).split(';')[0];
     const token = 'eyJhIjoiMTIzIiwidCI6IjQ1NiIsInMiOiJzZWNyZXQtdmFsdWUtZm9yLXRlc3RzIn0=';
-    const bad = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, body: { enabled: false, tunnelHostname: 'not a host' } });
+    const bad = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, headers: withPassword(), body: { enabled: false, tunnelHostname: 'not a host' } });
     assert.equal(bad.status, 400);
-    const saved = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, body: { enabled: false, tunnelHostname: 'https://Panel.Example.com/', tunnelToken: token } });
+    const saved = await local('PUT', '/api/remote-access', { cookie, csrf: login.json.csrf, headers: withPassword(), body: { enabled: false, tunnelHostname: 'https://Panel.Example.com/', tunnelToken: token } });
     assert.equal(saved.status, 200);
     assert.equal(bot.getData().config.tunnelHostname, 'panel.example.com');
     const state = await local('GET', '/api/state', { cookie });

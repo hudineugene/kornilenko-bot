@@ -253,3 +253,12 @@ test('действия, которые видят клиенты, спрашив
   assert.ok(toggle, 'обработчик переключателя найден');
   assert.match(toggle[1], /!toggle\.checked &&/, 'спрашиваем только при выключении');
 });
+
+test('панель просит пароль перед изменением доступа из интернета', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const handler = PANEL_HTML.match(/#saveRemote"\)\.onclick = async function \(\) \{([\s\S]*?)\n  \};/);
+  assert.ok(handler, 'обработчик кнопки найден');
+  assert.match(handler[1], /askPassword\(/, 'спрашивается текущий пароль');
+  assert.match(handler[1], /x-current-password/, 'и уходит на сервер заголовком');
+  assert.match(handler[1], /Открыть панель из интернета\?/, 'включение доступа подтверждается отдельно');
+});

@@ -467,11 +467,26 @@ function renderAccess(host) {
     } catch (error) { fail(error); }
   };
   host.querySelector("#saveRemote").onclick = async function () {
+    var on = host.querySelector("#remoteOn").checked;
+    if (on && !(await confirmDialog(
+      "Открыть панель из интернета?",
+      "Панель станет доступна по адресу туннеля. Вход защищён паролем и кодом из Telegram, но лучше включать это только когда нужно.",
+      "Открыть",
+      true
+    ))) return;
+    // Тот же порядок, что у восстановления копии: сначала пароль, потом
+    // действие. Чужой туннель — это дорога в домашнюю сеть.
+    var password = await askPassword("Доступ из интернета", "Чтобы изменить доступ и туннель, введите текущий пароль панели.");
+    if (!password) return;
     try {
-      await send("/api/remote-access", "PUT", {
-        enabled: host.querySelector("#remoteOn").checked,
-        tunnelHostname: host.querySelector("#tunnelHost").value,
-        tunnelToken: host.querySelector("#tunnelToken").value,
+      await api("/api/remote-access", {
+        method: "PUT",
+        headers: { "x-current-password": btoa(unescape(encodeURIComponent(password))) },
+        body: JSON.stringify({
+          enabled: on,
+          tunnelHostname: host.querySelector("#tunnelHost").value,
+          tunnelToken: host.querySelector("#tunnelToken").value,
+        }),
       });
       toast("Сохранено"); await reload();
     } catch (error) { fail(error); }

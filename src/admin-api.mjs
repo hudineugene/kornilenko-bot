@@ -174,6 +174,14 @@ async function handleApi(req, res, url) {
     if (!session) return;
     const body = await readJson(req);
     const enabled = body.enabled === true;
+    // Включение доступа из интернета и подмена туннеля — самое опасное, что
+    // можно сделать из панели: чужой туннель открывает путь с этого
+    // компьютера в домашнюю сеть. Одной открытой (или украденной) сессии для
+    // этого мало — просим текущий пароль, как у восстановления копии.
+    const changesTunnel = body.tunnelHostname != null || body.tunnelToken != null;
+    if (enabled || changesTunnel || data.config.remoteAccess) {
+      if (!passwordAccepted(req, res, headerPassword(req))) return;
+    }
     if (body.tunnelHostname != null) {
       const hostname = cleanText(body.tunnelHostname, 253).toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
       if (hostname && !/^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(hostname)) {
