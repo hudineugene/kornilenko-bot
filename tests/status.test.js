@@ -17,8 +17,11 @@ test.after(cleanup);
 test('the stop message says why the bot stopped', () => {
   const at = new Date(2026, 8, 18, 14, 19);
   assert.match(bot.stopNoticeText('SIGINT', at), /^🔴 Бот остановлен в (\d\d\.\d\d )?14:19: нажали Ctrl\+C в окне бота\./);
-  assert.match(bot.stopNoticeText('SIGHUP', at), /закрыли окно бота/);
-  assert.match(bot.stopNoticeText('SIGTERM', at), /выключение Windows/);
+  // Windows шлёт один сигнал и на закрытие окна, и на выключение компьютера:
+  // различить их нельзя, поэтому в причине названо и то, и другое.
+  assert.match(bot.stopNoticeText('SIGHUP', at), /закрыли окно бота или выключили компьютер/);
+  assert.match(bot.stopNoticeText('SIGBREAK', at), /Ctrl\+Break/);
+  assert.match(bot.stopNoticeText('SIGTERM', at), /диспетчер задач/);
   assert.match(bot.stopNoticeText('SIGINT', at), /Клиенты не получат ответов, пока бот не запущен снова/);
 });
 

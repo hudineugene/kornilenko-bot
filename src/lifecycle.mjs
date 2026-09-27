@@ -162,11 +162,11 @@ function reportSelfCheck() {
 
 let shuttingDown = false;
 
-// Closing the console window (SIGHUP on Windows) gives the process about ten
-// seconds: enough to save, and to tell the admin that the bot is no longer
-// running, since nobody may notice otherwise. Ctrl+C and a system shutdown
-// are reported the same way.
-const WINDOW_CLOSED_NOTICE_TIMEOUT_MS = 4000;
+// Закрытие окна, выход из учётной записи и выключение Windows приходят как
+// SIGHUP, и времени у процесса немного: система ждёт несколько секунд и гасит
+// его принудительно. Поэтому данные сохраняются первым делом, а на сообщение
+// администратору отводится короткий срок — не успело уйти, значит не успело.
+const WINDOW_CLOSED_NOTICE_TIMEOUT_MS = 2500;
 
 function shutdown(signal) {
   if (shuttingDown) return;
@@ -264,6 +264,22 @@ function start() {
   process.on('SIGINT', shutdown);
   process.on('SIGHUP', shutdown);
   process.on('SIGTERM', shutdown);
+  // Ctrl+Break в окне бота: без этого обработчика окно просто гасло.
+  process.on('SIGBREAK', shutdown);
+  // Последняя попытка сохранить данные, если выход произошёл другим путём:
+  // необработанная ошибка, process.exit из другого места, закрытие потока.
+  process.on('exit', () => {
+    if (shuttingDown) return;
+    try {
+      clearTimeout(saveTimer);
+      saveDataNow();
+      rememberShutdown('');
+      saveDataNow();
+      clearRunMarker();
+    } catch {
+      // Выход уже идёт — сделать больше нечего.
+    }
+  });
   // The app usually runs without a supervisor that would restart it, so it
   // keeps running: the error is shown in the panel and the Telegram
   // connection, the part most likely left in a broken state, is restarted.
