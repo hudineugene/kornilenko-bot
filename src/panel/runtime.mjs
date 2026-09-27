@@ -55,11 +55,17 @@ const PANEL_SHELL = String.raw`
 </div>
 <div id="toast" class="toast hidden"></div>
 <div id="savebar" class="savebar hidden"><span class="grow" id="savebarText">Есть несохранённые изменения</span><button class="btn secondary" id="savebarReset" type="button">Отменить</button><button class="btn" id="savebarSave" type="button">Сохранить</button></div>
+<div id="refreshHint" class="refresh-hint hidden"><span class="grow">Появились новые данные</span><button class="btn secondary" id="refreshHintApply" type="button">Обновить экран</button></div>
 `;
 
 const PANEL_RUNTIME_JS = String.raw`
 var state = null, csrf = "", currentView = "overview", currentTab = "", dirtyForm = null, refreshTimer = 0, loginChallenge = "";
 var currentRouteHash = "", allowNextRoute = false, routePromptOpen = false;
+// stateVersion — отпечаток данных с сервера: если он не изменился, экран не
+// перерисовываем. pageTouched — пользователь что-то ввёл на текущем экране,
+// значит перерисовка стёрла бы его черновик. pendingRefresh — данные обновились,
+// но экран оставлен как есть, и это видно по полоске.
+var stateVersion = "", pageTouched = false, pendingRefresh = false;
 var VIEWS = {};
 
 function el(id) { return document.getElementById(id); }
@@ -288,10 +294,46 @@ async function saveDirty() {
 async function reload(render) {
   state = await api("/api/state");
   csrf = state.csrf;
+  stateVersion = state.stateVersion || "";
+  hideRefreshHint();
   renderNav();
   renderBotState();
   renderNotificationBell();
   if (render !== false) renderView();
+}
+
+// Пользователь печатает или уже что-то ввёл на этом экране: перерисовка стёрла
+// бы черновик ответа, пост в канал или заметку по обращению.
+function pageBusy() {
+  if (pageTouched) return true;
+  var focused = document.activeElement;
+  if (!focused || !el("page").contains(focused)) return false;
+  return ["INPUT", "TEXTAREA", "SELECT"].indexOf(focused.tagName) >= 0 || focused.isContentEditable;
+}
+
+function showRefreshHint() {
+  pendingRefresh = true;
+  el("refreshHint").classList.remove("hidden");
+}
+
+function hideRefreshHint() {
+  pendingRefresh = false;
+  el("refreshHint").classList.add("hidden");
+}
+
+// Обновление по таймеру: сначала спрашиваем сервер, изменилось ли хоть что-то.
+async function refresh() {
+  var body = await api("/api/state?since=" + encodeURIComponent(stateVersion));
+  if (body && body.unchanged) return;
+  state = body;
+  csrf = state.csrf;
+  stateVersion = state.stateVersion || "";
+  renderNav();
+  renderBotState();
+  renderNotificationBell();
+  if (pageBusy()) return showRefreshHint();
+  hideRefreshHint();
+  renderView({ keepScroll: true });
 }
 
 function navItems() {
@@ -406,8 +448,9 @@ async function handleHashChange() {
   location.hash = requestedHash;
 }
 
-function renderView() {
+function renderView(options) {
   if (!state) return;
+  pageTouched = false;
   var item = navItems().find(function (entry) { return entry.id === currentView; });
   var view = VIEWS[currentView];
   if (!view) return;
@@ -423,7 +466,9 @@ function renderView() {
     button.onclick = function () { go(currentView, button.dataset.tab); };
   });
   view.render(el("viewBody"), currentTab);
-  window.scrollTo({ top: 0 });
+  // Наверх прокручиваем только при переходе: обновление по таймеру не должно
+  // выдёргивать страницу из-под рук.
+  if (!(options && options.keepScroll)) window.scrollTo({ top: 0 });
 }
 
 function pageAction(label, handler, kind) {
@@ -460,7 +505,7 @@ async function startApp() {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(function () {
     if (document.hidden || isDirty() || document.querySelector("dialog[open]")) return;
-    reload().catch(function () {});
+    refresh().catch(function () {});
   }, 45000);
 }
 
@@ -482,6 +527,12 @@ function bindShell() {
   el("logoutBtn").onclick = async function () {
     await api("/api/logout", { method: "POST" }).catch(function () {});
     location.reload();
+  };
+  // Ввод на экране запоминается: пока он есть, автообновление экран не трогает.
+  el("page").addEventListener("input", function () { pageTouched = true; });
+  el("refreshHintApply").onclick = function () {
+    hideRefreshHint();
+    renderView({ keepScroll: true });
   };
   el("savebarSave").onclick = saveDirty;
   el("savebarReset").onclick = function () { clearDirty(); renderView(); };

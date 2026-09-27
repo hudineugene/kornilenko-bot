@@ -49,7 +49,7 @@ test('внутренняя навигация защищает несохран�
   assert.match(PANEL_HTML, /async function confirmPageLeave\(\)/);
   assert.match(PANEL_HTML, /async function handleHashChange\(\)/);
   assert.match(PANEL_HTML, /Перейти без сохранения\?/);
-  const renderView = PANEL_HTML.match(/function renderView\(\) \{([\s\S]*?)\n\}/);
+  const renderView = PANEL_HTML.match(/function renderView\(options\) \{([\s\S]*?)\n\}/);
   assert.ok(renderView, 'функция отрисовки страницы не найдена');
   assert.doesNotMatch(renderView[1], /clearDirty\(\)/, 'обычная перерисовка не должна молча сбрасывать черновик');
 });

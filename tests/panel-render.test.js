@@ -72,6 +72,16 @@ function fakeDocument() {
   const body = fakeElement('body');
   const byId = new Map();
   const bySelector = new Map();
+  // Открытые диалоги считаем по-настоящему: панель спрашивает
+  // document.querySelector('dialog[open]') перед обновлением экрана.
+  const openDialogs = new Set();
+  const makeDialog = () => {
+    const dialog = fakeElement('dialog');
+    dialog.showModal = () => { dialog.open = true; openDialogs.add(dialog); };
+    dialog.close = () => { dialog.open = false; openDialogs.delete(dialog); };
+    dialog.remove = () => { openDialogs.delete(dialog); };
+    return dialog;
+  };
   return {
     body,
     documentElement: fakeElement('html'),
@@ -82,11 +92,13 @@ function fakeDocument() {
       return byId.get(String(id));
     },
     querySelector: (selector) => {
-      if (!bySelector.has(String(selector))) bySelector.set(String(selector), fakeElement());
-      return bySelector.get(String(selector));
+      const key = String(selector);
+      if (key === 'dialog[open]') return openDialogs.size ? Array.from(openDialogs)[0] : null;
+      if (!bySelector.has(key)) bySelector.set(key, fakeElement());
+      return bySelector.get(key);
     },
     querySelectorAll: () => [],
-    createElement: (tag) => fakeElement(tag),
+    createElement: (tag) => (String(tag).toLowerCase() === 'dialog' ? makeDialog() : fakeElement(tag)),
     createDocumentFragment: () => fakeElement('fragment'),
     createTextNode: () => fakeElement('text'),
     addEventListener() {}, removeEventListener() {},
@@ -117,7 +129,11 @@ function fakeFetch(state, texts, requests = []) {
       headers: { get: () => '' },
     });
     if (path.includes('/api/status')) return answer({ configured: true, botName: 'Test' });
-    if (path.includes('/api/state')) return answer(state);
+    if (path.includes('/api/state')) {
+      const since = (path.split('since=')[1] || '').split('&')[0];
+      if (since && since === state.stateVersion) return answer({ unchanged: true, stateVersion: state.stateVersion });
+      return answer(state);
+    }
     if (path.includes('/api/interface-text')) return answer({ interfaceText: texts });
     if (path.includes('/api/autostart')) return answer({ supported: false, enabled: false });
     return answer({ ok: true });
@@ -131,6 +147,8 @@ async function panelSandbox() {
   const script = PANEL_HTML.match(/<script[^>]*>([\s\S]*?)<\/script>/)[1];
 
   const state = safeState({ csrf: 'test-csrf' });
+  // Отпечаток данных: панель присылает его в ?since= и получает «не изменилось».
+  state.stateVersion = 'version-1';
   const texts = normalizedInterfaceText(bot.getData().interfaceText);
   const errors = [];
   const requests = [];
@@ -143,7 +161,12 @@ async function panelSandbox() {
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     navigator: { userAgent: 'test', clipboard: { writeText: async () => {} } },
     fetch: fakeFetch(state, texts, requests),
-    setTimeout, clearTimeout, setInterval: () => 0, clearInterval,
+    setTimeout,
+    clearTimeout,
+    // Запоминаем повторяющиеся таймеры: тест сам вызывает их, как это сделал бы
+    // браузер через 45 секунд.
+    setInterval: (fn, ms) => { sandbox.__timers.push({ fn, ms }); return sandbox.__timers.length; },
+    clearInterval,
     requestAnimationFrame: (fn) => setTimeout(fn, 0),
     Intl, URL, URLSearchParams, Blob, FormData, Promise, JSON, Math, Date, Number, String, Boolean, Array, Object, RegExp, Error, Map, Set, isNaN, isFinite, parseInt, parseFloat, encodeURIComponent, decodeURIComponent, btoa, atob,
     // Браузерные escape/unescape работают с процентными последовательностями
@@ -154,9 +177,11 @@ async function panelSandbox() {
     alert() {}, confirm: () => true, prompt: () => '',
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     addEventListener() {}, removeEventListener() {}, dispatchEvent: () => true,
-    scrollTo() {}, open: () => null, print() {},
+    scrollTo(...args) { sandbox.__scrolls.push(args); }, open: () => null, print() {},
     innerWidth: 1280, innerHeight: 800,
   };
+  sandbox.__scrolls = [];
+  sandbox.__timers = [];
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
   const context = vm.createContext(sandbox);
@@ -346,5 +371,70 @@ test.describe('восстановление копии из панели', () =>
     for (const kind of ['.json', '.gz', '.kbk']) {
       assert.ok(accept[1].includes(kind), 'в выборе файла нет ' + kind);
     }
+  });
+});
+
+test.describe('автообновление панели раз в 45 секунд', () => {
+  // Панель ставит таймер на 45 секунд; берём именно его, чтобы проверять то,
+  // что происходит в работе, а не отдельную функцию.
+  function tick(sandbox) {
+    const timer = sandbox.__timers.find((entry) => entry.ms === 45000);
+    assert.ok(timer, 'таймер обновления поставлен');
+    return timer.fn();
+  }
+
+  async function screen(view) {
+    resetData((data) => { data.config.active = true; });
+    const ready = await panelSandbox();
+    ready.sandbox.currentView = view;
+    ready.sandbox.renderView();
+    const page = ready.sandbox.document.getElementById('page');
+    page.innerHTML = 'ЧЕРНОВИК НА ЭКРАНЕ';
+    ready.requests.length = 0;
+    ready.sandbox.__scrolls.length = 0;
+    return { ...ready, page };
+  }
+
+  test('когда ничего не изменилось, экран не перерисовывается', async () => {
+    const { sandbox, requests, page } = await screen('settings');
+    sandbox.stateVersion = 'version-1';
+
+    await tick(sandbox);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const asked = requests.find((request) => request.url.includes('/api/state'));
+    assert.ok(asked, 'панель спросила сервер');
+    assert.match(asked.url, /since=version-1/, 'спрашивает с отпечатком данных');
+    assert.equal(page.innerHTML, 'ЧЕРНОВИК НА ЭКРАНЕ', 'страница не перерисована');
+    assert.deepEqual(sandbox.__scrolls, [], 'и не прокручена наверх');
+  });
+
+  test('введённый текст не стирается обновлением, а о новых данных сообщается', async () => {
+    const { sandbox, page } = await screen('inquiries');
+    sandbox.stateVersion = 'старая-версия';
+    sandbox.pageTouched = true;
+
+    await tick(sandbox);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(page.innerHTML, 'ЧЕРНОВИК НА ЭКРАНЕ', 'черновик на месте');
+    assert.equal(sandbox.document.getElementById('refreshHint').classList.contains('hidden'), false, 'видна полоска «появились новые данные»');
+  });
+
+  test('когда данные изменились и никто не печатает, экран обновляется без прыжка наверх', async () => {
+    const { sandbox, page } = await screen('overview');
+    sandbox.stateVersion = 'старая-версия';
+    sandbox.pageTouched = false;
+
+    await tick(sandbox);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.notEqual(page.innerHTML, 'ЧЕРНОВИК НА ЭКРАНЕ', 'экран обновился');
+    assert.deepEqual(sandbox.__scrolls, [], 'без прокрутки наверх');
+  });
+
+  test('переход между разделами прокручивает наверх, как и раньше', async () => {
+    const { sandbox } = await screen('overview');
+    sandbox.__scrolls.length = 0;
+    sandbox.renderView();
+    assert.equal(sandbox.__scrolls.length, 1, 'при обычной отрисовке страница прокручивается наверх');
   });
 });
