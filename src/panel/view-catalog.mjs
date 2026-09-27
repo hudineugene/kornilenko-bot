@@ -300,7 +300,7 @@ function openRecordEditor(kind, id) {
         return input ? String(input.value || "").trim() : "";
       }
       function interfaceCopy(group, language) {
-        return (((state.interfaceText || {})[group] || {})[language] || {});
+        return ((interfaceTexts()[group] || {})[language] || {});
       }
       function editorPublicationIssues(language) {
         if (!isObject) return [];
@@ -341,11 +341,13 @@ function openRecordEditor(kind, id) {
           marker.classList.toggle("hidden", !required);
         });
       }
+      function metreShort(language) {
+        return language === "ru" ? "м" : "m";
+      }
       function pricePreview(language, actions) {
         var amount = Number(value("fPrice"));
         if (Number.isFinite(amount) && amount > 0) {
           var locale = language === "en" ? "en-US" : language === "es" ? "es-ES" : "ru-RU";
-          var metre = language === "ru" ? "м" : "m";
           var currency = value("fCurrency") || "EUR";
           var symbols = { EUR: "€", USD: "$", GBP: "£" };
           var period = value("fPeriod") === "month" ? actions.priceMonth : value("fPeriod") === "week" ? actions.priceWeek : "";
@@ -373,6 +375,7 @@ function openRecordEditor(kind, id) {
           var dealText = value("fDeal") === "rent" ? actions.forRent : actions.forSale;
           var city = translatedValue("city", language), district = translatedValue("district", language);
           var locale = language === "en" ? "en-US" : language === "es" ? "es-ES" : "ru-RU";
+          var metre = metreShort(language);
           function factNumber(field) {
             var raw = value(field);
             var number = Number(raw);
@@ -486,6 +489,9 @@ function openRecordEditor(kind, id) {
       dialog.addEventListener("change", renderPublicationCheck);
       renderRecordPreview();
       renderPublicationCheck();
+      // Предпросмотр говорит теми же словами, что бот: тексты интерфейса
+      // грузятся отдельно, поэтому обновляем его, когда они приедут.
+      loadInterfaceText().then(renderRecordPreview).catch(function () {});
       dialog.querySelector("#saveRecord").onclick = async function () {
         if (isObject && ["active", "reserved"].indexOf(value("fStatus")) >= 0) {
           var incomplete = LANGUAGES.map(function (language) { return { language: language[0], issues: editorPublicationIssues(language[0]) }; }).filter(function (entry) { return entry.issues.length; });

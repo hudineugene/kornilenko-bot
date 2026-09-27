@@ -10,7 +10,6 @@ import { cleanText } from './util.mjs';
 import { normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { decryptBackup, isEncryptedBackup } from './offsite.mjs';
 import { imageBytes, imageExists } from './media.mjs';
-import { normalizedInterfaceText } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { publicRuntime } from './menus.mjs';
 import { propertyPublicationReadiness, recordImages } from './catalog.mjs';
@@ -187,18 +186,41 @@ function json(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-// The panel has a single inline <script>; a per-response nonce lets only that
-// script run, so an injected <script> or event handler would be blocked even
-// if some value were rendered without escaping.
-function html(res, content) {
+// Страница панели одна и та же до следующей сборки, поэтому отдаём её с
+// отпечатком (ETag): браузер спрашивает «не изменилось ли», получает 304 и не
+// качает 340 КБ заново. Разрешение на встроенный скрипт — по его хешу, а не по
+// одноразовому номеру: иначе страница была бы разной при каждой загрузке.
+const pageCache = new Map();
+
+function pageMeta(content) {
+  const cached = pageCache.get(content);
+  if (cached) return cached;
+  const scripts = Array.from(String(content).matchAll(/<script>([\s\S]*?)<\/script>/g), (match) => match[1]);
+  const hashes = scripts.map((code) => "'sha256-" + crypto.createHash('sha256').update(code, 'utf8').digest('base64') + "'");
+  const body = Buffer.from(content, 'utf8');
+  const meta = {
+    body,
+    etag: '"' + crypto.createHash('sha256').update(body).digest('hex').slice(0, 32) + '"',
+    csp: "default-src 'self'; script-src " + (hashes.join(' ') || "'none'")
+      + "; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+  };
+  pageCache.set(content, meta);
+  return meta;
+}
+
+function html(res, content, req = null) {
+  const meta = pageMeta(content);
   securityHeaders(res);
-  const nonce = crypto.randomBytes(16).toString('base64');
-  res.setHeader(
-    'content-security-policy',
-    "default-src 'self'; script-src 'nonce-" + nonce + "'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
-  );
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  res.end(content.replaceAll('<script>', '<script nonce="' + nonce + '">'));
+  res.setHeader('content-security-policy', meta.csp);
+  res.setHeader('etag', meta.etag);
+  // no-cache — не «не кешировать», а «спроси перед использованием».
+  res.setHeader('cache-control', 'no-cache');
+  if (req && req.headers['if-none-match'] === meta.etag) {
+    res.writeHead(304);
+    return res.end();
+  }
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': meta.body.length });
+  return res.end(meta.body);
 }
 
 function binaryImage(res, image) {
@@ -384,18 +406,23 @@ function imageMeta(image) {
   } : { exists: false };
 }
 
+// В списках панели от фотографии нужен только её номер: миниатюру она берёт по
+// адресу /api/media/..., а имя файла и размер там не показываются.
+function imageRef(image) {
+  return imageExists(image) ? { exists: true, id: image.id || '' } : { exists: false };
+}
+
 function publicRecord(record, collection) {
   const { image, images, imagesByLanguage, ...publicFields } = record;
   if (collection === 'objects' || collection === 'promotions') {
     const publicImagesByLanguage = Object.fromEntries(['ru', 'en', 'es'].map((language) => [
       language,
-      recordImages(record, language).map(imageMeta),
+      recordImages(record, language).map(imageRef),
     ]));
     const cover = recordImages(record)[0];
     return {
       ...publicFields,
       image: imageMeta(cover),
-      images: publicImagesByLanguage.ru,
       imagesByLanguage: publicImagesByLanguage,
       publicationIssues: collection === 'objects' ? propertyPublicationReadiness(record) : undefined,
       collection,
@@ -491,7 +518,6 @@ function safeState(session) {
     objects: data.objects.map((record) => publicRecord(record, 'objects')),
     promotions: data.promotions.map((record) => publicRecord(record, 'promotions')),
     contacts: data.contacts,
-    interfaceText: normalizedInterfaceText(data.interfaceText),
     errors: data.errors,
     notifications,
     notificationUnreadCount: notifications.filter((item) => item.active && !item.readAt && !item.handledAt).length,

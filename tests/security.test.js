@@ -292,14 +292,27 @@ test.describe('admin API', () => {
     });
   }
 
-  test('the panel page runs only its own nonce-tagged script', async () => {
+  test('the panel page allows only its own script, by hash', async () => {
+    const crypto = require('node:crypto');
     const response = await fetchLocal('/');
     const policy = response.headers.get('content-security-policy');
-    const nonce = policy.match(/script-src 'nonce-([^']+)'/)[1];
     assert.ok(!/script-src[^;]*unsafe-inline/.test(policy));
+    assert.ok(!/script-src[^;]*unsafe-hashes/.test(policy));
+    const hash = policy.match(/script-src 'sha256-([^']+)'/)[1];
     const page = await response.text();
-    assert.ok(page.includes('<script nonce="' + nonce + '">'));
-    assert.ok(!page.includes('<script>'));
+    const script = page.match(/<script>([\s\S]*?)<\/script>/)[1];
+    assert.equal(crypto.createHash('sha256').update(script, 'utf8').digest('base64'), hash, 'разрешён ровно тот скрипт, который в странице');
+    assert.ok(!/\son[a-z]+="/.test(page), 'в разметке нет встроенных обработчиков событий');
+  });
+
+  test('the panel page is not downloaded again while it has not changed', async () => {
+    const first = await fetchLocal('/');
+    const etag = first.headers.get('etag');
+    assert.ok(etag, 'страница отдаётся с отпечатком');
+    assert.equal(first.headers.get('cache-control'), 'no-cache');
+    const again = await fetchLocal('/', { headers: { 'if-none-match': etag } });
+    assert.equal(again.status, 304);
+    assert.equal((await again.text()).length, 0, 'тело второй раз не приходит');
   });
 
   test('unauthenticated login bodies are capped', async () => {

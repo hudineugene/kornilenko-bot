@@ -251,8 +251,15 @@ var INTERFACE_GROUPS = [
   ["languageSelected", "После выбора языка"],
 ];
 
-function renderInterface(host) {
-  var texts = state.interfaceText || {};
+async function renderInterface(host) {
+  host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загружаю тексты…</p></div></div>';
+  var texts;
+  try {
+    texts = await loadInterfaceText();
+  } catch (error) {
+    host.innerHTML = '<div class="card"><div class="card-body"><div class="chip bad">' + esc(error.message) + "</div></div></div>";
+    return;
+  }
   host.innerHTML = '<div class="toolbar"><div class="search"><input id="textSearch" placeholder="Найти текст"></div>' +
       '<span class="small faint">Здесь меняются все подписи, которые видит клиент</span></div>' +
     '<div class="card" id="interfaceForm"><div class="card-body stack">' + languageTabs() + "</div>" +
@@ -298,7 +305,7 @@ function renderInterface(host) {
     });
   };
   watchForm(host, async function () {
-    var payload = JSON.parse(JSON.stringify(state.interfaceText));
+    var payload = JSON.parse(JSON.stringify(interfaceTexts()));
     host.querySelectorAll("[data-group][data-key]").forEach(function (input) {
       var group = input.dataset.group, key = input.dataset.key, language = input.dataset.lang;
       payload[group] = payload[group] || {};
@@ -306,6 +313,7 @@ function renderInterface(host) {
       payload[group][language][key] = input.dataset.list ? input.value.split("\n").map(function (line) { return line.trim(); }).filter(Boolean) : input.value;
     });
     await send("/api/interface-text", "PUT", { interfaceText: payload });
+    await loadInterfaceText(true);
   }, "Тексты интерфейса изменены");
 }
 

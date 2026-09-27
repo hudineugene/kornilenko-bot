@@ -120,6 +120,26 @@ function api(url, options) {
 }
 function send(url, method, payload) { return api(url, { method: method, body: JSON.stringify(payload || {}) }); }
 
+// Тексты интерфейса весят больше половины общего пакета, поэтому грузятся
+// один раз и только там, где нужны: экран «Тексты бота» и предпросмотр карточки.
+var interfaceTextCache = null;
+var interfaceTextLoading = null;
+function interfaceTexts() { return interfaceTextCache || {}; }
+function loadInterfaceText(force) {
+  if (interfaceTextCache && !force) return Promise.resolve(interfaceTextCache);
+  // Два экрана могут попросить тексты одновременно — запрос всё равно один.
+  if (interfaceTextLoading && !force) return interfaceTextLoading;
+  interfaceTextLoading = api("/api/interface-text").then(function (body) {
+    interfaceTextCache = body.interfaceText || {};
+    interfaceTextLoading = null;
+    return interfaceTextCache;
+  }, function (error) {
+    interfaceTextLoading = null;
+    throw error;
+  });
+  return interfaceTextLoading;
+}
+
 function toast(text, bad) {
   var box = el("toast");
   box.textContent = text;
