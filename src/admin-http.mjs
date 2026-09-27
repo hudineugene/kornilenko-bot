@@ -562,9 +562,16 @@ function inquiryUnread(inquiry) {
 }
 
 function safeState(session) {
+  // В панель уходит вся карточка клиента, кроме истории действий: из неё нужны
+  // только реакции для ленты в «Обзоре». Остальное — лишний вес в каждом
+  // обновлении экрана.
   const users = Object.values(data.users)
     .sort((a, b) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)))
-    .slice(0, 500);
+    .slice(0, 500)
+    .map((user) => ({
+      ...user,
+      activity: (Array.isArray(user.activity) ? user.activity : []).filter((item) => item && item.kind === 'reaction').slice(-10),
+    }));
   const unreadUsers = new Set(data.inquiries.filter(inquiryUnread).map((item) => String(item.userId)));
   const notifications = adminNotifications();
   return {

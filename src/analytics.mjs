@@ -56,6 +56,13 @@ function recordError(area, error) {
   scheduleSave();
 }
 
+// История действий клиента нужна для недавних сопоставлений (ответ менеджера,
+// реакция на сообщение) и ленты реакций в «Обзоре». Хранить её длинной незачем:
+// 50 записей по 500 знаков на клиента — это десятки мегабайт при тысячах
+// клиентов, и всё это ещё и уезжает в панель при каждом обновлении экрана.
+const ACTIVITY_KEPT = 20;
+const ACTIVITY_TEXT_LIMIT = 200;
+
 function recordActivity(user, direction, text, kind = 'message', metadata = {}) {
   if (!user) return null;
   user.activity = Array.isArray(user.activity) ? user.activity : [];
@@ -63,7 +70,7 @@ function recordActivity(user, direction, text, kind = 'message', metadata = {}) 
     id: crypto.randomUUID(),
     direction,
     kind,
-    text: cleanText(text, 500),
+    text: cleanText(text, ACTIVITY_TEXT_LIMIT),
     createdAt: new Date().toISOString(),
   };
   if (Number.isFinite(Number(metadata.messageId))) entry.messageId = Number(metadata.messageId);
@@ -76,13 +83,14 @@ function recordActivity(user, direction, text, kind = 'message', metadata = {}) 
   if (Number.isFinite(Number(metadata.targetMessageId))) entry.targetMessageId = Number(metadata.targetMessageId);
   if (Array.isArray(metadata.reactions)) entry.reactions = metadata.reactions.map((item) => cleanText(item, 80)).filter(Boolean).slice(0, 20);
   if (metadata.reactionAction) entry.reactionAction = cleanText(metadata.reactionAction, 20);
-  if (metadata.targetText) entry.targetText = cleanText(metadata.targetText, 500);
+  if (metadata.targetText) entry.targetText = cleanText(metadata.targetText, ACTIVITY_TEXT_LIMIT);
   user.activity.push(entry);
-  user.activity = user.activity.slice(-50);
+  user.activity = user.activity.slice(-ACTIVITY_KEPT);
   return entry;
 }
 
 export {
+  ACTIVITY_KEPT,
   propertyAnalytics,
   recordActivity,
   recordDaily,

@@ -253,7 +253,10 @@ function saveDataNow() {
   if (needsContentAddressing(data)) contentAddressImages(data);
   rotateDataBackup();
   const temporary = DATA_FILE + '.tmp';
-  const content = JSON.stringify(data, null, 2);
+  // Без отступов: на пяти клиентах это 20 % веса файла, на пяти тысячах —
+  // десятки мегабайт и заметная пауза на каждом сохранении. Файл читается
+  // программами, а не глазами.
+  const content = JSON.stringify(data);
   for (let attempt = 1; ; attempt += 1) {
     try {
       fs.writeFileSync(temporary, content, { encoding: 'utf8', mode: 0o600 });

@@ -861,7 +861,7 @@ function normalizeLoadedData(parsed) {
           createdAt: user.expiredAction.createdAt || new Date().toISOString(),
         } : null,
         pendingStartPayload: cleanText(user.pendingStartPayload, 100),
-        activity: Array.isArray(user.activity) ? user.activity.slice(-50) : [],
+        activity: Array.isArray(user.activity) ? user.activity.slice(-20) : [],
       };
     }
     const rules = Array.isArray(parsed.rules)
