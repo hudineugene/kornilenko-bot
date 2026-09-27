@@ -1,7 +1,7 @@
 // «Уведомления»: клиент сам выбирает, получать ли рассылки и уведомления об
 // объектах, и может отписаться от рассылки одной кнопкой под ней.
 
-import { NAVIGATION_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
+import { MENU_LABELS, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { scheduleSave } from './store.mjs';
 import { normalizeUser } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
@@ -19,7 +19,7 @@ function subscriptionPanel(user) {
     markup: { inline_keyboard: [
       [{ text: (newsOn ? '✅ ' : '⬜ ') + copy.news, callback_data: 'subs:news:' + (newsOn ? 'off' : 'on') }],
       [{ text: (alertsOn ? '✅ ' : '⬜ ') + copy.alerts, callback_data: 'subs:alerts:' + (alertsOn ? 'off' : 'on') }],
-      [{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }],
+      [{ text: '⬅️ ' + (MENU_LABELS[language] || MENU_LABELS.ru).more, callback_data: 'nav:my' }],
     ] },
   };
 }

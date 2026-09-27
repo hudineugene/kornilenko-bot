@@ -3,17 +3,19 @@
 import { cleanText, fillTemplate } from './util.mjs';
 import { defaultData } from './data-format.mjs';
 import { imageExists } from './media.mjs';
-import { EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LANGUAGE_SELECTED, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
+import { COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LANGUAGE_SELECTED, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
 import { sendMessage, sendPhotoAlbum, sendPhotoMessage, telegramRequest } from './telegram.mjs';
-import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendWelcome } from './menus.mjs';
+import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs';
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
-import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, contentButtons, deleteCatalogMessages, localizedExact, objectCaption, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { CATALOG_MODES, COMPARISON_LIMIT, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, contentButtons, deleteCatalogMessages, localizedExact, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
+import { similarPropertyRanking } from './similar.mjs';
 
 async function sendPromotionPage(chatId, user, token, page = 0) {
   const language = user.preferredLanguage || 'ru';
@@ -165,6 +167,7 @@ async function handleNavigationCallback(query, token) {
   const user = normalizeUser(query.from, chatId, false);
   await acknowledgeCallback(query, token);
   if (action === 'menu') return sendMainMenu(chatId, user, token);
+  if (action === 'my') return sendMoreMenu(chatId, user, token);
   if (action === 'about') return sendAbout(chatId, user, token);
   if (action === 'help') return sendHelp(chatId, user, token);
   if (action === 'language') return sendLanguagePicker(chatId, token, user.preferredLanguage || '');
@@ -231,6 +234,7 @@ async function handleLanguageCallback(query, token) {
     const copy = INTERACTION_TEXT[user.preferredLanguage] || INTERACTION_TEXT.ru;
     return acknowledgeCallback(query, token, copy.stale);
   }
+  translateCatalogFilterCity(user, language);
   user.preferredLanguage = language;
   user.pendingAction = null;
   user.expiredAction = null;
@@ -284,7 +288,15 @@ async function handleCatalogCallback(query, token) {
   if (!user.preferredLanguage) return sendLanguagePicker(chatId, token, '');
   void notifyAdministratorAction(
     user,
-    mode === 'favorites' ? 'Листает избранные объекты' : mode === 'matches' ? 'Листает объекты по своему подбору' : 'Листает каталог объектов',
+    mode === 'favorites'
+      ? 'Листает избранные объекты'
+      : mode === 'matches'
+        ? 'Листает объекты по своему подбору'
+        : mode === 'recent'
+          ? 'Просматривает недавно открытые объекты'
+          : mode === 'comparison'
+            ? 'Просматривает выбранные для сравнения объекты'
+          : 'Листает каталог объектов',
     'Страница: ' + (Math.max(0, Number(parts[2] || 0)) + 1)
   );
   await showCatalogPageFromCallback(chatId, user, token, Number(parts[2] || 0), mode, query.message);
@@ -301,7 +313,7 @@ function propertyRequestText(record, language, type) {
 function catalogContextFromMessage(message, language) {
   const source = String(message && (message.caption || message.text) || '');
   const position = source.match(/·\s*(\d+)\s*\/\s*(\d+)/);
-  const mode = ['favorites', 'matches'].find((candidate) => source.startsWith(catalogHeading(candidate, language))) || 'all';
+  const mode = ['favorites', 'matches', 'similar', 'recent', 'comparison'].find((candidate) => source.startsWith(catalogHeading(candidate, language))) || 'all';
   return {
     mode,
     page: Math.max(0, Number(position && position[1] || 1) - 1),
@@ -327,11 +339,11 @@ function propertyManagerMarkup(record, language, returnToCatalog = false) {
   const rows = [];
   if (record.status === 'reserved') {
     rows.push([{ text: '🔔 ' + text.availability, callback_data: 'property:availability:' + record.id }]);
-    rows.push([{ text: '🏘 ' + text.similar, callback_data: 'property:similar:' + record.id }]);
   } else {
     rows.push([{ text: '📞 ' + text.interest, callback_data: 'property:interest:' + record.id }]);
     rows.push([{ text: '📅 ' + text.viewing, callback_data: 'property:viewing:' + record.id }]);
   }
+  rows.push([{ text: '🏘 ' + text.similar, callback_data: 'property:similar:' + record.id }]);
   rows.push([{ text: '❓ ' + text.question, callback_data: 'property:question:' + record.id }]);
   const whatsapp = configuredWhatsappUrl();
   if (whatsapp) rows.push([{ text: '🟢 WhatsApp', url: whatsapp }]);
@@ -342,35 +354,21 @@ function propertyManagerMarkup(record, language, returnToCatalog = false) {
 async function sendSimilarProperty(chatId, user, record, token) {
   const language = user.preferredLanguage || 'ru';
   const candidates = data.objects.filter((item) => item.id !== record.id && item.status === 'active' && propertyReadyForLanguage(item, language));
-  const city = localizedExact(record.city, language, 160);
-  const district = localizedExact(record.district, language, 160);
-  const sourcePrice = Number(record.priceValue) || 0;
-  const sourceBedrooms = Number(record.bedrooms) || 0;
-  const sourceArea = Number(record.area) || 0;
-  const similar = candidates.map((item) => {
-    let score = 0;
-    if (item.dealType === record.dealType) score += 45;
-    if (item.propertyType === record.propertyType) score += 40;
-    if (city && localizedExact(item.city, language, 160).toLocaleLowerCase() === city.toLocaleLowerCase()) score += 35;
-    if (district && localizedExact(item.district, language, 160).toLocaleLowerCase() === district.toLocaleLowerCase()) score += 20;
-    const candidatePrice = Number(item.priceValue) || 0;
-    if (sourcePrice && candidatePrice) score += Math.max(0, 25 - Math.round(Math.abs(candidatePrice - sourcePrice) / sourcePrice * 50));
-    const candidateBedrooms = Number(item.bedrooms) || 0;
-    if (sourceBedrooms && candidateBedrooms) score += Math.max(0, 12 - Math.abs(candidateBedrooms - sourceBedrooms) * 5);
-    const candidateArea = Number(item.area) || 0;
-    if (sourceArea && candidateArea) score += Math.max(0, 10 - Math.round(Math.abs(candidateArea - sourceArea) / sourceArea * 20));
-    return { item, score };
-  }).sort((a, b) => b.score - a.score)[0]?.item;
-  if (!similar) {
+  const ranking = similarPropertyRanking(record, candidates, language);
+  user.similarPropertyIds = ranking.map((item) => item.id);
+  user.similarPropertyDetails = ranking.map(({ id, score, reasons, warnings }) => ({ id, score, reasons, warnings }));
+  user.similarPropertySourceId = record.id;
+  scheduleSave();
+  if (!ranking.length) {
     const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
-    await sendMessage(chatId, copy.noSimilar, token, { reply_markup: { inline_keyboard: [[{ text: (MENU_LABELS[language] || MENU_LABELS.ru).contacts, callback_data: 'contact:question' }]] } });
+    const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
+    await sendUiMessage(chatId, user, copy.noSimilar, token, { reply_markup: { inline_keyboard: [
+      [{ text: (MENU_LABELS[language] || MENU_LABELS.ru).contacts, callback_data: 'contact:question' }],
+      [{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:return:' + record.id }],
+    ] } });
     return;
   }
-  const heading = '🏘 ' + (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).similarHeading;
-  const allRecords = catalogRecords(user, 'all');
-  user.catalogContext = { mode: 'all', page: Math.max(0, allRecords.findIndex((item) => item.id === similar.id)) };
-  scheduleSave();
-  await sendPropertyCard(chatId, user, token, similar, { heading, page: 0, totalPages: 1, mode: 'all' });
+  await sendCatalogPage(chatId, user, token, 0, 'similar');
 }
 
 async function handlePropertyCallback(query, token) {
@@ -422,8 +420,20 @@ async function handlePropertyCallback(query, token) {
     await acknowledgeCallback(query, token);
     const mode = browsingMode(user, record);
     const records = catalogRecords(user, mode);
-    const page = Math.max(0, records.findIndex((item) => item.id === record.id));
-    await sendCatalogPage(chatId, user, token, page, mode);
+    const page = records.findIndex((item) => item.id === record.id);
+    if (page >= 0) {
+      await sendCatalogPage(chatId, user, token, page, mode);
+    } else {
+      user.catalogContext = { mode: 'all', page: 0, propertyId: record.id };
+      scheduleSave();
+      await sendPropertyCard(chatId, user, token, record, {
+        heading: '🏠 ' + text.propertyHeading,
+        page: 0,
+        totalPages: 1,
+        mode: 'all',
+        filter: null,
+      });
+    }
     if (query.message && query.message.message_id) {
       try { await telegramRequest(token, 'deleteMessage', { chat_id: chatId, message_id: query.message.message_id }); } catch {}
     }
@@ -452,10 +462,14 @@ async function handlePropertyCallback(query, token) {
     if (external) rows.push([{ text: '🌐 ' + text.viewWebsite, url: external }]);
     if (map) rows.push([{ text: '📍 ' + text.openMap, url: map }]);
     if (share) rows.push([{ text: '📤 ' + text.share, url: share }]);
+    rows.push([{ text: '🏘 ' + text.similar, callback_data: 'property:similar:' + record.id }]);
     rows.push([{ text: '💬 ' + text.contactManager, callback_data: 'property:manager:' + record.id }]);
-    rows.push([{ text: '✕ ' + navigation.close, callback_data: 'nav:close' }]);
+    rows.push([{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:return:' + record.id }]);
     await acknowledgeCallback(query, token);
-    await sendUiMessage(chatId, user, objectCaption(record, language, { full: true }), token, { reply_markup: { inline_keyboard: rows } });
+    await sendUiMessage(chatId, user, objectCaptionHtml(record, language, { full: true }), token, {
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: rows },
+    });
     return;
   }
   if (actionName === 'manager') {
@@ -499,6 +513,34 @@ async function handlePropertyCallback(query, token) {
     await sendSimilarProperty(chatId, user, record, token);
     return;
   }
+  if (actionName === 'compare') {
+    const comparison = COMPARISON_TEXT[language] || COMPARISON_TEXT.ru;
+    if (comparisonContains(user, record.id)) {
+      await acknowledgeCallback(query, token);
+      void notifyAdministratorAction(user, 'Открыл сравнение объектов', localizedExact(record.title, language) || record.reference || record.id);
+      await sendComparison(chatId, user, token);
+      return;
+    }
+    const result = addToComparison(user, record);
+    if (result.status === 'limit') {
+      await acknowledgeCallback(query, token, comparison.limit);
+      return;
+    }
+    void notifyAdministratorAction(user, 'Добавил объект к сравнению', localizedExact(record.title, language) || record.reference || record.id);
+    if (query.message && query.message.message_id) {
+      try {
+        await telegramRequest(token, 'editMessageReplyMarkup', {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          reply_markup: contentButtons(record, language, user, 'property', catalogContextFromMessage(query.message, language)),
+        });
+      } catch {
+        // The comparison is saved even when an older card cannot be edited.
+      }
+    }
+    await acknowledgeCallback(query, token, comparison.added.replace('{count}', String(result.count)).replace('{max}', String(COMPARISON_LIMIT)));
+    return;
+  }
   if (actionName === 'favorite') {
     const favorites = new Set(Array.isArray(user.favorites) ? user.favorites : []);
     let notice;
@@ -531,12 +573,7 @@ async function handlePropertyCallback(query, token) {
       return;
     }
     if (query.message && query.message.message_id && query.message.reply_markup && Array.isArray(query.message.reply_markup.inline_keyboard)) {
-      const replacement = favorites.has(record.id) ? '💔 ' + text.favoriteRemoveButton : '❤️ ' + text.favoriteButton;
-      const markup = {
-        inline_keyboard: query.message.reply_markup.inline_keyboard.map((row) => row.map((button) => {
-          return button.callback_data === 'property:favorite:' + record.id ? { ...button, text: replacement } : button;
-        })),
-      };
+      const markup = contentButtons(record, language, user, 'property', catalogContextFromMessage(query.message, language));
       try {
         await telegramRequest(token, 'editMessageReplyMarkup', {
           chat_id: chatId,

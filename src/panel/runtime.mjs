@@ -31,20 +31,21 @@ const PANEL_SHELL = String.raw`
 </section>
 
 <div id="app" class="app hidden">
-  <aside class="side" id="side">
-    <div class="side-brand">
+  <header class="app-head" id="appHead">
+    <button class="btn ghost icon menu-toggle" id="menuToggle" type="button" aria-label="Открыть меню" aria-expanded="false">☰</button>
+    <div class="app-brand">
       <img src="/admin-assets/sidebar-logo.png" alt="">
-      <b>Construcciones<br>Kornilenko<span>панель бота</span></b>
+      <b>Construcciones Kornilenko<span>панель бота</span></b>
     </div>
-    <nav id="nav"></nav>
-    <div class="side-foot">
-      <div class="state-line" id="botState"><span class="dot"></span><span class="grow" id="botStateText">Загрузка…</span></div>
+    <nav id="nav" class="head-nav" aria-label="Основная навигация"></nav>
+    <div class="head-tools">
+      <button class="notification-bell" id="notificationBell" type="button" aria-label="Открыть уведомления"><span aria-hidden="true">🔔</span><b class="hidden" id="notificationCount">0</b></button>
+      <div class="state-line" id="botState"><span class="dot"></span><span id="botStateText">Загрузка…</span></div>
       <button class="btn ghost small" id="logoutBtn" type="button">Выйти</button>
     </div>
-  </aside>
+  </header>
   <div class="main">
     <div class="topbar">
-      <button class="btn ghost icon menu-toggle" id="menuToggle" type="button">☰</button>
       <div><h1 id="pageTitle">Обзор</h1><div class="sub" id="pageSubtitle"></div></div>
       <div class="grow"></div>
       <div id="pageActions" class="row"></div>
@@ -58,6 +59,7 @@ const PANEL_SHELL = String.raw`
 
 const PANEL_RUNTIME_JS = String.raw`
 var state = null, csrf = "", currentView = "overview", currentTab = "", dirtyForm = null, refreshTimer = 0, loginChallenge = "";
+var currentRouteHash = "", allowNextRoute = false, routePromptOpen = false;
 var VIEWS = {};
 
 function el(id) { return document.getElementById(id); }
@@ -66,8 +68,31 @@ function num(value) { return new Intl.NumberFormat("ru-RU").format(Number(value 
 function plural(value, one, few, many) { var n = Math.abs(Number(value || 0)) % 100, last = n % 10; return n > 10 && n < 20 ? many : last === 1 ? one : last >= 2 && last <= 4 ? few : many; }
 function counted(value, one, few, many) { return num(value) + " " + plural(value, one, few, many); }
 function money(value, currency) { return num(value) + " " + (currency === "USD" ? "$" : currency === "GBP" ? "£" : "€"); }
-function dateTime(value) { if (!value) return "—"; try { return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)); } catch (e) { return "—"; } }
-function dateShort(value) { if (!value) return "—"; try { return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(new Date(value)); } catch (e) { return "—"; } }
+function panelTimeZone() { return state && state.config && state.config.timeZone || "Europe/Madrid"; }
+function dateTime(value) { if (!value) return "—"; try { return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short", timeZone: panelTimeZone() }).format(new Date(value)); } catch (e) { return "—"; } }
+function dateShort(value) { if (!value) return "—"; try { return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", timeZone: panelTimeZone() }).format(new Date(value)); } catch (e) { return "—"; } }
+function zonedParts(value) {
+  var parts = new Intl.DateTimeFormat("en-CA", { timeZone: panelTimeZone(), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(value));
+  var result = {};
+  parts.forEach(function (part) { if (part.type !== "literal") result[part.type] = part.value; });
+  return result;
+}
+function dateTimeLocalValue(value) {
+  if (!value) return "";
+  try { var parts = zonedParts(value); return parts.year + "-" + parts.month + "-" + parts.day + "T" + parts.hour + ":" + parts.minute; } catch (e) { return ""; }
+}
+function zonedDateTimeToIso(value) {
+  var match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) return "";
+  var target = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]));
+  var guess = target;
+  for (var index = 0; index < 3; index += 1) {
+    var shown = zonedParts(guess);
+    var shownUtc = Date.UTC(Number(shown.year), Number(shown.month) - 1, Number(shown.day), Number(shown.hour), Number(shown.minute));
+    guess += target - shownUtc;
+  }
+  return new Date(guess).toISOString();
+}
 function ago(value) {
   var time = Date.parse(value || "");
   if (!time) return "—";
@@ -122,12 +147,30 @@ function confirmDialog(title, text, confirmText, danger) {
 
 function openDialog(options) {
   var dialog = document.createElement("dialog");
+  var dialogDirty = false, closingDialog = false;
   if (options.drawer) dialog.className = "drawer";
+  if (options.wide) dialog.classList.add("wide");
   dialog.innerHTML = '<div class="dialog-head"><h2>' + esc(options.title) + '</h2><div class="grow"></div><button class="btn ghost icon" data-close="1" type="button">✕</button></div>' +
     '<div class="dialog-body">' + options.body + '</div>' +
     (options.footer === null ? "" : '<div class="dialog-foot">' + (options.footer || '<button class="btn secondary" data-close="1" type="button">Закрыть</button>') + '</div>');
   document.body.appendChild(dialog);
-  dialog.querySelectorAll("[data-close]").forEach(function (button) { button.onclick = function () { dialog.close(); }; });
+  async function requestClose() {
+    if (closingDialog) return;
+    if (options.protectChanges && dialogDirty) {
+      closingDialog = true;
+      var discard = await confirmDialog("Закрыть без сохранения?", "Внесённые изменения будут потеряны.", "Закрыть", true);
+      closingDialog = false;
+      if (!discard) return;
+    }
+    dialog.close();
+  }
+  dialog.closeClean = function () { dialogDirty = false; dialog.close(); };
+  dialog.querySelectorAll("[data-close]").forEach(function (button) { button.onclick = requestClose; });
+  if (options.protectChanges) {
+    dialog.addEventListener("input", function () { dialogDirty = true; });
+    dialog.addEventListener("change", function () { dialogDirty = true; });
+    dialog.addEventListener("cancel", function (event) { event.preventDefault(); requestClose(); });
+  }
   dialog.addEventListener("close", function () { dialog.remove(); });
   dialog.showModal();
   if (options.ready) options.ready(dialog);
@@ -205,6 +248,11 @@ function watchForm(root, save, label) {
 function clearDirty() { dirtyForm = null; el("savebar").classList.add("hidden"); }
 function isDirty() { return Boolean(dirtyForm); }
 
+async function confirmPageLeave() {
+  if (!isDirty()) return true;
+  return confirmDialog("Перейти без сохранения?", "На этой странице есть несохранённые изменения.", "Перейти", true);
+}
+
 async function saveDirty() {
   if (!dirtyForm) return;
   var current = dirtyForm;
@@ -222,14 +270,16 @@ async function reload(render) {
   csrf = state.csrf;
   renderNav();
   renderBotState();
+  renderNotificationBell();
   if (render !== false) renderView();
 }
 
 function navItems() {
-  var waiting = (state && state.inquiries || []).filter(awaitsReply).length;
+  var waiting = Number(state && state.unreadConversationCount) || (state && state.inquiries || []).filter(awaitsReply).length;
   return [
     { id: "overview", icon: "◉", title: "Обзор" },
-    { id: "inquiries", icon: "✉", title: "Обращения", count: waiting, tabs: [["inbox", "Обращения"], ["viewings", "Просмотры"], ["clients", "Клиенты"]] },
+    { id: "notifications", icon: "🔔", title: "Центр уведомлений", hidden: true },
+    { id: "inquiries", icon: "✉", title: "Переписка", count: waiting, tabs: [["inbox", "Центр сообщений"], ["tasks", "Задачи"], ["pipeline", "Воронка"], ["viewings", "Просмотры"], ["clients", "База клиентов"]] },
     { id: "catalog", icon: "⌂", title: "Каталог", tabs: [["objects", "Объекты"], ["offers", "Акции"], ["feed", "Загрузка с сайта"]] },
     { id: "texts", icon: "✎", title: "Тексты бота", tabs: [["welcome", "Приветствие"], ["sections", "Разделы"], ["contacts", "Контакты"], ["rules", "Автоответы"], ["interface", "Интерфейс"]] },
     { id: "reach", icon: "➤", title: "Рассылки и каналы", tabs: [["campaigns", "Рассылки"], ["group", "Группы и каналы"], ["style", "Оформление постов"]] },
@@ -247,14 +297,38 @@ function awaitsReply(inquiry) {
 }
 
 function renderNav() {
-  el("nav").innerHTML = navItems().map(function (item) {
-    return '<button class="nav-item' + (item.id === currentView ? " active" : "") + '" data-view="' + item.id + '" type="button">' +
-      '<span class="ico">' + item.icon + '</span><span class="grow">' + esc(item.title) + '</span>' +
-      (item.count ? '<span class="count">' + num(item.count) + '</span>' : '') + '</button>';
+  el("nav").innerHTML = navItems().filter(function (item) { return !item.hidden; }).map(function (item) {
+    var active = item.id === currentView;
+    if (!item.tabs) {
+      return '<button class="nav-item' + (active ? " active" : "") + '" data-view="' + item.id + '" type="button">' +
+        '<span class="ico">' + item.icon + '</span><span>' + esc(item.title) + '</span>' +
+        (item.count ? '<span class="count">' + num(item.count) + '</span>' : '') + '</button>';
+    }
+    return '<details class="nav-menu' + (active ? " active" : "") + '"><summary class="nav-item">' +
+      '<span class="ico">' + item.icon + '</span><span>' + esc(item.title) + '</span>' +
+      (item.count ? '<span class="count">' + num(item.count) + '</span>' : '') + '<span class="chevron">⌄</span></summary>' +
+      '<div class="nav-dropdown"><div class="nav-caption">' + esc(item.title) + '</div>' + item.tabs.map(function (tab) {
+        return '<button class="nav-subitem' + (active && currentTab === tab[0] ? " active" : "") + '" data-view="' + item.id + '" data-tab="' + tab[0] + '" type="button">' + esc(tab[1]) + '</button>';
+      }).join("") + '</div></details>';
   }).join("");
   el("nav").querySelectorAll("[data-view]").forEach(function (button) {
-    button.onclick = function () { go(button.dataset.view); el("side").classList.remove("open"); };
+    button.onclick = function () {
+      go(button.dataset.view, button.dataset.tab || "");
+      var menu = button.closest("details");
+      if (menu) menu.open = false;
+      el("nav").classList.remove("open");
+      el("menuToggle").setAttribute("aria-expanded", "false");
+    };
   });
+}
+
+function renderNotificationBell() {
+  var button = el("notificationBell"), badge = el("notificationCount");
+  var count = Number(state && state.notificationUnreadCount || 0);
+  badge.textContent = count > 99 ? "99+" : String(count);
+  badge.classList.toggle("hidden", count === 0);
+  button.classList.toggle("active", currentView === "notifications");
+  button.setAttribute("aria-label", count ? "Открыть уведомления: непрочитанных " + count : "Открыть уведомления");
 }
 
 function renderBotState() {
@@ -267,10 +341,14 @@ function renderBotState() {
     : bad ? "Связь с Telegram потеряна" : "Бот работает" + (state.newInquiryCount ? ' · <b>' + num(state.newInquiryCount) + "</b> новых" : "");
 }
 
-function go(view, tab) {
+async function go(view, tab) {
   var target = "#/" + view + (tab ? "/" + tab : "");
-  if (location.hash === target) applyRoute();
-  else location.hash = target;
+  if (location.hash === target) return true;
+  if (!(await confirmPageLeave())) return false;
+  clearDirty();
+  allowNextRoute = true;
+  location.hash = target;
+  return true;
 }
 
 function applyRoute() {
@@ -278,8 +356,32 @@ function applyRoute() {
   var view = VIEWS[parts[0]] ? parts[0] : "overview";
   currentView = view;
   currentTab = parts[1] || "";
+  currentRouteHash = location.hash || "#/overview";
   renderNav();
+  renderNotificationBell();
   renderView();
+}
+
+async function handleHashChange() {
+  if (allowNextRoute) {
+    allowNextRoute = false;
+    applyRoute();
+    return;
+  }
+  if (!isDirty()) {
+    applyRoute();
+    return;
+  }
+  if (routePromptOpen) return;
+  routePromptOpen = true;
+  var requestedHash = location.hash;
+  history.replaceState(null, "", currentRouteHash || "#/overview");
+  var discard = await confirmPageLeave();
+  routePromptOpen = false;
+  if (!discard) return;
+  clearDirty();
+  allowNextRoute = true;
+  location.hash = requestedHash;
 }
 
 function renderView() {
@@ -288,7 +390,6 @@ function renderView() {
   var view = VIEWS[currentView];
   if (!view) return;
   if (item && item.tabs && !item.tabs.some(function (tab) { return tab[0] === currentTab; })) currentTab = item.tabs[0][0];
-  clearDirty();
   el("pageTitle").textContent = item ? item.title : "";
   el("pageSubtitle").textContent = view.subtitle ? view.subtitle() : "";
   el("pageActions").innerHTML = "";
@@ -342,8 +443,20 @@ async function startApp() {
 }
 
 function bindShell() {
-  window.addEventListener("hashchange", applyRoute);
-  el("menuToggle").onclick = function () { el("side").classList.toggle("open"); };
+  window.addEventListener("hashchange", handleHashChange);
+  el("menuToggle").onclick = function () {
+    var open = !el("nav").classList.contains("open");
+    el("nav").classList.toggle("open", open);
+    el("menuToggle").setAttribute("aria-expanded", String(open));
+  };
+  el("notificationBell").onclick = function () { go("notifications"); };
+  document.addEventListener("click", function (event) {
+    if (!event.target.closest(".nav-menu")) el("nav").querySelectorAll("details[open]").forEach(function (menu) { menu.open = false; });
+    if (window.innerWidth <= 860 && !event.target.closest("#nav") && !event.target.closest("#menuToggle")) {
+      el("nav").classList.remove("open");
+      el("menuToggle").setAttribute("aria-expanded", "false");
+    }
+  });
   el("logoutBtn").onclick = async function () {
     await api("/api/logout", { method: "POST" }).catch(function () {});
     location.reload();

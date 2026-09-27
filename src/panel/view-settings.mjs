@@ -2,6 +2,7 @@
 
 const SETTINGS_JS = String.raw`
 var WEEKDAYS = [[1, "Пн"], [2, "Вт"], [3, "Ср"], [4, "Чт"], [5, "Пт"], [6, "Сб"], [0, "Вс"]];
+var TIME_ZONE_OPTIONS = [["Europe/Madrid", "Испания — материк"], ["Atlantic/Canary", "Испания — Канарские острова"], ["Europe/Kyiv", "Украина"], ["Europe/Moscow", "Москва"], ["UTC", "UTC"]];
 
 // Настройки сохраняются одним запросом, поэтому неизменные поля посылаем как есть.
 function settingsPayload() {
@@ -10,6 +11,7 @@ function settingsPayload() {
     adminChatId: state.config.adminChatId,
     notifyMode: state.config.notifyMode,
     reminderHours: state.config.reminderHours,
+    timeZone: state.config.timeZone,
     statusNotices: state.config.statusNotices,
     active: state.config.active,
   };
@@ -38,7 +40,12 @@ function renderConnection(host) {
     '<div class="card-body stack"><div class="field"><label for="adminName">Как зовут главного администратора</label><input id="adminName" value="' + esc(config.adminName || "") + '" placeholder="Администратор"></div>' +
     '<div id="managerList" class="stack"></div>' +
     '<div class="hint">Менеджер открывает бота, отправляет /myid и присылает номер. Заявки приходят всем, отвечает любой.</div>' +
-    '<button class="btn secondary small" id="saveManagers" type="button">Сохранить менеджеров</button></div></div></div></div>';
+    '<button class="btn secondary small" id="saveManagers" type="button">Сохранить менеджеров</button></div></div>' +
+    '<div class="card"><header><h3>Надёжный запуск</h3></header><div class="card-body stack">' +
+      '<div class="row"><span class="dot" id="autostartDot"></span><span class="grow" id="autostartText">Проверяем автозапуск…</span></div>' +
+      '<div class="hint">Windows запустит bot.exe после входа в систему и повторит запуск, если программа завершится с ошибкой.</div>' +
+      '<button class="btn secondary small" id="autostartButton" type="button" disabled>Настроить</button>' +
+    '</div></div></div></div>';
 
   var watcher = watchForm(host.querySelector(".stack"), async function () {
     await send("/api/settings", "PUT", Object.assign(settingsPayload(), {
@@ -59,6 +66,46 @@ function renderConnection(host) {
   };
   host.querySelector("#testAdmin").onclick = async function () {
     try { await send("/api/admin-notification/test", "POST", { chatId: host.querySelector("#setAdminChat").value.trim() }); toast("Сообщение отправлено в Telegram"); await reload(); } catch (error) { fail(error); }
+  };
+
+  var autostartInfo = null;
+  function showAutostart(info) {
+    autostartInfo = info;
+    var dot = host.querySelector("#autostartDot");
+    var text = host.querySelector("#autostartText");
+    var button = host.querySelector("#autostartButton");
+    if (!info.supported) {
+      dot.className = "dot off";
+      text.textContent = "Доступно в автономном bot.exe на Windows";
+      button.textContent = "Недоступно";
+      button.disabled = true;
+      return;
+    }
+    dot.className = "dot " + (info.enabled ? "on" : "off");
+    text.textContent = info.enabled ? "Автозапуск включён" : "Автозапуск выключен";
+    button.textContent = info.enabled ? "Отключить автозапуск" : "Включить автозапуск";
+    button.className = "btn " + (info.enabled ? "ghost" : "secondary") + " small";
+    button.disabled = false;
+  }
+  api("/api/autostart").then(showAutostart).catch(function (error) {
+    host.querySelector("#autostartText").textContent = error.message;
+  });
+  host.querySelector("#autostartButton").onclick = async function () {
+    if (!autostartInfo || !autostartInfo.supported) return;
+    var enabling = !autostartInfo.enabled;
+    var accepted = await confirmDialog(
+      enabling ? "Включить автозапуск?" : "Отключить автозапуск?",
+      enabling ? "Бот будет запускаться после входа в Windows и восстанавливаться после сбоя." : "После следующего входа в Windows бот сам не запустится.",
+      enabling ? "Включить" : "Отключить",
+      false
+    );
+    if (!accepted) return;
+    var button = host.querySelector("#autostartButton");
+    button.disabled = true;
+    try {
+      showAutostart(await send("/api/autostart", "PUT", { enabled: enabling }));
+      toast(enabling ? "Автозапуск включён" : "Автозапуск отключён");
+    } catch (error) { fail(error); button.disabled = false; }
   };
 
   var managers = (config.managers || []).slice();
@@ -101,12 +148,17 @@ function renderWork(host) {
   host.innerHTML = '<div class="grid cols-2">' +
     '<div class="card"><header><h3>Рабочее время</h3></header><div class="card-body stack" id="hoursCard">' +
       '<label class="check"><input type="checkbox" id="hoursOn"' + (hours.enabled ? " checked" : "") + "> предупреждать клиентов о нерабочем времени</label>" +
+      '<div class="field"><label for="businessTimeZone">Часовой пояс компании</label><select id="businessTimeZone">' + TIME_ZONE_OPTIONS.map(function (option) {
+        return '<option value="' + option[0] + '"' + ((state.config.timeZone || "Europe/Madrid") === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
+      }).join("") + '</select><div class="hint">По этому времени работают расписания, напоминания и отложенные публикации.</div></div>' +
       '<div class="row"><div class="field"><label for="hoursFrom">С</label><input id="hoursFrom" type="time" value="' + esc(hours.from || "09:00") + '"></div>' +
       '<div class="field"><label for="hoursTo">До</label><input id="hoursTo" type="time" value="' + esc(hours.to || "19:00") + '"></div></div>' +
       '<div class="field"><span class="field-label">Рабочие дни</span><div class="row wrap">' + WEEKDAYS.map(function (day) {
         return '<label class="check"><input type="checkbox" data-day="' + day[0] + '"' + ((hours.days || []).indexOf(day[0]) >= 0 ? " checked" : "") + "> " + day[1] + "</label>";
       }).join("") + "</div></div>" +
-      '<div class="field"><label for="hoursNote">Текст для клиента (RU)</label><textarea id="hoursNote">' + esc((hours.note || {}).ru || "") + "</textarea><div class=\"hint\">{next} подставит ближайшее рабочее время</div></div>" +
+      '<div class="field"><span class="field-label">Текст для клиента</span>' + languageTabs() + LANGUAGES.map(function (language) {
+        return '<textarea data-tr="hoursNote" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((hours.note || {})[language[0]] || "") + "</textarea>";
+      }).join("") + '<div class="hint">{next} подставит ближайшее рабочее время. Заполните текст на всех языках.</div></div>' +
       '<button class="btn secondary small" id="saveHours" type="button">Сохранить</button>' +
     "</div></div>" +
     '<div class="card"><header><h3>Свободное время для просмотров</h3></header><div class="card-body stack">' +
@@ -137,14 +189,16 @@ function renderWork(host) {
       '<button class="btn secondary small" id="saveReminders" type="button">Сохранить</button>' +
     "</div></div></div>";
 
+  bindLanguageTabs(host);
   host.querySelector("#saveHours").onclick = async function () {
     try {
       await send("/api/working-hours", "PUT", {
         enabled: host.querySelector("#hoursOn").checked,
+        timeZone: host.querySelector("#businessTimeZone").value,
         from: host.querySelector("#hoursFrom").value,
         to: host.querySelector("#hoursTo").value,
         days: Array.from(host.querySelectorAll("[data-day]")).filter(function (box) { return box.checked; }).map(function (box) { return Number(box.dataset.day); }),
-        note: Object.assign({}, hours.note || {}, { ru: host.querySelector("#hoursNote").value }),
+        note: collectTranslated(host, "hoursNote"),
       });
       toast("Сохранено"); await reload();
     } catch (error) { fail(error); }

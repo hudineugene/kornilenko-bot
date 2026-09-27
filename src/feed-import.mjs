@@ -12,6 +12,7 @@ import { recordError } from './analytics.mjs';
 import { parseUploadedImage } from './admin-http.mjs';
 import { configured } from './store.mjs';
 import { deliverPropertyAlerts, propertyAlertDeliveries } from './alerts.mjs';
+import { propertyReadyForLanguage } from './catalog.mjs';
 
 const MAX_FEED_BYTES = 20 * 1024 * 1024;
 const MAX_FEED_PROPERTIES = 2000;
@@ -387,7 +388,7 @@ async function runImport(items, options) {
     const images = await downloadImages(item.images, fetcher, budget, result);
     const record = {
       id: crypto.randomUUID(),
-      status: options.publishNew && images.length ? 'active' : 'hidden',
+      status: 'hidden',
       reference: item.reference,
       ...item.fields,
       dealType: item.fields.dealType || 'sale',
@@ -411,6 +412,12 @@ async function runImport(items, options) {
       createdAt: now,
       updatedAt: now,
     };
+    // "Show at once" must not bypass the common card standard. A feed may
+    // omit a translation or a key characteristic; keep such a record as a
+    // draft so the administrator can complete it safely in the panel.
+    if (options.publishNew && ['ru', 'en', 'es'].every((language) => propertyReadyForLanguage(record, language))) {
+      record.status = 'active';
+    }
     data.objects.push(record);
     deliveries.push(...propertyAlertDeliveries(record, null));
   }

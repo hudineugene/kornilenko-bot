@@ -75,6 +75,22 @@ test('the client answering the manager continues the same inquiry', async () => 
   assert.match(sentTo(answer.calls, ADMIN_CHAT)[0].body.text, /^📩 Новое сообщение в обращении/);
   assert.equal(answer.replies.length, 1, 'after a pause the client hears the message was received');
   assert.equal(bot.awaitingReply(client.inquiries[0]), true, 'the client wrote after the answer');
+  assert.deepEqual(client.inquiries[0].messages.map((message) => message.direction), ['in', 'out', 'in'], 'the panel gets one chronological dialogue');
+});
+
+test('reactions to a manager reply are visible in the conversation history', async () => {
+  const client = createChat();
+  await client.say('Пришлите, пожалуйста, детали');
+  await adminSays('Конечно, отправляю презентацию.', { replyTo: notificationFor(client.id) });
+  const inquiry = client.inquiries[0];
+  const answer = inquiry.messages.find((message) => message.direction === 'out');
+  assert.ok(answer.telegramMessageId);
+  await bot.processUpdates([{ update_id: 990010, message_reaction: {
+    chat: { id: client.id, type: 'private' }, message_id: answer.telegramMessageId, date: Math.floor(Date.now() / 1000),
+    user: { id: client.id, first_name: 'Анна' }, old_reaction: [], new_reaction: [{ type: 'emoji', emoji: '👍' }],
+  } }], TOKEN);
+  await settle();
+  assert.deepEqual(answer.reactions, ['👍']);
 });
 
 test('a closed inquiry is not continued', async () => {
@@ -144,6 +160,94 @@ test('the notification about a photo is a reply to the copied photo', async () =
   const notification = sentTo(calls, ADMIN_CHAT)[0];
   assert.ok(notification.body.reply_parameters, 'linked to the photo');
   assert.equal(typeof notification.body.reply_parameters.message_id, 'number');
+  const stored = client.inquiries[0].messages[0];
+  assert.equal(stored.kind, 'photo');
+  assert.equal(stored.fileId, 'P1');
+  assert.equal(stored.text, 'Планировка');
+});
+
+test('a direct message from the client card is stored in the unified conversation', async () => {
+  const client = createChat({ firstName: 'Елена' });
+  await client.say('Ищу квартиру рядом с морем');
+  const inquiry = client.inquiries[0];
+  const data = bot.getData();
+  const password = bot.hashPassword('correct-password');
+  data.config.passwordSalt = password.salt;
+  data.config.passwordHash = password.hash;
+  data.config.adminName = 'Олег';
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = 'http://127.0.0.1:' + bot.server.address().port;
+    const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
+    const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+    const before = telegram.calls.length;
+    const response = await realFetch(base + '/api/users/' + client.id + '/message', {
+      method: 'POST', headers, body: JSON.stringify({ text: 'Подобрал для вас подходящий вариант' }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).inquiryId, inquiry.id);
+    assert.ok(sentTo(telegram.calls.slice(before), client.id).some((call) => call.body.text.includes('Подобрал для вас подходящий вариант')));
+    assert.deepEqual(inquiry.messages.map((message) => message.direction), ['in', 'out']);
+    assert.equal(inquiry.messages.at(-1).text, 'Подобрал для вас подходящий вариант');
+    assert.equal(inquiry.replies.at(-1).source, 'panel');
+    assert.equal(inquiry.replies.at(-1).by, 'Олег');
+    assert.equal(inquiry.status, 'in_progress');
+  } finally {
+    await new Promise((resolve) => bot.server.close(resolve));
+  }
+});
+
+test('the conversation sends photos and documents, quotes a client message and deduplicates retries', async () => {
+  const client = createChat({ firstName: 'Ирина' });
+  await client.say('Покажите, пожалуйста, план и презентацию');
+  const inquiry = client.inquiries[0];
+  const sourceMessageId = inquiry.messages[0].telegramMessageId;
+  const data = bot.getData();
+  const password = bot.hashPassword('correct-password');
+  data.config.passwordSalt = password.salt;
+  data.config.passwordHash = password.hash;
+  data.config.adminName = 'Олег';
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = 'http://127.0.0.1:' + bot.server.address().port;
+    const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
+    const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+    const imageDataUrl = 'data:image/png;base64,' + Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('panel photo')]).toString('base64');
+    const photoPayload = { text: 'Вот планировка', imageDataUrl, imageName: 'plan.png', replyToMessageId: sourceMessageId, clientRequestId: 'photo-request-12345', keepOpen: true };
+    const beforePhoto = telegram.calls.length;
+    const photoResponse = await realFetch(base + '/api/inquiries/' + inquiry.id + '/reply', { method: 'POST', headers, body: JSON.stringify(photoPayload) });
+    assert.equal(photoResponse.status, 200);
+    const photoCall = telegram.calls.slice(beforePhoto).find((call) => call.method === 'sendPhoto');
+    assert.ok(photoCall, 'photo reached Telegram');
+    assert.equal(photoCall.body.reply_parameters.message_id, sourceMessageId);
+    const storedPhoto = inquiry.messages.at(-1);
+    assert.equal(storedPhoto.kind, 'photo');
+    assert.equal(storedPhoto.fileName, 'plan.png');
+    assert.equal(storedPhoto.replyToTelegramMessageId, sourceMessageId);
+    assert.equal(storedPhoto.replyToText, 'Покажите, пожалуйста, план и презентацию');
+    assert.equal(storedPhoto.deliveryStatus, 'delivered');
+    assert.equal(storedPhoto.clientRequestId, photoPayload.clientRequestId);
+
+    const beforeRetry = telegram.calls.length;
+    const retry = await realFetch(base + '/api/inquiries/' + inquiry.id + '/reply', { method: 'POST', headers, body: JSON.stringify(photoPayload) });
+    assert.equal(retry.status, 200);
+    assert.equal((await retry.json()).duplicate, true);
+    assert.equal(telegram.calls.length, beforeRetry, 'a browser retry does not send a duplicate');
+
+    const documentDataUrl = 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF').toString('base64');
+    const beforeDocument = telegram.calls.length;
+    const documentResponse = await realFetch(base + '/api/inquiries/' + inquiry.id + '/reply', {
+      method: 'POST', headers, body: JSON.stringify({ text: 'И презентация', documentDataUrl, documentName: 'offer.pdf', clientRequestId: 'document-request-12345' }),
+    });
+    assert.equal(documentResponse.status, 200);
+    assert.ok(telegram.calls.slice(beforeDocument).some((call) => call.method === 'sendDocument'), 'document reached Telegram');
+    const storedDocument = inquiry.messages.at(-1);
+    assert.equal(storedDocument.kind, 'document');
+    assert.equal(storedDocument.fileName, 'offer.pdf');
+    assert.match(storedDocument.fileId, /^document-/);
+  } finally {
+    await new Promise((resolve) => bot.server.close(resolve));
+  }
 });
 
 test('the panel deletes one inquiry and clears old ones', async () => {

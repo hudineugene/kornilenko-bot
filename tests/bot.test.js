@@ -47,15 +47,15 @@ test('data from an older version is copied to backups/ before the upgrade, once'
     const old = JSON.stringify({ version: 16, config: { reminderHours: 4 }, users: {} });
     fs.writeFileSync(dataFile, old);
     const loaded = bot.loadData();
-    assert.equal(loaded.version, 17);
+    assert.equal(loaded.version, 28);
     const copies = upgradeCopies();
     assert.equal(copies.length, 1);
-    assert.match(copies[0], /^pre-upgrade-v16-to-v17-\d{8}-\d{6}\.json$/);
+    assert.match(copies[0], /^pre-upgrade-v16-to-v28-\d{8}-\d{6}\.json$/);
     assert.equal(fs.readFileSync(path.join(backups, copies[0]), 'utf8'), old, 'the file exactly as it was');
 
     bot.loadData();
     assert.equal(upgradeCopies().length, 1, 'not copied again on the next start');
-    fs.writeFileSync(dataFile, JSON.stringify({ ...JSON.parse(old), version: 17 }));
+    fs.writeFileSync(dataFile, JSON.stringify({ ...JSON.parse(old), version: 28 }));
     bot.loadData();
     assert.equal(upgradeCopies().length, 1, 'current data needs no copy');
   } finally {
@@ -93,7 +93,7 @@ test('version 17 gives the short menu labels and help to texts still at the old 
       en: { greeting: 'Hi', help: 'My own help', fallback: 'Thanks' },
     } },
     interfaceText: { menuLabels: {
-      ru: { objects: '🏘 Наши объекты', selection: '✨ Помогите подобрать объект', contacts: '💬 Связаться с менеджером', request: '📞 Заказать звонок' },
+      ru: { objects: '🏘 Наши объекты', selection: '✨ Помогите подобрать объект', contacts: '💬 Связаться с менеджером', request: '📞 Заказать звонок', more: '☰ Ещё' },
       en: { objects: '🏡 Homes', request: '📞 Request a call' },
     } },
   });
@@ -103,8 +103,205 @@ test('version 17 gives the short menu labels and help to texts still at the old 
   );
   assert.equal(saved.interfaceText.menuLabels.en.objects, '🏡 Homes', 'a label the administrator changed is kept');
   assert.equal(saved.interfaceText.menuLabels.en.request, '📞 Call me back');
+  assert.equal(saved.interfaceText.menuLabels.ru.more, '👤 Моё');
   assert.match(saved.config.messages.ru.help, /📞 Позвоните мне —/);
   assert.equal(saved.config.messages.en.help, 'My own help');
+});
+
+test('version 19 introduces comparison without overwriting administrator texts', () => {
+  const previousIntro = 'Здесь собраны сохранённые объекты, история просмотров, ваши заявки и личные настройки.';
+  const previousHelp = '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — специальные предложения\n📞 Позвоните мне — менеджер перезвонит в удобное время\n💬 Менеджер — задать вопрос, позвонить или написать в WhatsApp\n👤 Моё — избранное, история просмотров, заявки и уведомления\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.';
+  const saved = bot.normalizeLoadedData({
+    version: 18,
+    config: { messages: {
+      ru: { help: previousHelp },
+      en: { help: 'My custom help' },
+    } },
+    interfaceText: { myArea: {
+      ru: { intro: previousIntro },
+      en: { intro: 'My custom personal area' },
+    } },
+  });
+  assert.equal(saved.version, 28);
+  assert.match(saved.interfaceText.myArea.ru.intro, /сравниваемые объекты/);
+  assert.match(saved.config.messages.ru.help, /избранное, сравнение/);
+  assert.equal(saved.interfaceText.myArea.en.intro, 'My custom personal area');
+  assert.equal(saved.config.messages.en.help, 'My custom help');
+});
+
+test('version 20 introduces saved search without overwriting administrator texts', () => {
+  const previousIntro = 'Здесь собраны сохранённые и сравниваемые объекты, история просмотров, ваши заявки и личные настройки.';
+  const previousHelp = '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — специальные предложения\n📞 Позвоните мне — менеджер перезвонит в удобное время\n💬 Менеджер — задать вопрос, позвонить или написать в WhatsApp\n👤 Моё — избранное, сравнение, история просмотров, заявки и уведомления\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.';
+  const saved = bot.normalizeLoadedData({
+    version: 19,
+    config: { messages: { ru: { help: previousHelp }, en: { help: 'My own help' } } },
+    interfaceText: { myArea: { ru: { intro: previousIntro }, en: { intro: 'My own personal area' } } },
+  });
+  assert.equal(saved.version, 28);
+  assert.match(saved.interfaceText.myArea.ru.intro, /сохранённый поиск/);
+  assert.match(saved.config.messages.ru.help, /сохранённый поиск/);
+  assert.equal(saved.interfaceText.myArea.en.intro, 'My own personal area');
+  assert.equal(saved.config.messages.en.help, 'My own help');
+});
+
+test('version 21 keeps only valid explanations for ranked selection results', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 20,
+    users: { client: {
+      id: 'client',
+      selectionMatchIds: ['villa-1', 'villa-2'],
+      selectionMatchDetails: [
+        { id: 'villa-1', tier: 'exact', score: 100, reasons: ['deal', 'budget', 'invented'], warnings: [] },
+        { id: 'villa-2', tier: 'unknown', score: 300, reasons: [], warnings: ['priceMissing', 'invented'] },
+      ],
+    } },
+  });
+  assert.equal(saved.version, 28);
+  assert.deepEqual(saved.users.client.selectionMatchIds, ['villa-1', 'villa-2']);
+  assert.deepEqual(saved.users.client.selectionMatchDetails, [
+    { id: 'villa-1', tier: 'exact', score: 100, reasons: ['deal', 'budget'], warnings: [] },
+    { id: 'villa-2', tier: 'consider', score: 100, reasons: [], warnings: ['priceMissing'] },
+  ]);
+});
+
+test('version 22 keeps the selection result snapshot inside its inquiry', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 21,
+    inquiries: [{
+      id: 'selection-one', userId: 'client', chatId: 'client', language: 'ru', type: 'selection', status: 'new', text: 'Подбор',
+      matching: { generatedAt: '2026-09-24T06:00:00.000Z', results: [
+        { id: 'villa-1', tier: 'close', score: 80.4, reasons: ['deal', 'type'], warnings: ['priceMissing', 'invented'] },
+      ] },
+      replies: [], createdAt: '2026-09-24T06:00:00.000Z', updatedAt: '2026-09-24T06:00:00.000Z',
+    }],
+  });
+  assert.equal(saved.version, 28);
+  assert.deepEqual(saved.inquiries[0].matching, {
+    generatedAt: '2026-09-24T06:00:00.000Z',
+    results: [{ id: 'villa-1', tier: 'close', score: 80, reasons: ['deal', 'type'], warnings: ['priceMissing'] }],
+  });
+});
+
+test('version 23 keeps a safe snapshot of the similar-property mini-catalog', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 22,
+    users: { client: {
+      id: 'client',
+      similarPropertyIds: ['villa-2', 'villa-2', 'house-3'],
+      similarPropertySourceId: 'villa-1',
+      similarPropertyDetails: [
+        { id: 'villa-2', score: 150, reasons: ['type', 'city', 'invented'], warnings: ['priceMissing', 'invented'] },
+        { id: 'house-3', score: 72.4, reasons: ['relatedType', 'area'], warnings: [] },
+      ],
+      catalogContext: { mode: 'similar', page: 1, propertyId: 'house-3' },
+    } },
+  });
+  assert.equal(saved.version, 28);
+  assert.deepEqual(saved.users.client.similarPropertyIds, ['villa-2', 'house-3']);
+  assert.deepEqual(saved.users.client.similarPropertyDetails, [
+    { id: 'villa-2', score: 100, reasons: ['type', 'city'], warnings: ['priceMissing'] },
+    { id: 'house-3', score: 72, reasons: ['relatedType', 'area'], warnings: [] },
+  ]);
+  assert.equal(saved.users.client.similarPropertySourceId, 'villa-1');
+  assert.deepEqual(saved.users.client.catalogContext, { mode: 'similar', page: 1, propertyId: 'house-3' });
+});
+
+test('version 24 keeps a custom price from a natural-language saved search', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 23,
+    users: { client: {
+      id: 'client',
+      savedSearch: {
+        filter: { deal: 'sale', type: 'apartment', city: 'Марбелья', bedrooms: 2, minPrice: 300000, maxPrice: 525000 },
+        enabled: true,
+      },
+    } },
+  });
+  assert.equal(saved.version, 28);
+  assert.equal(saved.users.client.savedSearch.filter.minPrice, 300000);
+  assert.equal(saved.users.client.savedSearch.filter.maxPrice, 525000);
+});
+
+test('version 26 builds a readable conversation history without making old messages unread', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 25,
+    inquiries: [{
+      id: 'old-dialog', userId: 'client', chatId: '501', language: 'ru', type: 'general', status: 'in_progress', text: 'Старая переписка',
+      replies: [{ id: 'reply-one', text: 'Ответ менеджера', source: 'panel', by: 'Олег', createdAt: '2026-09-20T11:00:00.000Z', telegramMessageId: 77 }],
+      createdAt: '2026-09-20T10:00:00.000Z', updatedAt: '2026-09-20T11:00:00.000Z', clientMessageAt: '2026-09-20T10:00:00.000Z',
+    }],
+  });
+  assert.equal(saved.version, 28);
+  assert.deepEqual(saved.inquiries[0].messages.map((message) => [message.direction, message.text, message.telegramMessageId]), [
+    ['in', 'Старая переписка', null],
+    ['out', 'Ответ менеджера', 77],
+  ]);
+  assert.equal(saved.inquiries[0].readAt, '2026-09-20T10:00:00.000Z');
+});
+
+test('version 27 keeps safe notification-center state', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 26,
+    adminNotificationStates: {
+      'message:client:1': {
+        readAt: '2026-09-24T10:00:00.000Z',
+        handledAt: '2026-09-24T11:00:00.000Z',
+        snapshot: { id: 'message:client:1', kind: 'message', severity: 'bad', title: 'Новое сообщение', text: 'Текст', createdAt: '2026-09-24T09:00:00.000Z', route: { view: 'inquiries', tab: 'inbox', inquiryId: 'one' } },
+      },
+    },
+  });
+  assert.equal(saved.version, 28);
+  assert.equal(saved.adminNotificationStates['message:client:1'].snapshot.route.inquiryId, 'one');
+  assert.equal(saved.adminNotificationStates['message:client:1'].handledAt, '2026-09-24T11:00:00.000Z');
+});
+
+test('version 28 keeps messenger delivery, quote and retry metadata', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 27,
+    inquiries: [{
+      id: 'dialog', userId: 'client', chatId: '501', type: 'general', status: 'in_progress', text: 'Нужны документы',
+      messages: [{
+        id: 'answer', direction: 'out', kind: 'document', text: 'Отправляю презентацию', fileId: 'telegram-file', fileName: 'offer.pdf', mimeType: 'application/pdf',
+        telegramMessageId: 88, replyToTelegramMessageId: 77, replyToText: 'Нужны документы', deliveryStatus: 'delivered', clientRequestId: 'request-12345678', createdAt: '2026-09-25T10:00:00.000Z',
+      }],
+    }],
+  });
+  const message = saved.inquiries[0].messages[0];
+  assert.equal(saved.version, 28);
+  assert.equal(message.kind, 'document');
+  assert.equal(message.replyToTelegramMessageId, 77);
+  assert.equal(message.replyToText, 'Нужны документы');
+  assert.equal(message.deliveryStatus, 'delivered');
+  assert.equal(message.clientRequestId, 'request-12345678');
+});
+
+test('old open inquiries receive a useful funnel stage without inventing an outcome', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 26,
+    inquiries: [
+      { id: 'selection', userId: '1', type: 'selection', status: 'new' },
+      { id: 'viewing', userId: '2', type: 'viewing', status: 'in_progress' },
+      { id: 'contact', userId: '3', type: 'general', status: 'in_progress' },
+      { id: 'closed', userId: '4', type: 'general', status: 'closed' },
+      { id: 'won', userId: '5', type: 'general', status: 'closed', pipelineStage: 'won' },
+    ],
+  });
+  assert.deepEqual(saved.inquiries.map((item) => item.pipelineStage), ['selection', 'viewing', 'contact', '', 'won']);
+});
+
+test('version 25 keeps the district in a saved search', () => {
+  const saved = bot.normalizeLoadedData({
+    version: 24,
+    users: { client: {
+      id: 'client',
+      savedSearch: {
+        filter: { deal: 'sale', city: 'Марбелья', district: 'Сьерра-Бланка' },
+        enabled: true,
+      },
+    } },
+  });
+  assert.equal(saved.version, 28);
+  assert.equal(saved.users.client.savedSearch.filter.district, 'Сьерра-Бланка');
 });
 
 test('an old menu keyboard still opens its sections', async () => {
@@ -112,6 +309,9 @@ test('an old menu keyboard still opens its sections', async () => {
   assert.equal(bot.menuItemForText('📞 Заказать звонок', 'ru'), 'request');
   assert.equal(bot.menuItemForText('✨ Help me find a property', 'en'), 'selection');
   assert.equal(bot.menuItemForText('💬 Contactar con un gestor', 'es'), 'contacts');
+  assert.equal(bot.menuItemForText('☰ Ещё', 'ru'), 'more');
+  assert.equal(bot.menuItemForText('☰ More', 'en'), 'more');
+  assert.equal(bot.menuItemForText('☰ Más', 'es'), 'more');
 });
 
 test('admin edits of Russian texts survive a restart', () => {
@@ -129,7 +329,7 @@ test('admin edits of Russian texts survive a restart', () => {
   assert.equal(saved.config.messages.ru.greeting, 'Моё приветствие');
   assert.equal(saved.config.messages.ru.help, 'Моя справка');
   assert.equal(saved.config.messages.ru.fallback, 'Мой ответ');
-  assert.equal(saved.version, 17);
+  assert.equal(saved.version, 28);
   for (const key of ['greeting', 'help', 'fallback']) assert.equal(key in saved.config, false);
 
   const reloaded = bot.normalizeLoadedData(JSON.parse(JSON.stringify(saved)));

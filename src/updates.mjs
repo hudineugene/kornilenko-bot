@@ -9,7 +9,7 @@ import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMes
 import { configureBotCommands, isLanguageChangeText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
 import { adminChatFor, createInquiry, handleAdministratorReply, handleInquiryStatusCallback, handleMessageReaction, inquiryWasMerged, messageSummary, notifyAdministratorAction } from './inquiries.mjs';
-import { catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard } from './catalog.mjs';
+import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard } from './catalog.mjs';
 import { catalogRequest } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
@@ -19,6 +19,8 @@ import { handleMyRequestsCallback, sendMyRequests } from './requests.mjs';
 import { handleSubscriptionCallback } from './subscriptions.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { handleCalculatorCallback } from './calculator.mjs';
+import { handleComparisonCallback } from './comparison.mjs';
+import { handleSavedSearchCallback } from './saved-search.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
 import { ADMIN_CHAT_HINT, handleAdminChatMessage } from './admin-commands.mjs';
 import { handleChatJoinRequest, handleMyChatMember, rememberGroupMessage } from './groups.mjs';
@@ -77,6 +79,8 @@ async function handleUpdate(update, token) {
       if (callbackData.startsWith('language:')) await handleLanguageCallback(update.callback_query, token);
       else if (callbackData.startsWith('catalog:')) await handleCatalogCallback(update.callback_query, token);
       else if (callbackData.startsWith('property:')) await handlePropertyCallback(update.callback_query, token);
+      else if (callbackData.startsWith('compare:')) await handleComparisonCallback(update.callback_query, token, notifyAdministratorAction);
+      else if (callbackData.startsWith('saved:')) await handleSavedSearchCallback(update.callback_query, token, notifyAdministratorAction);
       else if (callbackData.startsWith('promotions:')) await handlePromotionCallback(update.callback_query, token);
       else if (callbackData.startsWith('contact:')) await handleContactCallback(update.callback_query, token);
       else if (callbackData.startsWith('about:')) await handleAboutCallback(update.callback_query, token);
@@ -297,6 +301,10 @@ async function handleUpdate(update, token) {
     await handleSelectionFormMessage(message, user, token);
     return;
   }
+  else if (user.pendingAction && user.pendingAction.type === 'catalog_filter_price' && (!text || !menuItemForText(text, user.preferredLanguage))) {
+    await handleCatalogPriceInputMessage(message, user, token);
+    return;
+  }
   else if (user.pendingAction && user.pendingAction.type === 'manager_question' && (!text || !menuItemForText(text, user.preferredLanguage))) {
     user.pendingAction = null;
     const inquiry = createInquiry(user, text || summary, { type: 'question', sourceMessage: message });
@@ -346,8 +354,7 @@ async function handleUpdate(update, token) {
         }
         if (menuItem === 'promotions' && await sendPromotions(message.chat.id, user, token)) return;
         if (menuItem === 'favorites') {
-          const context = user.catalogContext && user.catalogContext.mode === 'favorites' ? user.catalogContext : { page: 0 };
-          await sendCatalogPage(message.chat.id, user, token, Math.max(0, Number(context.page) || 0), 'favorites');
+          await sendCatalogPage(message.chat.id, user, token, catalogPageFromContext(user, 'favorites'), 'favorites');
           return;
         }
         if (menuItem === 'request') {
@@ -388,9 +395,19 @@ async function handleUpdate(update, token) {
       }
       else {
         const found = catalogRequest(text, user);
+        if (found && found.kind === 'filter') {
+          user.catalogFilter = normalizedCatalogFilter(found.filter);
+          scheduleSave();
+          const summary = catalogFilterSummary(user.catalogFilter, user.preferredLanguage);
+          void notifyAdministratorAction(user, 'Искал объекты по параметрам', summary);
+          await clearUiMessages(message.chat.id, user, token);
+          await clearGalleryMessages(message.chat.id, user, token);
+          await sendCatalogPage(message.chat.id, user, token, 0, 'all');
+          return;
+        }
         if (found && found.kind === 'city') {
           // A city name alone: the catalog in that city, the filter can be reset.
-          user.catalogFilter = normalizedCatalogFilter({ city: found.city });
+          user.catalogFilter = normalizedCatalogFilter({ ...(user.catalogFilter || {}), city: found.city, district: '' });
           scheduleSave();
           void notifyAdministratorAction(user, 'Искал объекты в городе', found.city);
           await clearUiMessages(message.chat.id, user, token);
@@ -401,7 +418,7 @@ async function handleUpdate(update, token) {
         if (found && found.exact) {
           // Just a property number: its card.
           const records = catalogRecords(user, 'all');
-          user.catalogContext = { mode: 'all', page: Math.max(0, records.findIndex((item) => item.id === found.record.id)) };
+          user.catalogContext = { mode: 'all', page: Math.max(0, records.findIndex((item) => item.id === found.record.id)), propertyId: found.record.id };
           scheduleSave();
           void notifyAdministratorAction(user, 'Открыл объект по номеру', found.record.reference || found.record.id);
           await clearUiMessages(message.chat.id, user, token);

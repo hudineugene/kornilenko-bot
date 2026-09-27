@@ -2,10 +2,10 @@
 
 import { fillTemplate } from './util.mjs';
 import { imageExists } from './media.mjs';
-import { BOT_COMMAND_DESCRIPTIONS, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SUBSCRIPTION_TEXT } from './texts.mjs';
+import { BOT_COMMAND_DESCRIPTIONS, COMPARISON_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
-import { clearCatalogMessages, clearGalleryMessages, clearUiMessages, sendUiMessage } from './catalog.mjs';
+import { catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, normalizedSavedSearch, sendUiMessage } from './catalog.mjs';
 import { tunnelInstalled } from './remote.mjs';
 import { inquiryChats } from './inquiries.mjs';
 import { ADMIN_COMMAND_DESCRIPTIONS } from './admin-commands.mjs';
@@ -16,7 +16,7 @@ function languageMessages(language) {
 
 // Four short rows. "Call me back" is on the main keyboard: for an agency it
 // is the main action. The language is chosen automatically and can be
-// changed in "More".
+// changed in "My space".
 function menuKeyboard(language) {
   const labels = MENU_LABELS[language] || MENU_LABELS.ru;
   return {
@@ -78,19 +78,30 @@ async function sendMainMenu(chatId, user, token) {
 async function sendMoreMenu(chatId, user, token) {
   const language = user.preferredLanguage || 'ru';
   const labels = MENU_LABELS[language] || MENU_LABELS.ru;
+  const copy = MY_AREA_TEXT[language] || MY_AREA_TEXT.ru;
   const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
-  const prompt = language === 'en'
-    ? 'More useful sections:'
-    : language === 'es'
-      ? 'Más secciones útiles:'
-      : 'Дополнительные разделы:';
-  await sendUiMessage(chatId, user, prompt, token, {
+  const favorites = catalogRecords(user, 'favorites').length;
+  const comparison = catalogRecords(user, 'comparison').length;
+  const savedSearch = normalizedSavedSearch(user.savedSearch);
+  const savedCopy = SAVED_SEARCH_TEXT[language] || SAVED_SEARCH_TEXT.ru;
+  const savedState = savedSearch
+    ? ' · ' + (savedSearch.enabled && user.propertyAlerts !== false ? savedCopy.onShort : savedCopy.pausedShort)
+    : '';
+  const recent = catalogRecords(user, 'recent').length;
+  const requests = data.inquiries.filter((inquiry) => inquiry.userId === String(user.id)).length;
+  const count = (value) => ' · ' + Math.min(999, Number(value) || 0);
+  await clearGalleryMessages(chatId, user, token);
+  await clearCatalogMessages(chatId, user, token);
+  await sendUiMessage(chatId, user, copy.title + '\n\n' + copy.intro, token, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton, callback_data: 'myreq:list' }],
+        [{ text: labels.favorites + count(favorites), callback_data: 'catalog:favorites:0' }],
+        [{ text: (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).menuButton + count(comparison), callback_data: 'compare:view' }],
+        [{ text: savedCopy.menuButton + savedState, callback_data: 'saved:view' }],
+        [{ text: copy.recent + count(recent), callback_data: 'catalog:recent:0' }],
+        [{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton + count(requests), callback_data: 'myreq:list' }],
         [{ text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).menuButton, callback_data: 'subs:menu' }],
-        [{ text: labels.about, callback_data: 'nav:about' }],
-        [{ text: labels.help, callback_data: 'nav:help' }],
+        [{ text: labels.about, callback_data: 'nav:about' }, { text: labels.help, callback_data: 'nav:help' }],
         [{ text: labels.language, callback_data: 'nav:language' }],
         [{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }],
       ],

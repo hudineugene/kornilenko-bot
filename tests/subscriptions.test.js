@@ -5,7 +5,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { bot, telegram, callbacksOf, createChat, resetData, adminMessages, cleanup } = require('./helpers/chat');
+const realFetch = global.fetch;
+const { bot, telegram, callbacksOf, createChat, property, resetData, adminMessages, cleanup } = require('./helpers/chat');
+const telegramStub = global.fetch;
+global.fetch = (url, init) => (String(url).startsWith('http://127.0.0.1') ? realFetch(url, init) : telegramStub(url, init));
 
 const broadcast = { messages: { ru: 'Новые виллы в Марбелье!', en: 'New villas!', es: '¡Villas nuevas!' }, languages: [], tags: [], buttonText: { ru: 'Смотреть', en: 'See', es: 'Ver' }, buttonUrl: 'https://example.com/villas' };
 
@@ -14,20 +17,20 @@ test.beforeEach(() => resetData((data) => {
 }));
 test.after(cleanup);
 
-test('"More" opens the settings, and each item turns on and off', async () => {
+test('"My space" opens the settings, and each item turns on and off', async () => {
   const chat = createChat();
   const more = await chat.say(bot.text.menu.ru.more);
   assert.ok(callbacksOf(more.last.markup).includes('subs:menu'));
 
   let step = await chat.press('subs:menu');
   assert.match(step.last.text, /^🔔 Какие сообщения присылать\?/);
-  assert.deepEqual(step.last.buttons, ['✅ Новости и акции', '✅ Объекты: снижение цены и новые по вашему запросу', '🏠 Главное меню']);
-  assert.deepEqual(callbacksOf(step.last.markup), ['subs:news:off', 'subs:alerts:off', 'nav:menu']);
+  assert.deepEqual(step.last.buttons, ['✅ Новости и акции', '✅ Объекты: снижение цены и новые по вашему запросу', '⬅️ 👤 Моё']);
+  assert.deepEqual(callbacksOf(step.last.markup), ['subs:news:off', 'subs:alerts:off', 'nav:my']);
 
   step = await chat.press('subs:news:off');
   assert.equal(chat.user.broadcastsOptOut, true);
   let edit = step.calls.find((call) => call.method === 'editMessageText');
-  assert.deepEqual(callbacksOf(edit.body.reply_markup), ['subs:news:on', 'subs:alerts:off', 'nav:menu']);
+  assert.deepEqual(callbacksOf(edit.body.reply_markup), ['subs:news:on', 'subs:alerts:off', 'nav:my']);
   assert.equal(edit.body.reply_markup.inline_keyboard[0][0].text, '⬜ Новости и акции');
 
   step = await chat.press('subs:alerts:off');
@@ -37,7 +40,7 @@ test('"More" opens the settings, and each item turns on and off', async () => {
   step = await chat.press('subs:news:on');
   assert.equal(chat.user.broadcastsOptOut, false);
   edit = step.calls.find((call) => call.method === 'editMessageText');
-  assert.deepEqual(callbacksOf(edit.body.reply_markup), ['subs:news:off', 'subs:alerts:off', 'nav:menu']);
+  assert.deepEqual(callbacksOf(edit.body.reply_markup), ['subs:news:off', 'subs:alerts:off', 'nav:my']);
   assert.ok(adminMessages().some((message) => message.text.startsWith('👀 Отписался от рассылок')));
 });
 
@@ -85,6 +88,59 @@ test('a broadcast counts who responded, sent a request or unsubscribed within th
 
   const reloaded = bot.normalizeLoadedData(JSON.parse(JSON.stringify(bot.getData())));
   assert.deepEqual(reloaded.broadcasts[0].respondedUserIds, [String(interested.id)], 'kept after a restart');
+});
+
+test('a campaign can target a funnel stage, source and property interest together', () => {
+  const data = bot.getData();
+  data.objects.push(property('villa-target', 'Вилла для рассылки'));
+  const matching = createChat({ firstName: 'Мария' });
+  matching.user.source = 'instagram';
+  matching.user.preferredLanguage = 'es';
+  matching.user.favorites = ['villa-target'];
+  const other = createChat({ firstName: 'Пётр' });
+  other.user.source = 'website';
+  other.user.favorites = ['villa-target'];
+  data.inquiries.push(
+    { id: 'segment-1', userId: String(matching.id), type: 'selection', status: 'in_progress', pipelineStage: 'selection', propertyId: '', createdAt: '2026-09-20T10:00:00.000Z', updatedAt: '2026-09-20T10:00:00.000Z' },
+    { id: 'segment-2', userId: String(other.id), type: 'lead', status: 'in_progress', pipelineStage: 'contact', propertyId: '', createdAt: '2026-09-20T10:00:00.000Z', updatedAt: '2026-09-20T10:00:00.000Z' },
+  );
+  const recipients = bot.broadcastUsers({ languages: ['es'], tags: [], pipelineStages: ['selection'], sources: ['instagram'], propertyId: 'villa-target', propertySignal: 'favorite' });
+  assert.deepEqual(recipients.map((user) => user.id), [String(matching.id)]);
+});
+
+test('a saved draft can be sent from the panel and keeps its audience segment', async () => {
+  const data = bot.getData();
+  data.config.active = true;
+  const password = bot.hashPassword('correct-password');
+  data.config.passwordSalt = password.salt;
+  data.config.passwordHash = password.hash;
+  data.objects.push(property('villa-draft', 'Вилла из черновика'));
+  const recipient = createChat({ firstName: 'Анна' });
+  recipient.user.source = 'instagram';
+  recipient.user.favorites = ['villa-draft'];
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = 'http://127.0.0.1:' + bot.server.address().port;
+    const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
+    const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+    const body = { mode: 'draft', messages: { ru: 'Персональная подборка', en: '', es: '' }, languages: ['ru'], tags: [], pipelineStages: [], sources: ['instagram'], propertyId: 'villa-draft', propertySignal: 'favorite', buttonText: { ru: '', en: '', es: '' }, buttonUrl: '' };
+    const created = await realFetch(base + '/api/broadcast', { method: 'POST', headers, body: JSON.stringify(body) });
+    assert.equal(created.status, 201);
+    const { id } = await created.json();
+    const estimate = await realFetch(base + '/api/broadcast/estimate', { method: 'POST', headers, body: JSON.stringify(body) });
+    assert.deepEqual(await estimate.json(), { total: 1, byLanguage: { ru: 1, en: 0, es: 0 }, sample: ['Анна'] });
+    const sent = await realFetch(base + '/api/broadcasts/' + id, { method: 'PATCH', headers, body: JSON.stringify({ ...body, mode: 'send' }) });
+    assert.equal(sent.status, 202);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const entry = data.broadcasts.find((item) => item.id === id);
+    assert.equal(entry.status, 'done');
+    assert.deepEqual([entry.sources, entry.propertyId, entry.propertySignal], [['instagram'], 'villa-draft', 'favorite']);
+    const reloaded = bot.normalizeLoadedData(JSON.parse(JSON.stringify(data))).broadcasts.find((item) => item.id === id);
+    assert.deepEqual([reloaded.sources, reloaded.propertyId, reloaded.propertySignal], [['instagram'], 'villa-draft', 'favorite']);
+    assert.ok(telegram.calls.some((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(recipient.id) && call.body.text === 'Персональная подборка'));
+  } finally {
+    await new Promise((resolve) => bot.server.close(resolve));
+  }
 });
 
 test('the setting survives a restart', () => {

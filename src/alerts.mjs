@@ -1,17 +1,18 @@
 // Уведомления клиентам об объектах: избранное и подбор.
 
-import { dayKey, delay } from './util.mjs';
+import { cleanText, dayKey, delay } from './util.mjs';
 import { imageExists } from './media.mjs';
-import { PROPERTY_ALERT_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
+import { PROPERTY_ALERT_TEXT, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
 import { configured, data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError, recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser, userById } from './users.mjs';
 import { sendMessage, sendPhotoMessage } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
 import { notifyAdministratorAction } from './inquiries.mjs';
-import { contentButtons, localizedExact, objectCaption, objectPriceText, propertyReadyForLanguage, recordImages } from './catalog.mjs';
+import { contentButtons, localizedExact, objectCaptionHtml, objectPriceText, propertyReadyForLanguage, recordImages } from './catalog.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
+import { savedSearchMatches } from './saved-search.mjs';
 
 // --- Property alerts ---------------------------------------------------------
 // A client hears about a property again when it matters to them: a favourite
@@ -49,12 +50,21 @@ function budgetLimit(text) {
   return best;
 }
 
+function normalizedSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 function locationMatches(request, record) {
   const place = ['city', 'district', 'address', 'title']
     .flatMap((field) => ['ru', 'en', 'es'].map((language) => localizedExact(record[field], language, 400)))
     .join(' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-  const words = String(request || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 4);
+  const words = normalizedSearchText(request).split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 4);
   return words.some((word) => place.includes(word));
 }
 
@@ -62,36 +72,152 @@ function locationMatches(request, record) {
 // the last answer, "Any", has no group.
 const SELECTION_TYPE_GROUPS = [['apartment', 'newbuild'], ['house', 'villa', 'townhouse'], ['land'], ['commercial']];
 
-// Unknown data never excludes a property: a missing price or bedroom count
-// passes, so the manager-worthy lead is not lost.
-function selectionMatches(inquiry, record) {
+const SELECTION_TIER_ORDER = { exact: 0, close: 1, consider: 2 };
+
+function requestedCurrency(text) {
+  const value = normalizedSearchText(text);
+  const words = value.split(/[^\p{L}]+/u).filter(Boolean);
+  if (value.includes('$') || words.some((word) => word === 'usd' || word.startsWith('dollar') || word.startsWith('dolar') || word.startsWith('доллар'))) return 'USD';
+  if (value.includes('£') || words.some((word) => word === 'gbp' || word.startsWith('pound') || word.startsWith('libra') || word.startsWith('фунт'))) return 'GBP';
+  if (value.includes('₴') || words.some((word) => word === 'uah' || word === 'грн' || word.startsWith('грив'))) return 'UAH';
+  if (value.includes('₽') || words.some((word) => word === 'rub' || word.startsWith('руб'))) return 'RUB';
+  if (value.includes('€') || words.some((word) => word === 'eur' || word.startsWith('euro') || word === 'евро')) return 'EUR';
+  return '';
+}
+
+function requestedRentPeriod(text) {
+  const words = normalizedSearchText(text).split(/[^\p{L}]+/u).filter(Boolean);
+  if (words.some((word) => word.startsWith('week') || word.startsWith('semana') || word.startsWith('недел'))) return 'week';
+  if (words.some((word) => word.startsWith('month') || word.startsWith('mensual') || word === 'mes' || word.startsWith('месяц') || word.startsWith('месяч'))) return 'month';
+  return '';
+}
+
+function comparableRentPrice(record, period) {
+  const price = Number(record.priceValue);
+  if (!(price > 0)) return 0;
+  const recordPeriod = record.pricePeriod === 'week' ? 'week' : 'month';
+  if (period === recordPeriod) return price;
+  return period === 'week' ? price * 12 / 52 : price * 52 / 12;
+}
+
+// Each requested criterion contributes to a transparent score. A deal or
+// property-type mismatch is a different search, so it is rejected. Price,
+// bedrooms and location may produce a useful nearby option, but missing data
+// can never be called an exact match.
+function selectionEvaluation(inquiry, record) {
   const selection = inquiry.selection || {};
   const copy = SELECTION_FORM_TEXT[inquiry.language] || SELECTION_FORM_TEXT.ru;
+  let earned = 0;
+  let possible = 0;
+  const reasons = [];
+  const warnings = [];
+
   const deal = copy.dealOptions.indexOf(selection.deal);
-  if (deal === 0 && record.dealType !== 'sale') return false;
-  if (deal === 1 && record.dealType !== 'rent') return false;
+  if (deal === 0 || deal === 1) {
+    possible += 20;
+    const wantedDeal = deal === 0 ? 'sale' : 'rent';
+    if (record.dealType !== wantedDeal) return null;
+    earned += 20;
+    reasons.push('deal');
+  }
+
   const typeGroup = SELECTION_TYPE_GROUPS[(copy.typeOptions || []).indexOf(selection.type)];
-  if (typeGroup && !typeGroup.includes(record.propertyType)) return false;
+  if (typeGroup) {
+    possible += 25;
+    if (!typeGroup.includes(record.propertyType)) return null;
+    earned += 25;
+    reasons.push('type');
+  }
+
+  if (selection.location && selection.location !== copy.anyLocation) {
+    possible += 20;
+    if (locationMatches(selection.location, record)) {
+      earned += 20;
+      reasons.push('location');
+    } else {
+      warnings.push('location');
+    }
+  }
+
+  const limit = selection.budget && selection.budget !== copy.noBudget ? budgetLimit(selection.budget) : 0;
+  if (limit) {
+    possible += 20;
+    const currency = cleanText(record.currency, 10).toUpperCase() || 'EUR';
+    const wantedCurrency = requestedCurrency(selection.budget);
+    const wantedPeriod = record.dealType === 'rent' ? (requestedRentPeriod(selection.budget) || 'month') : 'total';
+    let price = Number(record.priceValue);
+    if (record.dealType === 'rent') price = comparableRentPrice(record, wantedPeriod);
+    if (wantedCurrency && currency !== wantedCurrency) {
+      warnings.push('currency');
+    } else if (!(price > 0)) {
+      warnings.push('priceMissing');
+    } else if (price <= limit) {
+      earned += 20;
+      reasons.push('budget');
+      if (record.dealType === 'rent' && requestedRentPeriod(selection.budget)
+        && record.pricePeriod !== requestedRentPeriod(selection.budget)) warnings.push('periodConverted');
+    } else if (price <= limit * 1.1) {
+      earned += 10;
+      warnings.push('budgetClose');
+    } else if (price <= limit * 1.25) {
+      earned += 4;
+      warnings.push('budgetHigh');
+    } else {
+      return null;
+    }
+  }
+
   const wantedBedrooms = copy.bedroomOptions.indexOf(selection.bedrooms) + 1;
   const bedrooms = Number(record.bedrooms);
-  if (wantedBedrooms >= 1 && wantedBedrooms <= 4 && bedrooms > 0 && bedrooms < wantedBedrooms) return false;
-  const limit = selection.budget && selection.budget !== copy.noBudget ? budgetLimit(selection.budget) : 0;
-  const price = Number(record.priceValue);
-  if (limit && price > 0 && price > limit * 1.1) return false;
-  if (selection.location && selection.location !== copy.anyLocation && !locationMatches(selection.location, record)) return false;
-  return true;
+  if (wantedBedrooms >= 1 && wantedBedrooms <= 4) {
+    possible += 15;
+    if (!(bedrooms > 0)) {
+      warnings.push('bedroomsMissing');
+    } else if (bedrooms >= wantedBedrooms) {
+      earned += 15;
+      reasons.push('bedrooms');
+    } else if (bedrooms === wantedBedrooms - 1) {
+      earned += 5;
+      warnings.push('bedroomsClose');
+    } else {
+      return null;
+    }
+  }
+
+  if (!possible) return { tier: 'exact', score: 100, reasons: ['general'], warnings: [] };
+  const score = Math.round(earned / possible * 100);
+  if (score < 40) return null;
+  const hasApproximation = warnings.some((key) => key !== 'periodConverted');
+  const tier = !hasApproximation ? 'exact' : score >= 70 ? 'close' : 'consider';
+  return { tier, score, reasons: reasons.length ? reasons : ['general'], warnings };
+}
+
+// New-property notifications are deliberately quiet: only an exact result is
+// pushed automatically. Nearby options remain visible in the requested list.
+function selectionMatches(inquiry, record) {
+  const evaluation = selectionEvaluation(inquiry, record);
+  return Boolean(evaluation && evaluation.tier === 'exact');
 }
 
 // Published properties that already fit a selection form, best first by the
 // catalog order. Shown to the client right after they send the form.
 const SELECTION_MATCHES_SHOWN = 20;
 
-function currentSelectionMatches(user, selection) {
+function currentSelectionRanking(user, selection) {
   const language = user.preferredLanguage || 'ru';
   const request = { selection, language };
   return data.objects
-    .filter((record) => record.status === 'active' && propertyReadyForLanguage(record, language) && selectionMatches(request, record))
+    .map((record, index) => ({ record, index, evaluation: selectionEvaluation(request, record) }))
+    .filter((item) => item.record.status === 'active' && propertyReadyForLanguage(item.record, language) && item.evaluation)
+    .sort((left, right) => SELECTION_TIER_ORDER[left.evaluation.tier] - SELECTION_TIER_ORDER[right.evaluation.tier]
+      || right.evaluation.score - left.evaluation.score
+      || left.index - right.index)
+    .map((item) => ({ record: item.record, ...item.evaluation }))
     .slice(0, SELECTION_MATCHES_SHOWN);
+}
+
+function currentSelectionMatches(user, selection) {
+  return currentSelectionRanking(user, selection).map((item) => item.record);
 }
 
 // Who should hear about this property after it was created or saved.
@@ -119,6 +245,22 @@ function propertyAlertDeliveries(record, before) {
     }
   }
   if (!before || becameAvailable) {
+    // An explicit saved search has priority over the older, implicit matching
+    // from a selection request. A client receives the property only once.
+    for (const user of Object.values(data.users)) {
+      if (!alertsEnabled(user) || notified.has(user.id) || !savedSearchMatches(user, record)) continue;
+      const key = becameAvailable
+        ? 'saved-available:' + record.id + ':' + dayKey()
+        : 'saved-match:' + record.id;
+      if (user.alertsSent && user.alertsSent[key]) continue;
+      deliveries.push({
+        user,
+        record,
+        heading: (SAVED_SEARCH_TEXT[user.preferredLanguage] || SAVED_SEARCH_TEXT.ru).newMatch,
+        key,
+      });
+      notified.add(user.id);
+    }
     const since = Date.now() - SELECTION_ALERT_WINDOW_MS;
     const latestSelection = new Map();
     for (const inquiry of data.inquiries) {
@@ -141,13 +283,13 @@ async function sendPropertyAlert(delivery, token) {
   const { user, record, heading } = delivery;
   const language = user.preferredLanguage;
   const copy = PROPERTY_ALERT_TEXT[language] || PROPERTY_ALERT_TEXT.ru;
-  const caption = [heading, objectCaption(record, language)].join('\n\n').slice(0, 1000);
+  const caption = ['<i>' + String(heading || '').replace(/[&<>]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]) + '</i>', objectCaptionHtml(record, language)].join('\n\n');
   const buttons = contentButtons(record, language, user, 'property');
   const markup = { inline_keyboard: [...(buttons ? buttons.inline_keyboard : []), [{ text: copy.turnOff, callback_data: 'alerts:off' }]] };
   const image = recordImages(record, language)[0];
   // Sent as a separate message: the client's open catalog is left untouched.
-  if (imageExists(image)) await sendPhotoMessage(user.chatId, image, caption, token, markup);
-  else await sendMessage(user.chatId, caption, token, { reply_markup: markup });
+  if (imageExists(image)) await sendPhotoMessage(user.chatId, image, caption, token, markup, { parseMode: 'HTML' });
+  else await sendMessage(user.chatId, caption, token, { reply_markup: markup, parse_mode: 'HTML' });
   recordPropertyEvent(record.id, 'impressions');
 }
 
@@ -202,12 +344,14 @@ export {
   alertsEnabled,
   budgetLimit,
   currentSelectionMatches,
+  currentSelectionRanking,
   deliverPropertyAlerts,
   handleAlertsCallback,
   locationMatches,
   propertyAlertDeliveries,
   queuePropertyAlerts,
   rememberAlert,
+  selectionEvaluation,
   selectionMatches,
   sendPropertyAlert,
 };

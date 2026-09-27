@@ -6,6 +6,7 @@ import { PANEL_CSS } from './styles.mjs';
 import { PANEL_RUNTIME_JS, PANEL_SHELL } from './runtime.mjs';
 import { OVERVIEW_JS } from './view-overview.mjs';
 import { INQUIRIES_JS } from './view-inquiries.mjs';
+import { NOTIFICATIONS_JS } from './view-notifications.mjs';
 import { CATALOG_JS } from './view-catalog.mjs';
 import { TEXTS_JS } from './view-texts.mjs';
 import { REACH_JS } from './view-reach.mjs';
@@ -15,6 +16,7 @@ const PANEL_SCRIPT = [
   PANEL_RUNTIME_JS,
   OVERVIEW_JS,
   INQUIRIES_JS,
+  NOTIFICATIONS_JS,
   CATALOG_JS,
   TEXTS_JS,
   REACH_JS,

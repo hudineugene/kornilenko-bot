@@ -3,19 +3,19 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
-import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, REMINDER_HOUR_OPTIONS, MAX_MANAGERS, normalizeCalculator, normalizeLoadedData, normalizeManagers, normalizeViewingSlots, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
+import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAGES, REMINDER_HOUR_OPTIONS, MAX_MANAGERS, TIME_ZONES, normalizeCalculator, normalizeLoadedData, normalizeManagers, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { dropMissingImages, forEachStoredImage, imageBytes, imageExists } from './media.mjs';
 import { MANAGER_CONTACT_TEXT, applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
-import { configured, data, replaceData, runtime, saveDataNow, verifyPassword } from './store.mjs';
+import { applyConfiguredTimeZone, configured, data, replaceData, runtime, saveDataNow, verifyPassword } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { eraseUserData, rebuildUserIndex, userByChatId, userById, userDataExport } from './users.mjs';
-import { forgetTelegramFileIds, sendMessage, sendPhotoMessage, telegramFileIds, telegramRequest } from './telegram.mjs';
+import { forgetTelegramFileIds, sendDocumentMessage, sendMessage, sendPhotoMessage, telegramFileIds, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, menuKeyboard } from './menus.mjs';
-import { inquiryChats } from './inquiries.mjs';
+import { appendInquiryMessage, inquiryChats, inquiryTimelineMessage } from './inquiries.mjs';
 import { recordImages, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { findRule, restartPolling } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast, userUnavailableError } from './broadcasts.mjs';
-import { BOT_TOKEN_PATTERN, MAX_UNAUTHENTICATED_BODY_BYTES, binaryImage, clientAddress, createSession, isLocalRequest, json, loginAttempts, parseUploadedImage, readBackup, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
+import { BOT_TOKEN_PATTERN, MAX_UNAUTHENTICATED_BODY_BYTES, binaryImage, clientAddress, createSession, isLocalRequest, json, loginAttempts, parseUploadedDocument, parseUploadedImage, readBackup, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
 import { REMOTE_LOGIN_CODE_ATTEMPTS, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
 import { loginAllowed, menuInput, messagesInput, parseBroadcast, parseContentRecord, replyTemplateInput, rulesConflict, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { INQUIRY_EXPORT_COLUMNS, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
@@ -25,6 +25,8 @@ import { announceActiveChange } from './status.mjs';
 import { MIN_BACKUP_PASSWORD_LENGTH, sendTelegramBackup, setBackupPassword, telegramBackupSettings } from './offsite.mjs';
 import { applyImport, feedSettings, fetchFeed, planImport, planSummary, readFeed } from './feed-import.mjs';
 import { handleGroupApi } from './group-api.mjs';
+import { autostartStatus, setAutostart } from './autostart.mjs';
+import { readAllAdminNotifications, updateAdminNotification } from './admin-notifications.mjs';
 
 function portableBackupData() {
   const payload = clone(data);
@@ -147,6 +149,23 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true, csrf: session.csrf });
   }
 
+  if (url.pathname === '/api/autostart' && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    return json(res, 200, autostartStatus());
+  }
+
+  if (url.pathname === '/api/autostart' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    try {
+      return json(res, 200, setAutostart(body.enabled === true));
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+
   if (url.pathname === '/api/remote-access' && req.method === 'PUT') {
     const session = requireAuth(req, res, true);
     if (!session) return;
@@ -200,6 +219,25 @@ async function handleApi(req, res, url) {
     securityHeaders(res);
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
     return res.end(serialized.slice(0, -1) + ',"stateVersion":"' + stateVersion + '"}');
+  }
+
+  if (url.pathname === '/api/admin-notifications/read-all' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    readAllAdminNotifications();
+    return json(res, 200, { ok: true });
+  }
+
+  const adminNotificationMatch = url.pathname.match(/^\/api\/admin-notifications\/([^/]+)$/);
+  if (adminNotificationMatch && req.method === 'PATCH') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const action = cleanText(body.action, 20);
+    if (!['read', 'unread', 'handle', 'reopen'].includes(action)) return json(res, 400, { error: 'Некорректное действие с уведомлением' });
+    const changed = updateAdminNotification(decodeURIComponent(adminNotificationMatch[1]), action);
+    if (!changed) return json(res, 404, { error: 'Уведомление больше не актуально' });
+    return json(res, 200, { ok: true });
   }
 
   if (url.pathname === '/api/welcome' && req.method === 'PUT') {
@@ -349,6 +387,71 @@ async function handleApi(req, res, url) {
     } catch (error) {
       return json(res, 400, { error: error.message });
     }
+  }
+
+  // A property-centric view for the manager: aggregate counters plus the
+  // clients who showed a concrete signal of interest. Keeping this endpoint
+  // separate avoids limiting the list to the 500 users returned by /api/state.
+  const propertyInsightsMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/insights$/);
+  if (propertyInsightsMatch && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const propertyId = decodeURIComponent(propertyInsightsMatch[1]);
+    const record = data.objects.find((item) => String(item.id) === propertyId);
+    if (!record) return json(res, 404, { error: 'Объект не найден' });
+    const raw = (data.analytics && data.analytics.properties && data.analytics.properties[propertyId]) || {};
+    const relatedInquiries = data.inquiries.filter((item) => String(item.propertyId || '') === propertyId);
+    const resetAt = Date.parse(data.stats && data.stats.statisticsResetAt || '') || 0;
+    const periodInquiries = resetAt
+      ? relatedInquiries.filter((item) => (Date.parse(item.createdAt || '') || 0) >= resetAt)
+      : relatedInquiries;
+    const inquiriesByUser = new Map();
+    for (const inquiry of relatedInquiries) {
+      const userId = String(inquiry.userId || '');
+      if (!userId) continue;
+      const current = inquiriesByUser.get(userId) || [];
+      current.push(inquiry);
+      inquiriesByUser.set(userId, current);
+    }
+    function includesProperty(values) {
+      return Array.isArray(values) && values.some((value) => String(value) === propertyId);
+    }
+    const clients = Object.values(data.users).map((user) => {
+      const inquiries = (inquiriesByUser.get(String(user.id)) || []).sort((a, b) => (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0));
+      const signals = [];
+      if (includesProperty(user.favorites)) signals.push('favorite');
+      if (includesProperty(user.comparisonIds)) signals.push('comparison');
+      if (includesProperty(user.recentlyViewed)) signals.push('viewed');
+      if (includesProperty(user.selectionMatchIds)) signals.push('match');
+      if (inquiries.length) signals.push('inquiry');
+      if (!signals.length) return null;
+      return {
+        id: String(user.id), firstName: user.firstName || '', lastName: user.lastName || '', contactName: user.contactName || '',
+        username: user.username || '', phone: user.phone || '', preferredLanguage: user.preferredLanguage || '', source: user.source || '',
+        blocked: Boolean(user.blocked), lastSeenAt: user.lastSeenAt || '', signals, inquiryCount: inquiries.length,
+        latestInquiryId: inquiries[0] ? inquiries[0].id : '', latestInquiryStatus: inquiries[0] ? inquiries[0].status : '',
+        latestInquiryAt: inquiries[0] ? inquiries[0].updatedAt || inquiries[0].createdAt || '' : '',
+      };
+    }).filter(Boolean).sort((a, b) => {
+      const weight = (client) => (client.signals.includes('inquiry') ? 100 : 0) + (client.signals.includes('favorite') ? 20 : 0) + (client.signals.includes('comparison') ? 10 : 0);
+      return weight(b) - weight(a) || (Date.parse(b.latestInquiryAt || b.lastSeenAt) || 0) - (Date.parse(a.latestInquiryAt || a.lastSeenAt) || 0);
+    });
+    const countSignal = (signal) => clients.filter((client) => client.signals.includes(signal)).length;
+    return json(res, 200, {
+      propertyId,
+      analytics: {
+        impressions: Number(raw.impressions || raw.views || 0), details: Number(raw.details || 0), galleries: Number(raw.galleries || 0),
+        managerContacts: Number(raw.managerContacts || 0), similar: Number(raw.similar || 0), availability: Number(raw.availability || 0),
+        interests: Number(raw.interests || 0), viewings: Number(raw.viewings || 0), questions: Number(raw.questions || 0),
+        favorites: Number(raw.favorites || 0), calculator: Number(raw.calculator || 0), updatedAt: raw.updatedAt || '',
+      },
+      summary: {
+        clients: clients.length, inquiries: periodInquiries.length, inquiryClients: new Set(periodInquiries.map((item) => String(item.userId || '')).filter(Boolean)).size,
+        viewings: periodInquiries.filter((item) => item.type === 'viewing').length,
+        favorites: countSignal('favorite'), comparisons: countSignal('comparison'), viewed: countSignal('viewed'), matches: countSignal('match'),
+      },
+      clients: clients.slice(0, 1000),
+    });
   }
 
   // A copy of a property to start a similar one: hidden until the admin
@@ -514,15 +617,53 @@ async function handleApi(req, res, url) {
       const language = user.preferredLanguage || 'ru';
       const header = (MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru).replyHeader;
       const outgoingText = text ? header + '\n\n' + text : header;
-      if (image && outgoingText.length <= 1000) await sendPhotoMessage(user.chatId, image, outgoingText, data.config.botToken, markup);
-      else if (image) {
-        await sendPhotoMessage(user.chatId, image, '', data.config.botToken, null);
-        await sendMessage(user.chatId, outgoingText, data.config.botToken, markup ? { reply_markup: markup } : {});
-      } else {
-        await sendMessage(user.chatId, outgoingText, data.config.botToken, markup ? { reply_markup: markup } : {});
+      const delivered = [];
+      if (image && outgoingText.length <= 1000) {
+        const message = await sendPhotoMessage(user.chatId, image, outgoingText, data.config.botToken, markup);
+        delivered.push({ message, kind: 'photo', text: text || 'Изображение' });
       }
+      else if (image) {
+        const photoMessage = await sendPhotoMessage(user.chatId, image, '', data.config.botToken, null);
+        delivered.push({ message: photoMessage, kind: 'photo', text: 'Изображение' });
+        const textMessage = await sendMessage(user.chatId, outgoingText, data.config.botToken, markup ? { reply_markup: markup } : {});
+        delivered.push({ message: textMessage, kind: 'text', text });
+      } else {
+        const message = await sendMessage(user.chatId, outgoingText, data.config.botToken, markup ? { reply_markup: markup } : {});
+        delivered.push({ message, kind: 'text', text });
+      }
+      const now = new Date().toISOString();
+      let inquiry = data.inquiries.find((item) => String(item.userId) === String(user.id) && item.status !== 'closed');
+      if (!inquiry) {
+        inquiry = {
+          id: crypto.randomUUID(), userId: String(user.id), chatId: String(user.chatId), language,
+          text: text || 'Исходящее сообщение менеджера', type: 'general', propertyId: '', sourceMessageId: null,
+          lead: null, selection: null, matching: null, viewing: null, status: 'in_progress', pipelineStage: 'contact',
+          note: '', replies: [], messages: [], readAt: now, remindedAt: '', followUpDate: '', followUpTime: '',
+          followUpNotifiedAt: '', assignee: cleanText(data.config.adminName, 60) || 'Администратор',
+          createdAt: now, updatedAt: now, clientMessageAt: '',
+        };
+        data.inquiries.unshift(inquiry);
+        data.inquiries = data.inquiries.slice(0, 5000);
+      }
+      const replyText = [text, buttonText ? '🔗 ' + buttonText : ''].filter(Boolean).join('\n') || 'Изображение';
+      const lastMessage = delivered[delivered.length - 1] && delivered[delivered.length - 1].message;
+      inquiry.replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
+      inquiry.replies.push({
+        id: crypto.randomUUID(), text: replyText, source: 'panel', by: cleanText(data.config.adminName, 60) || 'Администратор',
+        createdAt: now, deliveredAt: now, telegramMessageId: lastMessage && lastMessage.message_id ? Number(lastMessage.message_id) : null,
+      });
+      inquiry.replies = inquiry.replies.slice(-50);
+      for (const delivery of delivered) {
+        appendInquiryMessage(inquiry, inquiryTimelineMessage(delivery.message, 'out', {
+          kind: delivery.kind, text: delivery.text, source: 'panel', by: cleanText(data.config.adminName, 60) || 'Администратор', createdAt: now,
+          telegramMessageId: delivery.message && delivery.message.message_id,
+        }));
+      }
+      inquiry.status = 'in_progress';
+      inquiry.readAt = now;
+      inquiry.updatedAt = now;
       saveDataNow();
-      return json(res, 200, { ok: true });
+      return json(res, 200, { ok: true, inquiryId: inquiry.id });
     } catch (error) {
       if (userUnavailableError(error)) user.blocked = true;
       recordError('Личное сообщение пользователю', error);
@@ -563,6 +704,9 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     if (body.note != null) user.note = cleanText(body.note, 2000);
     if (Array.isArray(body.tags)) user.tags = body.tags.map((tag) => cleanText(tag, 40)).filter(Boolean).slice(0, 20);
+    if (body.contactName != null) user.contactName = cleanText(body.contactName, 120);
+    if (body.phone != null) user.phone = cleanText(body.phone, 80);
+    if (body.preferredContactTime != null) user.preferredContactTime = cleanText(body.preferredContactTime, 160);
     if (['ru', 'en', 'es', ''].includes(body.preferredLanguage)) user.preferredLanguage = body.preferredLanguage;
     if (typeof body.blocked === 'boolean') user.blocked = body.blocked;
     saveDataNow();
@@ -646,6 +790,55 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true, removed, left: data.inquiries.length });
   }
 
+  const conversationReadMatch = url.pathname.match(/^\/api\/conversations\/([^/]+)\/read$/);
+  if (conversationReadMatch && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const userId = decodeURIComponent(conversationReadMatch[1]);
+    const inquiries = data.inquiries.filter((item) => String(item.userId) === userId);
+    if (!inquiries.length) return json(res, 404, { error: 'Диалог не найден' });
+    const now = new Date().toISOString();
+    for (const inquiry of inquiries) inquiry.readAt = now;
+    saveDataNow();
+    return json(res, 200, { ok: true, readAt: now });
+  }
+
+  const conversationMediaMatch = url.pathname.match(/^\/api\/conversation-media\/([^/]+)$/);
+  if (conversationMediaMatch && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const messageId = decodeURIComponent(conversationMediaMatch[1]);
+    let attachment = null;
+    for (const inquiry of data.inquiries) {
+      attachment = (Array.isArray(inquiry.messages) ? inquiry.messages : []).find((message) => message.id === messageId && message.fileId);
+      if (attachment) break;
+    }
+    if (!attachment) return json(res, 404, { error: 'Вложение не найдено' });
+    try {
+      const telegramFile = await telegramRequest(data.config.botToken, 'getFile', { file_id: attachment.fileId });
+      const filePath = cleanText(telegramFile && telegramFile.file_path, 512);
+      if (!filePath || filePath.includes('..') || !/^[A-Za-z0-9_./-]+$/.test(filePath)) throw new Error('Telegram не вернул путь к файлу');
+      const response = await fetch('https://api.telegram.org/file/bot' + data.config.botToken + '/' + filePath);
+      if (!response.ok) throw new Error('Telegram не отдал файл');
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length > 25 * 1024 * 1024) throw new Error('Файл больше 25 МБ');
+      const fallbackName = filePath.split('/').pop() || 'attachment';
+      const fileName = (attachment.fileName || fallbackName).replace(/[^\p{L}\p{N}._ -]+/gu, '_').slice(0, 180) || 'attachment';
+      securityHeaders(res);
+      res.writeHead(200, {
+        'content-type': attachment.mimeType || response.headers.get('content-type') || 'application/octet-stream',
+        'content-disposition': "inline; filename*=UTF-8''" + encodeURIComponent(fileName),
+        'content-length': bytes.length,
+        'cache-control': 'private, no-store',
+      });
+      res.end(bytes);
+      return;
+    } catch (error) {
+      recordError('Открытие вложения в панели', error);
+      return json(res, 502, { error: 'Не удалось получить вложение из Telegram' });
+    }
+  }
+
   const inquiryMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)$/);
   if (inquiryMatch && req.method === 'DELETE') {
     const session = requireAuth(req, res, true);
@@ -667,6 +860,15 @@ async function handleApi(req, res, url) {
     if (body.status != null && !['new', 'in_progress', 'closed'].includes(body.status)) {
       return json(res, 400, { error: 'Некорректный статус обращения' });
     }
+    if (body.pipelineStage != null && !['', ...PIPELINE_STAGES].includes(body.pipelineStage)) {
+      return json(res, 400, { error: 'Некорректный этап воронки' });
+    }
+    let assignee = null;
+    if (body.assignee != null) {
+      assignee = cleanText(body.assignee, 60);
+      const allowed = new Set(['', cleanText(data.config.adminName, 60) || 'Администратор', ...(Array.isArray(data.config.managers) ? data.config.managers.map((manager) => cleanText(manager.name, 60)) : [])]);
+      if (!allowed.has(assignee)) return json(res, 400, { error: 'Выберите ответственного из списка менеджеров' });
+    }
     if (body.followUpDate != null) {
       const date = cleanText(body.followUpDate, 10);
       const time = cleanText(body.followUpTime, 5);
@@ -677,8 +879,19 @@ async function handleApi(req, res, url) {
       inquiry.followUpDate = date;
       inquiry.followUpTime = date ? time : '';
     }
-    if (body.status != null) inquiry.status = body.status;
+    if (body.pipelineStage != null) {
+      inquiry.pipelineStage = body.pipelineStage;
+      if (['won', 'lost'].includes(body.pipelineStage)) inquiry.status = 'closed';
+      else if (body.pipelineStage && inquiry.status === 'closed') inquiry.status = 'in_progress';
+    }
+    if (body.status != null) {
+      inquiry.status = body.status;
+      if (body.status !== 'closed' && ['won', 'lost'].includes(inquiry.pipelineStage)) {
+        inquiry.pipelineStage = body.status === 'new' ? 'new' : 'contact';
+      }
+    }
     if (body.note != null) inquiry.note = cleanText(body.note, 2000);
+    if (assignee != null) inquiry.assignee = assignee;
     inquiry.updatedAt = new Date().toISOString();
     saveDataNow();
     return json(res, 200, { ok: true });
@@ -709,34 +922,106 @@ async function handleApi(req, res, url) {
     const inquiry = data.inquiries.find((item) => item.id === decodeURIComponent(inquiryReplyMatch[1]));
     if (!inquiry) return json(res, 404, { error: 'Обращение не найдено' });
     const body = await readJson(req);
-    const text = cleanText(body.text, 4000);
-    if (!text) return json(res, 400, { error: 'Введите ответ пользователю' });
+    const text = cleanText(body.text, 3800);
+    const requestedId = cleanText(body.clientRequestId, 100);
+    if (requestedId && !/^[A-Za-z0-9._:-]{8,100}$/.test(requestedId)) return json(res, 400, { error: 'Некорректный идентификатор отправки' });
+    const clientRequestId = requestedId || crypto.randomUUID();
+    const existingReply = (Array.isArray(inquiry.replies) ? inquiry.replies : []).find((item) => item.clientRequestId === clientRequestId);
+    if (existingReply) {
+      return json(res, 200, {
+        ok: true,
+        duplicate: true,
+        deliveredAt: existingReply.deliveredAt || existingReply.createdAt || '',
+        messageId: existingReply.telegramMessageId || null,
+      });
+    }
+    if (body.imageDataUrl && body.documentDataUrl) return json(res, 400, { error: 'За один раз можно отправить только один файл' });
+    let attachment = null;
+    let attachmentKind = '';
+    try {
+      if (body.imageDataUrl) {
+        attachment = parseUploadedImage(body.imageDataUrl, body.imageName || 'photo.jpg');
+        attachmentKind = 'photo';
+      } else if (body.documentDataUrl) {
+        attachment = parseUploadedDocument(body.documentDataUrl, body.documentName || 'document.pdf');
+        attachmentKind = 'document';
+      }
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+    if (!text && !attachment) return json(res, 400, { error: 'Введите сообщение или добавьте файл' });
+    if (attachment && text.length > 800) return json(res, 400, { error: 'С вложением отправьте подпись до 800 знаков' });
     const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
     if (!user || !user.chatId) return json(res, 400, { error: 'У пользователя нет доступного чата' });
+    const requestedReplyTo = Number(body.replyToMessageId);
+    let replyTarget = null;
+    if (body.replyToMessageId != null && body.replyToMessageId !== '') {
+      if (!Number.isFinite(requestedReplyTo)) return json(res, 400, { error: 'Не удалось определить сообщение для ответа' });
+      for (const related of data.inquiries) {
+        if (String(related.userId) !== String(inquiry.userId)) continue;
+        replyTarget = (Array.isArray(related.messages) ? related.messages : []).find((message) => message.direction === 'in' && Number(message.telegramMessageId) === requestedReplyTo);
+        if (replyTarget) break;
+      }
+      if (!replyTarget) return json(res, 400, { error: 'Сообщение для ответа не найдено в этом диалоге' });
+    }
     try {
       const language = user.preferredLanguage || inquiry.language || 'ru';
       const header = (MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru).replyHeader;
-      const replyParameters = Number.isFinite(Number(inquiry.sourceMessageId))
-        ? { message_id: Number(inquiry.sourceMessageId), allow_sending_without_reply: true }
+      const targetMessageId = replyTarget ? requestedReplyTo : Number(inquiry.sourceMessageId);
+      const replyParameters = Number.isFinite(targetMessageId)
+        ? { message_id: targetMessageId, allow_sending_without_reply: true }
         : null;
-      const sentMessage = await sendMessage(user.chatId, header + '\n\n' + text, data.config.botToken, {
-        reply_markup: menuKeyboard(user.preferredLanguage || inquiry.language || 'ru'),
-        ...(replyParameters ? { reply_parameters: replyParameters } : {}),
-      });
+      const keyboard = menuKeyboard(language);
+      const outgoingText = header + (text ? '\n\n' + text : '');
+      let sentMessage;
+      if (attachmentKind === 'photo') {
+        sentMessage = await sendPhotoMessage(user.chatId, attachment, outgoingText, data.config.botToken, keyboard, { replyParameters });
+      } else if (attachmentKind === 'document') {
+        sentMessage = await sendDocumentMessage(user.chatId, attachment, outgoingText, data.config.botToken, keyboard, { replyParameters });
+      } else {
+        sentMessage = await sendMessage(user.chatId, outgoingText, data.config.botToken, {
+          reply_markup: keyboard,
+          ...(replyParameters ? { reply_parameters: replyParameters } : {}),
+        });
+      }
+      let fileId = '';
+      if (attachmentKind === 'photo' && sentMessage && Array.isArray(sentMessage.photo) && sentMessage.photo.length) fileId = cleanText(sentMessage.photo[sentMessage.photo.length - 1].file_id, 512);
+      if (attachmentKind === 'document' && sentMessage && sentMessage.document) fileId = cleanText(sentMessage.document.file_id, 512);
       inquiry.replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
+      const createdAt = new Date().toISOString();
       inquiry.replies.push({
         id: crypto.randomUUID(),
-        text,
+        text: text || attachment.name,
         source: 'panel',
-        createdAt: new Date().toISOString(),
-        deliveredAt: new Date().toISOString(),
+        by: cleanText(data.config.adminName, 60) || 'Администратор',
+        createdAt,
+        deliveredAt: createdAt,
         telegramMessageId: sentMessage && sentMessage.message_id ? Number(sentMessage.message_id) : null,
+        clientRequestId,
+        kind: attachmentKind || 'text',
+        fileName: attachment ? attachment.name : '',
       });
       inquiry.replies = inquiry.replies.slice(-50);
+      appendInquiryMessage(inquiry, inquiryTimelineMessage(null, 'out', {
+        kind: attachmentKind || 'text',
+        text,
+        fileId,
+        fileName: attachment ? attachment.name : '',
+        mimeType: attachment ? attachment.mimeType : '',
+        source: 'panel',
+        by: cleanText(data.config.adminName, 60) || 'Администратор',
+        createdAt,
+        telegramMessageId: sentMessage && sentMessage.message_id,
+        replyToTelegramMessageId: Number.isFinite(targetMessageId) ? targetMessageId : null,
+        replyToText: replyTarget ? (replyTarget.text || replyTarget.fileName || 'Вложение клиента') : '',
+        deliveryStatus: 'delivered',
+        clientRequestId,
+      }));
       inquiry.status = body.keepOpen ? 'in_progress' : 'closed';
-      inquiry.updatedAt = new Date().toISOString();
+      inquiry.readAt = createdAt;
+      inquiry.updatedAt = createdAt;
       saveDataNow();
-      return json(res, 200, { ok: true });
+      return json(res, 200, { ok: true, deliveredAt: createdAt, messageId: sentMessage && sentMessage.message_id ? Number(sentMessage.message_id) : null });
     } catch (error) {
       if (userUnavailableError(error)) user.blocked = true;
       recordError('Ответ на обращение', error);
@@ -913,6 +1198,7 @@ async function handleApi(req, res, url) {
     if (adminChatId && !/^-?\d{4,20}$/.test(adminChatId)) return json(res, 400, { error: 'Chat ID должен состоять из цифр' });
     if (body.notifyMode != null && !['all', 'inquiries'].includes(body.notifyMode)) return json(res, 400, { error: 'Некорректный режим уведомлений' });
     if (body.reminderHours != null && !REMINDER_HOUR_OPTIONS.includes(Number(body.reminderHours))) return json(res, 400, { error: 'Некорректный срок напоминания' });
+    if (body.timeZone != null && !TIME_ZONES.includes(String(body.timeZone))) return json(res, 400, { error: 'Некорректный часовой пояс' });
 
     if (tokenChanged) {
       data.bot = nextBot;
@@ -927,6 +1213,7 @@ async function handleApi(req, res, url) {
     data.config.adminChatId = adminChatId;
     if (body.notifyMode != null) data.config.notifyMode = body.notifyMode;
     if (body.reminderHours != null) data.config.reminderHours = Number(body.reminderHours);
+    if (body.timeZone != null) data.config.timeZone = normalizeTimeZone(body.timeZone);
     if (typeof body.statusNotices === 'boolean') data.config.statusNotices = body.statusNotices;
     const staffChatsBefore = inquiryChats().map((chat) => chat.chatId);
     if (adminChatId !== previousAdminChatId) {
@@ -940,6 +1227,7 @@ async function handleApi(req, res, url) {
     data.config.messages = nextMessages;
     const activeChanged = data.config.active !== Boolean(body.active);
     data.config.active = Boolean(body.active);
+    applyConfiguredTimeZone();
     saveDataNow();
     if (activeChanged || tokenChanged) restartPolling();
     if (activeChanged) announceActiveChange(data.config.active);
@@ -1121,6 +1409,7 @@ async function handleApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const body = await readJson(req);
+    if (body.timeZone != null && !TIME_ZONES.includes(String(body.timeZone))) return json(res, 400, { error: 'Некорректный часовой пояс' });
     if (!CLOCK_TIME_PATTERN.test(String(body.from || '')) || !CLOCK_TIME_PATTERN.test(String(body.to || ''))) return json(res, 400, { error: 'Время укажите в формате ЧЧ:ММ' });
     if (String(body.from) >= String(body.to)) return json(res, 400, { error: 'Конец рабочего дня должен быть позже начала' });
     const days = Array.isArray(body.days) ? body.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) : [];
@@ -1130,6 +1419,8 @@ async function handleApi(req, res, url) {
       if (cleanText(note[language], 500) && !String(note[language]).includes('{next}')) return json(res, 400, { error: 'В тексте для клиента оставьте {next} — туда бот подставит, когда ответит менеджер' });
     }
     data.config.workingHours = normalizeWorkingHours({ enabled: body.enabled === true, days, from: body.from, to: body.to, note });
+    if (body.timeZone != null) data.config.timeZone = normalizeTimeZone(body.timeZone);
+    applyConfiguredTimeZone();
     saveDataNow();
     return json(res, 200, { ok: true, workingHours: data.config.workingHours });
   }
@@ -1139,7 +1430,11 @@ async function handleApi(req, res, url) {
     if (!session) return;
     try {
       const entry = parseBroadcast(await readJson(req), {}, { requireMessages: false, requireSelectedTexts: false });
-      return json(res, 200, { total: broadcastUsers(entry).length });
+      const users = broadcastUsers(entry);
+      const byLanguage = { ru: 0, en: 0, es: 0 };
+      for (const user of users) byLanguage[['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'ru'] += 1;
+      const sample = users.slice(0, 5).map((user) => cleanText(user.contactName || [user.firstName, user.lastName].filter(Boolean).join(' ') || (user.username ? '@' + user.username : 'Клиент ' + user.id), 160));
+      return json(res, 200, { total: users.length, byLanguage, sample });
     } catch (error) {
       return json(res, 400, { error: error.message });
     }
@@ -1177,7 +1472,7 @@ async function handleApi(req, res, url) {
       else {
         if (!data.config.active) throw new Error('Сначала включите бота в настройках');
         if (runtime.broadcastRunning) return json(res, 409, { error: 'Предыдущая рассылка еще выполняется' });
-        if (!broadcastUsers(entry).length) throw new Error('Для выбранных языков и тегов нет получателей');
+        if (!broadcastUsers(entry).length) throw new Error('Для выбранных условий нет получателей');
         entry.status = 'queued';
       }
       data.broadcasts.unshift(entry);
@@ -1204,16 +1499,28 @@ async function handleApi(req, res, url) {
     if (!['draft', 'scheduled'].includes(entry.status)) return json(res, 409, { error: 'Завершенную или выполняемую рассылку нельзя изменить' });
     try {
       const body = await readJson(req);
-      const nextStatus = body.mode === 'schedule' ? 'scheduled' : 'draft';
+      const mode = ['draft', 'schedule', 'send'].includes(body.mode) ? body.mode : 'draft';
+      const nextStatus = mode === 'schedule' ? 'scheduled' : mode === 'send' ? 'queued' : 'draft';
       const updated = parseBroadcast(body, entry, {
         requireMessages: nextStatus !== 'draft',
         requireSelectedTexts: nextStatus !== 'draft',
       });
       updated.status = nextStatus;
       if (updated.status === 'scheduled' && (!updated.scheduledAt || Date.parse(updated.scheduledAt) <= Date.now())) throw new Error('Укажите будущую дату и время');
+      if (updated.status === 'queued') {
+        if (!data.config.active) throw new Error('Сначала включите бота в настройках');
+        if (runtime.broadcastRunning) return json(res, 409, { error: 'Предыдущая рассылка еще выполняется' });
+        if (!broadcastUsers(updated).length) throw new Error('Для выбранных условий нет получателей');
+      }
       Object.assign(entry, updated);
       saveDataNow();
-      return json(res, 200, { ok: true });
+      if (mode === 'send') void runBroadcast(entry).catch((error) => {
+        entry.status = 'failed';
+        entry.error = cleanText(error.message, 400);
+        runtime.lastError = error.message;
+        recordError('Рассылка', error);
+      });
+      return json(res, mode === 'send' ? 202 : 200, { ok: true, total: broadcastUsers(entry).length });
     } catch (error) {
       return json(res, 400, { error: error.message });
     }

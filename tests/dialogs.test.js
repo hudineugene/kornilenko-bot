@@ -349,6 +349,7 @@ test.describe('selection form', () => {
     data.objects.push(property('villa-costly-04', 'Вилла на холме', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 5, priceValue: 2500000, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
     data.objects.push(property('house-fit-05', 'Дом у гольфа', 'active', { dealType: 'sale', propertyType: 'house', bedrooms: 3, priceValue: 480000, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
     data.objects.push(property('flat-fit-06', 'Квартира в центре', 'active', { dealType: 'sale', propertyType: 'apartment', bedrooms: 3, priceValue: 300000, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
+    data.objects.push(property('villa-price-07', 'Вилла с ценой по запросу', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 3, priceValue: null, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
     const chat = createChat();
     await chat.say(MENU.ru.selection);
     await chat.say(ru.dealOptions[0]);
@@ -357,12 +358,18 @@ test.describe('selection form', () => {
     await chat.say('до 600 000 €');
     await chat.say(ru.bedroomOptions[2]);
     const step = await chat.say(ru.confirm);
-    assert.equal(step.replies[0].text, ru.successMatches);
-    assert.deepEqual(chat.user.selectionMatchIds, ['villa-fit-03', 'house-fit-05'], 'type, price and city are respected');
+    assert.equal(step.replies[0].text, ru.successMatches + '\n\n' + ru.matchSummary.replace('{exact}', '2').replace('{close}', '1').replace('{consider}', '0'));
+    assert.deepEqual(chat.user.selectionMatchIds, ['villa-fit-03', 'house-fit-05', 'villa-price-07'], 'exact results come before a useful card with missing price');
+    assert.deepEqual(chat.user.selectionMatchDetails.map((item) => [item.id, item.tier]), [['villa-fit-03', 'exact'], ['house-fit-05', 'exact'], ['villa-price-07', 'close']]);
+    assert.deepEqual(chat.inquiries[0].matching.results, chat.user.selectionMatchDetails, 'the inquiry keeps the result snapshot for the manager');
     const card = step.calls.find((call) => call.method === 'sendPhoto');
-    assert.match(card.body.caption, new RegExp('^' + ru.matchesHeading + ' · 1 / 2\n\nВилла с садом'));
+    assert.ok(card.body.caption.startsWith('<i>' + ru.matchesHeading + ' · 1 / 3</i>\n\n<b>' + ru.tierExact + '</b>\n'));
+    assert.match(card.body.caption, /Почему: формат сделки · тип объекта · нужный район · в рамках бюджета · нужное число спален/);
+    assert.match(card.body.caption, /<b>Вилла с садом<\/b>/);
+    assert.equal(card.body.parse_mode, 'HTML');
     assert.ok(callbacksOf(card.body.reply_markup).includes('catalog:matches:1'));
     assert.equal(chat.inquiries.length, 1, 'the manager still gets the request');
+    assert.ok(adminNotifications().some((text) => text.includes('В карточках нужно уточнить данные') && text.includes('Вилла с ценой по запросу: цена')));
 
     const next = await chat.press('catalog:matches:1');
     const edited = next.calls.find((call) => call.method === 'editMessageMedia' || call.method === 'sendPhoto');
@@ -541,6 +548,67 @@ test.describe('property card', () => {
     });
   }
 
+  test('similar-property ranking never mixes sale and rent and explains its order', () => {
+    const source = property('similar-source-01', 'Исходная вилла', 'active', {
+      dealType: 'sale', propertyType: 'villa', priceValue: 850000, currency: 'EUR', bedrooms: 4, area: 220,
+      city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' },
+      district: { ru: 'Нагуэлес', en: 'Nagueles', es: 'Nagüeles' },
+    });
+    const exact = property('similar-exact-02', 'Точная альтернатива', 'active', {
+      dealType: 'sale', propertyType: 'villa', priceValue: 890000, currency: 'EUR', bedrooms: 4, area: 210,
+      city: source.city, district: source.district,
+    });
+    const related = property('similar-house-03', 'Близкий дом', 'active', {
+      dealType: 'sale', propertyType: 'house', priceValue: 800000, currency: 'EUR', bedrooms: 3, area: 240,
+      city: source.city,
+    });
+    const wrongDeal = property('similar-rent-04', 'Та же вилла в аренду', 'active', {
+      dealType: 'rent', propertyType: 'villa', priceValue: 4000, currency: 'EUR', bedrooms: 4, area: 220,
+      city: source.city, district: source.district,
+    });
+    const wrongType = property('similar-shop-05', 'Магазин рядом', 'active', {
+      dealType: 'sale', propertyType: 'commercial', priceValue: 850000, currency: 'EUR', bedrooms: 4, area: 220,
+      city: source.city, district: source.district,
+    });
+    const ranking = bot.similarPropertyRanking(source, [related, wrongDeal, wrongType, exact], 'ru');
+    assert.deepEqual(ranking.map((item) => item.id), ['similar-exact-02', 'similar-house-03']);
+    assert.ok(ranking[0].reasons.includes('district'));
+    assert.ok(ranking[1].reasons.includes('relatedType'));
+  });
+
+  test('similar properties are available from every card as a browsable mini-catalog', async () => {
+    const source = bot.getData().objects[0];
+    furnish(source);
+    bot.getData().objects.push(property('similar-villa-02', 'Вилла по соседству', 'active', {
+      dealType: 'sale', propertyType: 'villa', priceValue: 900000, currency: 'EUR', bedrooms: 4, area: 210,
+      city: source.city, district: source.district,
+    }));
+    bot.getData().objects.push(property('similar-house-03', 'Дом неподалёку', 'active', {
+      dealType: 'sale', propertyType: 'house', priceValue: 780000, currency: 'EUR', bedrooms: 3, area: 190,
+      city: source.city,
+    }));
+    const chat = createChat();
+
+    const details = await chat.press('property:details:' + source.id);
+    assert.ok(callbacksOf(details.last.markup).includes('property:similar:' + source.id), 'available in Details');
+    const manager = await chat.press('property:manager:' + source.id);
+    assert.ok(callbacksOf(manager.last.markup).includes('property:similar:' + source.id), 'available in the manager menu too');
+
+    const first = await chat.press('property:similar:' + source.id);
+    const firstCard = first.calls.find((call) => call.method === 'sendPhoto');
+    assert.ok(firstCard.body.caption.startsWith('<i>' + PROPERTY.ru.similarHeading + ' · 1 / 2</i>'));
+    assert.match(firstCard.body.caption, /Почему подходит: тот же тип · тот же город · тот же район · близкая цена/);
+    assert.ok(callbacksOf(firstCard.body.reply_markup).includes('catalog:similar:1'));
+    assert.ok(callbacksOf(firstCard.body.reply_markup).includes('property:return:' + source.id));
+    assert.equal(chat.user.catalogContext.mode, 'similar');
+    assert.deepEqual(chat.user.similarPropertyIds, ['similar-villa-02', 'similar-house-03']);
+
+    const second = await chat.press('catalog:similar:1');
+    const secondCard = second.calls.find((call) => call.method === 'sendPhoto');
+    assert.match(secondCard.body.caption, /Дом неподалёку/);
+    assert.match(secondCard.body.caption, /близкий тип/);
+  });
+
   test('the card is short and leads to a viewing', async () => {
     furnish(bot.getData().objects[0]);
     const chat = createChat();
@@ -549,19 +617,118 @@ test.describe('property card', () => {
     const caption = card.body.caption;
     assert.match(caption, /💰 850\s000 €/, 'the currency is a symbol');
     assert.match(caption, /📍 Марбелья, Сьерра-Бланка\n/, 'city and district only');
+    assert.match(caption, /🛏 Спальни: 4\s+·\s+🚿 Санузлы: 1/, 'characteristics have readable labels and no more than two values per row');
+    assert.match(caption, /📐 Площадь: 80 м²/, 'units are kept next to the labelled value');
+    assert.match(caption, /<i>🟢 Доступен · Вилла · Продажа<\/i>/, 'status line has a consistent visual hierarchy');
     assert.ok(!caption.includes('Calle Sol'), 'the address is in Details');
     assert.ok(!caption.includes('VILLA-MARBELLA-01'), 'the reference is in Details');
     assert.ok(caption.endsWith('Светлая вилла с видом на море и большим садом.'), 'only the first paragraph');
 
     const rows = card.body.reply_markup.inline_keyboard;
     assert.deepEqual(rows[0].map((button) => button.callback_data), ['property:viewing:villa-marbella-01']);
-    assert.deepEqual(rows[1].map((button) => button.callback_data), ['property:details:villa-marbella-01', 'property:favorite:villa-marbella-01']);
+    assert.deepEqual(rows[1].map((button) => button.callback_data), ['property:details:villa-marbella-01']);
+    assert.deepEqual(rows[2].map((button) => button.callback_data), ['property:favorite:villa-marbella-01', 'property:compare:villa-marbella-01']);
+    assert.deepEqual(rows[3].map((button) => button.callback_data), ['property:manager:villa-marbella-01']);
 
     const details = await chat.press('property:details:villa-marbella-01');
     const full = details.replies.map((reply) => reply.text).join('\n');
+    const detailsCall = details.calls.find((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id));
+    assert.equal(detailsCall.body.parse_mode, 'HTML');
+    assert.match(full, /<b>Характеристики<\/b>/);
+    assert.match(full, /<b>Описание<\/b>/);
     assert.match(full, /📍 Сьерра-Бланка, Calle Sol 5, Марбелья/, 'the city is not repeated when the address names it');
     assert.match(full, /VILLA-MARBELLA-01/);
     assert.match(full, /• Гараж на две машины/);
+  });
+
+  test('card actions stay readable on a phone in all three languages', async () => {
+    for (const record of bot.getData().objects) record.imagesByLanguage.es = [...record.imagesByLanguage.ru];
+    for (const language of ['ru', 'en', 'es']) {
+      const chat = createChat({ language });
+      chat.user.catalogFilter = { deal: 'sale' };
+      const step = await chat.say(MENU[language].objects);
+      const card = step.calls.find((call) => call.method === 'sendPhoto');
+      assert.ok(card.body.caption.includes('🛏 ' + PROPERTY[language].bedroomsLabel + ':'));
+      assert.ok(card.body.caption.includes('🚿 ' + PROPERTY[language].bathroomsLabel + ':'));
+      assert.ok(card.body.caption.includes('📐 ' + PROPERTY[language].areaLabel + ':'));
+      const rows = card.body.reply_markup.inline_keyboard;
+      const rowFor = (callback) => rows.find((row) => row.some((button) => button.callback_data === callback));
+      const details = rowFor('property:details:villa-marbella-01');
+      const secondary = rowFor('property:favorite:villa-marbella-01');
+      const manager = rowFor('property:manager:villa-marbella-01');
+      const filter = rowFor('cfilter:open');
+
+      assert.equal(details.length, 1, language + ': details gets the full phone width');
+      assert.deepEqual(secondary.map((button) => button.callback_data), [
+        'property:favorite:villa-marbella-01',
+        'property:compare:villa-marbella-01',
+      ]);
+      assert.equal(manager.length, 1, language + ': manager gets the full phone width');
+      assert.ok(secondary.every((button) => Array.from(button.text.replaceAll('\uFE0F', '')).length <= 18), language + ': paired labels remain compact');
+      assert.equal(filter[0].text, bot.text.catalogFilter[language].button + ' · 1', language + ': an active filter is compact');
+
+      chat.user.favorites = ['villa-marbella-01'];
+      const updatedMarkup = bot.contentButtons(bot.getData().objects[0], language, chat.user, 'property');
+      const updatedSecondary = updatedMarkup.inline_keyboard
+        .find((row) => row.some((button) => button.callback_data === 'property:favorite:villa-marbella-01'));
+      assert.equal(updatedSecondary.length, 2, language + ': saving a property does not break the row');
+      assert.equal(updatedSecondary[0].text, '💔 ' + PROPERTY[language].cardFavoriteRemove);
+    }
+
+    const originalManagerLabel = PROPERTY.es.contactManager;
+    try {
+      PROPERTY.es.contactManager = 'Contactar ahora mismo con nuestro gestor especializado';
+      const user = createChat({ language: 'es' }).user;
+      const markup = bot.contentButtons(bot.getData().objects[0], 'es', user, 'property');
+      const manager = markup.inline_keyboard.flat().find((button) => button.callback_data === 'property:manager:villa-marbella-01');
+      assert.ok(manager.text.endsWith('…'), 'a long administrator label is shortened deliberately');
+      assert.ok(Array.from(manager.text.replaceAll('\uFE0F', '')).length <= 31);
+    } finally {
+      PROPERTY.es.contactManager = originalManagerLabel;
+    }
+  });
+
+  test('the publication standard requires the same essential fields in every language', () => {
+    const ready = property('standard-01', 'Стандартная карточка', 'active');
+    assert.deepEqual(bot.propertyPublicationIssues(ready, 'ru'), []);
+    delete ready.area;
+    ready.description.en = '';
+    assert.ok(bot.propertyPublicationIssues(ready, 'ru').includes('площадь'));
+    assert.ok(bot.propertyPublicationIssues(ready, 'en').includes('описание'));
+    assert.equal(bot.propertyReadyForLanguage(ready, 'ru'), false);
+
+    const draft = bot.parseContentRecord({ title: { ru: 'Черновик' }, status: 'hidden' }, 'objects');
+    assert.equal(draft.status, 'hidden', 'an incomplete card can be kept as a draft');
+    assert.throws(
+      () => bot.parseContentRecord({ title: { ru: 'Неполный объект' }, status: 'active' }, 'objects'),
+      /Чтобы показывать объект в каталоге/
+    );
+  });
+
+  test('the Telegram card emphasizes the title and price and safely escapes text', async () => {
+    const data = bot.getData();
+    data.objects = [property('safe-html-01', 'Вилла <вид на море>', 'active', { priceValue: 725000 })];
+    const chat = createChat();
+    const step = await chat.say(MENU.ru.objects);
+    const card = step.calls.find((call) => call.method === 'sendPhoto');
+    assert.equal(card.body.parse_mode, 'HTML');
+    assert.match(card.body.caption, /<b>Вилла &lt;вид на море&gt;<\/b>/);
+    assert.match(card.body.caption, /<b>💰 725[^<]+<\/b>/);
+  });
+
+  test('the same premium field order is used for every supported language', () => {
+    const record = property('uniform-01', 'Единая карточка', 'active', {
+      bedrooms: 3, bathrooms: 2, area: 145, plotArea: 420, floor: '2', floors: '4', distanceSea: 750,
+    });
+    for (const language of ['ru', 'en', 'es']) {
+      const caption = bot.objectCaptionHtml(record, language);
+      const actions = PROPERTY[language];
+      assert.ok(caption.indexOf('💰 ') < caption.indexOf('🛏 '), language + ': commercial block precedes characteristics');
+      assert.ok(caption.indexOf('🛏 ' + actions.bedroomsLabel + ':') < caption.indexOf('📐 ' + actions.areaLabel + ':'), language + ': characteristics keep one order');
+      assert.match(caption, new RegExp('🌊 ' + actions.distanceSeaLabel + ': 750 ' + (language === 'ru' ? 'м' : 'm')));
+      const factRows = caption.split('\n').filter((line) => /^(🛏|🚿|📐|🌿|🏢|🌊)/u.test(line));
+      assert.ok(factRows.every((line) => (line.match(/   ·   /g) || []).length <= 1), language + ': at most two facts per row');
+    }
   });
 
   test('a reserved property has no viewing button on the card', async () => {

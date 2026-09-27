@@ -63,6 +63,8 @@ test.before(async () => {
   data.config.passwordHash = password.hash;
   data.config.botToken = '12345:ABCDEFGHIJKLMNOPQRSTUV';
   data.config.active = false;
+  data.config.adminName = 'Олег';
+  data.config.managers = [{ id: 'manager-one', name: 'Мария', chatId: '9000501', verifiedAt: '' }];
   data.users['501'] = { id: '501', chatId: 501, firstName: 'Анна', lastName: 'Петрова', username: 'anna', phone: '+34 600 000 501', source: 'instagram', preferredLanguage: 'ru', activity: [] };
   data.users['502'] = { id: '502', chatId: 502, firstName: 'John', preferredLanguage: 'en', activity: [] };
   data.objects.push({ id: 'villa-1', status: 'active', title: { ru: 'Вилла у моря', en: 'Sea villa', es: '' }, imagesByLanguage: { ru: [], en: [], es: [] } });
@@ -170,6 +172,32 @@ test.describe('property copies and order', () => {
   });
 });
 
+test.describe('property effectiveness', () => {
+  test('the manager sees real counters and every interested client', async () => {
+    const data = bot.getData();
+    data.analytics.properties['villa-1'] = { impressions: 24, details: 9, galleries: 4, managerContacts: 2, favorites: 3, updatedAt: '2026-09-20T10:00:00.000Z' };
+    data.users['501'].favorites = ['villa-1'];
+    data.users['501'].comparisonIds = ['villa-1'];
+    data.users['502'].recentlyViewed = ['villa-1'];
+    data.users['502'].selectionMatchIds = ['villa-1'];
+    const response = await call('GET', '/api/objects/villa-1/insights');
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.deepEqual([result.analytics.impressions, result.analytics.details, result.analytics.galleries], [24, 9, 4]);
+    assert.deepEqual(result.summary, { clients: 2, inquiries: 1, inquiryClients: 1, viewings: 0, favorites: 1, comparisons: 1, viewed: 1, matches: 1 });
+    assert.deepEqual(result.clients.map((client) => [client.id, client.signals]), [
+      ['502', ['viewed', 'match', 'inquiry']],
+      ['501', ['favorite', 'comparison']],
+    ]);
+    assert.equal(result.clients[0].latestInquiryId, 'inq-question');
+    data.stats.statisticsResetAt = '2026-09-18T00:00:00.000Z';
+    const afterReset = await (await call('GET', '/api/objects/villa-1/insights')).json();
+    assert.equal(afterReset.summary.inquiries, 0, 'old inquiries are not mixed with counters collected after a reset');
+    data.stats.statisticsResetAt = '';
+    assert.equal((await call('GET', '/api/objects/missing/insights')).status, 404);
+  });
+});
+
 test.describe('follow-up date in the panel', () => {
   test('a date and an optional time are saved, checked and cleared', async () => {
     assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { followUpDate: '18.09.2026' })).status, 400);
@@ -186,6 +214,47 @@ test.describe('follow-up date in the panel', () => {
     assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { followUpDate: '' })).status, 200);
     assert.deepEqual([inquiry.followUpDate, inquiry.followUpTime], ['', '']);
     inquiry.status = 'new';
+  });
+});
+
+test.describe('conversation center', () => {
+  test('the client card keeps editable contact details', async () => {
+    const response = await call('PATCH', '/api/users/501', {
+      contactName: 'Анна, покупатель', phone: '+34 611 222 333', preferredContactTime: 'после 16:00', preferredLanguage: 'es',
+    });
+    assert.equal(response.status, 200);
+    const user = bot.getData().users['501'];
+    assert.deepEqual([user.contactName, user.phone, user.preferredContactTime, user.preferredLanguage], ['Анна, покупатель', '+34 611 222 333', 'после 16:00', 'es']);
+  });
+
+  test('unread dialogs are counted by client and opening a dialog marks all their requests read', async () => {
+    let state = await (await call('GET', '/api/state')).json();
+    assert.equal(state.unreadConversationCount, 2);
+    const response = await call('POST', '/api/conversations/501/read', {});
+    assert.equal(response.status, 200);
+    const readAt = (await response.json()).readAt;
+    assert.equal(bot.getData().inquiries.find((item) => item.id === 'inq-lead').readAt, readAt);
+    state = await (await call('GET', '/api/state')).json();
+    assert.equal(state.unreadConversationCount, 1);
+  });
+
+  test('the panel assigns only a configured manager', async () => {
+    const inquiry = bot.getData().inquiries.find((item) => item.id === 'inq-lead');
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { assignee: 'Мария' })).status, 200);
+    assert.equal(inquiry.assignee, 'Мария');
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { assignee: 'Посторонний' })).status, 400);
+    assert.equal(inquiry.assignee, 'Мария');
+  });
+
+  test('the sales stage is independent and final stages close the inquiry', async () => {
+    const inquiry = bot.getData().inquiries.find((item) => item.id === 'inq-lead');
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { pipelineStage: 'unknown' })).status, 400);
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { pipelineStage: 'selection' })).status, 200);
+    assert.deepEqual([inquiry.pipelineStage, inquiry.status], ['selection', 'new']);
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { pipelineStage: 'won' })).status, 200);
+    assert.deepEqual([inquiry.pipelineStage, inquiry.status], ['won', 'closed']);
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { pipelineStage: 'negotiation' })).status, 200);
+    assert.deepEqual([inquiry.pipelineStage, inquiry.status], ['negotiation', 'in_progress'], 'returning to an active stage reopens the inquiry');
   });
 });
 

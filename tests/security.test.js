@@ -343,6 +343,47 @@ test.describe('admin API', () => {
     assert.equal(bot.getData().config.reminderHours, 4, 'other settings forms do not reset it');
   });
 
+  test('autostart is reported without changing Windows from the source test server', async () => {
+    const status = await fetchLocal('/api/autostart');
+    assert.equal(status.status, 200);
+    assert.deepEqual(await status.json(), { supported: false, enabled: false });
+    const change = await fetchLocal('/api/autostart', { method: 'PUT', body: JSON.stringify({ enabled: true }) });
+    assert.equal(change.status, 400);
+  });
+
+  test('admin notifications persist read and handled states', async () => {
+    const data = bot.getData();
+    const inquiry = data.inquiries.find((item) => item.id === 'i-201');
+    inquiry.createdAt = '2026-09-24T08:00:00.000Z';
+    inquiry.clientMessageAt = '2026-09-24T09:00:00.000Z';
+    inquiry.readAt = '';
+    inquiry.followUpDate = '2020-01-01';
+    inquiry.followUpTime = '10:00';
+    inquiry.updatedAt = '2026-09-24T09:00:00.000Z';
+
+    let panelState = await (await fetchLocal('/api/state')).json();
+    const message = panelState.notifications.find((item) => item.kind === 'message' && item.route.inquiryId === 'i-201');
+    const task = panelState.notifications.find((item) => item.kind === 'task' && item.route.inquiryId === 'i-201');
+    assert.ok(message, 'new client message is in the notification center');
+    assert.ok(task, 'overdue follow-up is in the notification center');
+    assert.ok(panelState.notificationUnreadCount >= 2);
+
+    const read = await fetchLocal('/api/admin-notifications/' + encodeURIComponent(message.id), { method: 'PATCH', body: JSON.stringify({ action: 'read' }) });
+    assert.equal(read.status, 200);
+    panelState = await (await fetchLocal('/api/state')).json();
+    assert.ok(panelState.notifications.find((item) => item.id === message.id).readAt);
+
+    const handled = await fetchLocal('/api/admin-notifications/' + encodeURIComponent(message.id), { method: 'PATCH', body: JSON.stringify({ action: 'handle' }) });
+    assert.equal(handled.status, 200);
+    panelState = await (await fetchLocal('/api/state')).json();
+    assert.ok(panelState.notifications.find((item) => item.id === message.id).handledAt);
+    assert.ok(data.adminNotificationStates[message.id].snapshot.title);
+
+    assert.equal((await fetchLocal('/api/admin-notifications/read-all', { method: 'POST', body: '{}' })).status, 200);
+    panelState = await (await fetchLocal('/api/state')).json();
+    assert.equal(panelState.notificationUnreadCount, 0);
+  });
+
   test('a user\'s data can be exported', async () => {
     const response = await fetchLocal('/api/users/200/export');
     assert.equal(response.status, 200);

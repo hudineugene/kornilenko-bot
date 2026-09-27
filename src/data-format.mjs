@@ -3,10 +3,29 @@
 import crypto from 'node:crypto';
 import { cleanText, clone } from './util.mjs';
 import { INTERFACE_TEXT_DEFAULTS } from './texts.mjs';
+import { normalizedSimilarPropertyDetails } from './similar.mjs';
 
-const DATA_VERSION = 17;
+const DATA_VERSION = 28;
+const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const REMINDER_HOUR_OPTIONS = [0, 1, 2, 4, 8, 24];
+const TIME_ZONES = ['Europe/Madrid', 'Atlantic/Canary', 'Europe/Kyiv', 'Europe/Moscow', 'UTC'];
+
+function normalizeTimeZone(value) {
+  return TIME_ZONES.includes(String(value || '')) ? String(value) : 'Europe/Madrid';
+}
+
+function normalizePipelineStage(value, inquiry = {}) {
+  const stage = cleanText(value, 24);
+  if (PIPELINE_STAGES.includes(stage)) return stage;
+  // Old closed conversations have no reliable sales outcome. They stay out
+  // of the active funnel until the administrator explicitly marks the result.
+  if (inquiry.status === 'closed') return '';
+  if (inquiry.type === 'viewing') return 'viewing';
+  if (inquiry.type === 'selection') return 'selection';
+  if (inquiry.status === 'in_progress') return 'contact';
+  return 'new';
+}
 
 const defaultData = {
   version: DATA_VERSION,
@@ -19,17 +38,17 @@ const defaultData = {
     messages: {
       ru: {
         greeting: 'Здравствуйте, {first_name}! Рад вас видеть. Чем могу помочь?',
-        help: '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — специальные предложения\n📞 Позвоните мне — менеджер перезвонит в удобное время\n💬 Менеджер — задать вопрос, позвонить или написать в WhatsApp\n☰ Ещё — мои заявки, уведомления, о компании, смена языка\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
+        help: '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — специальные предложения\n📞 Позвоните мне — менеджер перезвонит в удобное время\n💬 Менеджер — задать вопрос, позвонить или написать в WhatsApp\n👤 Моё — избранное, сравнение, сохранённый поиск, история просмотров, заявки и уведомления\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
         fallback: 'Спасибо! Сообщение получено. Менеджер ответит в этом чате.',
       },
       en: {
         greeting: 'Hello, {first_name}! Glad to see you. How can I help?',
-        help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n❤️ Favorites — return to saved properties\n🔥 Offers — current promotions\n📞 Call me back — a manager will call you at a convenient time\n💬 Manager — ask a question, call or write on WhatsApp\n☰ More — my requests, notifications, about us, language\n\nYou can also send a regular message. A manager will reply in this chat.',
+        help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n❤️ Favorites — return to saved properties\n🔥 Offers — current promotions\n📞 Call me back — a manager will call you at a convenient time\n💬 Manager — ask a question, call or write on WhatsApp\n👤 My space — favorites, comparison, saved search, recently viewed properties, requests and notifications\n\nYou can also send a regular message. A manager will reply in this chat.',
         fallback: 'Thank you! Your message has been received. A manager will reply in this chat.',
       },
       es: {
         greeting: '¡Hola, {first_name}! Me alegra verte. ¿Cómo puedo ayudarte?',
-        help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — ofertas actuales\n📞 Llámame — un gestor te llamará cuando te venga bien\n💬 Gestor — hacer una pregunta, llamar o escribir por WhatsApp\n☰ Más — mis solicitudes, avisos, la empresa, idioma\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
+        help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — ofertas actuales\n📞 Llámame — un gestor te llamará cuando te venga bien\n💬 Gestor — hacer una pregunta, llamar o escribir por WhatsApp\n👤 Mi espacio — favoritos, comparación, búsqueda guardada, inmuebles vistos, solicitudes y avisos\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
         fallback: '¡Gracias! Hemos recibido tu mensaje. Un gestor responderá en este chat.',
       },
     },
@@ -56,6 +75,7 @@ const defaultData = {
     active: true,
     notifyMode: 'inquiries',
     reminderHours: 2,
+    timeZone: 'Europe/Madrid',
     remoteAccess: false,
     tunnelToken: '',
     tunnelHostname: '',
@@ -103,6 +123,7 @@ const defaultData = {
   },
   analytics: { daily: {}, properties: {} },
   errors: [],
+  adminNotificationStates: {},
   broadcasts: [],
   inquiries: [],
   replyTemplates: [],
@@ -134,6 +155,26 @@ function normalizePropertyImages(record) {
   // Images from older versions are treated as Russian so they are never
   // accidentally shown to English- or Spanish-speaking users.
   return { ru: normalizeStoredImages(record || {}), en: [], es: [] };
+}
+
+function normalizeAdminNotificationStates(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).slice(0, 1000).map(([id, state]) => {
+    const source = state && typeof state === 'object' && !Array.isArray(state) ? state : {};
+    const snapshot = source.snapshot && typeof source.snapshot === 'object' ? source.snapshot : null;
+    return [cleanText(id, 240), {
+      readAt: cleanText(source.readAt, 40),
+      handledAt: cleanText(source.handledAt, 40),
+      snapshot: snapshot ? {
+        id: cleanText(snapshot.id || id, 240), kind: cleanText(snapshot.kind, 30), severity: cleanText(snapshot.severity, 20),
+        title: cleanText(snapshot.title, 180), text: cleanText(snapshot.text, 500), createdAt: cleanText(snapshot.createdAt, 40),
+        route: {
+          view: cleanText(snapshot.route && snapshot.route.view, 40), tab: cleanText(snapshot.route && snapshot.route.tab, 40),
+          inquiryId: cleanText(snapshot.route && snapshot.route.inquiryId, 100),
+        },
+      } : null,
+    }];
+  }).filter(([id]) => id));
 }
 
 function normalizeLocalizedField(value, maximum) {
@@ -237,6 +278,148 @@ function migrateShortMenu(interfaceText, messages) {
       messages[language].help = defaultData.config.messages[language].help;
     }
   }
+}
+
+// Version 18 turns the former catch-all "More" screen into a personal area.
+// Only untouched defaults are renamed; administrator wording is preserved.
+const VERSION_17_MY_DEFAULTS = {
+  ru: {
+    label: '☰ Ещё',
+    help: '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — специальные предложения\n📞 Позвоните мне — менеджер перезвонит в удобное время\n💬 Менеджер — задать вопрос, позвонить или написать в WhatsApp\n☰ Ещё — мои заявки, уведомления, о компании, смена языка\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
+    newsOff: 'Вы отписались от рассылок. Включить их снова можно в «☰ Ещё → 🔔 Уведомления».',
+    viewingFooter: 'Если планы изменятся, откройте «☰ Ещё → 📋 Мои заявки» или просто напишите нам.',
+  },
+  en: {
+    label: '☰ More',
+    help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n❤️ Favorites — return to saved properties\n🔥 Offers — current promotions\n📞 Call me back — a manager will call you at a convenient time\n💬 Manager — ask a question, call or write on WhatsApp\n☰ More — my requests, notifications, about us, language\n\nYou can also send a regular message. A manager will reply in this chat.',
+    newsOff: 'You have unsubscribed from our news. You can turn it back on in “☰ More → 🔔 Notifications”.',
+    viewingFooter: 'If your plans change, open “☰ More → 📋 My requests” or just send us a message.',
+  },
+  es: {
+    label: '☰ Más',
+    help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — ofertas actuales\n📞 Llámame — un gestor te llamará cuando te venga bien\n💬 Gestor — hacer una pregunta, llamar o escribir por WhatsApp\n☰ Más — mis solicitudes, avisos, la empresa, idioma\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
+    newsOff: 'Te has dado de baja de las novedades. Puedes activarlas de nuevo en «☰ Más → 🔔 Avisos».',
+    viewingFooter: 'Si cambian tus planes, abre «☰ Más → 📋 Mis solicitudes» o escríbenos.',
+  },
+};
+
+function migrateMyArea(interfaceText, messages) {
+  for (const language of ['ru', 'en', 'es']) {
+    const previous = VERSION_17_MY_DEFAULTS[language];
+    const labels = interfaceText && interfaceText.menuLabels && interfaceText.menuLabels[language];
+    if (labels && labels.more === previous.label) labels.more = INTERFACE_TEXT_DEFAULTS.menuLabels[language].more;
+    if (messages && messages[language] && messages[language].help === previous.help) messages[language].help = defaultData.config.messages[language].help;
+    const subscriptions = interfaceText && interfaceText.subscriptions && interfaceText.subscriptions[language];
+    if (subscriptions && subscriptions.newsOff === previous.newsOff) subscriptions.newsOff = INTERFACE_TEXT_DEFAULTS.subscriptions[language].newsOff;
+    const notices = interfaceText && interfaceText.viewingNotices && interfaceText.viewingNotices[language];
+    if (notices && notices.confirmedFooter === previous.viewingFooter) notices.confirmedFooter = INTERFACE_TEXT_DEFAULTS.viewingNotices[language].confirmedFooter;
+  }
+}
+
+// Version 19 adds property comparison to the personal area. Keep wording
+// written by the administrator and update only the exact version 18 defaults.
+const VERSION_18_COMPARISON_DEFAULTS = {
+  ru: {
+    intro: 'Здесь собраны сохранённые объекты, история просмотров, ваши заявки и личные настройки.',
+    help: '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — специальные предложения\n📞 Позвоните мне — менеджер перезвонит в удобное время\n💬 Менеджер — задать вопрос, позвонить или написать в WhatsApp\n👤 Моё — избранное, история просмотров, заявки и уведомления\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
+  },
+  en: {
+    intro: 'Your saved properties, viewing history, requests and personal settings are all here.',
+    help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n❤️ Favorites — return to saved properties\n🔥 Offers — current promotions\n📞 Call me back — a manager will call you at a convenient time\n💬 Manager — ask a question, call or write on WhatsApp\n👤 My space — favorites, recently viewed properties, requests and notifications\n\nYou can also send a regular message. A manager will reply in this chat.',
+  },
+  es: {
+    intro: 'Aquí encontrarás los inmuebles guardados, el historial de visitas, tus solicitudes y ajustes personales.',
+    help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — ofertas actuales\n📞 Llámame — un gestor te llamará cuando te venga bien\n💬 Gestor — hacer una pregunta, llamar o escribir por WhatsApp\n👤 Mi espacio — favoritos, inmuebles vistos, solicitudes y avisos\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
+  },
+};
+
+function migrateComparison(interfaceText, messages) {
+  for (const language of ['ru', 'en', 'es']) {
+    const previous = VERSION_18_COMPARISON_DEFAULTS[language];
+    const myArea = interfaceText && interfaceText.myArea && interfaceText.myArea[language];
+    if (myArea && myArea.intro === previous.intro) myArea.intro = INTERFACE_TEXT_DEFAULTS.myArea[language].intro;
+    if (messages && messages[language] && messages[language].help === previous.help) {
+      messages[language].help = defaultData.config.messages[language].help;
+    }
+  }
+}
+
+// Version 20 adds the explicit saved search. As before, only untouched
+// defaults are extended; administrator-written wording is never replaced.
+const VERSION_19_SAVED_SEARCH_DEFAULTS = {
+  ru: {
+    intro: 'Здесь собраны сохранённые и сравниваемые объекты, история просмотров, ваши заявки и личные настройки.',
+    help: '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — специальные предложения\n📞 Позвоните мне — менеджер перезвонит в удобное время\n💬 Менеджер — задать вопрос, позвонить или написать в WhatsApp\n👤 Моё — избранное, сравнение, история просмотров, заявки и уведомления\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
+  },
+  en: {
+    intro: 'Your saved and compared properties, viewing history, requests and personal settings are all here.',
+    help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n❤️ Favorites — return to saved properties\n🔥 Offers — current promotions\n📞 Call me back — a manager will call you at a convenient time\n💬 Manager — ask a question, call or write on WhatsApp\n👤 My space — favorites, comparison, recently viewed properties, requests and notifications\n\nYou can also send a regular message. A manager will reply in this chat.',
+  },
+  es: {
+    intro: 'Aquí encontrarás los inmuebles guardados y comparados, el historial, tus solicitudes y ajustes personales.',
+    help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — ofertas actuales\n📞 Llámame — un gestor te llamará cuando te venga bien\n💬 Gestor — hacer una pregunta, llamar o escribir por WhatsApp\n👤 Mi espacio — favoritos, comparación, inmuebles vistos, solicitudes y avisos\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
+  },
+};
+
+function migrateSavedSearch(interfaceText, messages) {
+  for (const language of ['ru', 'en', 'es']) {
+    const previous = VERSION_19_SAVED_SEARCH_DEFAULTS[language];
+    const myArea = interfaceText && interfaceText.myArea && interfaceText.myArea[language];
+    if (myArea && myArea.intro === previous.intro) myArea.intro = INTERFACE_TEXT_DEFAULTS.myArea[language].intro;
+    if (messages && messages[language] && messages[language].help === previous.help) {
+      messages[language].help = defaultData.config.messages[language].help;
+    }
+  }
+}
+
+const SAVED_SEARCH_TYPES = new Set(['apartment', 'house', 'villa', 'townhouse', 'land', 'commercial', 'newbuild', 'other']);
+function normalizeSavedSearchData(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const incoming = source.filter && typeof source.filter === 'object' && !Array.isArray(source.filter) ? source.filter : {};
+  const filter = {
+    deal: ['sale', 'rent'].includes(incoming.deal) ? incoming.deal : '',
+    type: SAVED_SEARCH_TYPES.has(incoming.type) ? incoming.type : '',
+    bedrooms: [1, 2, 3, 4].includes(Number(incoming.bedrooms)) ? Number(incoming.bedrooms) : 0,
+    city: cleanText(incoming.city, 160),
+    district: cleanText(incoming.district, 160),
+    minPrice: Number.isFinite(Number(incoming.minPrice)) && Number(incoming.minPrice) > 0 && Number(incoming.minPrice) <= 1000000000
+      ? Math.round(Number(incoming.minPrice))
+      : 0,
+    maxPrice: Number.isFinite(Number(incoming.maxPrice)) && Number(incoming.maxPrice) > 0 && Number(incoming.maxPrice) <= 1000000000
+      ? Math.round(Number(incoming.maxPrice))
+      : 0,
+    sort: '',
+  };
+  if (filter.minPrice && filter.maxPrice && filter.minPrice > filter.maxPrice) filter.minPrice = 0;
+  if (!filter.deal && !filter.type && !filter.bedrooms && !filter.city && !filter.district && !filter.minPrice && !filter.maxPrice) return null;
+  return {
+    filter,
+    enabled: source.enabled !== false,
+    createdAt: cleanText(source.createdAt, 40),
+    updatedAt: cleanText(source.updatedAt, 40),
+  };
+}
+
+const SELECTION_MATCH_TIERS = new Set(['exact', 'close', 'consider']);
+const SELECTION_MATCH_REASONS = new Set(['deal', 'type', 'location', 'budget', 'bedrooms', 'general']);
+const SELECTION_MATCH_WARNINGS = new Set(['location', 'budgetClose', 'budgetHigh', 'priceMissing', 'currency', 'periodConverted', 'bedroomsClose', 'bedroomsMissing']);
+
+function normalizeSelectionMatchDetails(value) {
+  return (Array.isArray(value) ? value : []).map((item) => ({
+    id: cleanText(item && item.id, 100),
+    tier: SELECTION_MATCH_TIERS.has(item && item.tier) ? item.tier : 'consider',
+    score: Math.max(0, Math.min(100, Math.round(Number(item && item.score) || 0))),
+    reasons: (Array.isArray(item && item.reasons) ? item.reasons : []).filter((key) => SELECTION_MATCH_REASONS.has(key)).slice(0, 6),
+    warnings: (Array.isArray(item && item.warnings) ? item.warnings : []).filter((key) => SELECTION_MATCH_WARNINGS.has(key)).slice(0, 8),
+  })).filter((item) => item.id).slice(0, 20);
+}
+
+function normalizeSelectionMatching(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return {
+    results: normalizeSelectionMatchDetails(value.results),
+    generatedAt: cleanText(value.generatedAt, 40),
+  };
 }
 
 // Оформление постов в группах и каналах: постоянная подпись под текстом и
@@ -505,6 +688,64 @@ function normalizeViewing(value) {
 }
 
 const MAX_REPLY_TEMPLATES = 50;
+const MAX_INQUIRY_MESSAGES = 200;
+
+function normalizeInquiryMessage(item, fallbackAt = '') {
+  if (!item || typeof item !== 'object') return null;
+  const direction = item.direction === 'out' ? 'out' : 'in';
+  const kind = ['text', 'photo', 'video', 'voice', 'audio', 'document', 'location', 'contact', 'sticker', 'other'].includes(item.kind)
+    ? item.kind
+    : 'text';
+  return {
+    id: cleanText(item.id, 100) || crypto.randomUUID(),
+    direction,
+    kind,
+    text: cleanText(item.text, 4000),
+    fileId: cleanText(item.fileId, 512),
+    fileName: cleanText(item.fileName, 200),
+    mimeType: cleanText(item.mimeType, 120),
+    telegramMessageId: Number.isFinite(Number(item.telegramMessageId)) && item.telegramMessageId != null ? Number(item.telegramMessageId) : null,
+    replyToTelegramMessageId: Number.isFinite(Number(item.replyToTelegramMessageId)) && item.replyToTelegramMessageId != null ? Number(item.replyToTelegramMessageId) : null,
+    replyToText: cleanText(item.replyToText, 300),
+    deliveryStatus: direction === 'out' ? (item.deliveryStatus === 'failed' ? 'failed' : 'delivered') : '',
+    clientRequestId: cleanText(item.clientRequestId, 100),
+    source: cleanText(item.source, 40),
+    by: cleanText(item.by, 80),
+    reactions: Array.isArray(item.reactions) ? item.reactions.map((reaction) => cleanText(reaction, 20)).filter(Boolean).slice(0, 20) : [],
+    reactionUpdatedAt: cleanText(item.reactionUpdatedAt, 40),
+    createdAt: cleanText(item.createdAt, 40) || fallbackAt || new Date().toISOString(),
+  };
+}
+
+function normalizeInquiryMessages(item) {
+  if (Array.isArray(item.messages) && item.messages.length) {
+    return item.messages.map((message) => normalizeInquiryMessage(message, item.createdAt)).filter(Boolean).slice(-MAX_INQUIRY_MESSAGES);
+  }
+  const messages = [];
+  if (cleanText(item.text, 4000)) {
+    messages.push(normalizeInquiryMessage({
+      direction: 'in',
+      kind: 'text',
+      text: item.text,
+      telegramMessageId: item.sourceMessageId,
+      source: 'migration',
+      createdAt: item.createdAt,
+    }, item.createdAt));
+  }
+  for (const reply of Array.isArray(item.replies) ? item.replies : []) {
+    messages.push(normalizeInquiryMessage({
+      id: reply.id,
+      direction: 'out',
+      kind: 'text',
+      text: reply.text,
+      telegramMessageId: reply.telegramMessageId,
+      source: reply.source,
+      by: reply.by,
+      createdAt: reply.createdAt,
+    }, item.updatedAt || item.createdAt));
+  }
+  return messages.filter(Boolean).slice(-MAX_INQUIRY_MESSAGES);
+}
 
 function normalizeReplyTemplates(value) {
   if (!Array.isArray(value)) return [];
@@ -566,6 +807,20 @@ function normalizeLoadedData(parsed) {
         tags: Array.isArray(user.tags) ? user.tags.map((tag) => cleanText(tag, 40)).filter(Boolean).slice(0, 20) : [],
         note: cleanText(user.note, 2000),
         favorites: Array.isArray(user.favorites) ? user.favorites.map(String).slice(0, 500) : [],
+        comparisonIds: Array.isArray(user.comparisonIds)
+          ? user.comparisonIds.map(String).filter((value, index, values) => value && values.indexOf(value) === index).slice(0, 3)
+          : [],
+        savedSearch: normalizeSavedSearchData(user.savedSearch),
+        selectionMatchIds: Array.isArray(user.selectionMatchIds) ? user.selectionMatchIds.map(String).slice(0, 20) : [],
+        selectionMatchDetails: normalizeSelectionMatchDetails(user.selectionMatchDetails),
+        similarPropertyIds: Array.isArray(user.similarPropertyIds)
+          ? user.similarPropertyIds.map(String).filter((value, index, values) => value && values.indexOf(value) === index).slice(0, 20)
+          : [],
+        similarPropertyDetails: normalizedSimilarPropertyDetails(user.similarPropertyDetails),
+        similarPropertySourceId: cleanText(user.similarPropertySourceId, 100),
+        recentlyViewed: Array.isArray(user.recentlyViewed)
+          ? user.recentlyViewed.map(String).filter((value, index, values) => value && values.indexOf(value) === index).slice(0, 20)
+          : [],
         catalogMessageIds: Array.isArray(user.catalogMessageIds)
           ? user.catalogMessageIds.map(Number).filter(Number.isFinite).slice(0, 20)
           : [],
@@ -581,9 +836,10 @@ function normalizeLoadedData(parsed) {
         } : null,
         lastInboundMessageId: user.lastInboundMessageId != null && Number.isFinite(Number(user.lastInboundMessageId)) ? Number(user.lastInboundMessageId) : null,
         catalogContext: user.catalogContext && typeof user.catalogContext === 'object' ? {
-          mode: ['all', 'favorites', 'matches'].includes(user.catalogContext.mode) ? user.catalogContext.mode : 'all',
+          mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison'].includes(user.catalogContext.mode) ? user.catalogContext.mode : 'all',
           page: Math.max(0, Number(user.catalogContext.page) || 0),
-        } : { mode: 'all', page: 0 },
+          propertyId: cleanText(user.catalogContext.propertyId, 100),
+        } : { mode: 'all', page: 0, propertyId: '' },
         pendingAction: user.pendingAction && typeof user.pendingAction === 'object' ? user.pendingAction : null,
         expiredAction: user.expiredAction && typeof user.expiredAction === 'object' ? {
           type: cleanText(user.expiredAction.type, 40),
@@ -612,6 +868,10 @@ function normalizeLoadedData(parsed) {
         buttonUrl: '',
       };
       if (entry.status === 'running') entry.status = 'queued';
+      entry.pipelineStages = Array.isArray(entry.pipelineStages) ? entry.pipelineStages.filter((stage) => PIPELINE_STAGES.includes(stage)).slice(0, PIPELINE_STAGES.length) : [];
+      entry.sources = Array.isArray(entry.sources) ? entry.sources.map((source) => cleanText(source, 80)).filter(Boolean).slice(0, 20) : [];
+      entry.propertyId = cleanText(entry.propertyId, 100);
+      entry.propertySignal = ['any', 'favorite', 'comparison', 'viewed', 'match', 'inquiry'].includes(entry.propertySignal) ? entry.propertySignal : 'any';
       for (const field of ['processedUserIds', 'respondedUserIds', 'inquiryUserIds', 'unsubscribedUserIds']) {
         entry[field] = Array.isArray(entry[field]) ? entry[field].map(String).slice(0, 100000) : [];
       }
@@ -626,6 +886,7 @@ function normalizeLoadedData(parsed) {
       language: ['ru', 'en', 'es'].includes(item.language) ? item.language : 'ru',
       text: cleanText(item.text, 4000),
       status: ['new', 'in_progress', 'closed'].includes(item.status) ? item.status : 'new',
+      pipelineStage: normalizePipelineStage(item.pipelineStage, item),
       note: cleanText(item.note, 2000),
       type: ['question', 'interest', 'selection', 'viewing', 'lead', 'general'].includes(item.type) ? item.type : 'general',
       propertyId: cleanText(item.propertyId, 100),
@@ -642,7 +903,12 @@ function normalizeLoadedData(parsed) {
         budget: cleanText(item.selection.budget, 200),
         bedrooms: cleanText(item.selection.bedrooms, 200),
       } : null,
+      matching: item.type === 'selection' ? normalizeSelectionMatching(item.matching) : null,
       replies: Array.isArray(item.replies) ? item.replies.slice(-50) : [],
+      // A compact conversation timeline is used by the panel. Old requests
+      // are converted without marking years of history as unread.
+      messages: normalizeInquiryMessages(item),
+      readAt: cleanText(item.readAt, 40) || (storedVersion < 26 ? (cleanText(item.clientMessageAt, 40) || item.updatedAt || item.createdAt || new Date().toISOString()) : ''),
       remindedAt: cleanText(item.remindedAt, 40),
       viewing: item.type === 'viewing' ? normalizeViewing(item.viewing || {}) : null,
       // When the manager plans to contact the client again.
@@ -708,6 +974,7 @@ function normalizeLoadedData(parsed) {
           : {},
       },
       errors: Array.isArray(parsed.errors) ? parsed.errors.slice(0, 100) : [],
+      adminNotificationStates: normalizeAdminNotificationStates(parsed.adminNotificationStates),
       broadcasts,
       inquiries,
       telegramOffset: Number.isFinite(Number(parsed.telegramOffset)) ? Math.max(0, Number(parsed.telegramOffset)) : 0,
@@ -720,6 +987,9 @@ function normalizeLoadedData(parsed) {
     if (storedVersion < 15) normalized.config.notifyMode = 'inquiries';
     if (storedVersion < 16) migrateSelectionSteps(normalized.interfaceText);
     if (storedVersion < 17) migrateShortMenu(normalized.interfaceText, normalized.config.messages);
+    if (storedVersion < 18) migrateMyArea(normalized.interfaceText, normalized.config.messages);
+    if (storedVersion < 19) migrateComparison(normalized.interfaceText, normalized.config.messages);
+    if (storedVersion < 20) migrateSavedSearch(normalized.interfaceText, normalized.config.messages);
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
     normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
@@ -729,6 +999,7 @@ function normalizeLoadedData(parsed) {
     normalized.groups = normalizeGroups(parsed.groups);
     normalized.groupPosts = normalizeGroupPosts(parsed.groupPosts);
     normalized.config.reminderHours = REMINDER_HOUR_OPTIONS.includes(Number(normalized.config.reminderHours)) ? Number(normalized.config.reminderHours) : 2;
+    normalized.config.timeZone = normalizeTimeZone(normalized.config.timeZone);
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
     normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
     normalized.config.viewingSlots = normalizeViewingSlots(normalized.config.viewingSlots);
@@ -750,13 +1021,18 @@ export {
   DEFAULT_WORKING_HOURS,
   MAX_MANAGERS,
   MAX_REPLY_TEMPLATES,
+  MAX_INQUIRY_MESSAGES,
+  PIPELINE_STAGES,
   REMINDER_HOUR_OPTIONS,
+  TIME_ZONES,
   defaultData,
   legacyConfigRemoved,
   managerTerminology,
   migrateDefaultTexts,
   migrateSelectionSteps,
   migrateShortMenu,
+  migrateMyArea,
+  migrateComparison,
   MAX_POST_BUTTONS,
   MAX_RUBRICS,
   normalizeGroupPosts,
@@ -764,8 +1040,12 @@ export {
   normalizePublishing,
   PREVIOUS_HELP_DEFAULTS,
   normalizeAdminReplyTargets,
+  normalizeAdminNotificationStates,
   normalizeCalculator,
   normalizeManagers,
+  normalizePipelineStage,
+  normalizeTimeZone,
+  normalizeSelectionMatching,
   normalizeLoadedData,
   normalizeLocalizedField,
   normalizePropertyImages,

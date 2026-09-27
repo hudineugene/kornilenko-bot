@@ -3,7 +3,8 @@
 import { cleanText, clone } from './util.mjs';
 import { data } from './store.mjs';
 import { adminMuteNotices, adminNotifyTimes, inquiryTimes } from './inquiries.mjs';
-import { normalizedCatalogFilter } from './catalog.mjs';
+import { normalizedCatalogFilter, normalizedSavedSearch } from './catalog.mjs';
+import { normalizedSimilarPropertyDetails } from './similar.mjs';
 
 // data.users is a plain object, so ids such as "__proto__" must not reach it
 // directly: that would return Object.prototype and let a PATCH pollute it.
@@ -38,6 +39,19 @@ function userByChatId(chatId) {
 // for any other language.
 // Advertising links carry a label: t.me/<bot>?start=src_instagram.
 const LEAD_SOURCE_PATTERN = /^src_([a-z0-9_-]{1,40})$/i;
+const SELECTION_MATCH_TIERS = new Set(['exact', 'close', 'consider']);
+const SELECTION_MATCH_REASONS = new Set(['deal', 'type', 'location', 'budget', 'bedrooms', 'general']);
+const SELECTION_MATCH_WARNINGS = new Set(['location', 'budgetClose', 'budgetHigh', 'priceMissing', 'currency', 'periodConverted', 'bedroomsClose', 'bedroomsMissing']);
+
+function normalizedSelectionMatchDetails(value) {
+  return (Array.isArray(value) ? value : []).map((item) => ({
+    id: cleanText(item && item.id, 100),
+    tier: SELECTION_MATCH_TIERS.has(item && item.tier) ? item.tier : 'consider',
+    score: Math.max(0, Math.min(100, Math.round(Number(item && item.score) || 0))),
+    reasons: (Array.isArray(item && item.reasons) ? item.reasons : []).filter((key) => SELECTION_MATCH_REASONS.has(key)).slice(0, 6),
+    warnings: (Array.isArray(item && item.warnings) ? item.warnings : []).filter((key) => SELECTION_MATCH_WARNINGS.has(key)).slice(0, 8),
+  })).filter((item) => item.id).slice(0, 20);
+}
 
 function leadSourceFromPayload(payload) {
   const match = cleanText(payload, 100).match(LEAD_SOURCE_PATTERN);
@@ -70,15 +84,22 @@ function normalizeUser(from, chatId, countMessage = true) {
     tags: Array.isArray(previous.tags) ? previous.tags : [],
     note: previous.note || '',
     favorites: Array.isArray(previous.favorites) ? previous.favorites : [],
+    comparisonIds: Array.isArray(previous.comparisonIds)
+      ? previous.comparisonIds.map(String).filter((value, index, values) => value && values.indexOf(value) === index).slice(0, 3)
+      : [],
+    recentlyViewed: Array.isArray(previous.recentlyViewed)
+      ? previous.recentlyViewed.map(String).filter((value, index, values) => value && values.indexOf(value) === index).slice(0, 20)
+      : [],
     catalogMessageIds: Array.isArray(previous.catalogMessageIds) ? previous.catalogMessageIds : [],
     uiMessageIds: Array.isArray(previous.uiMessageIds) ? previous.uiMessageIds : [],
     galleryMessageIds: Array.isArray(previous.galleryMessageIds) ? previous.galleryMessageIds : [],
     lastCallback: previous.lastCallback && typeof previous.lastCallback === 'object' ? previous.lastCallback : null,
     lastInboundMessageId: previous.lastInboundMessageId != null && Number.isFinite(Number(previous.lastInboundMessageId)) ? Number(previous.lastInboundMessageId) : null,
     catalogContext: previous.catalogContext && typeof previous.catalogContext === 'object' ? {
-      mode: ['all', 'favorites', 'matches'].includes(previous.catalogContext.mode) ? previous.catalogContext.mode : 'all',
+      mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison'].includes(previous.catalogContext.mode) ? previous.catalogContext.mode : 'all',
       page: Math.max(0, Number(previous.catalogContext.page) || 0),
-    } : { mode: 'all', page: 0 },
+      propertyId: cleanText(previous.catalogContext.propertyId, 100),
+    } : { mode: 'all', page: 0, propertyId: '' },
     pendingAction: previous.pendingAction && typeof previous.pendingAction === 'object' ? previous.pendingAction : null,
     expiredAction: previous.expiredAction && typeof previous.expiredAction === 'object' ? previous.expiredAction : null,
     pendingStartPayload: cleanText(previous.pendingStartPayload, 100),
@@ -86,6 +107,7 @@ function normalizeUser(from, chatId, countMessage = true) {
     propertyAlerts: previous.propertyAlerts !== false,
     source: cleanText(previous.source, 40),
     catalogFilter: previous.catalogFilter && typeof previous.catalogFilter === 'object' ? normalizedCatalogFilter(previous.catalogFilter) : null,
+    savedSearch: normalizedSavedSearch(previous.savedSearch),
     sourceAt: cleanText(previous.sourceAt, 40),
     alertsSent: previous.alertsSent && typeof previous.alertsSent === 'object' && !Array.isArray(previous.alertsSent) ? previous.alertsSent : {},
     // The client turned broadcasts off (the "Unsubscribe" button or settings).
@@ -98,6 +120,13 @@ function normalizeUser(from, chatId, countMessage = true) {
     } : null,
     // Properties that matched the client's last selection form.
     selectionMatchIds: Array.isArray(previous.selectionMatchIds) ? previous.selectionMatchIds.map(String).slice(0, 20) : [],
+    selectionMatchDetails: normalizedSelectionMatchDetails(previous.selectionMatchDetails),
+    // Ranked results from the last "Similar properties" request.
+    similarPropertyIds: Array.isArray(previous.similarPropertyIds)
+      ? previous.similarPropertyIds.map(String).filter((value, index, values) => value && values.indexOf(value) === index).slice(0, 20)
+      : [],
+    similarPropertyDetails: normalizedSimilarPropertyDetails(previous.similarPropertyDetails),
+    similarPropertySourceId: cleanText(previous.similarPropertySourceId, 100),
   };
   data.users[id] = user;
   indexUser(user);

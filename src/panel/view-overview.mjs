@@ -46,6 +46,8 @@ function attentionItems() {
   var items = [];
   var waiting = (state.inquiries || []).filter(awaitsReply);
   if (waiting.length) items.push({ what: counted(waiting.length, "обращение ждёт", "обращения ждут", "обращений ждут") + " ответа", why: "Самое давнее — " + ago(waiting[waiting.length - 1].clientMessageAt || waiting[waiting.length - 1].createdAt), go: ["inquiries", "inbox"], kind: "bad" });
+  var dueContacts = (state.inquiries || []).filter(function (item) { return item.status !== "closed" && item.followUpDate && item.followUpDate <= pipelineToday(); });
+  if (dueContacts.length) items.push({ what: counted(dueContacts.length, "контакт запланирован", "контакта запланированы", "контактов запланированы") + " на сегодня или раньше", why: "Откройте рабочий список менеджера", go: ["inquiries", "tasks"], kind: "bad" });
   var unconfirmed = unconfirmedViewings();
   if (unconfirmed.length) items.push({ what: counted(unconfirmed.length, "просмотр", "просмотра", "просмотров") + " без подтверждения", why: "Клиент ждёт дату и время", go: ["inquiries", "viewings"], kind: "warn" });
   if (!state.config.active) items.push({ what: "Бот выключен", why: "Клиенты не получают ответов", go: ["settings", "connection"], kind: "bad" });
@@ -104,7 +106,7 @@ VIEWS.overview = {
           "</div>" +
         "</div>" +
         '<div class="stack">' +
-          '<div class="card"><header><h3>Требует внимания</h3></header>' +
+          '<div class="card"><header><h3>Требует внимания</h3><div class="actions"><button class="btn ghost small" type="button" data-go="notifications">Центр уведомлений</button></div></header>' +
             (attention.length ? attention.map(function (item) {
               return '<div class="attention" data-go="' + item.go[0] + '" data-tab="' + (item.go[1] || "") + '">' +
                 '<span class="chip ' + item.kind + '">!</span><span class="grow"><span class="what">' + esc(item.what) + '</span><br><span class="why">' + esc(item.why) + "</span></span>→</div>";
@@ -199,6 +201,7 @@ VIEWS.stats = {
   render: function (host) {
     var days = lastDays(30);
     var inquiries = state.inquiries || [];
+    var inquiryUsers = new Set(inquiries.map(function (item) { return String(item.userId || ""); }).filter(Boolean)).size;
     var week = startOfWeek();
     var byType = {};
     inquiries.forEach(function (item) { byType[inquiryTypeName(item)] = (byType[inquiryTypeName(item)] || 0) + 1; });
@@ -206,7 +209,7 @@ VIEWS.stats = {
     var sources = (state.sources || []).map(function (item) { return [item.source || "без метки", item.users || 0]; }).sort(function (a, b) { return b[1] - a[1]; });
     var properties = (state.objects || []).map(function (record) {
       var stats = (state.analytics && state.analytics.properties && state.analytics.properties[record.id]) || {};
-      return { title: localized(record.title, "ru") || record.reference || record.id, views: Number(stats.views || 0), details: Number(stats.details || 0), inquiries: Number(stats.questions || 0) + Number(stats.viewings || 0) + Number(stats.interest || 0) };
+      return { id: record.id, title: localized(record.title, "ru") || record.reference || record.id, views: Number(stats.impressions || stats.views || 0), details: Number(stats.details || 0), inquiries: catalogPropertyStats(record).inquiries };
     }).sort(function (a, b) { return b.views - a.views; });
     var counts = state.languageCounts || {};
     var languages = { ru: counts.ru, en: counts.en, es: counts.es, unknown: counts.unknown };
@@ -217,7 +220,7 @@ VIEWS.stats = {
         kpiCard("Всего клиентов", num(state.userCount), "+" + usersInRange(week) + " за 7 дней") +
         kpiCard("Сообщений за 30 дней", num(sumDays(days, "received"))) +
         kpiCard("Обращений за 30 дней", num(sumDays(days, "inquiries"))) +
-        kpiCard("Конверсия в обращение", (state.userCount ? Math.round((inquiries.length / state.userCount) * 100) : 0) + "%", "от всех клиентов") +
+        kpiCard("Конверсия в обращение", (state.userCount ? Math.round((inquiryUsers / state.userCount) * 100) : 0) + "%", "клиенты с обращением") +
       "</div>" +
       '<div class="card" style="margin-bottom:12px"><header><h3>Активность за 30 дней</h3></header><div class="card-body">' +
         sparkline(days, "received", "var(--brand)") +
@@ -249,10 +252,11 @@ VIEWS.stats = {
         (properties.length ? '<div class="table-wrap"><table><thead><tr><th>Объект</th><th class="right">Показы</th><th class="right">Подробнее</th><th class="right">Обращения</th><th class="right">Интерес</th></tr></thead><tbody>' +
           properties.map(function (row) {
             var rate = row.views ? Math.round((row.inquiries / row.views) * 100) : 0;
-            return "<tr><td>" + esc(row.title) + '</td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + "%</td></tr>";
+            return '<tr class="clickable" data-property-insights="' + esc(row.id) + '"><td><b>' + esc(row.title) + '</b><br><span class="small faint">открыть клиентов и действия</span></td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + '%</td></tr>';
           }).join("") + "</tbody></table></div>" : '<div class="empty">Объектов пока нет</div>') +
       "</div>";
     bindSourceLink(host);
+    host.querySelectorAll("[data-property-insights]").forEach(function (row) { row.onclick = function () { openObjectInsights(row.dataset.propertyInsights); }; });
   },
 };
 `;

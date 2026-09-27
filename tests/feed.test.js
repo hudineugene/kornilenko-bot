@@ -25,7 +25,7 @@ const FEED = `<?xml version="1.0" encoding="UTF-8"?>
     <beds>3</beds><baths>2</baths>
     <surface_area><built>180</built><plot>600</plot></surface_area>
     <url><en>https://example.com/en/kb-101</en></url>
-    <desc><en><![CDATA[Modern villa with <b>sea views</b> &amp; pool]]></en><es>Villa moderna con vistas al mar</es></desc>
+    <desc><ru>Современная вилла с видом на море и бассейном</ru><en><![CDATA[Modern villa with <b>sea views</b> &amp; pool]]></en><es>Villa moderna con vistas al mar</es></desc>
     <images>
       <image id="1"><url>https://img.example.com/kb-101-1.png</url></image>
       <image id="2"><url>https://img.example.com/missing.png</url></image>
@@ -62,7 +62,7 @@ test('Kyero fields become the bot\'s property fields', () => {
   assert.deepEqual(villa.fields, { dealType: 'sale', pricePeriod: 'total', priceValue: 450000, currency: 'EUR', propertyType: 'villa', bedrooms: 3, bathrooms: 2, area: 180, plotArea: 600, condition: 'new' });
   assert.deepEqual(villa.texts.title, { ru: 'Вилла · Finestrat', en: 'Villa · Finestrat', es: 'Villa · Finestrat' });
   assert.equal(villa.texts.description.en, 'Modern villa with sea views & pool', 'HTML in the description becomes plain text');
-  assert.equal(villa.texts.description.ru, '');
+  assert.equal(villa.texts.description.ru, 'Современная вилла с видом на море и бассейном');
   assert.equal(villa.texts.mapUrl, 'https://www.google.com/maps?q=38.56,-0.21');
   assert.equal(villa.images.length, 2);
   assert.deepEqual([flat.fields.dealType, flat.fields.pricePeriod, flat.fields.propertyType], ['rent', 'month', 'apartment']);
@@ -140,6 +140,14 @@ test('with "show at once" new properties with photos are published', async () =>
   const data = bot.getData();
   assert.equal(data.objects.find((record) => record.reference === 'KB-101').status, 'active');
   assert.equal(data.objects.find((record) => record.reference === 'KB-202').status, 'hidden', 'no photos: not shown yet');
+});
+
+test('"show at once" keeps an incomplete multilingual card hidden', async () => {
+  const withoutRussianDescription = FEED.replace('<ru>Современная вилла с видом на море и бассейном</ru>', '');
+  await bot.applyImport(bot.readFeed(withoutRussianDescription), { fetcher: imageFetcher, publishNew: true });
+  const villa = bot.getData().objects.find((record) => record.reference === 'KB-101');
+  assert.equal(villa.status, 'hidden');
+  assert.deepEqual(bot.propertyPublicationIssues(villa, 'ru'), ['описание']);
 });
 
 test('a second import updates instead of duplicating, and reports what left the feed', async () => {

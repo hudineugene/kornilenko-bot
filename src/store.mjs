@@ -5,7 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA_FILE, MEDIA_DIRECTORY } from './config.mjs';
 import { clone, dayKey } from './util.mjs';
-import { DATA_VERSION, defaultData, normalizeLoadedData } from './data-format.mjs';
+import { DATA_VERSION, defaultData, normalizeLoadedData, normalizeTimeZone } from './data-format.mjs';
 import { cleanupOrphanImages, containsEmbeddedImages, contentAddressImages, ensureMigrationBackup, externalizeImages, forEachStoredImage, needsContentAddressing, referencedImageFiles, storedImageFile } from './media.mjs';
 import { applyInterfaceText } from './texts.mjs';
 import { recordError } from './analytics.mjs';
@@ -93,6 +93,15 @@ function loadData() {
 }
 
 let data = loadData();
+
+function applyConfiguredTimeZone(root = data) {
+  const timeZone = normalizeTimeZone(root && root.config && root.config.timeZone);
+  if (root && root.config) root.config.timeZone = timeZone;
+  process.env.TZ = timeZone;
+  return timeZone;
+}
+
+applyConfiguredTimeZone();
 let saveTimer = null;
 let lastReferencedImages = null;
 let lastDataBackupAt = 0;
@@ -283,10 +292,12 @@ function getData() {
 
 function replaceData(next) {
   data = next;
+  applyConfiguredTimeZone();
 }
 
 export {
   BACKUP_DIRECTORY,
+  applyConfiguredTimeZone,
   DAILY_BACKUPS_KEPT,
   DAILY_BACKUP_DIRECTORY,
   DATA_BACKUP_FILE,

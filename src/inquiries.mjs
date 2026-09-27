@@ -2,7 +2,7 @@
 
 import crypto from 'node:crypto';
 import { cleanText, localDayKey } from './util.mjs';
-import { normalizeViewing } from './data-format.mjs';
+import { normalizePipelineStage, normalizeSelectionMatching, normalizeViewing } from './data-format.mjs';
 import { nextOpening } from './hours.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
@@ -14,6 +14,7 @@ import { acknowledgeCallback, propertyRequestText } from './sections.mjs';
 import { recordBroadcastResponse, userUnavailableError } from './broadcasts.mjs';
 
 const MAX_INQUIRIES = 5000;
+const MAX_INQUIRY_MESSAGES = 200;
 // A client writing again continues the open conversation (also after the
 // manager's answer), so a dialogue is one inquiry, not one per message.
 const INQUIRY_MERGE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
@@ -25,6 +26,64 @@ const MERGEABLE_INQUIRY_TYPES = ['general', 'question'];
 const inquiryTimes = new Map();
 const adminNotifyTimes = new Map();
 const adminMuteNotices = new Map();
+
+function messageKind(message) {
+  if (!message) return 'text';
+  if (message.text || (!message.photo && !message.video && !message.voice && !message.audio && !message.document && !message.location && !message.contact && !message.sticker)) return 'text';
+  if (message.photo) return 'photo';
+  if (message.video) return 'video';
+  if (message.voice) return 'voice';
+  if (message.audio) return 'audio';
+  if (message.document) return 'document';
+  if (message.location) return 'location';
+  if (message.contact) return 'contact';
+  if (message.sticker) return 'sticker';
+  return 'other';
+}
+
+function messageFile(message, kind) {
+  if (!message) return null;
+  if (kind === 'photo') return Array.isArray(message.photo) ? message.photo[message.photo.length - 1] : null;
+  return message[kind] && typeof message[kind] === 'object' ? message[kind] : null;
+}
+
+function inquiryTimelineMessage(message, direction = 'in', options = {}) {
+  const kind = options.kind || messageKind(message);
+  const file = messageFile(message, kind);
+  const timestamp = Number(message && message.date) * 1000;
+  const replied = message && message.reply_to_message;
+  return {
+    id: crypto.randomUUID(),
+    direction: direction === 'out' ? 'out' : 'in',
+    kind,
+    text: cleanText(options.text != null ? options.text : messageSummary(message), 4000),
+    fileId: cleanText(options.fileId != null ? options.fileId : file && file.file_id, 512),
+    fileName: cleanText(options.fileName != null ? options.fileName : file && file.file_name, 200),
+    mimeType: cleanText(options.mimeType != null ? options.mimeType : file && file.mime_type, 120),
+    telegramMessageId: Number.isFinite(Number(options.telegramMessageId != null ? options.telegramMessageId : message && message.message_id))
+      ? Number(options.telegramMessageId != null ? options.telegramMessageId : message.message_id)
+      : null,
+    replyToTelegramMessageId: Number.isFinite(Number(options.replyToTelegramMessageId != null ? options.replyToTelegramMessageId : replied && replied.message_id))
+      ? Number(options.replyToTelegramMessageId != null ? options.replyToTelegramMessageId : replied.message_id)
+      : null,
+    replyToText: cleanText(options.replyToText != null ? options.replyToText : replied && messageSummary(replied), 300),
+    deliveryStatus: direction === 'out' ? (options.deliveryStatus === 'failed' ? 'failed' : 'delivered') : '',
+    clientRequestId: cleanText(options.clientRequestId, 100),
+    source: cleanText(options.source, 40),
+    by: cleanText(options.by, 80),
+    reactions: [],
+    reactionUpdatedAt: '',
+    createdAt: options.createdAt || (Number.isFinite(timestamp) && timestamp > 0 ? new Date(timestamp).toISOString() : new Date().toISOString()),
+  };
+}
+
+function appendInquiryMessage(inquiry, message) {
+  if (!inquiry || !message) return null;
+  inquiry.messages = Array.isArray(inquiry.messages) ? inquiry.messages : [];
+  inquiry.messages.push(message);
+  inquiry.messages = inquiry.messages.slice(-MAX_INQUIRY_MESSAGES);
+  return message;
+}
 
 // Sliding-window counter per key; returns false once the limit is reached.
 function withinRateLimit(store, key, limit, now = Date.now()) {
@@ -78,6 +137,8 @@ function mergeIntoLatestInquiry(user, text, type, context) {
   if (combined.length <= 4000) latest.text = combined;
   latest.updatedAt = new Date().toISOString();
   latest.clientMessageAt = latest.updatedAt;
+  if (context.sourceMessage && Number.isFinite(Number(context.sourceMessage.message_id))) latest.sourceMessageId = Number(context.sourceMessage.message_id);
+  appendInquiryMessage(latest, inquiryTimelineMessage(context.sourceMessage, 'in', { text, source: 'telegram', createdAt: latest.updatedAt }));
   if (latest.status === 'closed') latest.status = 'new';
   return latest;
 }
@@ -142,11 +203,15 @@ function createInquiry(user, text, context = {}) {
       budget: cleanText(context.selection.budget, 200),
       bedrooms: cleanText(context.selection.bedrooms, 200),
     } : null,
+    matching: type === 'selection' ? normalizeSelectionMatching(context.matching) : null,
     viewing: type === 'viewing' ? normalizeViewing(context.viewing || {}) : null,
     // A viewing booked into a free slot is confirmed from the start.
     status: context.status === 'in_progress' ? 'in_progress' : 'new',
+    pipelineStage: normalizePipelineStage('', { type, status: context.status === 'in_progress' ? 'in_progress' : 'new' }),
     note: '',
     replies: [],
+    messages: [inquiryTimelineMessage(context.sourceMessage, 'in', { text: cleanText(text, 4000), source: 'telegram', createdAt: now })],
+    readAt: '',
     createdAt: now,
     updatedAt: now,
     clientMessageAt: now,
@@ -391,10 +456,30 @@ async function notifyAdministrator(inquiry, user, options = {}) {
       if (text.startsWith(prefix)) text = text.slice(prefix.length).trim();
     }
   }
+  const matchingAttention = selectionMatchingAttention(inquiry);
   return notifyAdministratorAction(user, (options.title || 'Новое обращение') + ': ' + inquiryTypeLabel(inquiry), [
     propertyLine,
     text,
+    matchingAttention,
   ].filter(Boolean).join('\n'), inquiry.id, inquiry.sourceMessageId, { important: true, replyTo: options.replyTo });
+}
+
+function selectionMatchingAttention(inquiry) {
+  const results = inquiry && inquiry.matching && Array.isArray(inquiry.matching.results) ? inquiry.matching.results : [];
+  const rows = [];
+  for (const result of results) {
+    const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+    const missing = [];
+    if (warnings.includes('priceMissing')) missing.push('цена');
+    if (warnings.includes('bedroomsMissing')) missing.push('спальни');
+    if (!missing.length) continue;
+    const record = data.objects.find((item) => String(item.id) === String(result.id));
+    const title = record ? localized(record.title, 'ru') || record.reference || record.id : 'Объект ' + result.id;
+    rows.push('• ' + cleanText(title, 100) + ': ' + missing.join(', '));
+  }
+  if (!rows.length) return '';
+  const more = rows.length > 5 ? '\n• ещё ' + (rows.length - 5) : '';
+  return '⚠️ В карточках нужно уточнить данные:\n' + rows.slice(0, 5).join('\n') + more;
 }
 
 // Returns the copies by admin chat, so the notification can be a reply to
@@ -471,6 +556,15 @@ async function handleMessageReaction(change) {
   if (target) {
     target.reactions = newItems.map((item) => item.label);
     target.reactionUpdatedAt = new Date(Number(change.date || 0) * 1000 || Date.now()).toISOString();
+  }
+
+  for (const inquiry of data.inquiries) {
+    if (String(inquiry.userId) !== String(user.id)) continue;
+    const conversationMessage = [...(Array.isArray(inquiry.messages) ? inquiry.messages : [])].reverse().find((entry) => entry.direction === 'out' && Number(entry.telegramMessageId) === Number(change.message_id));
+    if (!conversationMessage) continue;
+    conversationMessage.reactions = newItems.map((item) => item.label);
+    conversationMessage.reactionUpdatedAt = new Date(Number(change.date || 0) * 1000 || Date.now()).toISOString();
+    break;
   }
 
   let reactionAction = 'changed';
@@ -614,8 +708,15 @@ async function handleAdministratorReply(message, token) {
       const inquiry = data.inquiries.find((item) => item.id === target.inquiryId);
       if (inquiry) {
         inquiry.replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
-        inquiry.replies.push({ id: crypto.randomUUID(), text: messageSummary(message), source: 'telegram', by: adminChat.name, createdAt: new Date().toISOString() });
+        const createdAt = new Date().toISOString();
+        inquiry.replies.push({ id: crypto.randomUUID(), text: messageSummary(message), source: 'telegram', by: adminChat.name, createdAt, telegramMessageId: copied && copied.message_id ? Number(copied.message_id) : null });
         inquiry.replies = inquiry.replies.slice(-50);
+        appendInquiryMessage(inquiry, inquiryTimelineMessage(message, 'out', {
+          text: messageSummary(message), source: 'telegram', by: adminChat.name, createdAt,
+          telegramMessageId: copied && copied.message_id,
+          replyToTelegramMessageId: target.sourceMessageId,
+          replyToText: ((inquiry.messages || []).find((entry) => entry.direction === 'in' && Number(entry.telegramMessageId) === Number(target.sourceMessageId)) || {}).text || '',
+        }));
         if (inquiry.status === 'new') inquiry.status = 'in_progress';
         if (!inquiry.assignee) inquiry.assignee = adminChat.name;
         inquiry.updatedAt = new Date().toISOString();
@@ -666,6 +767,8 @@ export {
   mergeIntoLatestInquiry,
   mergedInquiries,
   messageSummary,
+  inquiryTimelineMessage,
+  appendInquiryMessage,
   nextFollowUpDate,
   notifyAdministrator,
   notifyAdministratorAction,

@@ -7,7 +7,7 @@ import './config.mjs';
 import { hashPassword } from './util.mjs';
 import { PREVIOUS_HELP_DEFAULTS, normalizeLoadedData } from './data-format.mjs';
 import { contentAddressImages, persistImage, referencedImageFiles } from './media.mjs';
-import { CATALOG_FILTER_TEXT, COMMAND_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, MENU_LABELS, PROPERTY_ACTION_TEXT, PROPERTY_ALERT_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
+import { CATALOG_FILTER_TEXT, COMMAND_TEXT, COMPARISON_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, MENU_LABELS, MY_AREA_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_ALERT_TEXT, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { getData, loadData, replaceData, restoreMissingMedia, runDailyBackup, runtime, saveDataNow } from './store.mjs';
 import './analytics.mjs';
 import { leadSourceFromPayload, normalizeUser, rebuildUserIndex, userByChatId, userById } from './users.mjs';
@@ -15,15 +15,18 @@ import { splitTelegramText, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, menuItemForText } from './menus.mjs';
 import { formReminderDue, runFormReminders, viewingDateValue } from './forms.mjs';
 import { awaitingReply, createInquiry } from './inquiries.mjs';
-import { catalogFilterPanel, catalogRecords } from './catalog.mjs';
+import { catalogFilterPanel, catalogRecords, contentButtons, objectCaption, objectCaptionHtml, propertyPublicationIssues, propertyPublicationReadiness, propertyReadyForLanguage } from './catalog.mjs';
 import './sections.mjs';
 import { handleUpdate, processUpdates } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
 import { runDailyDigest, runFollowUpReminders, runInquiryReminders, runWeeklyReport, weeklyReport } from './notices.mjs';
-import { budgetLimit, deliverPropertyAlerts, propertyAlertDeliveries, queuePropertyAlerts, selectionMatches } from './alerts.mjs';
+import { budgetLimit, currentSelectionRanking, deliverPropertyAlerts, locationMatches, propertyAlertDeliveries, queuePropertyAlerts, selectionEvaluation, selectionMatches } from './alerts.mjs';
 import { confirmViewing, parseViewingDate, runViewingNotices, viewingAgenda } from './viewings.mjs';
 import { myRequestsView } from './requests.mjs';
 import { subscriptionPanel } from './subscriptions.mjs';
+import { savedSearchMatches, savedSearchResults, savedSearchText } from './saved-search.mjs';
+import { normalizedSimilarPropertyDetails, similarPropertyRanking } from './similar.mjs';
+import { catalogRequest, naturalCatalogFilter, parseBedrooms, parseMaxPrice, parseMinPrice, parsePriceRange } from './search.mjs';
 import { offHoursNote } from './hours.mjs';
 import { monthlyPayment, purchaseEstimate } from './calculator.mjs';
 import { decryptBackup, encryptBackup, runTelegramBackup, setBackupPassword } from './offsite.mjs';
@@ -31,13 +34,15 @@ import { applyImport, parseXml, planImport, planSummary, propertyTypeOf, publicA
 import { postToGroup, runDueGroupPosts } from './groups.mjs';
 import { announceError, announceStart, sendStatusNotice, startNoticeText, stopNoticeText, telegramContactLost, telegramContactRestored } from './status.mjs';
 import { hostAllowed, loginAttempts, requestIsRemote, sessions } from './admin-http.mjs';
-import './admin-input.mjs';
+import { parseContentRecord } from './admin-input.mjs';
 import { xlsxWorkbook } from './excel.mjs';
 import { startTunnel, stopTunnel, tunnelErrorFrom, tunnelUrlFrom } from './remote.mjs';
+import { autostartStatus, autostartTaskName, autostartTaskXml, currentWindowsUser, setAutostart } from './autostart.mjs';
 import { handleApi } from './admin-api.mjs';
 import { server } from './server.mjs';
 import { abruptStopNotice, clearRunMarker, previousRunEndedAbruptly, reportAbruptStop, start, writeRunMarker } from './lifecycle.mjs';
 
+if (process.argv.includes('--no-auto-open')) process.env.NO_AUTO_OPEN = '1';
 if (process.env.BOT_NO_START !== '1') start();
 
 function setData(next) {
@@ -55,6 +60,9 @@ const text = {
   propertyActions: PROPERTY_ACTION_TEXT,
   propertyAlerts: PROPERTY_ALERT_TEXT,
   catalogFilter: CATALOG_FILTER_TEXT,
+  myArea: MY_AREA_TEXT,
+  comparison: COMPARISON_TEXT,
+  savedSearch: SAVED_SEARCH_TEXT,
 };
 
 export {
@@ -62,16 +70,23 @@ export {
   announceError,
   announceStart,
   applyImport,
+  autostartStatus,
+  autostartTaskName,
+  autostartTaskXml,
   broadcastUsers,
   awaitingReply,
   budgetLimit,
   catalogFilterPanel,
   catalogRecords,
+  catalogRequest,
   clearRunMarker,
   configureBotCommands,
   confirmViewing,
+  contentButtons,
   contentAddressImages,
+  currentWindowsUser,
   createInquiry,
+  currentSelectionRanking,
   decryptBackup,
   deliverBroadcast,
   deliverPropertyAlerts,
@@ -85,12 +100,22 @@ export {
   leadSourceFromPayload,
   loadData,
   loginAttempts,
+  locationMatches,
   menuItemForText,
   monthlyPayment,
   myRequestsView,
   normalizeLoadedData,
+  normalizedSimilarPropertyDetails,
+  naturalCatalogFilter,
   normalizeUser,
   offHoursNote,
+  objectCaption,
+  objectCaptionHtml,
+  parseContentRecord,
+  parseBedrooms,
+  parseMinPrice,
+  parseMaxPrice,
+  parsePriceRange,
   parseViewingDate,
   parseXml,
   planImport,
@@ -104,6 +129,9 @@ export {
   previousRunEndedAbruptly,
   processUpdates,
   propertyAlertDeliveries,
+  propertyPublicationIssues,
+  propertyPublicationReadiness,
+  propertyReadyForLanguage,
   purchaseEstimate,
   queuePropertyAlerts,
   referencedImageFiles,
@@ -123,11 +151,17 @@ export {
   runWeeklyReport,
   runtime,
   saveDataNow,
+  savedSearchMatches,
+  savedSearchResults,
+  savedSearchText,
+  similarPropertyRanking,
+  selectionEvaluation,
   selectionMatches,
   sendStatusNotice,
   server,
   sessions,
   setBackupPassword,
+  setAutostart,
   setData,
   splitTelegramText,
   startNoticeText,

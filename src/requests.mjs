@@ -1,7 +1,7 @@
 // «Мои заявки»: клиент видит свои последние обращения и их статус и может
 // отменить просмотр.
 
-import { INTERACTION_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT } from './texts.mjs';
+import { INTERACTION_TEXT, MENU_LABELS, MY_REQUESTS_TEXT } from './texts.mjs';
 import { data } from './store.mjs';
 import { normalizeUser } from './users.mjs';
 import { localized, localizedExact, sendUiMessage, shortenedText } from './catalog.mjs';
@@ -45,11 +45,11 @@ function userRequests(user) {
 function myRequestsView(user) {
   const language = user.preferredLanguage || 'ru';
   const copy = MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru;
-  const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
+  const myArea = (MENU_LABELS[language] || MENU_LABELS.ru).more;
   const requests = userRequests(user);
   const rows = [];
   if (!requests.length) {
-    rows.push([{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]);
+    rows.push([{ text: '⬅️ ' + myArea, callback_data: 'nav:my' }]);
     return { text: copy.none, markup: { inline_keyboard: rows } };
   }
   const blocks = requests.map((inquiry) => {
@@ -70,7 +70,7 @@ function myRequestsView(user) {
     }
     return [heading, [details, requestStatusLabel(inquiry, copy)].filter(Boolean).join(' — ')].join('\n');
   });
-  rows.push([{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]);
+  rows.push([{ text: '⬅️ ' + myArea, callback_data: 'nav:my' }]);
   return { text: [copy.title, '', blocks.join('\n\n'), '', copy.footer].join('\n'), markup: { inline_keyboard: rows } };
 }
 
@@ -114,7 +114,7 @@ async function handleMyRequestsCallback(query, token) {
     await cancelViewing(inquiry, user);
     await sendUiMessage(chatId, user, copy.cancelDone, token, { reply_markup: { inline_keyboard: [
       [{ text: copy.menuButton, callback_data: 'myreq:list' }],
-      [{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }],
+      [{ text: '⬅️ ' + (MENU_LABELS[language] || MENU_LABELS.ru).more, callback_data: 'nav:my' }],
     ] } });
     return;
   }

@@ -51,7 +51,7 @@ test.describe('language from Telegram', () => {
     assert.equal(client.user.preferredLanguage, 'ru');
     assert.equal(sent.length, 1);
     assert.match(sent[0].body.text, /^Здравствуйте, Новый!/);
-    assert.ok(buttonsOf(sent[0].body.reply_markup).includes(MENU.ru.more), 'the language can still be changed in «More»');
+    assert.ok(buttonsOf(sent[0].body.reply_markup).includes(MENU.ru.more), 'the language can still be changed in «My space»');
   });
 
   test('regional codes such as en-US count as English', async () => {
@@ -218,7 +218,8 @@ test.describe('property alerts', () => {
     assert.equal(await bot.deliverPropertyAlerts(deliveries, TOKEN), 1);
     const [card] = telegram.calls.filter((call) => call.method === 'sendPhoto');
     assert.equal(String(card.body.chat_id), fan.id);
-    assert.ok(card.body.caption.startsWith(ALERTS.ru.priceDrop));
+    assert.ok(card.body.caption.startsWith('<i>' + ALERTS.ru.priceDrop));
+    assert.equal(card.body.parse_mode, 'HTML');
     assert.ok(callbacksOf(card.body.reply_markup).includes('alerts:off'));
     assert.deepEqual(bot.propertyAlertDeliveries(record, { status: 'active', priceValue: 500000 }), [], 'the same drop is not announced twice');
   });
@@ -249,12 +250,12 @@ test.describe('property alerts', () => {
     assert.equal(deliveries[0].heading, ALERTS.ru.newMatch);
   });
 
-  test('an unknown price or bedroom count does not exclude a property', () => {
+  test('an incomplete residential card is not advertised', () => {
     user(9141); selection(9141, wishes({ budget: 'до 200 000', bedrooms: SELECTION.bedroomOptions[3] }));
     const record = bot.getData().objects[0];
     record.priceValue = null;
     record.bedrooms = null;
-    assert.equal(bot.propertyAlertDeliveries(record, null).length, 1);
+    assert.equal(bot.propertyAlertDeliveries(record, null).length, 0);
   });
 
   test('a client with both a favourite and a matching request gets one alert', () => {
@@ -293,6 +294,79 @@ test.describe('property alerts', () => {
     assert.equal(bot.budgetLimit('от 300 до 450 тыс'), 450000);
     assert.equal(bot.budgetLimit('Бюджет пока не определён'), 0);
   });
+
+  test('price ranges are read in Russian, English and Spanish without mistaking dates for money', () => {
+    assert.deepEqual(bot.parsePriceRange('от 300 до 500 тыс. €'), { minPrice: 300000, maxPrice: 500000 });
+    assert.deepEqual(bot.parsePriceRange('€300k–€500k'), { minPrice: 300000, maxPrice: 500000 });
+    assert.deepEqual(bot.parsePriceRange('between 0.3 and 0.5 million euros'), { minPrice: 300000, maxPrice: 500000 });
+    assert.deepEqual(bot.parsePriceRange('entre 300 y 500 mil euros'), { minPrice: 300000, maxPrice: 500000 });
+    assert.deepEqual(bot.parsePriceRange('300 000-500 000'), { minPrice: 300000, maxPrice: 500000 });
+    assert.equal(bot.parseMinPrice('цена от 350 тыс.'), 350000);
+    assert.equal(bot.parseMaxPrice('budget from 300k'), 0, 'a lower boundary is not silently turned into a maximum');
+    assert.equal(bot.parsePriceRange('с 2026–2027 года'), null);
+    assert.equal(bot.parseMinPrice('от 3 спален'), 0);
+  });
+
+  test('selection results distinguish exact, close and useful alternatives', () => {
+    const baseSelection = {
+      deal: SELECTION.dealOptions[0],
+      type: SELECTION.typeOptions[1],
+      location: 'Марбелья',
+      budget: 'до 600 000 €',
+      bedrooms: SELECTION.bedroomOptions[2],
+    };
+    const request = { language: 'ru', selection: baseSelection };
+    const exact = property('exact-villa', 'Точная вилла', 'active', {
+      dealType: 'sale', propertyType: 'villa', bedrooms: 3, priceValue: 550000, currency: 'EUR',
+      city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' },
+    });
+    assert.deepEqual(bot.selectionEvaluation(request, exact), {
+      tier: 'exact', score: 100,
+      reasons: ['deal', 'type', 'location', 'budget', 'bedrooms'], warnings: [],
+    });
+
+    const missingPrice = { ...exact, id: 'missing-price', priceValue: null };
+    const close = bot.selectionEvaluation(request, missingPrice);
+    assert.equal(close.tier, 'close');
+    assert.ok(close.warnings.includes('priceMissing'));
+    assert.equal(bot.selectionMatches(request, missingPrice), false, 'an incomplete card is not pushed as an exact alert');
+
+    const otherCurrency = { ...exact, id: 'other-currency', currency: 'USD' };
+    assert.equal(bot.selectionEvaluation(request, otherCurrency).tier, 'close');
+    assert.ok(bot.selectionEvaluation(request, otherCurrency).warnings.includes('currency'));
+
+    const otherArea = { ...exact, id: 'other-area', city: { ru: 'Эстепона', en: 'Estepona', es: 'Estepona' } };
+    assert.equal(bot.selectionEvaluation(request, otherArea).tier, 'close');
+    assert.ok(bot.selectionEvaluation(request, otherArea).warnings.includes('location'));
+
+    const tooExpensive = { ...exact, id: 'too-expensive', priceValue: 900000 };
+    assert.equal(bot.selectionEvaluation(request, tooExpensive), null);
+
+    const rentRequest = { language: 'ru', selection: {
+      deal: SELECTION.dealOptions[1], type: SELECTION.typeOptions[1], location: SELECTION.anyLocation,
+      budget: 'до 5 000 € в месяц', bedrooms: SELECTION.bedroomOptions[4],
+    } };
+    const weeklyRent = { ...exact, id: 'weekly-rent', dealType: 'rent', priceValue: 1000, pricePeriod: 'week' };
+    const converted = bot.selectionEvaluation(rentRequest, weeklyRent);
+    assert.equal(converted.tier, 'exact');
+    assert.ok(converted.warnings.includes('periodConverted'), 'a weekly rent is compared with the monthly budget after conversion');
+  });
+
+  test('location matching ignores accents and ranking always puts exact results first', () => {
+    assert.equal(bot.locationMatches('Malaga centro', property('accented', 'Apartamento', 'active', {
+      city: { ru: 'Малага', en: 'Málaga', es: 'Málaga' },
+    })), true);
+
+    const data = bot.getData();
+    data.objects = [
+      property('nearby-first', 'Почти подходит', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 3, priceValue: null, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }),
+      property('exact-second', 'Подходит точно', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 3, priceValue: 500000, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }),
+    ];
+    const ranking = bot.currentSelectionRanking({ preferredLanguage: 'ru' }, {
+      deal: SELECTION.dealOptions[0], type: SELECTION.typeOptions[1], location: 'Марбелья', budget: '600 000 €', bedrooms: SELECTION.bedroomOptions[2],
+    });
+    assert.deepEqual(ranking.map((item) => [item.record.id, item.tier]), [['exact-second', 'exact'], ['nearby-first', 'close']]);
+  });
 });
 
 test.describe('search in client messages', () => {
@@ -312,7 +386,7 @@ test.describe('search in client messages', () => {
     const chat = createChat();
     telegram.calls = [];
     await chat.say('ref 1024');
-    assert.match(shownCard(), /^🏠 Объект\n\nКвартира у пляжа/);
+    assert.match(shownCard(), /^<i>🏠 Объект · 1 \/ 1<\/i>\n\n<b>Квартира у пляжа<\/b>/);
     assert.equal(chat.inquiries.length, 0);
     telegram.calls = [];
     await chat.say('REF-4096');
@@ -333,7 +407,7 @@ test.describe('search in client messages', () => {
   test('a city name shows the catalog in that city, in any language and spelling', async () => {
     const chat = createChat();
     await chat.say('benidorm');
-    assert.deepEqual(chat.user.catalogFilter, { deal: '', type: '', bedrooms: 0, city: 'Бенидорм', maxPrice: 0, sort: '' });
+    assert.deepEqual(chat.user.catalogFilter, { deal: '', type: '', bedrooms: 0, city: 'Бенидорм', district: '', minPrice: 0, maxPrice: 0, sort: '' });
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['flat-benidorm-01']);
     assert.equal(chat.inquiries.length, 0);
 
@@ -342,11 +416,98 @@ test.describe('search in client messages', () => {
     assert.equal(english.user.catalogFilter.city, 'Málaga', 'the city as the client\'s language writes it');
   });
 
+  test('a natural request becomes an exact catalog filter in all three languages', async () => {
+    resetData((data) => {
+      const marbella = { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' };
+      const malaga = { ru: 'Малага', en: 'Málaga', es: 'Málaga' };
+      const sierraBlanca = { ru: 'Сьерра-Бланка', en: 'Sierra Blanca', es: 'Sierra Blanca' };
+      data.objects.push(property('natural-flat-01', 'Квартира по запросу', 'active', { dealType: 'sale', propertyType: 'apartment', bedrooms: 2, priceValue: 470000, city: marbella }));
+      data.objects.push(property('natural-flat-02', 'Слишком дорогая квартира', 'active', { dealType: 'sale', propertyType: 'apartment', bedrooms: 3, priceValue: 620000, city: marbella }));
+      data.objects.push(property('natural-villa-03', 'Villa for search', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 3, priceValue: 1100000, city: marbella, district: sierraBlanca }));
+      data.objects.push(property('natural-rent-04', 'Piso de alquiler', 'active', { dealType: 'rent', propertyType: 'apartment', bedrooms: 2, priceValue: 1600, pricePeriod: 'month', city: malaga }));
+      for (const record of data.objects) record.imagesByLanguage.es = record.imagesByLanguage.ru.slice();
+    });
+
+    const russian = createChat();
+    await russian.say('Ищу купить квартиру в Марбелье до 500 000 €, 2 спальни');
+    assert.deepEqual(russian.user.catalogFilter, { deal: 'sale', type: 'apartment', bedrooms: 2, city: 'Марбелья', district: '', minPrice: 0, maxPrice: 500000, sort: '' });
+    assert.deepEqual(bot.catalogRecords(russian.user).map((record) => record.id), ['natural-flat-01']);
+    assert.equal(russian.inquiries.length, 0);
+    const customPricePanel = await russian.press('cfilter:open');
+    const customPriceButton = customPricePanel.last.markup.inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:price:500000');
+    assert.ok(customPriceButton && customPriceButton.text.startsWith('✓ '), 'a price typed by the client stays visible in the filter');
+
+    const english = createChat({ language: 'en' });
+    await english.say('Looking to buy a villa in Marbella under 1.2 million, 3 bedrooms');
+    assert.deepEqual(english.user.catalogFilter, { deal: 'sale', type: 'villa', bedrooms: 3, city: 'Marbella', district: '', minPrice: 0, maxPrice: 1200000, sort: '' });
+    assert.deepEqual(bot.catalogRecords(english.user).map((record) => record.id), ['natural-villa-03']);
+
+    const byDistrict = createChat();
+    await byDistrict.say('Ищу купить виллу в Сьерра-Бланке до 1 200 000 €, 3 спальни');
+    assert.deepEqual(byDistrict.user.catalogFilter, { deal: 'sale', type: 'villa', bedrooms: 3, city: 'Марбелья', district: 'Сьерра-Бланка', minPrice: 0, maxPrice: 1200000, sort: '' });
+    assert.deepEqual(bot.catalogRecords(byDistrict.user).map((record) => record.id), ['natural-villa-03']);
+
+    const spanish = createChat({ language: 'es' });
+    await spanish.say('Busco apartamento de alquiler en Málaga hasta 1.800 €, 2 dormitorios');
+    assert.deepEqual(spanish.user.catalogFilter, { deal: 'rent', type: 'apartment', bedrooms: 2, city: 'Málaga', district: '', minPrice: 0, maxPrice: 1800, sort: '' });
+    assert.deepEqual(bot.catalogRecords(spanish.user).map((record) => record.id), ['natural-rent-04']);
+  });
+
+  test('a price range in an ordinary message becomes the same catalog filter in all three languages', async () => {
+    resetData((data) => {
+      const marbella = { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' };
+      data.objects.push(property('range-low-01', 'Дешевле диапазона', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 250000, city: marbella }));
+      data.objects.push(property('range-fit-02', 'В диапазоне', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 420000, city: marbella }));
+      data.objects.push(property('range-high-03', 'Дороже диапазона', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 650000, city: marbella }));
+      for (const record of data.objects) record.imagesByLanguage.es = record.imagesByLanguage.ru.slice();
+    });
+
+    const cases = [
+      { language: 'ru', message: 'Ищу квартиру в Марбелье от 300 до 500 тыс. €', city: 'Марбелья' },
+      { language: 'en', message: 'Looking for an apartment in Marbella from 300k to 500k', city: 'Marbella' },
+      { language: 'es', message: 'Busco apartamento en Marbella entre 300 y 500 mil euros', city: 'Marbella' },
+    ];
+    for (const item of cases) {
+      const chat = createChat({ language: item.language });
+      await chat.say(item.message);
+      assert.equal(chat.user.catalogFilter.minPrice, 300000);
+      assert.equal(chat.user.catalogFilter.maxPrice, 500000);
+      assert.equal(chat.user.catalogFilter.city, item.city);
+      assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['range-fit-02']);
+      assert.equal(chat.inquiries.length, 0);
+    }
+  });
+
+  test('a filtered catalog can send the same criteria to a manager with one tap', async () => {
+    resetData((data) => {
+      data.objects.push(property('manager-search-01', 'Квартира для заявки', 'active', {
+        dealType: 'sale', propertyType: 'apartment', bedrooms: 2, priceValue: 480000,
+        city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' },
+        district: { ru: 'Нагуэлес', en: 'Nagueles', es: 'Nagüeles' },
+      }));
+    });
+    const chat = createChat();
+    const search = await chat.say('Ищу купить квартиру в Нагуэлесе до 500 000 €, 2 спальни');
+    const card = search.calls.find((call) => call.method === 'sendPhoto');
+    assert.ok(callbacksOf(card.body.reply_markup).includes('cfilter:manager'));
+
+    const sent = await chat.press('cfilter:manager');
+    assert.deepEqual(sent.popups, [bot.text.catalogFilter.ru.sentToManager]);
+    const inquiry = chat.inquiries[0];
+    assert.equal(inquiry.type, 'selection');
+    assert.match(inquiry.text, /Продажа, Квартира, Марбелья, Нагуэлес, 2\+ спален, до 500\s?000 €/);
+    assert.equal(inquiry.selection.location, 'Марбелья, Нагуэлес');
+    assert.deepEqual(inquiry.matching.results.map((item) => item.id), ['manager-search-01']);
+    assert.deepEqual(chat.user.selectionMatchIds, ['manager-search-01']);
+  });
+
   test('longer messages and unknown places still go to the manager', async () => {
     const chat = createChat();
     await chat.say('Ищу что-нибудь в Бенидорме или Финестрате');
     await chat.say('Торревьеха');
-    assert.equal(chat.inquiries.length, 1, 'both messages end up in one inquiry');
+    await chat.say('Ищу виллу в Торревьехе до 500 000 €');
+    await chat.say('Ищу дом или виллу в Малаге');
+    assert.equal(chat.inquiries.length, 1, 'all ambiguous messages end up in one conversation');
     assert.equal(chat.user.catalogFilter, null);
   });
 });
@@ -357,7 +518,7 @@ test.describe('catalog filter', () => {
     ['sale-villa-3', 'sale', 'villa', 3],
     ['sale-villa-4', 'sale', 'villa', 4],
     ['sale-flat-2', 'sale', 'apartment', 2],
-    ['sale-flat-x', 'sale', 'apartment', null],
+    ['sale-flat-x', 'sale', 'apartment', 0],
     ['rent-flat-1', 'rent', 'apartment', 1],
     ['rent-flat-2', 'rent', 'apartment', 2],
     ['rent-house-5', 'rent', 'house', 5],
@@ -376,11 +537,15 @@ test.describe('catalog filter', () => {
     return cards[cards.length - 1].body.reply_markup;
   }
 
-  test('a small catalog has no filter button', async () => {
+  function withoutCount(label) {
+    return String(label).replace(/ · \d+$/, '');
+  }
+
+  test('the filter is always available, including in a small catalog', async () => {
     withCatalog(catalog.slice(0, 4));
     const chat = createChat();
     await chat.say(MENU.ru.objects);
-    assert.ok(!callbacksOf(cardMarkup()).includes('cfilter:open'));
+    assert.ok(callbacksOf(cardMarkup()).includes('cfilter:open'));
   });
 
   test('the filter narrows the catalog and is remembered', async () => {
@@ -391,24 +556,28 @@ test.describe('catalog filter', () => {
 
     const panel = await chat.press('cfilter:open');
     assert.equal(panel.last.text, FILTER.title);
-    assert.ok(panel.last.buttons.includes('✓ ' + FILTER.anyDeal));
+    assert.ok(panel.last.buttons.some((label) => withoutCount(label) === '✓ ' + FILTER.anyDeal));
     assert.ok(panel.last.buttons.includes(FILTER.show + ': 7'));
-    assert.ok(panel.last.buttons.includes('Вилла') && panel.last.buttons.includes('Дом') && !panel.last.buttons.includes('Участок'), 'only types present in the catalog are offered');
+    assert.ok(panel.last.buttons.some((label) => withoutCount(label) === 'Вилла')
+      && panel.last.buttons.some((label) => withoutCount(label) === 'Дом')
+      && !panel.last.buttons.some((label) => withoutCount(label) === 'Участок'), 'only types present in the catalog are offered');
 
     const rent = await chat.press('cfilter:deal:rent');
     const edited = rent.calls.find((call) => call.method === 'editMessageText');
-    assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === '✓ Аренда'));
+    assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => withoutCount(button.text) === '✓ Аренда'));
     assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === FILTER.show + ': 3'));
+    assert.ok(!edited.body.reply_markup.inline_keyboard.flat().some((button) => withoutCount(button.text) === 'Вилла'), 'an impossible type is not offered');
+    assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === 'Квартира · 2'), 'available choices show their result count');
     await chat.press('cfilter:bed:2');
-    assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2, city: '', maxPrice: 0, sort: '' });
+    assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2, city: '', district: '', minPrice: 0, maxPrice: 0, sort: '' });
 
     await chat.press('cfilter:show');
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['rent-flat-2', 'rent-house-5']);
     const filterButton = cardMarkup().inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:open');
-    assert.equal(filterButton.text, FILTER.button + ': Аренда, 2+ спален');
+    assert.equal(filterButton.text, FILTER.button + ' · 2');
 
     await chat.say('Добрый день');
-    assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2, city: '', maxPrice: 0, sort: '' }, 'kept after other messages');
+    assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2, city: '', district: '', minPrice: 0, maxPrice: 0, sort: '' }, 'kept after other messages');
   });
 
   test('an empty result offers to reset the filter or leave wishes', async () => {
@@ -418,7 +587,7 @@ test.describe('catalog filter', () => {
     await chat.press('cfilter:deal:sale');
     const shown = await chat.press('cfilter:show');
     assert.ok(shown.last.text.startsWith(FILTER.empty));
-    assert.deepEqual(callbacksOf(shown.last.markup), ['cfilter:reset', 'selection:start', 'nav:menu']);
+    assert.deepEqual(callbacksOf(shown.last.markup), ['cfilter:open', 'cfilter:reset', 'cfilter:manager', 'selection:start', 'nav:menu']);
     await chat.press('cfilter:reset');
     assert.equal(chat.user.catalogFilter, null);
     assert.equal(bot.catalogRecords(chat.user).length, 7);
@@ -427,27 +596,38 @@ test.describe('catalog filter', () => {
   test('cities, price limits and sorting by price', async () => {
     resetData((data) => {
       const city = (ru, en) => ({ ru, en, es: en });
-      data.objects.push(property('sale-marbella-1', 'Вилла 1', 'active', { dealType: 'sale', propertyType: 'villa', priceValue: 900000, city: city('Марбелья', 'Marbella') }));
-      data.objects.push(property('sale-marbella-2', 'Квартира 2', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 240000, city: city('марбелья', 'Marbella') }));
-      data.objects.push(property('sale-estepona-3', 'Квартира 3', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 380000, city: city('Эстепона', 'Estepona') }));
-      data.objects.push(property('sale-estepona-4', 'Дом 4', 'active', { dealType: 'sale', propertyType: 'house', city: city('Эстепона', 'Estepona') }));
+      data.objects.push(property('sale-marbella-1', 'Вилла 1', 'active', { dealType: 'sale', propertyType: 'villa', priceValue: 900000, city: city('Марбелья', 'Marbella'), district: city('Сьерра-Бланка', 'Sierra Blanca') }));
+      data.objects.push(property('sale-marbella-2', 'Квартира 2', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 240000, city: city('марбелья', 'Marbella'), district: city('Нагуэлес', 'Nagueles') }));
+      data.objects.push(property('sale-estepona-3', 'Квартира 3', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 380000, city: city('Эстепона', 'Estepona'), district: city('Аталайя', 'Atalaya') }));
+      data.objects.push(property('sale-estepona-4', 'Дом 4', 'active', { dealType: 'sale', propertyType: 'house', city: city('Эстепона', 'Estepona'), district: city('Центр', 'Centro') }));
       data.objects.push(property('rent-malaga-5', 'Квартира 5', 'active', { dealType: 'rent', propertyType: 'apartment', priceValue: 1100, city: city('Малага', 'Malaga') }));
       data.objects.push(property('rent-malaga-6', 'Квартира 6', 'active', { dealType: 'rent', propertyType: 'apartment', priceValue: 1900, city: city('Малага', 'Malaga') }));
     });
     const chat = createChat();
     let panel = await chat.press('cfilter:open');
     const buttons = () => panel.calls.filter((call) => ['sendMessage', 'editMessageText'].includes(call.method)).pop().body.reply_markup.inline_keyboard.flat();
-    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:city:')).map((button) => button.text), ['✓ ' + FILTER.anyCity, 'Малага', 'Марбелья', 'Эстепона'], 'each city once, whatever the case');
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:city:')).map((button) => withoutCount(button.text)), ['✓ ' + FILTER.anyCity, 'Малага', 'Марбелья', 'Эстепона'], 'each city once, whatever the case');
     assert.ok(!buttons().some((button) => button.callback_data.startsWith('cfilter:price:')), 'no price scale while sale and rent are mixed');
 
-    const marbella = buttons().find((button) => button.text === 'Марбелья');
+    const marbella = buttons().find((button) => withoutCount(button.text) === 'Марбелья');
     panel = await chat.press(marbella.callback_data);
     assert.equal(chat.user.catalogFilter.city, 'Марбелья');
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-1', 'sale-marbella-2']);
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:district:')).map((button) => withoutCount(button.text)), ['✓ ' + FILTER.anyDistrict, 'Нагуэлес', 'Сьерра-Бланка']);
+
+    const sierra = buttons().find((button) => withoutCount(button.text) === 'Сьерра-Бланка');
+    panel = await chat.press(sierra.callback_data);
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-1']);
+    assert.equal(chat.user.catalogFilter.city + ', ' + chat.user.catalogFilter.district, 'Марбелья, Сьерра-Бланка');
+
+    const estepona = buttons().find((button) => withoutCount(button.text) === 'Эстепона');
+    panel = await chat.press(estepona.callback_data);
+    assert.equal(chat.user.catalogFilter.district, '', 'a district from another city is cleared');
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-estepona-3', 'sale-estepona-4']);
 
     panel = await chat.press('cfilter:city:any');
     panel = await chat.press('cfilter:deal:sale');
-    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => button.text.replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 150 000 €', 'до 250 000 €', 'до 400 000 €', 'до 600 000 €', 'до 1 000 000 €']);
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => withoutCount(button.text).replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 250 000 €', 'до 400 000 €', 'до 600 000 €', 'до 1 000 000 €', '✎ ' + FILTER.customPrice]);
     await chat.press('cfilter:price:400000');
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-2', 'sale-estepona-3'], 'a price on request is left out');
 
@@ -460,14 +640,118 @@ test.describe('catalog filter', () => {
     await chat.press('cfilter:price:250000');
     panel = await chat.press('cfilter:deal:rent');
     assert.equal(chat.user.catalogFilter.maxPrice, 0, 'a purchase limit does not carry over to rent');
-    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => button.text.replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 800 €', 'до 1 200 €', 'до 2 000 €', 'до 3 000 €']);
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => withoutCount(button.text).replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 1 200 €', 'до 2 000 €', 'до 3 000 €', '✎ ' + FILTER.customPrice]);
     await chat.press('cfilter:show');
     const filterButton = cardMarkup().inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:open');
-    assert.equal(filterButton.text, FILTER.button + ': Аренда, Сначала дешевле');
+    assert.equal(filterButton.text, FILTER.button + ' · 2');
 
     const english = createChat({ language: 'en' });
     english.user.catalogFilter = { city: 'Marbella' };
     assert.deepEqual(bot.catalogRecords(english.user).map((record) => record.id), ['sale-marbella-1', 'sale-marbella-2'], 'the city in the client\'s language');
+  });
+
+  test('long city and district lists use compact paginated pickers', async () => {
+    resetData((data) => {
+      const place = (value) => ({ ru: value, en: value, es: value });
+      for (let city = 1; city <= 8; city += 1) {
+        const districtTotal = city === 1 ? 7 : 1;
+        for (let district = 1; district <= districtTotal; district += 1) {
+          data.objects.push(property('place-' + city + '-' + district, 'Объект ' + city + '-' + district, 'active', {
+            dealType: 'sale',
+            priceValue: 200000 + city * 10000 + district,
+            city: place('Город ' + city),
+            district: place('Район ' + district),
+          }));
+        }
+      }
+    });
+    const chat = createChat();
+    const latest = (step) => step.calls.filter((call) => ['sendMessage', 'editMessageText'].includes(call.method)).pop().body;
+
+    let step = await chat.press('cfilter:open');
+    let markup = latest(step).reply_markup;
+    assert.ok(callbacksOf(markup).includes('cfilter:cities:0'));
+    assert.equal(callbacksOf(markup).filter((callback) => callback.startsWith('cfilter:city:')).length, 0, 'cities do not stretch the main filter');
+
+    step = await chat.press('cfilter:cities:0');
+    let body = latest(step);
+    assert.equal(body.text, FILTER.cityPickerTitle);
+    assert.equal(callbacksOf(body.reply_markup).filter((callback) => callback.startsWith('cfilter:city:')).length, 7, 'any city plus six choices fit on one page');
+    assert.ok(callbacksOf(body.reply_markup).includes('cfilter:cities:1'));
+    const firstCity = body.reply_markup.inline_keyboard.flat().find((button) => withoutCount(button.text) === 'Город 1');
+
+    step = await chat.press(firstCity.callback_data);
+    body = latest(step);
+    assert.equal(chat.user.catalogFilter.city, 'Город 1');
+    assert.equal(body.text, FILTER.districtPickerTitle.replace('{city}', 'Город 1'));
+    assert.ok(callbacksOf(body.reply_markup).includes('cfilter:districts:1'));
+
+    step = await chat.press('cfilter:districts:1');
+    body = latest(step);
+    const seventhDistrict = body.reply_markup.inline_keyboard.flat().find((button) => withoutCount(button.text) === 'Район 7');
+    assert.ok(seventhDistrict);
+    step = await chat.press(seventhDistrict.callback_data);
+    body = latest(step);
+    assert.equal(chat.user.catalogFilter.district, 'Район 7');
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['place-1-7']);
+    assert.ok(callbacksOf(body.reply_markup).includes('cfilter:cities:0'));
+    assert.ok(callbacksOf(body.reply_markup).includes('cfilter:districts:0'));
+  });
+
+  test('a client can set an exact price range inside the filter', async () => {
+    resetData((data) => {
+      data.objects.push(property('custom-price-low', 'Дешевле диапазона', 'active', { dealType: 'sale', priceValue: 280000 }));
+      data.objects.push(property('custom-price-fit', 'Подходит по цене', 'active', { dealType: 'sale', priceValue: 510000 }));
+      data.objects.push(property('custom-price-high', 'Дороже бюджета', 'active', { dealType: 'sale', priceValue: 700000 }));
+    });
+    const chat = createChat();
+    await chat.press('cfilter:deal:sale');
+    const prompt = await chat.press('cfilter:price:custom');
+    assert.equal(chat.user.pendingAction.type, 'catalog_filter_price');
+    assert.equal(prompt.last.text, FILTER.askCustomPrice);
+    assert.deepEqual(prompt.last.buttons, [FILTER.cancelCustomPrice]);
+
+    const invalid = await chat.say('примерно средний бюджет');
+    assert.equal(invalid.last.text, FILTER.invalidCustomPrice);
+    assert.equal(chat.user.pendingAction.type, 'catalog_filter_price', 'an invalid amount keeps the input open');
+
+    const applied = await chat.say('525 тыс. €');
+    assert.equal(chat.user.pendingAction, null);
+    assert.equal(chat.user.catalogFilter.maxPrice, 525000);
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['custom-price-low', 'custom-price-fit']);
+    assert.equal(chat.inquiries.length, 0, 'a budget is filter input, not a manager message');
+    assert.ok(applied.replies.some((reply) => reply.text.includes('525') && reply.text.includes('€')));
+    const selected = applied.calls.filter((call) => call.method === 'sendMessage').pop().body.reply_markup.inline_keyboard.flat()
+      .find((button) => button.callback_data === 'cfilter:price:525000');
+    assert.ok(selected && selected.text.startsWith('✓ '));
+
+    const minimumPrompt = await chat.press('cfilter:minprice:custom');
+    assert.equal(chat.user.pendingAction.priceBound, 'min');
+    assert.equal(minimumPrompt.last.text, FILTER.askMinimumPrice);
+
+    const conflict = await chat.say('600 000 €');
+    assert.equal(chat.user.pendingAction.priceBound, 'min', 'a conflicting boundary keeps the input open');
+    assert.match(conflict.last.text, /600/);
+    assert.match(conflict.last.text, /525/);
+
+    const minimumApplied = await chat.say('500 тыс. €');
+    assert.equal(chat.user.catalogFilter.minPrice, 500000);
+    assert.equal(chat.user.catalogFilter.maxPrice, 525000);
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['custom-price-fit']);
+    const selectedMinimum = minimumApplied.calls.filter((call) => call.method === 'sendMessage').pop().body.reply_markup.inline_keyboard.flat()
+      .find((button) => button.callback_data === 'cfilter:minprice:500000');
+    assert.ok(selectedMinimum && selectedMinimum.text.startsWith('✓ '));
+    assert.match(selectedMinimum.text.replace(/[  ]/g, ' '), /от 500 000 €/);
+
+    await chat.press('cfilter:price:custom');
+    const cancelled = await chat.say(FILTER.cancelCustomPrice);
+    assert.equal(chat.user.catalogFilter.maxPrice, 525000, 'cancel keeps the previous price');
+    assert.equal(chat.user.catalogFilter.minPrice, 500000, 'cancel also keeps the lower boundary');
+    assert.ok(cancelled.replies.some((reply) => reply.text === FILTER.customPriceCancelled));
+
+    await chat.press('cfilter:price:0');
+    assert.equal(chat.user.catalogFilter.minPrice, 0, '“any price” clears the entire range');
+    assert.equal(chat.user.catalogFilter.maxPrice, 0);
   });
 
   test('a bedroom filter leaves out properties without a bedroom count', () => {
@@ -483,6 +767,107 @@ test.describe('catalog filter', () => {
     chat.user.catalogFilter = { deal: 'sale', type: '', bedrooms: 0 };
     await chat.say(MENU.ru.objects);
     assert.ok(callbacksOf(cardMarkup()).includes('cfilter:open'));
+  });
+
+  test('the exact property, filter and sort survive details, reordering and reopening', async () => {
+    withCatalog(catalog.slice(0, 3));
+    const chat = createChat();
+    chat.user.catalogFilter = { deal: 'sale', type: '', bedrooms: 0, city: '', maxPrice: 0, sort: 'desc' };
+    await chat.say(MENU.ru.objects);
+    await chat.press('catalog:all:1');
+    const targetId = chat.user.catalogContext.propertyId;
+    const target = bot.getData().objects.find((record) => record.id === targetId);
+    assert.ok(targetId && target);
+
+    const details = await chat.press('property:details:' + targetId);
+    assert.ok(callbacksOf(details.last.markup).includes('property:return:' + targetId));
+
+    bot.getData().objects.unshift(property('new-first-00', 'Новый первый', 'active', { priceValue: 990000 }));
+    const returned = await chat.press('property:return:' + targetId);
+    const returnedCard = returned.calls.find((call) => call.method === 'sendPhoto');
+    assert.ok(returnedCard.body.caption.includes('<b>' + target.title.ru + '</b>'));
+    assert.equal(chat.user.catalogContext.propertyId, targetId);
+
+    const targetIndex = bot.getData().objects.findIndex((record) => record.id === targetId);
+    bot.getData().objects.push(bot.getData().objects.splice(targetIndex, 1)[0]);
+    const reopened = await chat.say(MENU.ru.objects);
+    const reopenedCard = reopened.calls.find((call) => call.method === 'sendPhoto');
+    assert.ok(reopenedCard.body.caption.includes('<b>' + target.title.ru + '</b>'), 'the object id, not an obsolete page number, anchors the catalog');
+    assert.equal(chat.user.catalogFilter.sort, 'desc');
+  });
+
+  test('My space combines personal sections and keeps a clean recent history', async () => {
+    resetData((data) => {
+      data.objects.push(property('recent-one', 'Первый просмотренный', 'active'));
+      data.objects.push(property('recent-two', 'Второй просмотренный', 'active'));
+      data.objects.push(property('recent-hidden', 'Скрытый объект', 'draft'));
+    });
+    const chat = createChat();
+    await chat.say(MENU.ru.objects);
+    await chat.press('catalog:all:1');
+    assert.deepEqual(chat.user.recentlyViewed, ['recent-two', 'recent-one']);
+
+    chat.user.favorites = ['recent-one'];
+    chat.user.recentlyViewed.unshift('recent-hidden');
+    chat.user.catalogFilter = { deal: 'rent', type: '', bedrooms: 0, city: '', maxPrice: 0, sort: '' };
+    const personal = await chat.say(MENU.ru.more);
+    assert.equal(personal.last.text, bot.text.myArea.ru.title + '\n\n' + bot.text.myArea.ru.intro);
+    assert.deepEqual(callbacksOf(personal.last.markup), [
+      'catalog:favorites:0', 'compare:view', 'saved:view', 'catalog:recent:0', 'myreq:list', 'subs:menu',
+      'nav:about', 'nav:help', 'nav:language', 'nav:menu',
+    ]);
+    assert.ok(personal.last.buttons.includes(MENU.ru.favorites + ' · 1'));
+    assert.ok(personal.last.buttons.includes(bot.text.comparison.ru.menuButton + ' · 0'));
+    assert.ok(personal.last.buttons.includes(bot.text.myArea.ru.recent + ' · 2'), 'a draft is not counted');
+    assert.ok(personal.last.buttons.some((label) => label.endsWith(' · 0')), 'the request counter is visible even when empty');
+
+    const recent = await chat.press('catalog:recent:0');
+    const recentCard = recent.calls.find((call) => ['editMessageMedia', 'sendPhoto'].includes(call.method));
+    const recentMedia = typeof recentCard.body.media === 'string' ? JSON.parse(recentCard.body.media) : recentCard.body.media;
+    const recentCaption = recentCard.body.caption || (recentMedia && recentMedia.caption) || '';
+    assert.ok(recentCaption.includes('<b>Второй просмотренный</b>'));
+    assert.ok(recentCaption.startsWith('<i>' + bot.text.myArea.ru.recentHeading + ' · 1 / 2</i>'));
+    assert.ok(callbacksOf(recentCard.body.reply_markup).includes('nav:my'));
+    assert.deepEqual(bot.catalogRecords(chat.user, 'recent').map((record) => record.id), ['recent-two', 'recent-one'], 'filters and hidden properties do not affect the history');
+
+    const historyBeforePaging = [...chat.user.recentlyViewed];
+    await chat.press('catalog:recent:1');
+    assert.deepEqual(chat.user.recentlyViewed, historyBeforePaging, 'paging through history does not reorder it');
+
+    chat.user.catalogFilter = null;
+    await chat.press('catalog:all:0');
+    assert.equal(chat.user.recentlyViewed[0], 'recent-one');
+    assert.equal(chat.user.recentlyViewed.filter((id) => id === 'recent-one').length, 1, 'opening the same card moves it instead of duplicating it');
+  });
+
+  test('a gallery returns to the same property and the city filter follows the language', async () => {
+    resetData((data) => {
+      const home = property('gallery-home-01', 'Дом с галереей', 'active', {
+        city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' },
+        district: { ru: 'Золотая Миля', en: 'Golden Mile', es: 'Milla de Oro' },
+      });
+      home.imagesByLanguage.ru.push({ ...home.imagesByLanguage.ru[0], id: 'gallery-home-01-extra' });
+      data.objects.push(home);
+      data.objects.push(property('other-home-02', 'Другой дом', 'active', { city: { ru: 'Бенидорм', en: 'Benidorm', es: 'Benidorm' } }));
+    });
+    const chat = createChat();
+    chat.user.catalogFilter = { deal: 'sale', type: '', bedrooms: 0, city: 'Марбелья', district: 'Золотая Миля', maxPrice: 0, sort: 'asc' };
+    await chat.say(MENU.ru.objects);
+    const gallery = await chat.press('property:gallery:gallery-home-01');
+    assert.ok(callbacksOf(gallery.last.markup).includes('property:return:gallery-home-01'));
+    await chat.press('property:return:gallery-home-01');
+    assert.equal(chat.user.catalogContext.propertyId, 'gallery-home-01');
+
+    await chat.press('language:en');
+    assert.deepEqual(chat.user.catalogFilter, { deal: 'sale', type: '', bedrooms: 0, city: 'Marbella', district: 'Golden Mile', minPrice: 0, maxPrice: 0, sort: 'asc' });
+  });
+
+  test('typing a city changes only the city and keeps the other catalog choices', async () => {
+    withCatalog(catalog);
+    const chat = createChat();
+    chat.user.catalogFilter = { deal: 'sale', type: 'apartment', bedrooms: 2, city: '', maxPrice: 250000, sort: 'desc' };
+    await chat.say('Бенидорм');
+    assert.deepEqual(chat.user.catalogFilter, { deal: 'sale', type: 'apartment', bedrooms: 2, city: 'Бенидорм', district: '', minPrice: 0, maxPrice: 250000, sort: 'desc' });
   });
 
   test('favourites are never filtered', () => {

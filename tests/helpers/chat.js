@@ -33,10 +33,13 @@ global.fetch = async (url, init) => {
     // Photos are uploaded as multipart; keep the text fields, parse the markup.
     for (const [key, value] of init.body.entries()) if (typeof value === 'string') body[key] = value;
     if (body.reply_markup) body.reply_markup = JSON.parse(body.reply_markup);
+    if (body.reply_parameters) body.reply_parameters = JSON.parse(body.reply_parameters);
   }
   telegram.calls.push({ method, body });
   telegram.nextMessageId += 1;
   const result = method === 'sendMediaGroup' ? [{ message_id: telegram.nextMessageId }]
+    : method === 'sendPhoto' ? { message_id: telegram.nextMessageId, photo: [{ file_id: 'photo-' + telegram.nextMessageId }] }
+      : method === 'sendDocument' ? { message_id: telegram.nextMessageId, document: { file_id: 'document-' + telegram.nextMessageId, file_name: 'document' } }
     : ['deleteMessage', 'answerCallbackQuery', 'setMyCommands'].includes(method) ? true
       : { message_id: telegram.nextMessageId };
   return new Response(JSON.stringify({ ok: true, result }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -117,7 +120,14 @@ function property(id, title, status, extra = {}) {
     id,
     status,
     reference: id.toUpperCase(),
+    dealType: 'sale',
+    propertyType: 'apartment',
     title: { ru: title, en: title + ' (EN)', es: title + ' (ES)' },
+    description: { ru: 'Краткое описание объекта.', en: 'A short property description.', es: 'Una breve descripción del inmueble.' },
+    city: { ru: 'Бенидорм', en: 'Benidorm', es: 'Benidorm' },
+    area: 80,
+    bedrooms: 2,
+    bathrooms: 1,
     imagesByLanguage: {
       ru: [{ id: id + '-ru', mimeType: 'image/png', dataBase64: PNG }],
       en: [{ id: id + '-en', mimeType: 'image/png', dataBase64: PNG }],

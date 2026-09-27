@@ -21,6 +21,7 @@ const MAX_BODY_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_BODY_BYTES = 256 * 1024 * 1024;
 const MAX_BACKUP_OUTPUT_BYTES = 512 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 // Extra host names the panel may be opened by (comma-separated), for example
 // when ADMIN_HOST=0.0.0.0 and the computer is reached by its network name.
 const ADMIN_ALLOWED_HOSTS = new Set(String(process.env.ADMIN_ALLOWED_HOSTS || '')
@@ -75,6 +76,7 @@ export {
   MAX_BACKUP_BODY_BYTES,
   MAX_BACKUP_OUTPUT_BYTES,
   MAX_BODY_BYTES,
+  MAX_DOCUMENT_BYTES,
   MAX_IMAGE_BYTES,
   MEDIA_DIRECTORY,
   PENDING_ACTION_TTL_MS,

@@ -19,6 +19,29 @@ function cleanText(value, maxLength) {
   return String(value == null ? '' : value).trim().slice(0, maxLength);
 }
 
+// Parse the usual ways clients write a budget: 525000, 525 000,
+// 525k, 1.2 million, 1,2 млн. A decimal without a scale is rejected unless
+// it is an unambiguous thousands separator such as 1.800.
+function parseMoneyAmount(value) {
+  const text = cleanText(value, 100);
+  if (!text || /^\s*-/u.test(text)) return 0;
+  const match = text.match(/(\d{1,3}(?:[ .\u00a0\u202f]\d{3})+|\d+(?:[.,]\d+)?)\s*(millones|millón|millions|million|млн|тысяч|тыс|mil|k|m)?/iu);
+  if (!match) return 0;
+  const suffix = String(match[2] || '').normalize('NFD').replace(/\p{M}+/gu, '').toLocaleLowerCase();
+  const compact = match[1].replace(/[\s\u00a0\u202f]/g, '');
+  const million = /^(?:млн|million|millions|millon|millones|m)$/u.test(suffix);
+  const thousand = /^(?:тыс|тысяч|k|mil)$/u.test(suffix);
+  let amount;
+  if (million && /^\d+[.,]\d{1,2}$/u.test(compact)) amount = Number(compact.replace(',', '.'));
+  else if (!million && /[.,]/u.test(compact) && !/^\d{1,3}(?:[.,]\d{3})+$/u.test(compact)) return 0;
+  else amount = Number(compact.replace(/[^\d]/g, ''));
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  if (million) amount *= 1000000;
+  if (thousand) amount *= 1000;
+  amount = Math.round(amount);
+  return amount <= 1000000000 ? amount : 0;
+}
+
 function fillTemplate(template, user) {
   return String(template)
     .replaceAll('{first_name}', user.firstName || 'друг')
@@ -49,6 +72,7 @@ export {
   dateFromDayKey,
   dayKey,
   localDayKey,
+  parseMoneyAmount,
   delay,
   fillTemplate,
   hashPassword,

@@ -97,13 +97,16 @@ test('the panel saves office hours and checks them', async () => {
     assert.equal((await save({ enabled: true, days: [], from: '09:00', to: '19:00' })).status, 400, 'no working days');
     assert.equal((await save({ enabled: true, days: [1], from: '9:00', to: '19:00' })).status, 400, 'not HH:MM');
     assert.equal((await save({ enabled: true, days: [1], from: '09:00', to: '19:00', note: { ru: 'Мы закрыты' } })).status, 400, 'the text needs {next}');
+    assert.equal((await save({ enabled: true, days: [1], from: '09:00', to: '19:00', timeZone: 'Wrong/Zone' })).status, 400, 'unknown time zone');
 
-    const response = await save({ enabled: true, days: [1, 2, 3, 4, 5, 9], from: '09:30', to: '18:00', note: { ru: 'Ответим {next}.', en: '', es: '' } });
+    const response = await save({ enabled: true, days: [1, 2, 3, 4, 5, 9], from: '09:30', to: '18:00', timeZone: 'Atlantic/Canary', note: { ru: 'Ответим {next}.', en: '', es: '' } });
     assert.equal(response.status, 200);
     const state = await (await fetch(base + '/api/state', { headers })).json();
     assert.deepEqual(state.config.workingHours.days, [1, 2, 3, 4, 5], 'unknown days are dropped');
     assert.equal(state.config.workingHours.note.ru, 'Ответим {next}.');
     assert.match(state.config.workingHours.note.en, /\{next\}/, 'an empty text falls back to the default');
+    assert.equal(state.config.timeZone, 'Atlantic/Canary');
+    assert.equal(process.env.TZ, 'Atlantic/Canary', 'the scheduler switches immediately to the company time zone');
     assert.equal(bot.offHoursNote('ru', FRIDAY_EVENING), 'Ответим в понедельник с 9:30.');
 
     const slots = (body) => fetch(base + '/api/viewing-slots', { method: 'PUT', headers, body: JSON.stringify(body) });

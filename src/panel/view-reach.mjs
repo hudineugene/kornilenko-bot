@@ -3,6 +3,22 @@
 const REACH_JS = String.raw`
 var selectedGroup = "";
 
+function campaignPropertySignalLabel(signal) {
+  return { any: "любой интерес", favorite: "в избранном", comparison: "сравнивает", viewed: "просматривал", match: "подходит по запросу", inquiry: "обращался" }[signal || "any"] || "любой интерес";
+}
+function campaignAudienceLabel(entry) {
+  var parts = [];
+  if ((entry.languages || []).length) parts.push((entry.languages || []).join(", ").toUpperCase());
+  if ((entry.pipelineStages || []).length) parts.push((entry.pipelineStages || []).map(function (key) { var stage = PIPELINE_STAGES.find(function (item) { return item[0] === key; }); return stage ? stage[1] : key; }).join(", "));
+  if ((entry.sources || []).length) parts.push("источник: " + entry.sources.join(", "));
+  if (entry.propertyId) {
+    var record = (state.objects || []).find(function (item) { return String(item.id) === String(entry.propertyId); });
+    parts.push((record ? localized(record.title, "ru") || record.reference : "объект удалён") + " · " + campaignPropertySignalLabel(entry.propertySignal));
+  }
+  if ((entry.tags || []).length) parts.push("теги: " + entry.tags.join(", "));
+  return parts.join(" · ") || "все доступные клиенты";
+}
+
 // --- Рассылки --------------------------------------------------------------------
 function renderCampaigns(host) {
   var drafts = (state.broadcasts || []).filter(function (entry) { return entry.status === "draft" || entry.status === "scheduled"; });
@@ -13,15 +29,15 @@ function renderCampaigns(host) {
       drafts.map(function (entry) {
         return '<tr data-id="' + esc(entry.id) + '"><td class="clickable" data-edit="1">' + esc(String(localized(entry.messages, "ru")).slice(0, 70)) + "</td>" +
           "<td>" + (entry.status === "scheduled" ? dateTime(entry.scheduledAt) : "черновик") + "</td>" +
-          "<td>" + esc((entry.languages || []).join(", ").toUpperCase() || "—") + "</td>" +
+          "<td>" + esc(campaignAudienceLabel(entry)) + "</td>" +
           '<td class="right"><button class="btn ghost small" data-delete="1">✕</button></td></tr>';
       }).join("") + "</tbody></table></div></div>" : "") +
-    '<div class="card"><header><h3>История рассылок</h3><div class="actions"><span class="small faint">получатели · отклики · отписки</span></div></header><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Текст</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
+    '<div class="card"><header><h3>История рассылок</h3><div class="actions"><span class="small faint">получатели · отклики · отписки</span></div></header><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Текст</th><th>Аудитория</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
     (history.length ? history.map(function (entry) {
-      return "<tr><td class=\"nowrap\">" + dateShort(entry.startedAt) + "</td><td>" + esc(String(localized(entry.messages, "ru")).slice(0, 60)) + "</td>" +
+      return "<tr><td class=\"nowrap\">" + dateShort(entry.startedAt) + "</td><td>" + esc(String(localized(entry.messages, "ru")).slice(0, 60)) + "</td><td class=\"small\">" + esc(campaignAudienceLabel(entry)) + "</td>" +
         '<td class="right">' + num(entry.sent) + '</td><td class="right">' + num(entry.responses) + '</td><td class="right">' + num(entry.unsubscribes) + "</td>" +
         "<td>" + (entry.status === "failed" ? '<span class="chip bad">ошибка</span>' : entry.status === "queued" || entry.status === "running" ? '<span class="chip warn">идёт</span>' : '<span class="chip ok">отправлена</span>') + "</td></tr>";
-    }).join("") : '<tr><td colspan="6"><div class="empty"><b>Рассылок ещё не было</b>Сообщение получат клиенты, которые не отписались</div></td></tr>') +
+    }).join("") : '<tr><td colspan="7"><div class="empty"><b>Рассылок ещё не было</b>Сообщение получат клиенты, которые не отписались</div></td></tr>') +
     "</tbody></table></div></div>";
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     var id = row.dataset.id;
@@ -39,35 +55,81 @@ function openCampaignEditor(id) {
   var entry = id ? (state.broadcasts || []).find(function (item) { return item.id === id; }) : null;
   var tags = [];
   (state.users || []).forEach(function (user) { (user.tags || []).forEach(function (tag) { if (tags.indexOf(tag) < 0) tags.push(tag); }); });
+  var sources = (state.sources || []).map(function (item) { return item.source; }).filter(Boolean);
+  var selectedStage = entry && entry.pipelineStages && entry.pipelineStages[0] || "";
+  var selectedSource = entry && entry.sources && entry.sources[0] || "";
+  var selectedProperty = entry && entry.propertyId || "";
+  var selectedSignal = entry && entry.propertySignal || "any";
   openDialog({
     title: entry ? "Рассылка" : "Новая рассылка",
     drawer: true,
-    body: '<div class="stack">' + languageTabs() +
-      '<div class="field"><label>Текст сообщения</label>' + LANGUAGES.map(function (language) {
-        return '<textarea data-tr="messages" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" style="min-height:140px">' + esc((entry && entry.messages && entry.messages[language[0]]) || "") + "</textarea>";
-      }).join("") + '<div class="hint">Можно использовать {first_name}</div></div>' +
-      '<div class="field"><span class="field-label">Кому отправить</span><div class="row wrap">' + LANGUAGES.map(function (language) {
-        var checked = !entry || (entry.languages || []).indexOf(language[0]) >= 0;
-        return '<label class="check"><input type="checkbox" data-audience="' + language[0] + '"' + (checked ? " checked" : "") + "> " + language[1] + "</label>";
-      }).join("") + "</div></div>" +
-      (tags.length ? '<div class="field"><label for="campTags">Только с тегами</label><input id="campTags" value="' + esc((entry && entry.tags || []).join(", ")) + '" placeholder="' + esc(tags.join(", ")) + '"></div>' : "") +
-      '<div class="grid cols-2"><div class="field"><label>Кнопка: текст</label>' + LANGUAGES.map(function (language) {
-        return '<input data-tr="buttonText" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc((entry && entry.buttonText && entry.buttonText[language[0]]) || "") + '">';
-      }).join("") + "</div>" +
-      '<div class="field"><label for="campUrl">Кнопка: ссылка</label><input id="campUrl" value="' + esc(entry && entry.buttonUrl || "") + '"></div></div>' +
-      '<div class="field"><label for="campImage">Картинка</label><input id="campImage" type="file" accept="image/jpeg,image/png"></div>' +
-      '<div class="field"><label for="campDate">Отправить позже</label><input id="campDate" type="datetime-local" value="' + esc(entry && entry.scheduledAt ? String(entry.scheduledAt).slice(0, 16) : "") + '"></div>' +
-      '<div id="campEstimate" class="small muted"></div></div>',
+    wide: true,
+    protectChanges: true,
+    body: '<div class="editor-layout"><div class="editor-form stack">' +
+      '<div class="editor-language"><div class="row wrap">' + languageTabs() + '<span class="hint">Сообщение для выбранного языка</span></div></div>' +
+      '<details class="editor-section" open><summary><b>Сообщение</b><span>текст, изображение и кнопка</span></summary><div class="editor-section-body stack">' +
+        '<div class="field"><label>Текст сообщения</label>' + LANGUAGES.map(function (language) {
+          return '<textarea data-tr="messages" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" style="min-height:150px" placeholder="Введите текст для ' + esc(language[1]) + '">' + esc((entry && entry.messages && entry.messages[language[0]]) || "") + "</textarea>";
+        }).join("") + '<div class="hint">Подстановка <b>{first_name}</b> заменится именем клиента.</div></div>' +
+        '<div class="grid cols-2"><div class="field"><label>Текст кнопки</label>' + LANGUAGES.map(function (language) {
+          return '<input data-tr="buttonText" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc((entry && entry.buttonText && entry.buttonText[language[0]]) || "") + '" placeholder="Например: Посмотреть объект">';
+        }).join("") + "</div>" +
+        '<div class="field"><label for="campUrl">Ссылка кнопки</label><input id="campUrl" value="' + esc(entry && entry.buttonUrl || "") + '" placeholder="https://..."></div></div>' +
+        '<div class="field"><span class="field-label">Изображение</span><div class="image-upload-row"><label class="btn secondary small">＋ Выбрать изображение<input id="campImage" class="file-hidden" type="file" accept="image/jpeg,image/png"></label><span class="small muted" id="campImageName">' + (entry && entry.image && entry.image.exists ? "Изображение загружено" : "Не выбрано") + "</span></div></div>" +
+      "</div></details>" +
+      '<details class="editor-section" open><summary><b>Получатели</b><span>языки и группы клиентов</span></summary><div class="editor-section-body stack">' +
+        '<div class="field"><span class="field-label">Языки аудитории</span><div class="row wrap">' + LANGUAGES.map(function (language) {
+          var checked = !entry || (entry.languages || []).indexOf(language[0]) >= 0;
+          return '<label class="check"><input type="checkbox" data-audience="' + language[0] + '"' + (checked ? " checked" : "") + "> " + language[1] + "</label>";
+        }).join("") + "</div></div>" +
+        '<div class="grid cols-2"><div class="field"><label for="campStage">Этап воронки</label><select id="campStage"><option value="">Любой этап</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (selectedStage === stage[0] ? " selected" : "") + '>' + esc(stage[1]) + "</option>"; }).join("") + '</select></div><div class="field"><label for="campSource">Источник клиента</label><select id="campSource"><option value="">Любой источник</option>' + sources.map(function (source) { return '<option value="' + esc(source) + '"' + (selectedSource === source ? " selected" : "") + '>' + esc(source) + "</option>"; }).join("") + "</select></div></div>" +
+        '<div class="grid cols-2"><div class="field"><label for="campProperty">Интерес к объекту</label><select id="campProperty"><option value="">Не учитывать объект</option>' + (state.objects || []).map(function (record) { var title = localized(record.title, "ru") || record.reference || record.id; return '<option value="' + esc(record.id) + '"' + (selectedProperty === record.id ? " selected" : "") + '>' + esc(title) + "</option>"; }).join("") + '</select></div><div class="field"><label for="campPropertySignal">Как проявил интерес</label><select id="campPropertySignal"' + (selectedProperty ? "" : " disabled") + '>' + [["any", "Любое действие"], ["favorite", "Добавил в избранное"], ["comparison", "Сравнивает"], ["viewed", "Просматривал"], ["match", "Подходит по запросу"], ["inquiry", "Обращался по объекту"]].map(function (signal) { return '<option value="' + signal[0] + '"' + (selectedSignal === signal[0] ? " selected" : "") + '>' + signal[1] + "</option>"; }).join("") + "</select></div></div>" +
+        (tags.length ? '<div class="field"><label for="campTags">Только клиенты с тегами</label><input id="campTags" value="' + esc((entry && entry.tags || []).join(", ")) + '" placeholder="' + esc(tags.join(", ")) + '"><div class="hint">Оставьте пустым, чтобы не ограничивать аудиторию тегами.</div></div>' : "") +
+        '<div class="hint">Условия из разных полей применяются одновременно. Например: Spanish + «Подбор» + интерес к выбранной вилле.</div>' +
+        '<div class="recipient-summary"><span>👥</span><div><b id="campEstimate">Считаем получателей…</b><small id="campEstimateDetails">Проверяем выбранный сегмент</small></div></div>' +
+      "</div></details>" +
+      '<details class="editor-section" open><summary><b>Время отправки</b><span>сейчас или по расписанию</span></summary><div class="editor-section-body">' +
+        '<div class="field"><label for="campDate">Отправить позже</label><input id="campDate" type="datetime-local" value="' + esc(entry && entry.scheduledAt ? dateTimeLocalValue(entry.scheduledAt) : "") + '"><div class="hint">Оставьте поле пустым для отправки сейчас. Часовой пояс: ' + esc((state.config.timeZone || "Europe/Madrid") === "Europe/Madrid" ? "Испания — материк" : state.config.timeZone || "Europe/Madrid") + "</div></div>" +
+      "</div></details></div>" +
+      '<aside class="editor-preview-panel"><div class="editor-preview-head"><b>Предпросмотр Telegram</b><span id="campaignPreviewLanguage">Русский</span></div><div class="tg-preview" id="campaignPreview"></div><div class="tg-note" style="margin-top:8px">Имя в предпросмотре показано как пример. Перед отправкой бот подставит имя каждого клиента.</div></aside></div>',
     footer: '<button class="btn secondary" id="campTest" type="button">Себе для проверки</button><div class="grow"></div>' +
       '<button class="btn secondary" id="campDraft" type="button">В черновик</button><button class="btn" id="campSend" type="button">Отправить</button>',
     ready: function (dialog) {
       bindLanguageTabs(dialog);
       var image = null;
+      var savedImageUrl = entry && entry.image && entry.image.exists ? "/api/media/broadcasts/" + encodeURIComponent(entry.id) : "";
+      var exampleNames = { ru: "Анна", en: "Anna", es: "Ana" };
+      function campaignLanguageValue(name, language) {
+        var input = dialog.querySelector('[data-tr="' + name + '"][data-lang="' + language + '"]');
+        return input ? String(input.value || "").trim() : "";
+      }
+      function renderCampaignPreview() {
+        var language = dialog.dataset.activeLanguage || "ru";
+        var languageName = (LANGUAGES.find(function (item) { return item[0] === language; }) || ["", language])[1];
+        dialog.querySelector("#campaignPreviewLanguage").textContent = languageName;
+        var message = campaignLanguageValue("messages", language).replace(/\{first_name\}/g, exampleNames[language] || "Anna");
+        var buttonText = campaignLanguageValue("buttonText", language);
+        var buttonUrl = String(dialog.querySelector("#campUrl").value || "").trim();
+        var imageUrlValue = image ? image.dataUrl : savedImageUrl;
+        var preview = dialog.querySelector("#campaignPreview");
+        if (!message && !imageUrlValue) {
+          preview.innerHTML = '<div class="editor-preview-empty">Введите сообщение или выберите изображение</div>';
+          return;
+        }
+        preview.innerHTML = '<div class="tg-bubble">' + (imageUrlValue ? '<img src="' + esc(imageUrlValue) + '" alt="">' : "") +
+          (message ? '<div class="tg-text">' + linkedPreview(message) + "</div>" : "") + "</div>" +
+          (buttonText ? '<div class="tg-buttons"><div class="tg-button">' + esc(buttonText) + "</div></div>" : "") +
+          (buttonText && !buttonUrl ? '<div class="tg-note" style="color:var(--warn)">Добавьте ссылку для кнопки</div>' : "");
+      }
       dialog.querySelector("#campImage").onchange = function (event) {
         var file = event.target.files && event.target.files[0];
         if (!file) return;
         var reader = new FileReader();
-        reader.onload = function () { image = { dataUrl: reader.result, name: file.name }; };
+        reader.onload = function () {
+          image = { dataUrl: reader.result, name: file.name };
+          dialog.querySelector("#campImageName").textContent = file.name;
+          renderCampaignPreview();
+        };
         reader.readAsDataURL(file);
       };
       function payload(mode) {
@@ -78,9 +140,13 @@ function openCampaignEditor(id) {
           buttonUrl: dialog.querySelector("#campUrl").value,
           languages: Array.from(dialog.querySelectorAll("[data-audience]")).filter(function (box) { return box.checked; }).map(function (box) { return box.dataset.audience; }),
           tags: (dialog.querySelector("#campTags") ? dialog.querySelector("#campTags").value : "").split(",").map(function (tag) { return tag.trim(); }).filter(Boolean),
+          pipelineStages: dialog.querySelector("#campStage").value ? [dialog.querySelector("#campStage").value] : [],
+          sources: dialog.querySelector("#campSource").value ? [dialog.querySelector("#campSource").value] : [],
+          propertyId: dialog.querySelector("#campProperty").value,
+          propertySignal: dialog.querySelector("#campProperty").value ? dialog.querySelector("#campPropertySignal").value : "any",
         };
         var when = dialog.querySelector("#campDate").value;
-        if (when && mode !== "draft") { body.mode = "schedule"; body.scheduledAt = new Date(when).toISOString(); }
+        if (when && mode !== "draft") { body.mode = "schedule"; body.scheduledAt = zonedDateTimeToIso(when); }
         if (image) { body.imageDataUrl = image.dataUrl; body.imageName = image.name; }
         return body;
       }
@@ -88,10 +154,34 @@ function openCampaignEditor(id) {
         try {
           var result = await send("/api/broadcast/estimate", "POST", payload("draft"));
           dialog.querySelector("#campEstimate").textContent = "Получателей: " + result.total;
-        } catch (error) { dialog.querySelector("#campEstimate").textContent = ""; }
+          var languages = [result.byLanguage.ru ? "RU " + result.byLanguage.ru : "", result.byLanguage.en ? "EN " + result.byLanguage.en : "", result.byLanguage.es ? "ES " + result.byLanguage.es : ""].filter(Boolean).join(" · ");
+          var sample = (result.sample || []).length ? "Пример: " + result.sample.join(", ") : "Нет подходящих клиентов";
+          dialog.querySelector("#campEstimateDetails").textContent = [languages, sample].filter(Boolean).join(" · ");
+          return result;
+        } catch (error) {
+          dialog.querySelector("#campEstimate").textContent = "Аудитория пока не определена";
+          dialog.querySelector("#campEstimateDetails").textContent = error && error.message ? error.message : "Проверьте условия";
+          return null;
+        }
       }
       estimate();
       dialog.querySelectorAll("[data-audience]").forEach(function (box) { box.onchange = estimate; });
+      ["#campStage", "#campSource", "#campPropertySignal"].forEach(function (selector) { dialog.querySelector(selector).onchange = estimate; });
+      dialog.querySelector("#campProperty").onchange = function () {
+        var enabled = Boolean(dialog.querySelector("#campProperty").value);
+        dialog.querySelector("#campPropertySignal").disabled = !enabled;
+        if (!enabled) dialog.querySelector("#campPropertySignal").value = "any";
+        estimate();
+      };
+      var tagsInput = dialog.querySelector("#campTags");
+      if (tagsInput) tagsInput.oninput = function () {
+        clearTimeout(tagsInput._estimateTimer);
+        tagsInput._estimateTimer = setTimeout(estimate, 300);
+      };
+      dialog.addEventListener("languagechange", renderCampaignPreview);
+      dialog.addEventListener("input", renderCampaignPreview);
+      dialog.addEventListener("change", renderCampaignPreview);
+      renderCampaignPreview();
       dialog.querySelector("#campTest").onclick = async function () {
         try {
           await send("/api/broadcast/test", "POST", Object.assign(payload("draft"), { userId: String(state.config.adminChatId) }));
@@ -102,17 +192,20 @@ function openCampaignEditor(id) {
         try {
           if (entry) await send("/api/broadcasts/" + encodeURIComponent(entry.id), "PATCH", payload("draft"));
           else await send("/api/broadcast", "POST", payload("draft"));
-          dialog.close(); toast("Черновик сохранён"); await reload();
+          dialog.closeClean(); toast("Черновик сохранён"); await reload();
         } catch (error) { fail(error); }
       };
       dialog.querySelector("#campSend").onclick = async function () {
         var when = dialog.querySelector("#campDate").value;
-        if (!when && !(await confirmDialog("Отправить рассылку?", "Сообщение получат все выбранные клиенты. Отменить отправку нельзя.", "Отправить"))) return;
+        var audience = await estimate();
+        if (!audience || !audience.total) return toast("Для выбранных условий нет получателей", true);
+        var currentPayload = payload(when ? "schedule" : "send");
+        if (!when && !(await confirmDialog("Отправить рассылку?", "Получатели: " + counted(audience.total, "клиент", "клиента", "клиентов") + ". Сегмент: " + campaignAudienceLabel(currentPayload) + ". Отменить отправку нельзя.", "Отправить"))) return;
         try {
           var result = entry && entry.status !== "sent"
-            ? await send("/api/broadcasts/" + encodeURIComponent(entry.id), "PATCH", payload(when ? "schedule" : "send"))
-            : await send("/api/broadcast", "POST", payload(when ? "schedule" : "send"));
-          dialog.close();
+            ? await send("/api/broadcasts/" + encodeURIComponent(entry.id), "PATCH", currentPayload)
+            : await send("/api/broadcast", "POST", currentPayload);
+          dialog.closeClean();
           toast(when ? "Запланировано" : "Рассылка пошла, получателей: " + (result.total || 0));
           await reload();
         } catch (error) { fail(error); }
@@ -470,7 +563,7 @@ function renderGroupCard(host, group) {
       pin: Boolean(host.querySelector("#groupPin") && host.querySelector("#groupPin").checked),
       notify: host.querySelector("#groupNotify").checked,
       image: image,
-      sendAt: when ? new Date(when).toISOString() : "",
+      sendAt: when ? zonedDateTimeToIso(when) : "",
     };
   }
   host.querySelector("#groupPreview").onclick = async function () {

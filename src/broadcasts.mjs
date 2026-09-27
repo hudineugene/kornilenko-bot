@@ -1,6 +1,7 @@
 // Рассылки.
 
 import { cleanText, delay, fillTemplate } from './util.mjs';
+import { PIPELINE_STAGES, normalizePipelineStage } from './data-format.mjs';
 import { imageExists } from './media.mjs';
 import { SUBSCRIPTION_TEXT } from './texts.mjs';
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
@@ -11,12 +12,48 @@ import { localized, validHttpUrl } from './catalog.mjs';
 function broadcastUsers(entry) {
   const languages = Array.isArray(entry.languages) ? entry.languages.filter((language) => ['ru', 'en', 'es'].includes(language)) : [];
   const requiredTags = Array.isArray(entry.tags) ? entry.tags.map((tag) => String(tag).toLocaleLowerCase('ru-RU')) : [];
+  const pipelineStages = Array.isArray(entry.pipelineStages) ? entry.pipelineStages.filter((stage) => PIPELINE_STAGES.includes(stage)) : [];
+  const sources = Array.isArray(entry.sources) ? entry.sources.map((source) => String(source).toLocaleLowerCase('ru-RU')) : [];
+  const propertyId = String(entry.propertyId || '');
+  const propertySignal = ['favorite', 'comparison', 'viewed', 'match', 'inquiry'].includes(entry.propertySignal) ? entry.propertySignal : 'any';
+  const latestByUser = new Map();
+  const propertyInquiryUsers = new Set();
+  if (pipelineStages.length || propertyId) {
+    for (const inquiry of data.inquiries) {
+      const userId = String(inquiry.userId || '');
+      if (propertyId && String(inquiry.propertyId || '') === propertyId) propertyInquiryUsers.add(userId);
+      if (!pipelineStages.length || !userId) continue;
+      const previous = latestByUser.get(userId);
+      if (!previous || (Date.parse(inquiry.updatedAt || inquiry.createdAt) || 0) > (Date.parse(previous.updatedAt || previous.createdAt) || 0)) latestByUser.set(userId, inquiry);
+    }
+  }
+  function includesProperty(values) {
+    return Array.isArray(values) && values.some((value) => String(value) === propertyId);
+  }
+  function propertySignals(user) {
+    const signals = [];
+    if (includesProperty(user.favorites)) signals.push('favorite');
+    if (includesProperty(user.comparisonIds)) signals.push('comparison');
+    if (includesProperty(user.recentlyViewed)) signals.push('viewed');
+    if (includesProperty(user.selectionMatchIds)) signals.push('match');
+    if (propertyInquiryUsers.has(String(user.id))) signals.push('inquiry');
+    return signals;
+  }
   return Object.values(data.users).filter((user) => {
     if (user.blocked || !user.chatId || user.broadcastsOptOut) return false;
     if (languages.length && !languages.includes(user.preferredLanguage || 'ru')) return false;
     if (requiredTags.length) {
       const userTags = (user.tags || []).map((tag) => String(tag).toLocaleLowerCase('ru-RU'));
       if (!requiredTags.some((tag) => userTags.includes(tag))) return false;
+    }
+    if (sources.length && !sources.includes(String(user.source || '').toLocaleLowerCase('ru-RU'))) return false;
+    if (pipelineStages.length) {
+      const latest = latestByUser.get(String(user.id));
+      if (!latest || !pipelineStages.includes(normalizePipelineStage(latest.pipelineStage, latest))) return false;
+    }
+    if (propertyId) {
+      const signals = propertySignals(user);
+      if (!signals.length || (propertySignal !== 'any' && !signals.includes(propertySignal))) return false;
     }
     return true;
   });

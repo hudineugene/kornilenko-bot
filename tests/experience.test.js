@@ -46,6 +46,17 @@ test.describe('client', () => {
     assert.equal(chat.inquiries.length, 0);
   });
 
+  test('a promotion remains active through its entire final calendar day', async () => {
+    const chat = createChat();
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    bot.getData().promotions[0].endAt = year + '-' + month + '-' + day;
+    const shown = await chat.say(MENU.ru.promotions);
+    assert.match(shown.last.text, /Летняя скидка/);
+  });
+
   test('"ask for the price" appears only on cards without a price', async () => {
     const chat = createChat();
     await chat.say(MENU.ru.objects);

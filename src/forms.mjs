@@ -2,14 +2,14 @@
 
 import { PENDING_ACTION_TTL_MS } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { INTERACTION_TEXT, LEAD_FORM_TEXT, MANAGER_CONTACT_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
+import { CATALOG_FILTER_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, MANAGER_CONTACT_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { sendMessage } from './telegram.mjs';
 import { menuKeyboard, sendMainMenu } from './menus.mjs';
 import { createInquiry } from './inquiries.mjs';
-import { localizedExact, publishedCatalog, sendCatalogPage, sendUiMessage } from './catalog.mjs';
-import { currentSelectionMatches } from './alerts.mjs';
+import { localizedExact, publishedCatalog, sendCatalogPage, sendUiMessage, showCatalogPricePrompt, startCatalogPriceInput } from './catalog.mjs';
+import { currentSelectionRanking } from './alerts.mjs';
 import { propertyRequestText } from './sections.mjs';
 import { parseViewingDate, sendViewingConfirmation, viewingDayForOption } from './viewings.mjs';
 import { withOffHoursNote } from './hours.mjs';
@@ -98,11 +98,13 @@ function rememberExpiredAction(user, pending) {
       : pending.type === 'manager_question' ? 'manager_question'
         : pending.type === 'question' ? 'property_question'
           : pending.type === 'lead' ? 'lead'
-            : '';
+            : pending.type === 'catalog_filter_price' ? 'catalog_filter_price'
+              : '';
   if (!type) return null;
   user.expiredAction = {
     type,
     propertyId: cleanText(pending.propertyId, 100),
+    priceBound: type === 'catalog_filter_price' && pending.priceBound === 'min' ? 'min' : '',
     createdAt: new Date().toISOString(),
   };
   return user.expiredAction;
@@ -172,6 +174,7 @@ async function showPendingActionStep(user, token) {
     await sendMessage(user.chatId, copy.askQuestion, token, { reply_markup: menuKeyboard(language) });
     return true;
   }
+  if (pending.type === 'catalog_filter_price') return showCatalogPricePrompt(user, token);
   if (pending.type === 'question' && pending.propertyId) {
     const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
     const property = data.objects.find((item) => item.id === pending.propertyId && ['active', 'reserved'].includes(item.status));
@@ -214,7 +217,7 @@ function isStaleFormControl(text) {
   for (const language of ['ru', 'en', 'es']) {
     const interaction = INTERACTION_TEXT[language];
     if (interaction && [interaction.continueForm, interaction.discardForm, interaction.resume, interaction.backToMenu].includes(value)) return true;
-    for (const source of [LEAD_FORM_TEXT[language], VIEWING_FORM_TEXT[language], SELECTION_FORM_TEXT[language]]) {
+    for (const source of [LEAD_FORM_TEXT[language], VIEWING_FORM_TEXT[language], SELECTION_FORM_TEXT[language], CATALOG_FILTER_TEXT[language]]) {
       if (source && keys.some((key) => source[key] && source[key] === value)) return true;
     }
   }
@@ -630,6 +633,15 @@ function selectionReviewText(copy, pending) {
   return [copy.review, '', ...copy.labels.map((label, index) => label + ': ' + cleanText(values[index], 200))].join('\n');
 }
 
+function selectionMatchSummary(copy, ranking) {
+  const counts = { exact: 0, close: 0, consider: 0 };
+  for (const item of ranking) if (Object.hasOwn(counts, item.tier)) counts[item.tier] += 1;
+  return String(copy.matchSummary || '')
+    .replace('{exact}', String(counts.exact))
+    .replace('{close}', String(counts.close))
+    .replace('{consider}', String(counts.consider));
+}
+
 async function sendSelectionReview(user, pending, token, language) {
   const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
   pending.step = 'confirm';
@@ -764,14 +776,29 @@ async function handleSelectionFormMessage(message, user, token) {
       budget: cleanText(pending.data.budget, 200),
       bedrooms: cleanText(pending.data.bedrooms, 200),
     };
-    const inquiryText = selectionReviewText(copy, pending).replace(copy.review, copy.summaryTitle).trim();
+    const ranking = currentSelectionRanking(user, selection);
+    const matchSummary = selectionMatchSummary(copy, ranking);
+    const inquiryText = [selectionReviewText(copy, pending).replace(copy.review, copy.summaryTitle).trim(), matchSummary].filter(Boolean).join('\n\n');
+    const matchDetails = ranking.map((item) => ({
+      id: item.record.id,
+      tier: item.tier,
+      score: item.score,
+      reasons: item.reasons,
+      warnings: item.warnings,
+    }));
     user.pendingAction = null;
-    createInquiry(user, inquiryText, { type: 'selection', selection, sourceMessage: message });
-    // What already fits is shown right away; the manager still gets the request.
-    const matches = currentSelectionMatches(user, selection);
-    user.selectionMatchIds = matches.map((record) => record.id);
+    createInquiry(user, inquiryText, {
+      type: 'selection',
+      selection,
+      matching: { results: matchDetails, generatedAt: new Date().toISOString() },
+      sourceMessage: message,
+    });
+    // Exact matches come first, then useful nearby alternatives. The short
+    // explanation stored with each id follows the user through catalog pages.
+    user.selectionMatchIds = ranking.map((item) => item.record.id);
+    user.selectionMatchDetails = matchDetails;
     saveDataNow();
-    if (!matches.length) {
+    if (!ranking.length) {
       await sendMessage(user.chatId, withOffHoursNote(copy.success, language), token, { reply_markup: menuKeyboard(language) });
       // Nothing fits yet: the rest of the catalog is one tap away.
       if (publishedCatalog(user).length) {
@@ -780,7 +807,7 @@ async function handleSelectionFormMessage(message, user, token) {
       }
       return true;
     }
-    await sendMessage(user.chatId, withOffHoursNote(copy.successMatches, language), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(user.chatId, withOffHoursNote([copy.successMatches, matchSummary].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
     await sendCatalogPage(user.chatId, user, token, 0, 'matches');
     return true;
   }
@@ -865,6 +892,10 @@ async function restartExpiredAction(user, token) {
     await sendMessage(user.chatId, copy.askQuestion, token, {
       reply_markup: { inline_keyboard: [[{ text: '✕ ' + copy.cancel, callback_data: 'contact:cancel' }]] },
     });
+    return true;
+  }
+  if (action.type === 'catalog_filter_price') {
+    await startCatalogPriceInput(user, token, action.priceBound === 'min' ? 'min' : 'max');
     return true;
   }
   await sendMessage(user.chatId, (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).propertyUnavailable, token, { reply_markup: menuKeyboard(language) });

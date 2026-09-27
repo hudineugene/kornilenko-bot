@@ -5,15 +5,16 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import zlib from 'node:zlib';
-import { ADMIN_ALLOWED_HOSTS, DATA_FILE, MAX_BACKUP_BODY_BYTES, MAX_BACKUP_OUTPUT_BYTES, MAX_BODY_BYTES, MAX_IMAGE_BYTES, SESSION_TTL_MS } from './config.mjs';
+import { ADMIN_ALLOWED_HOSTS, DATA_FILE, MAX_BACKUP_BODY_BYTES, MAX_BACKUP_OUTPUT_BYTES, MAX_BODY_BYTES, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, SESSION_TTL_MS } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
+import { normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { decryptBackup, isEncryptedBackup } from './offsite.mjs';
 import { imageBytes, imageExists } from './media.mjs';
 import { normalizedInterfaceText } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { publicRuntime } from './menus.mjs';
-import { recordImages } from './catalog.mjs';
+import { propertyPublicationReadiness, recordImages } from './catalog.mjs';
+import { adminNotifications } from './admin-notifications.mjs';
 
 const SESSIONS_FILE = path.join(path.dirname(DATA_FILE), 'bot-sessions.json');
 const SESSION_PERSIST_STEP_MS = 10 * 60 * 1000;
@@ -252,6 +253,36 @@ function parseUploadedImage(dataUrl, originalName) {
   };
 }
 
+function parseUploadedDocument(dataUrl, originalName) {
+  const name = path.basename(cleanText(originalName, 180));
+  const extension = path.extname(name).toLowerCase();
+  const allowed = {
+    '.pdf': ['application/pdf', 'application/octet-stream'],
+    '.txt': ['text/plain', 'application/octet-stream'],
+    '.doc': ['application/msword', 'application/octet-stream'],
+    '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip', 'application/octet-stream'],
+    '.xls': ['application/vnd.ms-excel', 'application/octet-stream'],
+    '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/octet-stream'],
+  };
+  const match = String(dataUrl || '').match(/^data:([^;,]{0,120});base64,([A-Za-z0-9+/=]+)$/);
+  const suppliedMime = match && match[1] ? match[1].toLowerCase() : 'application/octet-stream';
+  if (!name || !allowed[extension] || !match || !allowed[extension].includes(suppliedMime)) {
+    throw new Error('Поддерживаются документы PDF, TXT, DOC, DOCX, XLS и XLSX');
+  }
+  const bytes = Buffer.from(match[2], 'base64');
+  if (!bytes.length) throw new Error('Документ пустой');
+  if (bytes.length > MAX_DOCUMENT_BYTES) throw new Error('Размер документа не должен превышать 10 МБ');
+  const pdf = bytes.subarray(0, 5).toString('ascii') === '%PDF-';
+  const zip = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b
+    && ((bytes[2] === 0x03 && bytes[3] === 0x04) || (bytes[2] === 0x05 && bytes[3] === 0x06) || (bytes[2] === 0x07 && bytes[3] === 0x08));
+  const ole = bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from('d0cf11e0a1b11ae1', 'hex'));
+  if (extension === '.pdf' && !pdf) throw new Error('Содержимое файла не соответствует формату PDF');
+  if (['.docx', '.xlsx'].includes(extension) && !zip) throw new Error('Содержимое файла не соответствует формату Office');
+  if (['.doc', '.xls'].includes(extension) && !ole) throw new Error('Содержимое файла не соответствует формату Office');
+  if (extension === '.txt' && bytes.includes(0)) throw new Error('TXT-файл содержит недопустимые двоичные данные');
+  return { id: crypto.randomUUID(), mimeType: match[1] || allowed[extension][0], dataBase64: bytes.toString('base64'), name, size: bytes.length, updatedAt: new Date().toISOString() };
+}
+
 function readBody(req, maximumBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     const tooLarge = () => {
@@ -366,6 +397,7 @@ function publicRecord(record, collection) {
       image: imageMeta(cover),
       images: publicImagesByLanguage.ru,
       imagesByLanguage: publicImagesByLanguage,
+      publicationIssues: collection === 'objects' ? propertyPublicationReadiness(record) : undefined,
       collection,
     };
   }
@@ -404,10 +436,21 @@ function sourceReport(now = Date.now()) {
   return Array.from(rows.values()).sort((a, b) => (a.source ? 0 : 1) - (b.source ? 0 : 1) || b.users - a.users || a.source.localeCompare(b.source));
 }
 
+function inquiryUnread(inquiry) {
+  if (!inquiry) return false;
+  const lastIncoming = Math.max(
+    Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0,
+    ...(Array.isArray(inquiry.messages) ? inquiry.messages.filter((message) => message.direction === 'in').map((message) => Date.parse(message.createdAt) || 0) : [0]),
+  );
+  return lastIncoming > (Date.parse(inquiry.readAt || '') || 0);
+}
+
 function safeState(session) {
   const users = Object.values(data.users)
     .sort((a, b) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)))
     .slice(0, 500);
+  const unreadUsers = new Set(data.inquiries.filter(inquiryUnread).map((item) => String(item.userId)));
+  const notifications = adminNotifications();
   return {
     csrf: session.csrf,
     bot: data.bot,
@@ -424,6 +467,7 @@ function safeState(session) {
       tunnelTokenSet: Boolean(data.config.tunnelToken),
       tunnelHostname: data.config.tunnelHostname || '',
       reminderHours: Number.isFinite(Number(data.config.reminderHours)) ? Number(data.config.reminderHours) : 2,
+      timeZone: normalizeTimeZone(data.config.timeZone),
       workingHours: normalizeWorkingHours(data.config.workingHours),
       statusNotices: data.config.statusNotices !== false,
       calculator: normalizeCalculator(data.config.calculator),
@@ -449,6 +493,9 @@ function safeState(session) {
     contacts: data.contacts,
     interfaceText: normalizedInterfaceText(data.interfaceText),
     errors: data.errors,
+    notifications,
+    notificationUnreadCount: notifications.filter((item) => item.active && !item.readAt && !item.handledAt).length,
+    notificationActiveCount: notifications.filter((item) => item.active && !item.handledAt).length,
     languageCounts: languageCounts(),
     // Recipient ids stay on the server; the panel gets the counts.
     broadcasts: data.broadcasts.map(({ processedUserIds, respondedUserIds, inquiryUserIds, unsubscribedUserIds, ...entry }) => ({
@@ -461,6 +508,7 @@ function safeState(session) {
     inquiries: data.inquiries,
     replyTemplates: data.replyTemplates || [],
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
+    unreadConversationCount: unreadUsers.size,
     broadcastOptOutCount: Object.values(data.users).filter((user) => user.broadcastsOptOut && !user.blocked && user.chatId).length,
     sources: sourceReport(),
     publishing: (({ signature, signatureEnabled, signatureWrap, signatureQuote, signatureDivider, buttons, buttonsPerRow, rubrics }) => ({
@@ -499,6 +547,7 @@ export {
   loopbackSocket,
   parseCookies,
   parseUploadedImage,
+  parseUploadedDocument,
   publicRecord,
   readBackup,
   readBody,

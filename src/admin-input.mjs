@@ -3,10 +3,10 @@
 import crypto from 'node:crypto';
 import { MAX_IMAGE_BYTES } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { normalizePropertyImages, normalizeStoredImages } from './data-format.mjs';
+import { PIPELINE_STAGES, normalizePropertyImages, normalizeStoredImages } from './data-format.mjs';
 import { imageBytes, imageExists } from './media.mjs';
 import { data } from './store.mjs';
-import { validHttpUrl } from './catalog.mjs';
+import { propertyPublicationReadiness, validHttpUrl } from './catalog.mjs';
 import { loginAttempts, parseUploadedImage } from './admin-http.mjs';
 
 function replyTemplateInput(body) {
@@ -186,7 +186,7 @@ function parseContentRecord(body, kind, existing = {}) {
   if (kind === 'objects') {
     delete common.images;
     delete common.image;
-    return {
+    const record = {
       ...common,
       imagesByLanguage,
       description: translatedInput(body.description, 3000),
@@ -212,6 +212,14 @@ function parseContentRecord(body, kind, existing = {}) {
       badges: Array.isArray(body.badges) ? body.badges.filter((item) => ['new', 'recommended', 'exclusive', 'price_reduced'].includes(item)) : [],
       status: ['active', 'hidden', 'reserved', 'sold'].includes(body.status) ? body.status : 'active',
     };
+    if (['active', 'reserved'].includes(record.status)) {
+      const readiness = propertyPublicationReadiness(record);
+      const missing = Object.entries(readiness).filter(([, issues]) => issues.length);
+      if (missing.length) {
+        throw new Error('Чтобы показывать объект в каталоге, заполните обязательные поля: ' + missing.map(([language, issues]) => language.toUpperCase() + ' — ' + issues.join(', ')).join('; '));
+      }
+    }
+    return record;
   }
   const startAt = cleanText(body.startAt, 40);
   const endAt = cleanText(body.endAt, 40);
@@ -256,6 +264,11 @@ function parseBroadcast(body, existing = {}, options = {}) {
   if (buttonUrl && languages.some((language) => !buttonText[language])) throw new Error('Введите название кнопки для каждого выбранного языка');
   const scheduledAt = cleanText(body.scheduledAt, 40);
   if (scheduledAt && !Number.isFinite(Date.parse(scheduledAt))) throw new Error('Некорректная дата рассылки');
+  const pipelineStages = Array.isArray(body.pipelineStages) ? body.pipelineStages.filter((stage) => PIPELINE_STAGES.includes(stage)).slice(0, PIPELINE_STAGES.length) : [];
+  const sources = Array.isArray(body.sources) ? body.sources.map((source) => cleanText(source, 80)).filter(Boolean).slice(0, 20) : [];
+  const propertyId = cleanText(body.propertyId, 100);
+  const propertySignal = ['any', 'favorite', 'comparison', 'viewed', 'match', 'inquiry'].includes(body.propertySignal) ? body.propertySignal : 'any';
+  if (propertyId && !data.objects.some((record) => String(record.id) === propertyId)) throw new Error('Выбранный объект больше не найден в каталоге');
   const now = new Date().toISOString();
   return {
     ...existing,
@@ -263,6 +276,10 @@ function parseBroadcast(body, existing = {}, options = {}) {
     messages,
     languages,
     tags: Array.isArray(body.tags) ? body.tags.map((tag) => cleanText(tag, 40)).filter(Boolean).slice(0, 20) : [],
+    pipelineStages,
+    sources,
+    propertyId,
+    propertySignal: propertyId ? propertySignal : 'any',
     buttonText,
     buttonUrl,
     image: parseOptionalImage(body, existing.image),

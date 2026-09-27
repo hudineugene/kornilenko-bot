@@ -124,7 +124,8 @@ async function telegramMultipartRequest(token, method, fields) {
     const form = new FormData();
     for (const [key, value] of Object.entries(fields)) {
       if (value == null || value === '') continue;
-      form.append(key, typeof value === 'string' || value instanceof Blob ? value : JSON.stringify(value));
+      if (value && typeof value === 'object' && value.upload instanceof Blob) form.append(key, value.upload, value.fileName || 'file');
+      else form.append(key, typeof value === 'string' || value instanceof Blob ? value : JSON.stringify(value));
     }
     return { body: form };
   }, { timeoutMs: TELEGRAM_UPLOAD_TIMEOUT_MS });
@@ -168,6 +169,7 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
         caption: caption || undefined,
         parse_mode: parseMode,
         show_caption_above_media: captionAbove,
+        reply_parameters: options.replyParameters || undefined,
         reply_markup: replyMarkup,
       });
     } catch {
@@ -182,6 +184,7 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
       caption: caption || undefined,
       parse_mode: parseMode,
       show_caption_above_media: captionAbove,
+      reply_parameters: options.replyParameters || undefined,
       reply_markup: replyMarkup,
     });
     if (result && Array.isArray(result.photo) && result.photo.length) {
@@ -198,17 +201,18 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
 // PNG с прозрачностью Telegram сохраняет только как файл (документ).
 async function sendDocumentMessage(chatId, image, caption, token, replyMarkup, options = {}) {
   const bytes = imageBytes(image);
-  const name = String(image.name || 'image.png').replace(/[^A-Za-z0-9._-]/g, '') || 'image.png';
+  const name = String(image.name || 'document').replace(/[^\p{L}\p{N}._ -]/gu, '_').slice(0, 120) || 'document';
   const result = await telegramMultipartRequest(token, 'sendDocument', {
     chat_id: String(chatId),
-    document: new Blob([bytes], { type: image.mimeType || 'image/png' }),
+    document: { upload: new Blob([bytes], { type: image.mimeType || 'application/octet-stream' }), fileName: name },
     caption: caption || undefined,
     parse_mode: options.parseMode || undefined,
+    reply_parameters: options.replyParameters || undefined,
     reply_markup: replyMarkup,
   });
   data.stats.messagesSent += 1;
   recordDaily('sent');
-  recordActivity(userByChatId(chatId), 'out', caption || '[Файл]', 'photo', { messageId: result && result.message_id });
+  recordActivity(userByChatId(chatId), 'out', caption || '[Файл]', 'document', { messageId: result && result.message_id });
   scheduleSave();
   return result;
 }

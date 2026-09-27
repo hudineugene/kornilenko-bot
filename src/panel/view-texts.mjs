@@ -94,6 +94,12 @@ function renderSections(host) {
 // --- Контакты -------------------------------------------------------------------
 function renderContacts(host) {
   var contacts = state.contacts || {};
+  var phones = String(contacts.phone || "").match(/\+?\d[\d\s().-]{5,}\d/g) || [];
+  var whatsappAvailable = contacts.whatsappEnabled !== false && Boolean(contacts.whatsapp || phones[0]);
+  var previewLines = [(contacts.text || {}).ru || ""];
+  if (contacts.managerName) previewLines.push("👨‍💼 " + contacts.managerName);
+  phones.forEach(function (phone) { previewLines.push("☎️ " + phone); });
+  if (contacts.email) previewLines.push("✉️ " + contacts.email);
   host.innerHTML = '<div class="split"><div class="card"><header><h3>Менеджер и каналы связи</h3></header><div class="card-body stack" id="contactsForm">' +
       '<div class="grid cols-2">' +
         '<div class="field"><label for="cName">Имя менеджера или отдела</label><input id="cName" value="' + esc(contacts.managerName || "") + '"></div>' +
@@ -111,8 +117,8 @@ function renderContacts(host) {
       }).join("") + "</div>" +
     "</div></div>" +
     '<div class="card"><header><h3>Так увидит клиент</h3></header><div class="card-body stack">' +
-      '<div class="msg">' + esc((contacts.text || {}).ru || "") + (contacts.phone ? "\n\n☎️ " + esc(contacts.phone) : "") + "</div>" +
-      '<div class="row wrap">' + [contacts.whatsappEnabled !== false && contacts.whatsapp ? "🟢 WhatsApp" : "", contacts.telegram ? "✈️ Telegram" : "", contacts.website ? "🌐 Сайт" : "", contacts.mapUrl ? "📍 Карта" : "", "📞 Позвоните мне", "❓ Задать вопрос"].filter(Boolean).map(function (label) {
+      '<div class="msg">' + esc(previewLines.filter(Boolean).join("\n\n")) + "</div>" +
+      '<div class="row wrap">' + [whatsappAvailable ? "🟢 WhatsApp" : "", contacts.telegram ? "✈️ Telegram" : "", contacts.website ? "🌐 Сайт" : "", contacts.mapUrl ? "📍 Карта" : "", "📞 Позвоните мне", "❓ Задать вопрос", "🏠 Главное меню"].filter(Boolean).map(function (label) {
         return '<span class="chip brand">' + esc(label) + "</span>";
       }).join("") + "</div>" +
     "</div></div></div>";
@@ -182,6 +188,7 @@ function openRuleEditor(id) {
   var rule = id ? (state.rules || []).find(function (item) { return item.id === id; }) : null;
   openDialog({
     title: rule ? "Автоответ" : "Новый автоответ",
+    protectChanges: true,
     body: '<div class="stack">' +
       '<div class="field"><label for="rTrigger">Если сообщение</label><input id="rTrigger" value="' + esc(rule && rule.trigger || "") + '"></div>' +
       '<div class="grid cols-2"><div class="field"><label for="rType">Как сравнивать</label><select id="rType">' + RULE_TYPES.map(function (type) {
@@ -204,7 +211,7 @@ function openRuleEditor(id) {
         try {
           if (rule) await send("/api/rules/" + encodeURIComponent(rule.id), "PUT", payload);
           else await send("/api/rules", "POST", payload);
-          dialog.close();
+          dialog.closeClean();
           toast("Сохранено");
           await reload();
         } catch (error) { fail(error); }
@@ -218,6 +225,9 @@ var INTERFACE_GROUPS = [
   ["menuLabels", "Кнопки главного меню"],
   ["menuHints", "Подсказка под приветствием"],
   ["mainMenu", "Текст главного меню"],
+  ["myArea", "Раздел «Моё»"],
+  ["savedSearch", "Сохранённый поиск"],
+  ["comparison", "Сравнение объектов"],
   ["managerContact", "Связь с менеджером"],
   ["propertyActions", "Кнопки карточки объекта"],
   ["catalogFilter", "Фильтр каталога"],

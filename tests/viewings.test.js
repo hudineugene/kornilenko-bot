@@ -340,10 +340,10 @@ test.describe('my requests', () => {
     assert.ok(lines.includes('📅 Просмотр · Вилла в Марбелье'));
     assert.ok(lines.some((line) => line.endsWith('— ✅ просмотр подтверждён')));
     assert.ok(lines.some((line) => /^отправлена \d\d\.\d\d — 🆕 получена/.test(line)));
-    assert.deepEqual(callbacksOf(step.last.markup), ['myreq:cancel:' + inquiry.id, 'nav:menu']);
+    assert.deepEqual(callbacksOf(step.last.markup), ['myreq:cancel:' + inquiry.id, 'nav:my']);
   });
 
-  test('"More" leads to the list; without requests it explains what will appear', async () => {
+  test('"My space" leads to the list; without requests it explains what will appear', async () => {
     const chat = createChat();
     const more = await chat.say(bot.text.menu.ru.more);
     assert.ok(callbacksOf(more.last.markup).includes('myreq:list'));
