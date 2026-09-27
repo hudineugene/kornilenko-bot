@@ -94,7 +94,7 @@ function parseBedrooms(message) {
 const MONEY_AMOUNT_PATTERN = '(\\d{1,3}(?:[ .\\u00a0\\u202f]\\d{3})+|\\d+(?:[.,]\\d+)?)';
 // Longer words must come before their prefixes: otherwise “mil” is captured
 // as “m” and 300 mil incorrectly becomes 300 million.
-const MONEY_SUFFIX_PATTERN = '(millones|millón|millions|million|млн|тысяч|тыс|mil|k|m)?';
+const MONEY_SUFFIX_PATTERN = '(millones|millón|millions|million|млн|тысяч|тыс|mil|k|к|m)?';
 const MONEY_CONTEXT_PATTERN = /[€$£]|\b(?:eur|euro|euros|usd|dollar|dollars|gbp|pound|pounds|price|budget|precio|presupuesto|rent|rental|alquiler|sale|venta|buy|purchase)\b|(?:евро|доллар|фунт|цена|бюджет|аренд|покуп|продаж|квартир|недвижим|вилл|дом)/iu;
 
 function moneyWithInheritedScale(amount, suffix, otherSuffix) {
@@ -130,13 +130,26 @@ function parsePriceRange(message) {
   return validPriceRange(text, dashed);
 }
 
+// «до» внутри «дом» или «надо» — не признак цены, поэтому слова-указатели
+// ищутся целиком. Между словом и суммой допускаем только пробелы, знаки и
+// короткие связки: иначе «до моря 150 м» превратилось бы в «до 150 €».
+const MONEY_GAP_PATTERN = '(?:[^\\p{L}\\d]|чем|около|примерно|than|about|de|unos|como)*';
+
+function wholeWords(marker) {
+  return '(?<![\\p{L}\\d])' + marker + '(?![\\p{L}\\d])';
+}
+
+// Сумма без валюты и без «тысяч» ниже этого порога — это не цена, а спальни,
+// этаж или минуты до моря.
+const MONEY_FLOOR = 100;
+
 function parseMinPrice(message) {
   const range = parsePriceRange(message);
   if (range) return range.minPrice;
   const marker = '(?:не\\s+дешевле|цена\\s+от|бюджет(?:ом)?\\s+от|минимум|от|price\\s+from|budget\\s+from|at\\s+least|minimum|min|from|precio\\s+desde|presupuesto\\s+desde|como\\s+mínimo|como\\s+minimo|mínimo|minimo|desde)';
-  const match = String(message || '').match(new RegExp(marker + '[^\\d]{0,16}' + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
+  const match = String(message || '').match(new RegExp(wholeWords(marker) + MONEY_GAP_PATTERN + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
   const amount = match ? parseMoneyAmount(match[1] + ' ' + (match[2] || '')) : 0;
-  return amount >= 100 ? amount : 0;
+  return amount >= MONEY_FLOOR ? amount : 0;
 }
 
 function parseMaxPrice(message) {
@@ -147,8 +160,9 @@ function parseMaxPrice(message) {
   // because the same sentence also contains the word “budget”.
   if (/(?:цена\s+от|бюджет(?:ом)?\s+от|не\s+дешевле|price\s+from|budget\s+from|at\s+least|precio\s+desde|presupuesto\s+desde|como\s+m[ií]nimo)/iu.test(text)) return 0;
   const marker = '(?:не\\s+дороже|цена\\s+до|бюджет(?:ом)?(?:\\s+до)?|максимум|до|up\\s+to|under|below|budget(?:\\s+of)?|maximum|max|hasta|presupuesto(?:\\s+de)?|máximo|maximo)';
-  const match = text.match(new RegExp(marker + '[^\\d]{0,16}' + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
-  return match ? parseMoneyAmount(match[1] + ' ' + (match[2] || '')) : 0;
+  const match = text.match(new RegExp(wholeWords(marker) + MONEY_GAP_PATTERN + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
+  const amount = match ? parseMoneyAmount(match[1] + ' ' + (match[2] || '')) : 0;
+  return amount >= MONEY_FLOOR ? amount : 0;
 }
 
 function searchableReference(record) {

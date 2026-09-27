@@ -1,6 +1,6 @@
 // Уведомления клиентам об объектах: избранное и подбор.
 
-import { cleanText, dayKey, delay } from './util.mjs';
+import { cleanText, dayKey, delay, largestMoneyAmount } from './util.mjs';
 import { imageExists } from './media.mjs';
 import { PROPERTY_ALERT_TEXT, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
 import { configured, data, saveDataNow, scheduleSave } from './store.mjs';
@@ -36,18 +36,10 @@ function rememberAlert(user, key) {
   user.alertsSent = sent;
 }
 
-// The largest amount in a free-text budget: "до 600 000 €", "1,2 млн",
-// "600k", "600 mil". 0 when no amount can be read.
+// Бюджет из подбора разбирается тем же способом, что и поиск фразой:
+// «до 600 000 €», «1,2 млн», «300к», «€350,000», «до 800» для аренды.
 function budgetLimit(text) {
-  const normalized = String(text || '').toLowerCase().replace(/(\d)[\s\u00a0.](?=\d{3}(?!\d))/g, '$1');
-  let best = 0;
-  for (const match of normalized.matchAll(/(\d+(?:[.,]\d+)?)\s*(млн|миллион\S*|mln|millones|million|m(?![\p{L}])|тыс\S*|k(?![\p{L}])|mil(?![\p{L}]))?/gu)) {
-    const unit = match[2] || '';
-    const multiplier = unit === 'm' || /^(млн|миллион|mln|millones|million)/.test(unit) ? 1e6 : /^(тыс|k|mil)/.test(unit) ? 1e3 : 1;
-    const value = Number(match[1].replace(',', '.')) * multiplier;
-    if (value >= 1000) best = Math.max(best, value);
-  }
-  return best;
+  return largestMoneyAmount(text, 100);
 }
 
 function normalizedSearchText(value) {
