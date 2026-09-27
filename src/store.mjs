@@ -82,6 +82,10 @@ function noteRecovery(recovered, message) {
   });
 }
 
+// Версия, которая была в файле до приведения к текущему формату: самопроверке
+// нужно показывать её, а не ту, которую бот только что записал сам.
+let loadedVersion = 0;
+
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) {
     // Файла нет: либо это первый запуск, либо файл унесли (перенесли папку,
@@ -96,8 +100,22 @@ function loadData() {
   }
   try {
     const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    // Данные новее самой программы: так бывает, если рядом положили старый
+    // bot.exe. Раньше он молча приводил файл к своему формату — всё, чего он
+    // не знает, терялось без следа. Лучше не запускаться.
+    const storedVersion = Number(raw && raw.version) || 0;
+    if (storedVersion > DATA_VERSION) {
+      console.error('');
+      console.error('Файл данных создан более новой версией бота: в файле ' + storedVersion
+        + ', эта программа понимает ' + DATA_VERSION + '.');
+      console.error('Запуск остановлен, чтобы не потерять данные. Поставьте свежую версию bot.exe');
+      console.error('или восстановите копию, сделанную этой версией программы.');
+      console.error('');
+      process.exit(1);
+    }
     const snapshot = backupBeforeUpgrade(raw);
     if (snapshot) console.log('Формат данных обновляется до версии ' + DATA_VERSION + '. Копия прежних данных:', snapshot);
+    loadedVersion = storedVersion;
     return normalizeLoadedData(raw);
   } catch (error) {
     console.error('Не удалось прочитать файл данных:', error.message);
@@ -116,6 +134,10 @@ function loadData() {
 }
 
 let data = loadData();
+
+function loadedDataVersion() {
+  return loadedVersion;
+}
 
 function applyConfiguredTimeZone(root = data) {
   const timeZone = normalizeTimeZone(root && root.config && root.config.timeZone);
@@ -480,6 +502,7 @@ function replaceData(next) {
 }
 
 export {
+  loadedDataVersion,
   looksEmpty,
   snapshotBeforeRestore,
   verifyPasswordAsync,

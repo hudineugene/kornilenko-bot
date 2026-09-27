@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import { MAX_IMAGE_BYTES } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { PIPELINE_STAGES, normalizePropertyImages, normalizeStoredImages } from './data-format.mjs';
+import { DATA_VERSION, PIPELINE_STAGES, normalizePropertyImages, normalizeStoredImages } from './data-format.mjs';
 import { imageBytes, imageExists } from './media.mjs';
 import { data } from './store.mjs';
 import { validHttpUrl } from './catalog.mjs';
@@ -108,6 +108,13 @@ function validateStoredImage(image, label) {
 
 function validateBackupPayload(backup) {
   if (!backup || typeof backup !== 'object' || Array.isArray(backup)) throw new Error('Некорректная структура файла');
+  // Копия из более новой версии: восстановить её — значит потерять всё, чего
+  // эта программа ещё не знает.
+  const backupVersion = Number(backup.version) || 0;
+  if (backupVersion > DATA_VERSION) {
+    throw new Error('Копия сделана более новой версией бота (' + backupVersion + ', программа понимает '
+      + DATA_VERSION + '). Обновите бота и повторите');
+  }
   if (!backup.config || typeof backup.config !== 'object') throw new Error('В копии отсутствуют настройки');
   if (!cleanText(backup.config.passwordHash, 300) || !cleanText(backup.config.passwordSalt, 300)) {
     throw new Error('В копии отсутствуют настройки входа');

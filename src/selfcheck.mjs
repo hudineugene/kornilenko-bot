@@ -6,7 +6,7 @@ import path from 'node:path';
 import { DATA_FILE, MEDIA_DIRECTORY } from './config.mjs';
 import { DATA_VERSION } from './data-format.mjs';
 import { cleanText, localDayKey } from './util.mjs';
-import { data, runtime, scheduleSave } from './store.mjs';
+import { data, loadedDataVersion, runtime, scheduleSave } from './store.mjs';
 import { propertyReadyForLanguage } from './catalog.mjs';
 import { forEachStoredImage, imageExists, referencedImageFiles } from './media.mjs';
 import { policyIsDraft } from './privacy.mjs';
@@ -211,8 +211,13 @@ function runSelfCheck(now = new Date()) {
     add('disk', 'Свободное место', 'ok', 'свободно ' + fileSizeText(disk.free) + ', папка бота занимает ' + fileSizeText(disk.used));
   }
 
-  if (Number(data.version) !== DATA_VERSION) {
-    add('version', 'Версия данных', 'bad', 'в файле ' + data.version + ', программа ждёт ' + DATA_VERSION, 'Обновите программу или восстановите копию');
+  // Сравниваем с тем, что было в файле при загрузке: в памяти версия всегда
+  // текущая, поэтому прежняя проверка не срабатывала никогда.
+  const stored = loadedDataVersion();
+  if (stored && stored > DATA_VERSION) {
+    add('version', 'Версия данных', 'bad', 'файл создан более новой версией бота: в файле ' + stored + ', программа понимает ' + DATA_VERSION, 'Поставьте свежую версию bot.exe');
+  } else if (stored && stored < DATA_VERSION) {
+    add('version', 'Версия данных', 'ok', 'формат обновлён с версии ' + stored + ' до ' + DATA_VERSION + ', копия прежних данных в папке backups');
   } else {
     const backup = latestDailyBackup();
     const ageDays = backup ? Math.floor((now - backup.at) / 86400000) : Infinity;

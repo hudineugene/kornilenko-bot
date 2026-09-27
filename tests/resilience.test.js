@@ -75,9 +75,13 @@ test.describe('self-check', () => {
     assert.deepEqual(bot.mediaReport().missing, ['gone.jpg'], 'в списке имя файла');
   });
 
-  test('a data version the program does not expect is a problem', () => {
-    bot.getData().version = 17;
-    assert.equal(checkOf(bot.runSelfCheck(), 'version').status, 'bad');
+  // Версия данных проверяется по тому, что было в файле при загрузке: в
+  // памяти она всегда текущая. Случай «файл новее программы» разобран в
+  // tests/version-guard.test.js — там бот и вовсе отказывается стартовать.
+  test('a data version that matches the program is not a problem', () => {
+    const check = checkOf(bot.runSelfCheck(), 'version');
+    assert.notEqual(check.status, 'bad', 'сам формат в порядке (о копии предупреждаем отдельно)');
+    assert.match(check.detail, new RegExp(String(bot.DATA_VERSION || 28)));
   });
 });
 
