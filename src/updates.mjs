@@ -565,32 +565,53 @@ function alreadyHandled(update) {
   return false;
 }
 
-async function processUpdates(allUpdates, token, handler = handleUpdate) {
+// Очередь на каждый чат: сообщения одного клиента обрабатываются по порядку,
+// а разные чаты идут одновременно. Очереди живут между пачками обновлений,
+// поэтому медленная отправка в один чат не задерживает остальные — бот тем
+// временем продолжает получать и разбирать новые сообщения.
+const chatQueues = new Map();
+
+function queuedUpdates() {
+  return chatQueues.size;
+}
+
+function enqueueUpdate(update, token, handler) {
+  const key = updateChatKey(update);
+  const generation = runtime.generation;
+  const previous = chatQueues.get(key) || Promise.resolve();
+  const work = previous.then(async () => {
+    // Токен сменили или бота перезапустили: старую пачку доигрывать не нужно.
+    if (generation !== runtime.generation) return;
+    try {
+      await handler(update, token);
+    } catch (error) {
+      runtime.lastError = error.message;
+      recordError('Обработка сообщения', error);
+      console.error('Не удалось обработать обновление ' + update.update_id + ':', error.message);
+    }
+  });
+  const tracked = work.finally(() => {
+    if (chatQueues.get(key) === tracked) chatQueues.delete(key);
+  });
+  chatQueues.set(key, tracked);
+  return tracked;
+}
+
+function processUpdates(allUpdates, token, handler = handleUpdate) {
   const generation = runtime.generation;
   const updates = (Array.isArray(allUpdates) ? allUpdates : []).filter((update) => !alreadyHandled(update));
-  const queues = new Map();
-  for (const update of updates) {
-    const key = updateChatKey(update);
-    if (!queues.has(key)) queues.set(key, []);
-    queues.get(key).push(update);
-  }
-  await Promise.all(Array.from(queues.values(), async (queue) => {
-    for (const update of queue) {
-      try {
-        await handler(update, token);
-      } catch (error) {
-        runtime.lastError = error.message;
-        recordError('Обработка сообщения', error);
-        console.error('Не удалось обработать обновление ' + update.update_id + ':', error.message);
-      }
+  const work = updates.map((update) => enqueueUpdate(update, token, handler));
+  // Сдвигаем отметку сразу: Telegram не пришлёт эти обновления снова, а если
+  // всё-таки пришлёт (перезапуск), повтор отсеется по номеру обновления.
+  if (generation === runtime.generation) {
+    for (const update of Array.isArray(allUpdates) ? allUpdates : []) {
+      runtime.offset = Math.max(runtime.offset, Number(update.update_id) + 1);
     }
-  }));
-  // After a token change or restart the offset belongs to the new session.
-  if (generation !== runtime.generation) return;
-  for (const update of Array.isArray(allUpdates) ? allUpdates : []) {
-    runtime.offset = Math.max(runtime.offset, Number(update.update_id) + 1);
+    data.telegramOffset = runtime.offset;
   }
-  data.telegramOffset = runtime.offset;
+  // Ожидание возвращаем тем, кому оно нужно (проверки и тесты); сам бот его
+  // не ждёт.
+  return Promise.all(work);
 }
 
 async function pollingLoop(generation, token) {
@@ -642,9 +663,15 @@ async function pollingLoop(generation, token) {
       markTelegramSuccess();
       telegramContactRestored();
       backoff = 1000;
-      await processUpdates(updates, token);
+      // Не ждём окончания обработки: пока одно сообщение грузит фотографию или
+      // пережидает «слишком часто», остальные клиенты должны получать ответы.
+      const work = processUpdates(updates, token);
       if (generation !== runtime.generation) break;
-      if (updates.length) saveDataNow();
+      if (updates.length) {
+        work.then(() => {
+          if (generation === runtime.generation) saveDataNow();
+        }).catch(() => {});
+      }
     } catch (error) {
       if (error.name === 'AbortError' || generation !== runtime.generation) break;
       const firstFailure = markTelegramFailure(error, 'reconnecting');
@@ -682,6 +709,7 @@ function restartPolling() {
 }
 
 export {
+  queuedUpdates,
   findRule,
   handleUpdate,
   pollingLoop,
