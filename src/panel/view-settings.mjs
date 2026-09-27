@@ -228,6 +228,26 @@ function renderWork(host) {
   };
 }
 
+function mediaCheckHtml(report) {
+  var missing = report.missing || [];
+  var rows = '<div class="row wrap">' +
+    '<span class="chip ' + (missing.length ? "bad" : "ok") + '">' + (missing.length
+      ? "нет файлов: " + missing.length + (report.missingRefs > missing.length ? " (ссылок на них: " + report.missingRefs + ")" : "")
+      : "все файлы на месте") + "</span>" +
+    '<span class="chip">картинок в данных: ' + Number(report.total || 0) + "</span>" +
+    (report.orphans ? '<span class="chip warn">лишних файлов: ' + Number(report.orphans) + "</span>" : "") +
+    (typeof report.restored === "number" && report.restored ? '<span class="chip ok">вернули из копии: ' + report.restored + "</span>" : "") +
+    "</div>";
+  if (missing.length) {
+    rows += '<div class="list">' + missing.slice(0, 20).map(function (name) {
+      return '<div class="list-item"><span class="grow muted small">' + esc(name) + "</span></div>";
+    }).join("") + "</div>" +
+      '<div class="row wrap"><button class="btn secondary small" id="restoreMedia" type="button">Вернуть из ежедневной копии</button></div>' +
+      '<div class="hint">Если файла нет и в копии, картинку нужно загрузить заново в карточке объекта.</div>';
+  }
+  return rows;
+}
+
 function renderData(host) {
   var backup = state.config.telegramBackup || {};
   host.innerHTML = '<div class="grid cols-2">' +
@@ -246,6 +266,12 @@ function renderData(host) {
       (backup.lastError ? '<div class="chip bad">' + esc(backup.lastError) + "</div>" : "") +
       '<div class="hint">Файл .kbk можно восстановить здесь же — понадобится этот пароль.</div>' +
     "</div></div>" +
+    '<div class="card"><header><h3>Самопроверка</h3><div class="actions"><button class="btn secondary small" id="runSelfCheck" type="button">Проверить сейчас</button></div></header>' +
+      '<div class="card-body stack" id="selfCheckBody"><p class="muted small">Проверяет токен и связь, чат администратора, видимость каталога у клиентов, файлы картинок и версию данных. Ничего не меняет.</p></div>' +
+    "</div>" +
+    '<div class="card"><header><h3>Файлы картинок</h3><div class="actions"><button class="btn secondary small" id="checkMedia" type="button">Проверить файлы</button></div></header>' +
+      '<div class="card-body stack" id="mediaCheckBody"><p class="muted small">Сверяет картинки в данных с файлами в папке bot-media. Потерянные можно вернуть из ежедневной копии.</p></div>' +
+    "</div>" +
     '<div class="card"><header><h3>Журнал ошибок</h3><div class="actions"><button class="btn ghost small" id="clearErrors" type="button">Очистить</button></div></header>' +
       ((state.errors || []).length ? '<div class="list">' + state.errors.slice(0, 20).map(function (error) {
         return '<div class="list-item"><span class="grow"><b>' + esc(error.area || error.context || "Ошибка") + '</b><br><span class="muted small">' + esc(error.message) + "</span></span>" +
@@ -283,6 +309,39 @@ function renderData(host) {
   };
   host.querySelector("#sendTgBackup").onclick = async function () {
     try { await send("/api/telegram-backup/send", "POST", {}); toast("Копия отправлена в Telegram"); await reload(); } catch (error) { fail(error); }
+  };
+  function checkRow(check) {
+    var kind = check.status === "bad" ? "bad" : check.status === "warn" ? "warn" : "ok";
+    var mark = check.status === "bad" ? "✕" : check.status === "warn" ? "!" : "✓";
+    return '<div class="list-item"><span class="grow"><b>' + esc(check.title) + "</b><br><span class=\"muted small\">" + esc(check.detail) +
+      (check.hint ? " · " + esc(check.hint) : "") + '</span></span><span class="chip ' + kind + '">' + mark + "</span></div>";
+  }
+  host.querySelector("#runSelfCheck").onclick = async function () {
+    var body = host.querySelector("#selfCheckBody");
+    body.innerHTML = '<p class="muted small">Проверяю…</p>';
+    try {
+      var report = await api("/api/self-check");
+      var summary = report.bad ? "Есть проблемы: " + report.bad : report.warn ? "Стоит посмотреть: " + report.warn : "Всё в порядке";
+      body.innerHTML = '<div class="row wrap"><span class="chip ' + (report.bad ? "bad" : report.warn ? "warn" : "ok") + '">' + esc(summary) + "</span>" +
+        '<span class="small faint">проверено ' + dateTime(report.checkedAt) + "</span></div>" +
+        '<div class="list">' + (report.checks || []).map(checkRow).join("") + "</div>";
+    } catch (error) { body.innerHTML = '<div class="chip bad">' + esc(error.message) + "</div>"; }
+  };
+  host.querySelector("#checkMedia").onclick = async function () {
+    var body = host.querySelector("#mediaCheckBody");
+    body.innerHTML = '<p class="muted small">Сверяю файлы…</p>';
+    try {
+      var report = await send("/api/media-check", "POST", {});
+      body.innerHTML = mediaCheckHtml(report);
+      var restore = body.querySelector("#restoreMedia");
+      if (restore) restore.onclick = async function () {
+        try {
+          var done = await send("/api/media-check", "POST", { restore: true });
+          body.innerHTML = mediaCheckHtml(done);
+          toast(done.restored ? "Вернули файлов: " + done.restored : "В копии этих файлов нет");
+        } catch (error) { fail(error); }
+      };
+    } catch (error) { body.innerHTML = '<div class="chip bad">' + esc(error.message) + "</div>"; }
   };
   host.querySelector("#clearErrors").onclick = async function () {
     try { await api("/api/errors", { method: "DELETE" }); await reload(); } catch (error) { fail(error); }

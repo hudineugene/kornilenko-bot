@@ -13,9 +13,13 @@ import { restartPolling } from './updates.mjs';
 import { startTunnel, stopTunnel } from './remote.mjs';
 import { server } from './server.mjs';
 import { announceError, announceStart, rememberShutdown, sendStatusNotice, statusNoticesOn, stopNoticeText } from './status.mjs';
+import { runSelfCheck, selfCheckLines, selfCheckNotice } from './selfcheck.mjs';
 
 const RUN_MARKER_FILE = path.join(path.dirname(DATA_FILE), 'bot-running.json');
 const RUN_HEARTBEAT_MS = 60 * 1000;
+// Метку обновляет живой бот раз в минуту: с запасом считаем её своей, если ей
+// меньше трёх минут.
+const RUN_MARKER_STALE_MS = 3 * RUN_HEARTBEAT_MS;
 
 // While the bot runs, a small marker file holds the time it was last seen
 // alive. A normal shutdown removes it. If the marker is still there at the
@@ -40,15 +44,50 @@ function clearRunMarker() {
   }
 }
 
-// Returns { lastAliveAt } of an abruptly ended previous run, or null.
-function previousRunEndedAbruptly() {
-  let marker;
+function readRunMarker() {
   try {
-    marker = JSON.parse(fs.readFileSync(RUN_MARKER_FILE, 'utf8'));
+    return JSON.parse(fs.readFileSync(RUN_MARKER_FILE, 'utf8'));
   } catch {
     return null;
   }
-  const lastAliveAt = new Date(marker && marker.lastAliveAt);
+}
+
+function processAlive(pid) {
+  const id = Number(pid);
+  if (!Number.isInteger(id) || id <= 0 || id === process.pid) return false;
+  try {
+    process.kill(id, 0);
+    return true;
+  } catch (error) {
+    // EPERM: процесс есть, но принадлежит другому пользователю.
+    return error && error.code === 'EPERM';
+  }
+}
+
+// Вторая копия на тех же данных: та же метка, живой процесс и свежий отпечаток
+// времени. Две копии с одним токеном мешают друг другу — Telegram отдаёт
+// сообщения только одной, и часть ответов теряется.
+function runningCopy(now = new Date()) {
+  const marker = readRunMarker();
+  if (!marker || !processAlive(marker.pid)) return null;
+  const lastAliveAt = Date.parse(marker.lastAliveAt || '');
+  if (!Number.isFinite(lastAliveAt) || now.getTime() - lastAliveAt > RUN_MARKER_STALE_MS) return null;
+  return { pid: Number(marker.pid), lastAliveAt: new Date(lastAliveAt) };
+}
+
+function secondCopyNotice(copy) {
+  return [
+    '  Бот уже запущен на этих данных (процесс ' + copy.pid + ', отметка ' + clockTime(copy.lastAliveAt) + ').',
+    '  Вторая копия не запущена: с одним токеном они мешают друг другу и часть ответов клиентам теряется.',
+    '  Нажмите Ctrl+C в окне работающего бота, если хотите запустить заново.',
+  ].join('\n');
+}
+
+// Returns { lastAliveAt } of an abruptly ended previous run, or null.
+function previousRunEndedAbruptly() {
+  const marker = readRunMarker();
+  if (!marker) return null;
+  const lastAliveAt = new Date(marker.lastAliveAt);
   return Number.isFinite(lastAliveAt.getTime()) ? { lastAliveAt } : { lastAliveAt: null };
 }
 
@@ -88,6 +127,25 @@ async function reportAbruptStop(previous, token = data.config.botToken) {
   return text;
 }
 
+// Проверка при запуске ждёт, пока установится связь с Telegram.
+const SELF_CHECK_DELAY_MS = 20 * 1000;
+
+function reportSelfCheck() {
+  try {
+    const report = runSelfCheck();
+    console.log('');
+    console.log('  Проверка при запуске:');
+    for (const line of selfCheckLines(report)) console.log('  ' + line);
+    console.log('');
+    const notice = selfCheckNotice(report);
+    if (notice) void sendStatusNotice(notice).catch(() => {});
+    return report;
+  } catch (error) {
+    console.error('Не удалось выполнить проверку при запуске:', error.message);
+    return null;
+  }
+}
+
 let shuttingDown = false;
 
 // Closing the console window (SIGHUP on Windows) gives the process about ten
@@ -117,6 +175,13 @@ function shutdown(signal) {
 }
 
 function start() {
+  const running = runningCopy();
+  if (running && process.env.BOT_ALLOW_SECOND_COPY !== '1') {
+    console.log('');
+    console.log(secondCopyNotice(running));
+    console.log('');
+    process.exit(1);
+  }
   const previousRun = previousRunEndedAbruptly();
   server.listen(PORT, HOST, () => {
     // Only a started instance owns the marker: a second copy that fails on a
@@ -135,6 +200,10 @@ function start() {
         ? '  Бот подключается к Telegram…'
         : '  Бот остановлен в настройках панели.');
     console.log('  Для остановки нажмите Ctrl+C.');
+    // Короткая проверка «всё ли на месте»: в окне видно всегда, в Telegram
+    // уходит только то, что клиенты или администратор почувствуют. Ждём, пока
+    // станет известно состояние связи, иначе проверка сообщит о ней зря.
+    if (configured()) setTimeout(reportSelfCheck, SELF_CHECK_DELAY_MS).unref();
     if (!['127.0.0.1', '::1', 'localhost'].includes(HOST)) {
       console.log('');
       console.log('  ВНИМАНИЕ: панель доступна из сети (' + HOST + ') по HTTP без шифрования.');
@@ -195,9 +264,13 @@ function start() {
 
 export {
   RUN_HEARTBEAT_MS,
+  RUN_MARKER_STALE_MS,
+  SELF_CHECK_DELAY_MS,
   RUN_MARKER_FILE,
   WINDOW_CLOSED_NOTICE_TIMEOUT_MS,
   abruptStopNotice,
+  runningCopy,
+  secondCopyNotice,
   clearRunMarker,
   clockTime,
   previousRunEndedAbruptly,

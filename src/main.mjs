@@ -40,7 +40,8 @@ import { startTunnel, stopTunnel, tunnelErrorFrom, tunnelUrlFrom } from './remot
 import { autostartStatus, autostartTaskName, autostartTaskXml, currentWindowsUser, setAutostart } from './autostart.mjs';
 import { handleApi } from './admin-api.mjs';
 import { server } from './server.mjs';
-import { abruptStopNotice, clearRunMarker, previousRunEndedAbruptly, reportAbruptStop, start, writeRunMarker } from './lifecycle.mjs';
+import { mediaReport, runSelfCheck, selfCheckNotice } from './selfcheck.mjs';
+import { abruptStopNotice, clearRunMarker, previousRunEndedAbruptly, reportAbruptStop, runningCopy, secondCopyNotice, start, writeRunMarker } from './lifecycle.mjs';
 
 if (process.argv.includes('--no-auto-open')) process.env.NO_AUTO_OPEN = '1';
 if (process.env.BOT_NO_START !== '1') start();
@@ -127,6 +128,8 @@ export {
   readFeed,
   persistImage,
   previousRunEndedAbruptly,
+  runningCopy,
+  secondCopyNotice,
   processUpdates,
   propertyAlertDeliveries,
   propertyPublicationIssues,
@@ -136,6 +139,9 @@ export {
   queuePropertyAlerts,
   referencedImageFiles,
   reportAbruptStop,
+  runSelfCheck,
+  selfCheckNotice,
+  mediaReport,
   requestIsRemote,
   restoreMissingMedia,
   runBroadcast,

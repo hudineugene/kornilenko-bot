@@ -130,6 +130,9 @@ const defaultData = {
   adminReplyTargets: {},
   adminReplyTargetsSince: '',
   telegramOffset: 0,
+  // Номера последних обработанных обновлений: защита от повторной обработки
+  // после нештатной остановки.
+  handledUpdateIds: [],
 };
 
 function normalizeStoredImages(record) {
@@ -984,6 +987,9 @@ function normalizeLoadedData(parsed) {
       broadcasts,
       inquiries,
       telegramOffset: Number.isFinite(Number(parsed.telegramOffset)) ? Math.max(0, Number(parsed.telegramOffset)) : 0,
+      handledUpdateIds: Array.isArray(parsed.handledUpdateIds)
+        ? parsed.handledUpdateIds.map((id) => Number(id)).filter((id) => Number.isFinite(id)).slice(-200)
+        : [],
       adminReplyTargets: normalizeAdminReplyTargets(parsed.adminReplyTargets),
       // Notifications sent before this version have no entry in the map.
       adminReplyTargetsSince: cleanText(parsed.adminReplyTargetsSince, 40) || new Date().toISOString(),

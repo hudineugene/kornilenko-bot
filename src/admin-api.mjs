@@ -6,7 +6,8 @@ import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
 import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAGES, REMINDER_HOUR_OPTIONS, MAX_MANAGERS, TIME_ZONES, normalizeCalculator, normalizeLoadedData, normalizeManagers, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { dropMissingImages, forEachStoredImage, imageBytes, imageExists } from './media.mjs';
 import { MANAGER_CONTACT_TEXT, applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
-import { applyConfiguredTimeZone, configured, data, replaceData, runtime, saveDataNow, verifyPassword } from './store.mjs';
+import { applyConfiguredTimeZone, configured, data, replaceData, restoreMissingMedia, runtime, saveDataNow, verifyPassword } from './store.mjs';
+import { mediaReport, runSelfCheck } from './selfcheck.mjs';
 import { recordError } from './analytics.mjs';
 import { eraseUserData, rebuildUserIndex, userByChatId, userById, userDataExport } from './users.mjs';
 import { forgetTelegramFileIds, sendDocumentMessage, sendMessage, sendPhotoMessage, telegramFileIds, telegramRequest } from './telegram.mjs';
@@ -311,6 +312,31 @@ async function handleApi(req, res, url) {
     } catch (error) {
       return json(res, 400, { error: 'Telegram не принял токен: ' + error.message });
     }
+  }
+
+  // Самопроверка: токен и связь, админ-чат, каталог, файлы картинок, версия
+  // данных. Только читает.
+  if (url.pathname === '/api/self-check' && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    return json(res, 200, runSelfCheck());
+  }
+
+  // Сверка картинок в данных с файлами на диске; по запросу возвращает
+  // потерянные файлы из ежедневной копии.
+  if (url.pathname === '/api/media-check' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    let restored = 0;
+    if (body.restore) {
+      try {
+        restored = restoreMissingMedia(data);
+      } catch (error) {
+        return json(res, 500, { error: 'Не удалось вернуть файлы: ' + error.message });
+      }
+    }
+    return json(res, 200, { ...mediaReport(), restored });
   }
 
   if (url.pathname === '/api/errors' && req.method === 'DELETE') {

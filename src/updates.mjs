@@ -490,8 +490,27 @@ function updateChatKey(update) {
 // parallel, so one slow conversation does not hold up everyone else.
 // A failing update is logged and skipped: the offset always moves past it,
 // otherwise Telegram would return the same update forever.
-async function processUpdates(updates, token, handler = handleUpdate) {
+// Telegram считает сообщение доставленным только после запроса со следующим
+// offset. Если бот упал между ответом клиенту и сохранением offset, Telegram
+// пришлёт те же обновления заново — поэтому номера последних обработанных
+// обновлений хранятся в данных, и дважды никто не отвечает.
+const HANDLED_UPDATES_KEPT = 200;
+
+function alreadyHandled(update) {
+  const id = Number(update && update.update_id);
+  if (!Number.isFinite(id)) return false;
+  if (!Array.isArray(data.handledUpdateIds)) data.handledUpdateIds = [];
+  if (data.handledUpdateIds.includes(id)) return true;
+  data.handledUpdateIds.push(id);
+  if (data.handledUpdateIds.length > HANDLED_UPDATES_KEPT) {
+    data.handledUpdateIds = data.handledUpdateIds.slice(-HANDLED_UPDATES_KEPT);
+  }
+  return false;
+}
+
+async function processUpdates(allUpdates, token, handler = handleUpdate) {
   const generation = runtime.generation;
+  const updates = (Array.isArray(allUpdates) ? allUpdates : []).filter((update) => !alreadyHandled(update));
   const queues = new Map();
   for (const update of updates) {
     const key = updateChatKey(update);
@@ -511,7 +530,7 @@ async function processUpdates(updates, token, handler = handleUpdate) {
   }));
   // After a token change or restart the offset belongs to the new session.
   if (generation !== runtime.generation) return;
-  for (const update of updates) {
+  for (const update of Array.isArray(allUpdates) ? allUpdates : []) {
     runtime.offset = Math.max(runtime.offset, Number(update.update_id) + 1);
   }
   data.telegramOffset = runtime.offset;
