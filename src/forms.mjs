@@ -453,6 +453,47 @@ async function startViewingForm(user, record, token) {
   await sendMessage(user.chatId, [title ? '🏠 ' + title : '', copy.askDate].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, 'date', pending) });
 }
 
+// Ответ с клавиатуры приходит буква в букву, а написанный от руки — как
+// придётся: другой регистр, без эмодзи, короче или длиннее. Формы сами просят
+// «напишите ответ», поэтому такой ответ тоже должен приниматься.
+function cleanAnswer(value) {
+  return String(value || '').toLowerCase().replace(/[^\p{L}\p{N}+]+/gu, ' ').trim();
+}
+
+function optionFromText(text, options) {
+  const typed = cleanAnswer(text);
+  if (!typed) return '';
+  const list = (Array.isArray(options) ? options : []).filter(Boolean);
+  const exact = list.find((option) => cleanAnswer(option) === typed);
+  if (exact) return exact;
+  // «покупка квартиры» → «Покупка», «кварт» → «Квартира». Если подходит больше
+  // одного варианта, лучше переспросить, чем угадать неверно.
+  // Обрывок в две буквы слишком легко отнести не к тому варианту, поэтому
+  // начало слова засчитываем от трёх букв.
+  const near = list.filter((option) => {
+    const value = cleanAnswer(option);
+    return (typed.length >= 3 && value.startsWith(typed)) || typed.startsWith(value);
+  });
+  if (near.length === 1) return near[0];
+  // Ответ одним числом: «2» → «2 спальни», «6» → «4+ спальни».
+  const number = /^\d{1,2}$/.test(typed) ? Number(typed) : NaN;
+  if (!Number.isFinite(number)) return '';
+  const numbered = list
+    .map((option) => ({ option, value: Number((cleanAnswer(option).match(/^(\d{1,2})/) || [])[1]) }))
+    .filter((item) => Number.isFinite(item.value));
+  const same = numbered.find((item) => item.value === number);
+  if (same) return same.option;
+  const open = numbered.filter((item) => String(item.option).includes('+')).sort((a, b) => b.value - a.value)[0];
+  return open && number > open.value ? open.option : '';
+}
+
+// Если ответ всё-таки не понят, показываем, из чего выбирать: повторять
+// «напишите ответ» в ответ на написанный ответ — издевательство.
+function invalidWithOptions(copy, options) {
+  const list = (Array.isArray(options) ? options : []).filter(Boolean);
+  return list.length ? copy.invalid + '\n\n' + list.join(' · ') : copy.invalid;
+}
+
 async function handleViewingFormMessage(message, user, token) {
   const pending = user.pendingAction;
   if (!pending || pending.type !== 'viewing_form') return false;
@@ -477,7 +518,8 @@ async function handleViewingFormMessage(message, user, token) {
   // Free slots were switched off in the panel while the form was open.
   if (pending.data.slotMode && !slotsEnabled()) pending.data.slotMode = false;
   if (pending.step === 'date') {
-    if (text === copy.dateOptions[3]) {
+    const chosenDate = copy.dateOptions.includes(text) ? text : optionFromText(text, copy.dateOptions);
+    if (chosenDate === copy.dateOptions[3]) {
       pending.data.slotMode = false;
       pending.step = 'custom';
       scheduleSave();
@@ -485,9 +527,23 @@ async function handleViewingFormMessage(message, user, token) {
       return true;
     }
     if (pending.data.slotMode) {
-      const day = availableSlotDays(language).find((item) => item.label === text);
+      const days = availableSlotDays(language);
+      const typedDay = parseViewingDate(text);
+      const day = days.find((item) => item.label === text)
+        || days.find((item) => item.label === optionFromText(text, days.map((entry) => entry.label)))
+        || (typedDay ? days.find((item) => item.key === typedDay) : null);
       if (!day) {
-        await sendMessage(user.chatId, copy.invalid, token, { reply_markup: keyboard('date') });
+        // Написанную дату, которой нет среди свободных окон, принимаем как
+        // обычное пожелание: менеджер подтвердит её вручную.
+        if (typedDay) {
+          pending.data.slotMode = false;
+          pending.data.date = text;
+          pending.data.day = typedDay;
+          pending.data.time = copy.asSpecified;
+          await sendViewingReview(user, pending, property, token, language);
+          return true;
+        }
+        await sendMessage(user.chatId, invalidWithOptions(copy, days.map((item) => item.label).concat(copy.dateOptions[3])), token, { reply_markup: keyboard('date') });
         return true;
       }
       pending.data.day = day.key;
@@ -498,12 +554,22 @@ async function handleViewingFormMessage(message, user, token) {
       }
       pending.data.time = '';
     } else {
-      const optionIndex = copy.dateOptions.indexOf(text);
+      const optionIndex = copy.dateOptions.indexOf(chosenDate);
       if (optionIndex < 0) {
-        await sendMessage(user.chatId, copy.invalid, token, { reply_markup: keyboard('date') });
+        // «25 октября», «3.11» — форма сама просит написать дату, значит и
+        // принимать её надо, а не отвечать «выберите вариант».
+        const typedDay = parseViewingDate(text);
+        if (typedDay) {
+          pending.data.date = text;
+          pending.data.day = typedDay;
+          pending.data.time = copy.asSpecified;
+          await sendViewingReview(user, pending, property, token, language);
+          return true;
+        }
+        await sendMessage(user.chatId, invalidWithOptions(copy, copy.dateOptions), token, { reply_markup: keyboard('date') });
         return true;
       }
-      pending.data.date = viewingDateValue(text, copy, language);
+      pending.data.date = viewingDateValue(chosenDate, copy, language);
       pending.data.day = viewingDayForOption(optionIndex);
       // "As specified" belonged to the free-text date that was just replaced.
       if (pending.data.time === copy.asSpecified) pending.data.time = '';
@@ -518,19 +584,27 @@ async function handleViewingFormMessage(message, user, token) {
     return true;
   }
   if (pending.step === 'time') {
-    if (text === copy.timeOptions[3]) {
+    const times = pending.data.slotMode ? freeTimes(pending.data.day) : copy.timeOptions;
+    const chosenTime = times.includes(text) ? text : optionFromText(text, times);
+    if (chosenTime === copy.timeOptions[3]) {
       pending.data.slotMode = false;
       pending.step = 'custom_time';
       scheduleSave();
       await sendMessage(user.chatId, copy.askCustomTime, token, { reply_markup: keyboard('custom_time') });
       return true;
     }
-    const valid = pending.data.slotMode ? freeTimes(pending.data.day).includes(text) : copy.timeOptions.includes(text);
-    if (!valid) {
-      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: keyboard('time') });
+    if (!chosenTime) {
+      // Написанное время («17:00», «после обеда») тоже ответ: в свободные окна
+      // оно не встанет, но менеджеру уйдёт как пожелание.
+      if (!pending.data.slotMode && text.length >= 2 && /\d/.test(text)) {
+        pending.data.time = text;
+        await sendViewingReview(user, pending, property, token, language);
+        return true;
+      }
+      await sendMessage(user.chatId, invalidWithOptions(copy, times.concat(pending.data.slotMode ? [copy.timeOptions[3]] : [])), token, { reply_markup: keyboard('time') });
       return true;
     }
-    pending.data.time = text;
+    pending.data.time = chosenTime;
     await sendViewingReview(user, pending, property, token, language);
     return true;
   }
@@ -682,11 +756,12 @@ async function handleSelectionFormMessage(message, user, token) {
   }
   pending.data = pending.data && typeof pending.data === 'object' ? pending.data : {};
   if (pending.step === 'deal') {
-    if (!copy.dealOptions.includes(text)) {
-      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: selectionKeyboard(language, 'deal') });
+    const chosen = copy.dealOptions.includes(text) ? text : optionFromText(text, copy.dealOptions);
+    if (!chosen) {
+      await sendMessage(user.chatId, invalidWithOptions(copy, copy.dealOptions), token, { reply_markup: selectionKeyboard(language, 'deal') });
       return true;
     }
-    pending.data.deal = text;
+    pending.data.deal = chosen;
     if (pending.editing === 'deal') {
       await sendSelectionReview(user, pending, token, language);
       return true;
@@ -697,12 +772,13 @@ async function handleSelectionFormMessage(message, user, token) {
     return true;
   }
   if (pending.step === 'type') {
-    if (!copy.typeOptions.includes(text)) {
-      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: selectionKeyboard(language, 'type') });
+    const chosen = copy.typeOptions.includes(text) ? text : optionFromText(text, copy.typeOptions);
+    if (!chosen) {
+      await sendMessage(user.chatId, invalidWithOptions(copy, copy.typeOptions), token, { reply_markup: selectionKeyboard(language, 'type') });
       return true;
     }
-    pending.data.type = text;
-    if (!selectionNeedsBedrooms(copy, text)) {
+    pending.data.type = chosen;
+    if (!selectionNeedsBedrooms(copy, chosen)) {
       pending.data.bedrooms = copy.bedroomOptions[copy.bedroomOptions.length - 1];
       pending.data.bedroomsSkipped = true;
     } else if (pending.editing === 'type' && pending.data.bedroomsSkipped) {
@@ -743,11 +819,12 @@ async function handleSelectionFormMessage(message, user, token) {
     return true;
   }
   if (pending.step === 'bedrooms') {
-    if (!copy.bedroomOptions.includes(text)) {
-      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: selectionKeyboard(language, 'bedrooms') });
+    const chosen = copy.bedroomOptions.includes(text) ? text : optionFromText(text, copy.bedroomOptions);
+    if (!chosen) {
+      await sendMessage(user.chatId, invalidWithOptions(copy, copy.bedroomOptions), token, { reply_markup: selectionKeyboard(language, 'bedrooms') });
       return true;
     }
-    pending.data.bedrooms = text;
+    pending.data.bedrooms = chosen;
     pending.data.bedroomsSkipped = false;
     await sendSelectionReview(user, pending, token, language);
     return true;
@@ -919,6 +996,7 @@ async function restartExpiredAction(user, token) {
 }
 
 export {
+  optionFromText,
   FORM_REMINDER_IDLE_MS,
   duplicateCallback,
   formReminderDue,

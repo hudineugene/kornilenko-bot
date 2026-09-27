@@ -227,11 +227,12 @@ test.describe('viewing form', () => {
     assert.equal(at(21), weekend + ' (26.09–27.09)');
   });
 
-  test('free text instead of a date option is rejected', async () => {
+  test('text that is not a date is asked again, with the options listed', async () => {
     const chat = createChat();
     await chat.press('property:viewing:villa-marbella-01');
     const step = await chat.say('когда-нибудь');
-    assert.equal(step.last.text, ru.invalid);
+    assert.ok(step.last.text.startsWith(ru.invalid), 'the same request, now with the options');
+    assert.ok(step.last.text.includes(ru.dateOptions[0]), 'the client sees what to choose from');
     assert.equal(chat.user.pendingAction.step, 'date');
   });
 
@@ -378,19 +379,20 @@ test.describe('selection form', () => {
     assert.match(edited.body.media ? JSON.stringify(edited.body.media) : edited.body.caption, /Дом у гольфа/);
   });
 
-  test('answers outside the options are rejected', async () => {
+  test('answers outside the options are asked again, with the options listed', async () => {
     const chat = createChat();
     await chat.say(MENU.ru.selection);
     let step = await chat.say('хочу виллу');
-    assert.equal(step.last.text, ru.invalid);
+    assert.ok(step.last.text.startsWith(ru.invalid));
+    assert.ok(step.last.text.includes(ru.dealOptions[1]), 'the options are listed in the message');
     assert.equal(chat.user.pendingAction.step, 'deal');
     await chat.say(ru.dealOptions[0]);
     step = await chat.say('Дача');
-    assert.equal(step.last.text, ru.invalid);
+    assert.ok(step.last.text.startsWith(ru.invalid));
     assert.equal(chat.user.pendingAction.step, 'type');
     await chat.say(ru.typeOptions[0]);
     step = await chat.say('М');
-    assert.equal(step.last.text, ru.invalid);
+    assert.ok(step.last.text.startsWith(ru.invalid));
     assert.equal(chat.user.pendingAction.step, 'location');
   });
 });
