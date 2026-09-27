@@ -98,11 +98,13 @@ const MONEY_SUFFIX_PATTERN = '(millones|millón|millions|million|млн|тыся
 const MONEY_CONTEXT_PATTERN = /[€$£]|\b(?:eur|euro|euros|usd|dollar|dollars|gbp|pound|pounds|price|budget|precio|presupuesto|rent|rental|alquiler|sale|venta|buy|purchase)\b|(?:евро|доллар|фунт|цена|бюджет|аренд|покуп|продаж|квартир|недвижим|вилл|дом)/iu;
 
 function moneyWithInheritedScale(amount, suffix, otherSuffix) {
-  if (suffix) return parseMoneyAmount(amount + ' ' + suffix);
+  // Букву приписываем вплотную: с пробелом одиночная «к» или «m» считается
+  // единицей измерения, а не масштабом.
+  if (suffix) return parseMoneyAmount(amount + suffix);
   const plain = parseMoneyAmount(amount);
   // “300–500 тыс.” conventionally applies “тыс.” to both sides. A fully
   // written 300 000 already has its own scale and must not inherit another.
-  if (otherSuffix && plain < 10000) return parseMoneyAmount(amount + ' ' + otherSuffix);
+  if (otherSuffix && plain < 10000) return parseMoneyAmount(amount + otherSuffix);
   return plain;
 }
 
@@ -161,7 +163,9 @@ function parseMaxPrice(message) {
   if (/(?:цена\s+от|бюджет(?:ом)?\s+от|не\s+дешевле|price\s+from|budget\s+from|at\s+least|precio\s+desde|presupuesto\s+desde|como\s+m[ií]nimo)/iu.test(text)) return 0;
   const marker = '(?:не\\s+дороже|цена\\s+до|бюджет(?:ом)?(?:\\s+до)?|максимум|до|up\\s+to|under|below|budget(?:\\s+of)?|maximum|max|hasta|presupuesto(?:\\s+de)?|máximo|maximo)';
   const match = text.match(new RegExp(wholeWords(marker) + MONEY_GAP_PATTERN + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
-  const amount = match ? parseMoneyAmount(match[1] + ' ' + (match[2] || '')) : 0;
+  // Передаём кусок исходного текста, а не число отдельно: разборщику нужно
+  // видеть, что идёт следом — «150 кв.м» и «300 м от моря» это не цена.
+  const amount = match ? parseMoneyAmount(text.slice(match.index, match.index + 60)) : 0;
   return amount >= MONEY_FLOOR ? amount : 0;
 }
 

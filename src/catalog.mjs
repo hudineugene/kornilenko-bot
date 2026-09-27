@@ -528,6 +528,9 @@ async function startCatalogPriceInput(user, token, requestedBound = 'max') {
   return showCatalogPricePrompt(user, token, priceBound);
 }
 
+// Нижняя граница «своей цены»: меньше — это не цена, а опечатка.
+const CATALOG_PRICE_FLOOR = 100;
+
 async function handleCatalogPriceInputMessage(message, user, token) {
   if (!user || !user.pendingAction || user.pendingAction.type !== 'catalog_filter_price') return false;
   const language = user.preferredLanguage || 'ru';
@@ -542,8 +545,10 @@ async function handleCatalogPriceInputMessage(message, user, token) {
     await sendUiMessage(user.chatId, user, panel.text, token, { reply_markup: panel.markup });
     return true;
   }
+  // Цена объекта не бывает в пять евро: такое число — это опечатка или
+  // количество комнат, и молча подставлять его в фильтр нельзя.
   const price = parseMoneyAmount(text);
-  if (!price) {
+  if (price < CATALOG_PRICE_FLOOR) {
     await sendMessage(user.chatId, copy.invalidCustomPrice, token, { reply_markup: catalogPriceInputKeyboard(language, bound) });
     return true;
   }

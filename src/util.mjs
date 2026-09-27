@@ -22,11 +22,26 @@ function cleanText(value, maxLength) {
 // Parse the usual ways clients write a budget: 525000, 525 000,
 // 525k, 1.2 million, 1,2 млн. A decimal without a scale is rejected unless
 // it is an unambiguous thousands separator such as 1.800.
+// Единица измерения сразу после числа: это расстояние или площадь, а не цена.
+// «до 300 м от моря» — метры, «до 150 кв.м» — площадь, «до 2 км» — километры.
+const MEASURE_UNIT = /^\s*(?:кв\.?\s*м|м²|м2|метр\w*|м(?![а-яё])|км|га|соток|сотк\w*|sq\.?\s*m|m²|m2|met(?:er|re)s?|m(?![a-z])|km|ha)/iu;
+// Масштаб числа: «300к», «1,5 млн», «500 тысяч». Одиночная буква считается
+// масштабом только вплотную к числу: «300к» — тысячи, «300 к» и «300 m» —
+// скорее единица измерения.
+const MONEY_SCALE = /^(\s*)(millones|millón|millions|million|млн|тысяч|тыс|mil|k|к|m)(?![\p{L}])/iu;
+
 function parseMoneyAmount(value) {
   const text = cleanText(value, 100);
   if (!text || /^\s*-/u.test(text)) return 0;
-  const match = text.match(/(\d{1,3}(?:[ .\u00a0\u202f]\d{3})+|\d+(?:[.,]\d+)?)\s*(millones|millón|millions|million|млн|тысяч|тыс|mil|k|к|m)?/iu);
-  if (!match) return 0;
+  const number = text.match(/\d{1,3}(?:[ .\u00a0\u202f]\d{3})+|\d+(?:[.,]\d+)?/u);
+  if (!number) return 0;
+  const after = text.slice(number.index + number[0].length);
+  const scaleMatch = after.match(MONEY_SCALE);
+  const scaleWord = scaleMatch && (!scaleMatch[1] || scaleMatch[2].length > 1) ? scaleMatch[2] : '';
+  const tail = scaleWord ? after.slice(scaleMatch[0].length) : after;
+  // Число с единицей измерения — не цена.
+  if (MEASURE_UNIT.test(tail)) return 0;
+  const match = [text, number[0], scaleWord];
   const suffix = String(match[2] || '').normalize('NFD').replace(/\p{M}+/gu, '').toLocaleLowerCase();
   const compact = match[1].replace(/[\s\u00a0\u202f]/g, '');
   const million = /^(?:млн|million|millions|millon|millones|m)$/u.test(suffix);
@@ -50,8 +65,9 @@ function largestMoneyAmount(value, minimum = 100) {
   if (!source) return 0;
   let best = 0;
   for (const candidate of source.matchAll(/\d{1,3}(?:[ .\u00a0\u202f]\d{3})+|\d+(?:[.,]\d+)?/gu)) {
-    const after = source.slice(candidate.index + candidate[0].length);
-    const amount = parseMoneyAmount(candidate[0] + ' ' + after.slice(0, 12).trim());
+    // Кусок исходной строки как есть: важно, вплотную ли стоит буква
+    // («300к» — тысячи, «300 м» — метры) и что идёт следом.
+    const amount = parseMoneyAmount(source.slice(candidate.index, candidate.index + 40));
     if (amount >= minimum) best = Math.max(best, amount);
   }
   return best;
