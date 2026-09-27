@@ -2,6 +2,7 @@
 
 // Страница панели — один встроенный скрипт. Браузер разбирает его целиком,
 // поэтому опечатка в кавычках ломает всю панель: проверяем синтаксис здесь.
+// Как этот код ведёт себя при работе — в tests/panel-render.test.js.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -10,7 +11,7 @@ const vm = require('node:vm');
 test('скрипт панели разбирается без ошибок', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   const scripts = [...PANEL_HTML.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
-  assert.equal(scripts.length, 1, 'скрипт должен быть один — иначе не сработает nonce');
+  assert.equal(scripts.length, 1, 'скрипт должен быть один — страница разрешает его по хешу');
   new vm.Script(scripts[0]);
 });
 
