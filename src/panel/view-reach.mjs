@@ -388,6 +388,21 @@ function renderGroups(host) {
   renderGroupCard(host.querySelector("#groupBody"), group || groups[0]);
 }
 
+// Очередь отложенных публикаций этой группы: раньше запланированный пост
+// нигде не показывался — ни отменить, ни узнать, что он не ушёл.
+function groupPostQueue(group) {
+  var posts = (state.groupPosts || []).filter(function (post) { return String(post.groupId) === String(group.id); });
+  if (!posts.length) return "";
+  return '<div class="card"><header><h3>Отложенные публикации</h3><div class="actions"><span class="small faint">время по часовому поясу бота</span></div></header><div class="list">' +
+    posts.map(function (post) {
+      var failed = post.status === "failed";
+      return '<div class="list-item"><span class="grow"><b>' + esc(String(post.text || "Публикация с фото").slice(0, 80)) + "</b>" +
+        '<br><span class="muted small">' + esc(dateTime(post.sendAt)) + (failed && post.error ? " · " + esc(String(post.error).slice(0, 120)) : "") + "</span></span>" +
+        '<span class="chip ' + (failed ? "bad" : "brand") + '">' + (failed ? "не ушла" : "ждёт отправки") + "</span>" +
+        '<button class="btn ghost small" data-cancel-post="' + esc(post.id) + '" type="button">' + (failed ? "Убрать" : "Отменить") + "</button></div>";
+    }).join("") + "</div></div>";
+}
+
 function renderGroupCard(host, group) {
   var admin = group.status === "administrator" || group.status === "creator";
   var pinned = (group.messages || []).find(function (message) { return message.messageId === group.pinnedMessageId; });
@@ -418,6 +433,7 @@ function renderGroupCard(host, group) {
       "</div></div>" +
       '<div class="card"><header><h3>Предпросмотр</h3><div class="actions"><span class="small faint">так увидят подписчики</span></div></header>' +
         '<div class="card-body"><div class="tg-preview" id="postPreview"></div></div></div>' +
+      groupPostQueue(group) +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small faint">историю Telegram не отдаёт</span></div></header>' +
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
@@ -590,6 +606,15 @@ function renderGroupCard(host, group) {
       await reload();
     } catch (error) { fail(error); }
   };
+  host.querySelectorAll("[data-cancel-post]").forEach(function (button) {
+    button.onclick = async function () {
+      try {
+        await api("/api/group-posts/" + encodeURIComponent(button.dataset.cancelPost), { method: "DELETE" });
+        toast("Публикация убрана");
+        await reload();
+      } catch (error) { fail(error); }
+    };
+  });
   host.querySelectorAll("[data-pin]").forEach(function (button) {
     button.onclick = async function () {
       try { await send(base + "/pin", "POST", { messageId: button.dataset.pin, notify: false }); toast("Закреплено"); await reload(); } catch (error) { fail(error); }

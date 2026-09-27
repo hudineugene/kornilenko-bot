@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { cleanText } from './util.mjs';
 import { normalizePublishing } from './data-format.mjs';
 import { data, scheduleSave } from './store.mjs';
+import { temporaryDeliveryError } from './broadcasts.mjs';
 import { recordError } from './analytics.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { imageExists, imageHasTransparency } from './media.mjs';
@@ -445,6 +446,11 @@ function duePosts(now = new Date()) {
     .filter((post) => post.status === 'scheduled' && Date.parse(post.sendAt) <= now.getTime());
 }
 
+// Обрыв связи не должен хоронить отложенный пост: он остаётся в очереди и
+// уходит со следующей проверкой. После стольких неудачных попыток подряд пост
+// признаётся несостоявшимся — иначе он молча висел бы в очереди вечно.
+const GROUP_POST_ATTEMPTS = 5;
+
 async function runDueGroupPosts(now = new Date(), token = data.config.botToken) {
   if (!token || !data.config.active) return [];
   const sent = [];
@@ -460,10 +466,16 @@ async function runDueGroupPosts(now = new Date(), token = data.config.botToken) 
       post.status = 'sent';
       post.sentAt = new Date().toISOString();
       post.error = '';
+      post.attempts = 0;
       sent.push(post.id);
     } catch (error) {
-      post.status = 'failed';
+      post.attempts = Number(post.attempts || 0) + 1;
       post.error = error.message;
+      if (temporaryDeliveryError(error) && post.attempts < GROUP_POST_ATTEMPTS) {
+        // Связи нет или Telegram попросил подождать: пробуем ещё раз позже.
+        continue;
+      }
+      post.status = 'failed';
       recordError('Отложенная публикация в группу', error);
     }
   }
@@ -492,6 +504,7 @@ function newGroupPost(fields) {
 }
 
 export {
+  GROUP_POST_ATTEMPTS,
   GROUP_MESSAGE_LIMIT,
   activeGroups,
   duePosts,

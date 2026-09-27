@@ -518,6 +518,7 @@ function normalizeGroupPosts(value) {
     createdAt: cleanText(item.createdAt, 40) || new Date().toISOString(),
     messageId: Math.max(0, Number(item.messageId) || 0),
     error: cleanText(item.error, 500),
+    attempts: Math.max(0, Math.min(99, Number(item.attempts) || 0)),
   })).filter((item) => item.groupId);
 }
 

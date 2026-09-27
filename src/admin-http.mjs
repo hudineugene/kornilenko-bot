@@ -629,7 +629,11 @@ function safeState(session) {
       rubrics: rubrics.map((rubric) => ({ id: rubric.id, name: rubric.name, placement: rubric.placement, image: imageMeta(rubric.image) })),
     }))(normalizePublishing(data.config.publishing)),
     groups: Array.isArray(data.groups) ? data.groups : [],
-    groupPosts: Array.isArray(data.groupPosts) ? data.groupPosts.filter((post) => post.status === 'scheduled') : [],
+    // Панель показывает и те публикации, которые не состоялись: иначе о них
+    // никто не узнает — пост просто не появится в группе.
+    groupPosts: Array.isArray(data.groupPosts)
+      ? data.groupPosts.filter((post) => post.status === 'scheduled' || post.status === 'failed').slice(-50)
+      : [],
   };
 }
 

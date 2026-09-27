@@ -128,6 +128,7 @@ async function reportAbruptStop(previous, token = data.config.botToken) {
 }
 
 // Проверка при запуске ждёт, пока установится связь с Telegram.
+const FIRST_SCHEDULE_CHECK_MS = 30 * 1000;
 const SELF_CHECK_DELAY_MS = 20 * 1000;
 
 function reportSelfCheck() {
@@ -218,6 +219,10 @@ function start() {
     if (data.config.remoteAccess) startTunnel();
     runDailyBackupSafely();
     setInterval(runDailyBackupSafely, 60 * 60 * 1000).unref();
+    // Первая проверка — вскоре после запуска, а не через 15 минут: пост,
+    // время которого пришло, пока бот был выключен, не должен ждать четверть
+    // часа. Небольшая задержка нужна, чтобы связь с Telegram успела ожить.
+    setTimeout(runScheduledNotices, FIRST_SCHEDULE_CHECK_MS).unref();
     setInterval(runScheduledNotices, 15 * 60 * 1000).unref();
     if (process.platform === 'win32' && process.env.NO_AUTO_OPEN !== '1') {
       setTimeout(() => {
