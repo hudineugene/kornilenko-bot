@@ -968,10 +968,19 @@ test.describe('access from the internet', () => {
     assert.equal(late.json.expired, true);
   });
 
-  test('without a verified admin chat a remote login is refused', async () => {
+  test('without a verified admin chat a remote login goes nowhere', async () => {
     bot.getData().config.adminNotificationVerifiedAt = '';
     const start = await local('POST', '/api/login', { headers: { ...THROUGH_TUNNEL, 'cf-connecting-ip': '203.0.113.50' }, body: { password: 'correct-password' } });
-    assert.equal(start.status, 403);
+    // Ответ такой же, как на неверный пароль: снаружи не видно, угадан ли он.
+    // Кода при этом никто не получает, а владелец видит причину в журнале.
+    assert.equal(start.status, 200);
+    assert.equal(start.json.twoFactor, true);
+    const verify = await local('POST', '/api/login/verify', {
+      headers: { ...THROUGH_TUNNEL, 'cf-connecting-ip': '203.0.113.50' },
+      body: { challenge: start.json.challenge, code: '000000' },
+    });
+    assert.equal(verify.status, 401, 'войти всё равно нельзя');
+    assert.ok(bot.getData().errors.some((item) => item.area === 'Код для входа'), 'причина записана в журнал');
   });
 
   test('a login on this computer still needs only the password', async () => {

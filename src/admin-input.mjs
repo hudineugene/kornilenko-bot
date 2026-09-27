@@ -7,53 +7,14 @@ import { DATA_VERSION, PIPELINE_STAGES, normalizePropertyImages, normalizeStored
 import { imageBytes, imageExists } from './media.mjs';
 import { data } from './store.mjs';
 import { validHttpUrl } from './catalog.mjs';
-import { loginAttempts, parseUploadedImage } from './admin-http.mjs';
+// Счёт попыток входа живёт рядом с картой попыток, в admin-http.
+import { LOGIN_LIMIT_PER_ADDRESS, LOGIN_LIMIT_TOTAL, attemptKey, expandIpv6, forgetLoginAttempts, loginAllowed, loginAttempts, parseUploadedImage, rememberFailedLogin } from './admin-http.mjs';
 
 function replyTemplateInput(body) {
   const title = cleanText(body && body.title, 80);
   if (!title) throw new Error('Укажите название шаблона');
   const text = translatedInput(body && body.text, 4000, true);
   return { title, text };
-}
-
-// Попытки считаются по подсети, а не по отдельному адресу: у IPv6 один
-// провайдер выдаёт клиенту сразу /64, и перебор мог бы идти с «нового» адреса
-// каждый раз. Плюс общий счётчик на всех: иначе поток с тысячи адресов обходит
-// любой лимит по адресу.
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_LIMIT_PER_ADDRESS = 10;
-const LOGIN_LIMIT_TOTAL = 60;
-const LOGIN_ATTEMPTS_KEPT = 5000;
-
-function attemptKey(ip) {
-  const address = String(ip || 'unknown').replace(/^::ffff:/i, '');
-  if (!address.includes(':')) return address;
-  // IPv6: считаем по /64 — первые четыре группы.
-  return address.split(':').slice(0, 4).join(':') + '::/64';
-}
-
-function pruneLoginAttempts(now) {
-  for (const [key, item] of loginAttempts) if (!item || item.resetAt < now) loginAttempts.delete(key);
-  if (loginAttempts.size <= LOGIN_ATTEMPTS_KEPT) return;
-  // Защита от разрастания карты: оставляем самые свежие записи.
-  const sorted = Array.from(loginAttempts).sort((first, second) => second[1].resetAt - first[1].resetAt);
-  loginAttempts.clear();
-  for (const [key, item] of sorted.slice(0, LOGIN_ATTEMPTS_KEPT)) loginAttempts.set(key, item);
-}
-
-function loginAllowed(ip) {
-  const now = Date.now();
-  pruneLoginAttempts(now);
-  const key = attemptKey(ip);
-  let item = loginAttempts.get(key);
-  if (!item || item.resetAt < now) item = { count: 0, resetAt: now + LOGIN_WINDOW_MS };
-  item.count += 1;
-  loginAttempts.set(key, item);
-  let total = loginAttempts.get('*');
-  if (!total || total.resetAt < now) total = { count: 0, resetAt: now + LOGIN_WINDOW_MS };
-  total.count += 1;
-  loginAttempts.set('*', total);
-  return item.count <= LOGIN_LIMIT_PER_ADDRESS && total.count <= LOGIN_LIMIT_TOTAL;
 }
 
 function translatedInput(value, maxLength, required = false) {
@@ -330,6 +291,9 @@ function parseBroadcast(body, existing = {}, options = {}) {
 
 export {
   LOGIN_LIMIT_PER_ADDRESS,
+  expandIpv6,
+  forgetLoginAttempts,
+  rememberFailedLogin,
   LOGIN_LIMIT_TOTAL,
   attemptKey,
   languageImageInput,

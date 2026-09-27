@@ -10,7 +10,7 @@ import { cleanText } from './util.mjs';
 import { normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { decryptBackup, isEncryptedBackup } from './offsite.mjs';
 import { imageBytes, imageExists, storedImageFile, writeMediaFile } from './media.mjs';
-import { data, runtime, verifyPassword } from './store.mjs';
+import { data, runtime, verifyPassword, verifyPasswordAsync } from './store.mjs';
 import { publicRuntime } from './menus.mjs';
 import { propertyPublicationReadiness, recordImages } from './catalog.mjs';
 import { isContainerBackup, readBackupContainer } from './backup-file.mjs';
@@ -414,30 +414,93 @@ async function readBackup(req) {
   return payload && payload.backup && typeof payload.backup === 'object' ? payload.backup : payload;
 }
 
-// Опасные действия просят текущий пароль отдельно от входа: украденной сессии
-// недостаточно, чтобы увести бота или выкачать данные с токенами.
-// Тот же счётчик попыток, что и у входа (loginAttempts объявлен здесь же),
-// проверяется на месте: admin-input импортировать нельзя — будет круг.
-function attemptAllowed(ip) {
-  const now = Date.now();
-  let item = loginAttempts.get(ip);
-  if (!item || item.resetAt < now) item = { count: 0, resetAt: now + 15 * 60 * 1000 };
-  item.count += 1;
-  loginAttempts.set(ip, item);
-  return item.count <= 10;
+// Попытки считаются по подсети, а не по отдельному адресу: у IPv6 один
+// провайдер выдаёт клиенту сразу /64, и перебор мог бы идти с «нового» адреса
+// каждый раз. Плюс общий счётчик на всех: иначе поток с тысячи адресов обходит
+// любой лимит по адресу.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_LIMIT_PER_ADDRESS = 10;
+const LOGIN_LIMIT_TOTAL = 60;
+const LOGIN_ATTEMPTS_KEPT = 5000;
+
+// IPv6 записывают сокращённо: «2001:db8:abcd::1» и «2001:db8:abcd:0:1::9» —
+// это одна и та же подсеть /64. Без разворачивания они получали разные ключи,
+// и перебор шёл «с новых адресов» в пределах одной выданной провайдером сети.
+function expandIpv6(address) {
+  const [head, tail] = address.split('::');
+  const left = head ? head.split(':') : [];
+  const right = tail !== undefined && tail ? tail.split(':') : [];
+  const missing = 8 - left.length - right.length;
+  const groups = tail === undefined ? left : left.concat(Array(Math.max(0, missing)).fill('0'), right);
+  return groups.slice(0, 8).map((group) => (group || '0').toLowerCase().replace(/^0+(?=.)/, ''));
 }
 
-function passwordAccepted(req, res, supplied) {
+function attemptKey(ip) {
+  const address = String(ip || 'unknown').toLowerCase().replace(/^\[|\]$/g, '').replace(/^::ffff:/i, '');
+  if (!address.includes(':')) return address;
+  // IPv6: считаем по /64 — первые четыре группы развёрнутого адреса.
+  return expandIpv6(address).slice(0, 4).join(':') + '::/64';
+}
+
+function pruneLoginAttempts(now) {
+  for (const [key, item] of loginAttempts) if (!item || item.resetAt < now) loginAttempts.delete(key);
+  if (loginAttempts.size <= LOGIN_ATTEMPTS_KEPT) return;
+  // Защита от разрастания карты: оставляем самые свежие записи.
+  const sorted = Array.from(loginAttempts).sort((first, second) => second[1].resetAt - first[1].resetAt);
+  loginAttempts.clear();
+  for (const [key, item] of sorted.slice(0, LOGIN_ATTEMPTS_KEPT)) loginAttempts.set(key, item);
+}
+
+function attemptCount(key, now) {
+  const item = loginAttempts.get(key);
+  return item && item.resetAt >= now ? item.count : 0;
+}
+
+// Проверка без подсчёта: считаем только неудачные попытки, и только те, что
+// пришли снаружи. Раньше счётчик рос на каждом запросе — 61 попытка из
+// интернета запирала вход и владельцу на этом же компьютере, а вместе с ним
+// смену пароля и копию данных в Telegram.
+function loginAllowed(ip, { local = false } = {}) {
+  const now = Date.now();
+  pruneLoginAttempts(now);
+  if (attemptCount(attemptKey(ip), now) >= LOGIN_LIMIT_PER_ADDRESS) return false;
+  return local || attemptCount('*', now) < LOGIN_LIMIT_TOTAL;
+}
+
+function rememberFailedLogin(ip, { local = false } = {}) {
+  const now = Date.now();
+  pruneLoginAttempts(now);
+  const bump = (key) => {
+    const item = loginAttempts.get(key);
+    const fresh = item && item.resetAt >= now ? item : { count: 0, resetAt: now + LOGIN_WINDOW_MS };
+    fresh.count += 1;
+    loginAttempts.set(key, fresh);
+  };
+  bump(attemptKey(ip));
+  // Общий счётчик — только про запросы снаружи: иначе владелец запирает сам
+  // себя, пробуя вспомнить пароль на своём же компьютере.
+  if (!local) bump('*');
+}
+
+function forgetLoginAttempts(ip) {
+  loginAttempts.delete(attemptKey(ip));
+}
+
+// Опасные действия просят текущий пароль отдельно от входа: украденной сессии
+// недостаточно, чтобы увести бота или выкачать данные с токенами.
+async function passwordAccepted(req, res, supplied) {
   const ip = clientAddress(req);
-  if (!attemptAllowed(ip)) {
+  const local = isLocalRequest(req);
+  if (!loginAllowed(ip, { local })) {
     json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
     return false;
   }
-  if (!verifyPassword(String(supplied || ''))) {
-    json(res, 403, { error: 'Введите текущий пароль панели' });
+  if (!(await verifyPasswordAsync(String(supplied || '')))) {
+    rememberFailedLogin(ip, { local });
+    json(res, 403, { error: 'Неверный пароль панели' });
     return false;
   }
-  loginAttempts.delete(ip);
+  forgetLoginAttempts(ip);
   return true;
 }
 
@@ -712,7 +775,14 @@ export {
   isLocalRequest,
   json,
   languageCounts,
+  LOGIN_LIMIT_PER_ADDRESS,
+  LOGIN_LIMIT_TOTAL,
+  attemptKey,
+  expandIpv6,
+  forgetLoginAttempts,
+  loginAllowed,
   loginAttempts,
+  rememberFailedLogin,
   loopbackSocket,
   parseCookies,
   parseUploadedImage,

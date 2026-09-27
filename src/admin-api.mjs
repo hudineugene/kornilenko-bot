@@ -20,8 +20,8 @@ import { validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { restartPolling } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
 import { BOT_TOKEN_PATTERN, DOWNLOAD_TICKET_MS, MAX_UNAUTHENTICATED_BODY_BYTES, clientAddress, headerPassword, issueDownloadTicket, passwordAccepted, useDownloadTicket, createSession, isLocalRequest, json, ownPageRequest, loginAttempts, parseUploadedImage, readBackup, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
-import { REMOTE_LOGIN_CODE_ATTEMPTS, pendingRemoteLogins, remoteLoginCodeHash, startDecoyRemoteLogin, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
-import { attemptKey, loginAllowed, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
+import { REMOTE_LOGIN_ANSWER_MS, REMOTE_LOGIN_CODE_ATTEMPTS, decoyRemoteLogin, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
+import { attemptKey, forgetLoginAttempts, loginAllowed, rememberFailedLogin, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { handleGroupApi } from './group-api.mjs';
 import { autostartStatus, setAutostart } from './autostart.mjs';
 import { readAllAdminNotifications, updateAdminNotification } from './admin-notifications.mjs';
@@ -98,24 +98,28 @@ async function handleApi(req, res, url) {
     // счётчик и запереть вход владельцу.
     if (!ownPageRequest(req)) return json(res, 403, { error: 'Запрос пришёл со стороннего сайта' });
     const ip = clientAddress(req);
-    if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
+    const local = isLocalRequest(req);
+    if (!loginAllowed(ip, { local })) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
+    const startedAt = Date.now();
     const correct = await verifyPasswordAsync(String(body.password || ''));
-    const remote = requestIsRemote(req);
+    const remote = !local;
     // Из интернета ответ одинаковый и на верный, и на неверный пароль: иначе
-    // перебор узнавал бы пароль, не имея доступа к коду из Telegram.
+    // перебор узнавал бы пароль, не имея доступа к коду из Telegram. Одинаков
+    // и по времени: раньше верный пароль выдавал себя задержкой на отправку
+    // кода в Telegram.
     if (remote) {
-      if (!correct) {
-        await delay(250);
-        return startDecoyRemoteLogin(res);
-      }
-      return startRemoteLogin(res, ip);
+      if (!correct) rememberFailedLogin(ip, { local });
+      const answer = correct ? await startRemoteLogin(res, ip, { defer: true }) : decoyRemoteLogin();
+      await delay(Math.max(0, REMOTE_LOGIN_ANSWER_MS - (Date.now() - startedAt)));
+      return json(res, 200, answer);
     }
     if (!correct) {
+      rememberFailedLogin(ip, { local });
       await delay(250);
       return json(res, 401, { error: 'Неверный пароль' });
     }
-    loginAttempts.delete(attemptKey(ip));
+    forgetLoginAttempts(ip);
     const session = createSession(res, req);
     return json(res, 200, { ok: true, csrf: session.csrf });
   }
@@ -123,7 +127,8 @@ async function handleApi(req, res, url) {
   if (url.pathname === '/api/login/verify' && req.method === 'POST') {
     if (!ownPageRequest(req)) return json(res, 403, { error: 'Запрос пришёл со стороннего сайта' });
     const ip = clientAddress(req);
-    if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
+    const localVerify = isLocalRequest(req);
+    if (!loginAllowed(ip, { local: localVerify })) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
     const challenge = cleanText(body.challenge, 100);
     const pending = pendingRemoteLogins.get(challenge);
@@ -133,6 +138,7 @@ async function handleApi(req, res, url) {
     }
     pending.attempts += 1;
     if (pending.attempts > REMOTE_LOGIN_CODE_ATTEMPTS) {
+      rememberFailedLogin(ip, { local: localVerify });
       pendingRemoteLogins.delete(challenge);
       return json(res, 401, { error: 'Слишком много неверных кодов. Введите пароль ещё раз.', expired: true });
     }
@@ -144,10 +150,11 @@ async function handleApi(req, res, url) {
     pendingRemoteLogins.delete(challenge);
     // Подставной вход: пароль был неверным, код совпасть не может.
     if (pending.decoy) {
+      rememberFailedLogin(ip, { local: localVerify });
       await delay(250);
       return json(res, 401, { error: 'Неверный код' });
     }
-    loginAttempts.delete(attemptKey(ip));
+    forgetLoginAttempts(ip);
     const session = createSession(res, req);
     return json(res, 200, { ok: true, csrf: session.csrf });
   }
@@ -180,7 +187,7 @@ async function handleApi(req, res, url) {
     // этого мало — просим текущий пароль, как у восстановления копии.
     const changesTunnel = body.tunnelHostname != null || body.tunnelToken != null;
     if (enabled || changesTunnel || data.config.remoteAccess) {
-      if (!passwordAccepted(req, res, headerPassword(req))) return;
+      if (!(await passwordAccepted(req, res, headerPassword(req)))) return;
     }
     if (body.tunnelHostname != null) {
       const hostname = cleanText(body.tunnelHostname, 253).toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -281,7 +288,7 @@ async function handleApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const body = await readJson(req);
-    if (!passwordAccepted(req, res, body.currentPassword)) return;
+    if (!(await passwordAccepted(req, res, body.currentPassword))) return;
     return json(res, 200, { ticket: issueDownloadTicket(), validMs: DOWNLOAD_TICKET_MS });
   }
 
@@ -304,7 +311,7 @@ async function handleApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     // Восстановление заменяет все данные бота: просим текущий пароль.
-    if (!passwordAccepted(req, res, headerPassword(req))) return;
+    if (!(await passwordAccepted(req, res, headerPassword(req)))) return;
     try {
       const backup = await readBackup(req);
       if (!backup || typeof backup !== 'object') throw new Error('Выберите корректный файл резервной копии');

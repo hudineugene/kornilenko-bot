@@ -30,28 +30,38 @@ function remoteLoginCodeHash(code, challenge) {
   return crypto.createHash('sha256').update(challenge + ':' + code).digest('hex');
 }
 
-async function startRemoteLogin(res, ip) {
+// Ответ на вход из интернета всегда один и тот же и по виду, и по времени:
+// «просим код». Иначе перебор отличал бы верный пароль по задержке на
+// отправку кода в Telegram или по ошибке 502, когда Telegram недоступен.
+const REMOTE_LOGIN_ANSWER_MS = 1200;
+
+async function startRemoteLogin(res, ip, options = {}) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
-  if (!adminChatId || !data.config.adminNotificationVerifiedAt || !data.config.botToken) {
-    return json(res, 403, { error: 'Вход из интернета возможен только с подтверждённым админ-чатом в Telegram: туда приходит код для входа.' });
-  }
   const now = Date.now();
   for (const [key, pending] of pendingRemoteLogins) if (pending.expiresAt < now) pendingRemoteLogins.delete(key);
+  if (!adminChatId || !data.config.adminNotificationVerifiedAt || !data.config.botToken) {
+    // Кода не будет — но и знать об этом снаружи незачем.
+    recordError('Код для входа', new Error('Вход из интернета без подтверждённого админ-чата'));
+    return options.defer ? decoyRemoteLogin() : json(res, 200, decoyRemoteLogin());
+  }
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   const challenge = crypto.randomBytes(24).toString('hex');
   try {
     await sendMessage(adminChatId, '🔐 Код для входа в панель: ' + code + '\n\nДействует 5 минут. Вход из интернета, адрес ' + ip + '.\nЕсли это не вы — никому не сообщайте код и смените пароль в настройках панели.', data.config.botToken, { track: false });
   } catch (error) {
+    // Отправить код не вышло: отвечаем как обычно, иначе по ответу видно, что
+    // пароль угадан. Владелец увидит ошибку в журнале панели.
     recordError('Код для входа', error);
-    return json(res, 502, { error: 'Не удалось отправить код в Telegram. Попробуйте ещё раз.' });
+    return options.defer ? decoyRemoteLogin() : json(res, 200, decoyRemoteLogin());
   }
   pendingRemoteLogins.set(challenge, { codeHash: remoteLoginCodeHash(code, challenge), expiresAt: now + REMOTE_LOGIN_CODE_TTL_MS, attempts: 0 });
-  return json(res, 200, { twoFactor: true, challenge });
+  const answer = { twoFactor: true, challenge };
+  return options.defer ? answer : json(res, 200, answer);
 }
 
 // Неверный пароль из интернета получает такой же ответ, как верный: мы просим
 // код, которого никто не получал. Так перебор не узнаёт пароль.
-function startDecoyRemoteLogin(res) {
+function decoyRemoteLogin() {
   const now = Date.now();
   for (const [key, pending] of pendingRemoteLogins) if (pending.expiresAt < now) pendingRemoteLogins.delete(key);
   const challenge = crypto.randomBytes(24).toString('hex');
@@ -61,7 +71,7 @@ function startDecoyRemoteLogin(res) {
     attempts: 0,
     decoy: true,
   });
-  return json(res, 200, { twoFactor: true, challenge });
+  return { twoFactor: true, challenge };
 }
 
 function tunnelInstalled() {
@@ -192,7 +202,8 @@ export {
   announceTunnel,
   pendingRemoteLogins,
   remoteLoginCodeHash,
-  startDecoyRemoteLogin,
+  REMOTE_LOGIN_ANSWER_MS,
+  decoyRemoteLogin,
   startRemoteLogin,
   startTunnel,
   stopTunnel,

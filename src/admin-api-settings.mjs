@@ -260,7 +260,7 @@ function refreshStaffCommands(previousChatIds = []) {
     // список меняется только с текущим паролем.
     const before = JSON.stringify((data.config.managers || []).map((manager) => [manager.name, manager.chatId]));
     const after = JSON.stringify(list.map((manager) => [cleanText(manager && manager.name, 60), cleanText(manager && manager.chatId, 40)]));
-    if (before !== after && !passwordAccepted(req, res, body.currentPassword)) return;
+    if (before !== after && !(await passwordAccepted(req, res, body.currentPassword))) return;
     const adminChatId = cleanText(data.config.adminChatId, 40);
     const seen = new Set();
     for (const item of list) {

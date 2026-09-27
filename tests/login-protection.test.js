@@ -87,15 +87,21 @@ test.describe('лимит попыток', () => {
   });
 
   test('общий лимит закрывает перебор с разных адресов', async () => {
-    const { loginAttempts } = await import('../src/admin-input.mjs').then(() => import('../src/admin-http.mjs'));
-    const { LOGIN_LIMIT_TOTAL } = await import('../src/admin-input.mjs');
+    const { loginAttempts } = await import('../src/admin-http.mjs');
+    const { LOGIN_LIMIT_TOTAL, loginAllowed, rememberFailedLogin } = await import('../src/admin-input.mjs');
     loginAttempts.clear();
-    const { loginAllowed } = await import('../src/admin-input.mjs');
     let allowed = 0;
     for (let index = 0; index < LOGIN_LIMIT_TOTAL + 10; index += 1) {
-      if (loginAllowed('10.0.' + Math.floor(index / 250) + '.' + (index % 250))) allowed += 1;
+      const address = '10.0.' + Math.floor(index / 250) + '.' + (index % 250);
+      // Считаются только неудачные попытки — как при настоящем переборе.
+      if (loginAllowed(address)) {
+        allowed += 1;
+        rememberFailedLogin(address);
+      }
     }
     assert.equal(allowed, LOGIN_LIMIT_TOTAL, 'сверх общего лимита попытки не проходят, даже с новых адресов');
+    // Владельцу на его же компьютере перебор снаружи вход не запирает.
+    assert.equal(loginAllowed('127.0.0.1', { local: true }), true, 'локальный вход остаётся открыт');
   });
 
   test('карта попыток не растёт без предела', async () => {
