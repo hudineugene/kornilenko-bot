@@ -419,6 +419,8 @@ function hideRefreshHint() {
 async function refresh() {
   var body = await api("/api/state?since=" + encodeURIComponent(stateVersion));
   if (body && body.unchanged) return;
+  // Данные изменились — переписка открытой беседы могла пополниться.
+  if (typeof conversationCache === "object") conversationCache = {};
   state = body;
   csrf = state.csrf;
   stateVersion = state.stateVersion || "";

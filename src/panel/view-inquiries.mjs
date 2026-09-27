@@ -532,14 +532,34 @@ async function exportInquiries() {
   } catch (error) { fail(error); }
 }
 
+// Переписка беседы приходит отдельным запросом: в общем состоянии её нет,
+// иначе панель тянула бы переписку всех клиентов каждые 45 секунд.
+// Загруженное помним, пока открыта страница; при обновлении экрана и после
+// отправки ответа берём заново.
+var conversationCache = {};
+var conversationLoading = {};
+
 function conversationTimeline(userId) {
-  var messages = [];
-  (state.inquiries || []).filter(function (item) { return String(item.userId) === String(userId); }).forEach(function (item) {
-    (item.messages || []).forEach(function (message) {
-      messages.push(Object.assign({ inquiryId: item.id }, message));
-    });
+  var loaded = conversationCache[String(userId)];
+  return loaded ? loaded.slice() : null;
+}
+
+function forgetConversation(userId) {
+  delete conversationCache[String(userId)];
+}
+
+function loadConversation(userId, onReady) {
+  var key = String(userId);
+  if (conversationLoading[key]) return;
+  conversationLoading[key] = true;
+  api("/api/conversations/" + encodeURIComponent(key) + "/timeline").then(function (body) {
+    conversationLoading[key] = false;
+    conversationCache[key] = Array.isArray(body.messages) ? body.messages : [];
+    if (onReady) onReady();
+  }, function (error) {
+    conversationLoading[key] = false;
+    fail(error);
   });
-  return messages.sort(function (a, b) { return (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0); });
 }
 function conversationMessageHtml(message) {
   var icons = { photo: "🖼 Фотография", video: "🎬 Видео", voice: "🎙 Голосовое сообщение", audio: "🎵 Аудиофайл", document: "📎 Документ", location: "📍 Геолокация", contact: "👤 Контакт", sticker: "🙂 Стикер", other: "📎 Вложение" };
@@ -580,6 +600,11 @@ function renderInquiryCard(host) {
   var viewing = item.viewing || null;
   var managers = [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
   var timeline = conversationTimeline(item.userId);
+  if (!timeline) {
+    // Первый показ этой беседы: просим переписку и перерисовываем, когда придёт.
+    loadConversation(item.userId, function () { renderInquiryCard(host); });
+    timeline = [];
+  }
   // Открыл человек — значит прочитал. Перерисовка того же экрана (обновление по
   // таймеру, смена фильтра) больше ничего не помечает.
   if (conversationOpenedByUser) {
@@ -592,7 +617,9 @@ function renderInquiryCard(host) {
         (related.length > 1 ? '<div class="field grow"><label>Текущее обращение</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + (entry.status === "closed" ? "закрыто" : awaitsReply(entry) ? "ждёт ответа" : "в работе") + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущее обращение</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
         (property ? '<button class="property-link" id="linkedProperty" type="button">🏠 ' + esc(localized(property.title, "ru") || property.reference || property.id) + '<span>Открыть →</span></button>' : item.propertyId ? '<div class="chip bad">Связанный объект удалён</div>' : "") +
       '</div>' +
-      '<div class="conversation-thread">' + (timeline.length ? timeline.map(conversationMessageHtml).join("") : '<div class="empty"><b>Сообщений пока нет</b></div>') + "</div>" +
+      '<div class="conversation-thread">' + (timeline.length
+        ? timeline.map(conversationMessageHtml).join("")
+        : conversationLoading[String(item.userId)] ? '<div class="empty"><b>Загружаем переписку…</b></div>' : '<div class="empty"><b>Сообщений пока нет</b></div>') + "</div>" +
       '<div class="reply-box"><div class="reply-box-head"><b>Ответить в Telegram</b>' +
         (state.replyTemplates && state.replyTemplates.length ? '<select id="replyTemplate"><option value="">Вставить шаблон ответа…</option>' + state.replyTemplates.map(function (template) { return '<option value="' + esc(template.id) + '">' + esc(template.title) + "</option>"; }).join("") + "</select>" : "") +
       '</div><div class="reply-quote hidden" id="replyQuote"><div><span>Ответ на сообщение клиента</span><b id="replyQuoteText"></b></div><button class="reply-quote-remove" id="clearReplyQuote" type="button" aria-label="Убрать цитату">×</button></div>' +
@@ -691,6 +718,7 @@ function renderInquiryCard(host) {
     retryReply.classList.add("hidden");
     try {
       var result = await send("/api/inquiries/" + encodeURIComponent(item.id) + "/reply", "POST", payload);
+      forgetConversation(item.userId);
       replyDelivery.classList.add("ok");
       replyDeliveryText.textContent = result.duplicate ? "✓ Сообщение уже было доставлено" : "✓ Доставлено в Telegram";
       toast(result.duplicate ? "Сообщение уже было доставлено" : "Ответ доставлен");
@@ -941,6 +969,11 @@ function clientSelectionText(inquiries) {
   return [values.deal, values.type, values.location, values.budget, values.bedrooms].filter(Boolean).join(" · ") || "Условия подбора пока не оставлены";
 }
 
+// Список клиентов показываем порциями: на тысячах строк браузер заметно
+// задумывается, а молча обрывать список на трёхстах — обманывать владельца.
+var CLIENTS_PAGE = 300;
+var clientsShown = CLIENTS_PAGE;
+
 function renderClients(host) {
   var rows = (state.users || []).map(function (user) {
     var inquiries = (state.inquiries || []).filter(function (item) { return String(item.userId) === user.id; });
@@ -955,7 +988,7 @@ function renderClients(host) {
   host.innerHTML = '<div class="toolbar"><div class="search"><input id="clientSearch" placeholder="Имя, телефон, @username" value="' + esc(clientSearch) + '"></div>' +
       '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) + " из " + num(state.userCount) + " · активных " + num(state.activeUserCount) + "</span></div>" +
     '<div class="card"><div class="table-wrap"><table><thead><tr><th>Клиент</th><th>Источник и язык</th><th>Этап работы</th><th>Следующий контакт</th><th class="right">Последняя активность</th></tr></thead><tbody>' +
-    (rows.length ? rows.slice(0, 300).map(function (row) {
+    (rows.length ? rows.slice(0, clientsShown).map(function (row) {
       var user = row.user, latest = row.latest, active = row.active;
       return '<tr class="clickable" data-id="' + esc(user.id) + '"><td><div class="row"><span class="avatar">' + esc(initials(user.firstName)) + "</span><span><b>" + esc(userName(user)) + "</b>" +
         (user.username ? ' <span class="small faint">@' + esc(user.username) + "</span>" : "") +
@@ -965,14 +998,21 @@ function renderClients(host) {
         "<td>" + (active && active.followUpDate ? '<span class="chip ' + (active.followUpDate <= pipelineToday() ? "bad" : "") + '">' + pipelineDate(active.followUpDate) + (active.followUpTime ? " · " + esc(active.followUpTime) : "") + "</span>" : "—") + "</td>" +
         '<td class="right small faint nowrap">' + ago(user.lastSeenAt) + "</td></tr>";
     }).join("") : '<tr><td colspan="5"><div class="empty"><b>Никого не найдено</b></div></td></tr>') +
-    "</tbody></table></div></div>";
+    "</tbody></table></div>" +
+    (rows.length > clientsShown
+      ? '<div class="card-body row"><span class="small faint">Показаны первые ' + num(clientsShown) + " из " + num(rows.length) + '</span><div class="grow"></div><button class="btn secondary small" id="moreClients" type="button">Показать ещё ' + num(Math.min(CLIENTS_PAGE, rows.length - clientsShown)) + "</button></div>"
+      : "") +
+    "</div>";
   var search = host.querySelector("#clientSearch");
   search.oninput = function () {
     clientSearch = search.value.trim();
+    clientsShown = CLIENTS_PAGE;
     clearTimeout(search._timer);
     search._timer = setTimeout(function () { renderClients(host); host.querySelector("#clientSearch").focus(); }, 250);
   };
-  host.querySelector("#clientStage").onchange = function (event) { clientStageFilter = event.target.value; renderClients(host); };
+  var moreClients = host.querySelector("#moreClients");
+  if (moreClients) moreClients.onclick = function () { clientsShown += CLIENTS_PAGE; renderClients(host); };
+  host.querySelector("#clientStage").onchange = function (event) { clientStageFilter = event.target.value; clientsShown = CLIENTS_PAGE; renderClients(host); };
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     row.onclick = function () { openClient(row.dataset.id); };
   });

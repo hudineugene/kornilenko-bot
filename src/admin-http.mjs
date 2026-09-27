@@ -565,13 +565,40 @@ function safeState(session) {
   // В панель уходит вся карточка клиента, кроме истории действий: из неё нужны
   // только реакции для ленты в «Обзоре». Остальное — лишний вес в каждом
   // обновлении экрана.
-  const users = Object.values(data.users)
+  const panelUser = (user) => ({
+    ...user,
+    activity: (Array.isArray(user.activity) ? user.activity : []).filter((item) => item && item.kind === 'reaction').slice(-10),
+  });
+  const recent = Object.values(data.users)
     .sort((a, b) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)))
-    .slice(0, 500)
-    .map((user) => ({
-      ...user,
-      activity: (Array.isArray(user.activity) ? user.activity : []).filter((item) => item && item.kind === 'reaction').slice(-10),
-    }));
+    .slice(0, 500);
+  const shown = new Set(recent.map((user) => String(user.id)));
+  // Клиент, который давно не писал, может оставаться в переписке и в задачах.
+  // Без его карточки панель показывала обращение без имени, телефона и языка.
+  const mentioned = [];
+  for (const inquiry of data.inquiries) {
+    const id = String(inquiry.userId);
+    if (shown.has(id)) continue;
+    const user = data.users[id];
+    shown.add(id);
+    if (!user) continue;
+    mentioned.push({
+      id: String(user.id),
+      chatId: user.chatId,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      username: user.username || '',
+      phone: user.phone || '',
+      preferredLanguage: user.preferredLanguage || '',
+      source: user.source || '',
+      blocked: Boolean(user.blocked),
+      lastSeenAt: user.lastSeenAt || '',
+      // Карточка неполная: подробности панель запросит, когда её откроют.
+      partial: true,
+      activity: [],
+    });
+  }
+  const users = recent.map(panelUser).concat(mentioned);
   const unreadUsers = new Set(data.inquiries.filter(inquiryUnread).map((item) => String(item.userId)));
   const notifications = adminNotifications();
   return {
@@ -628,7 +655,14 @@ function safeState(session) {
       inquiriesAfter: Array.isArray(inquiryUserIds) ? inquiryUserIds.length : 0,
       unsubscribes: Array.isArray(unsubscribedUserIds) ? unsubscribedUserIds.length : 0,
     })),
-    inquiries: data.inquiries,
+    // Переписка обращения — самая тяжёлая часть состояния: она нужна только
+    // для беседы, которую открыли, и запрашивается отдельно
+    // (/api/conversations/:id/timeline). Здесь остаётся всё остальное.
+    inquiries: data.inquiries.map(({ messages, ...item }) => ({
+      ...item,
+      messageCount: Array.isArray(messages) ? messages.length : 0,
+      lastMessageAt: Array.isArray(messages) && messages.length ? messages[messages.length - 1].createdAt || '' : '',
+    })),
     replyTemplates: data.replyTemplates || [],
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
     unreadConversationCount: unreadUsers.size,

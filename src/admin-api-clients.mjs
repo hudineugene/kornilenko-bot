@@ -252,6 +252,25 @@ async function handleClientsApi(req, res, url) {
     return json(res, 200, { ok: true, removed, left: data.inquiries.length });
   }
 
+  // Переписка беседы: панель просит её, когда беседу открывают, — в общем
+  // состоянии её больше нет, иначе каждое обновление экрана тянуло бы всю
+  // переписку всех клиентов.
+  const conversationTimelineMatch = url.pathname.match(/^\/api\/conversations\/([^/]+)\/timeline$/);
+  if (conversationTimelineMatch && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const userId = decodeURIComponent(conversationTimelineMatch[1]);
+    const messages = [];
+    for (const inquiry of data.inquiries) {
+      if (String(inquiry.userId) !== userId) continue;
+      for (const message of Array.isArray(inquiry.messages) ? inquiry.messages : []) {
+        messages.push({ ...message, inquiryId: inquiry.id });
+      }
+    }
+    messages.sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
+    return json(res, 200, { userId, messages: messages.slice(-400) });
+  }
+
   const conversationReadMatch = url.pathname.match(/^\/api\/conversations\/([^/]+)\/read$/);
   if (conversationReadMatch && req.method === 'POST') {
     const session = requireAuth(req, res, true);
