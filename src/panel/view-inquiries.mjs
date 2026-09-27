@@ -463,18 +463,29 @@ function renderInquiryList(host) {
 }
 
 // Уборка списка: закрытые, отвеченные или всё подряд, с отсечкой по возрасту.
+// Те же правила, что и у бота: закрытые, и «отвеченные» — только там, где
+// ответ отправлен, клиент не ждёт и обращение не в работе.
+function cleanupMatches(item, scope) {
+  if (scope === "all") return true;
+  if (item.status === "closed") return true;
+  if (scope === "closed") return false;
+  return item.status !== "in_progress" && !awaitsReply(item) && (item.replies || []).length > 0;
+}
+
 function openCleanup() {
   var all = state.inquiries || [];
-  var closed = all.filter(function (item) { return item.status === "closed"; }).length;
+  var countFor = function (scope) { return all.filter(function (item) { return cleanupMatches(item, scope); }).length; };
+  var closed = countFor("closed");
   openDialog({
     title: "Очистить обращения",
     body: '<div class="stack">' +
       '<p class="muted small">Обращения удаляются из панели без возможности восстановления. Клиенты и переписка в Telegram остаются.</p>' +
       '<div class="field"><label for="cleanScope">Какие удалить</label><select id="cleanScope">' +
         '<option value="closed">Только закрытые (' + closed + ")</option>" +
-        '<option value="answered">Закрытые и отвеченные</option>' +
-        '<option value="all">Все, включая ждущие ответа (' + all.length + ")</option>" +
+        '<option value="answered">Закрытые и отвеченные (' + countFor("answered") + ")</option>" +
+        '<option value="all">Все, включая ждущие ответа и дела в работе (' + all.length + ")</option>" +
       "</select></div>" +
+      '<div class="hint">«Закрытые и отвеченные» не трогают обращения в работе и те, где клиент ждёт ответа.</div>' +
       '<div class="field"><label for="cleanAge">Старше чем</label><select id="cleanAge">' +
         '<option value="0">любого возраста</option><option value="30">30 дней</option><option value="90" selected>90 дней</option><option value="180">180 дней</option><option value="365">года</option>' +
       "</select></div>" +
@@ -487,8 +498,7 @@ function openCleanup() {
         var before = days ? Date.now() - days * 864e5 : Infinity;
         return all.filter(function (item) {
           var old = (Date.parse(item.updatedAt || item.createdAt) || 0) < before;
-          var matches = scope === "all" ? true : scope === "closed" ? item.status === "closed" : item.status !== "new";
-          return matches && old;
+          return cleanupMatches(item, scope) && old;
         }).length;
       }
       function preview() { dialog.querySelector("#cleanPreview").textContent = "Будет удалено: " + matching(); }

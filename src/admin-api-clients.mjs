@@ -9,7 +9,7 @@ import { recordError } from './analytics.mjs';
 import { eraseUserData, markUnavailable, userByChatId, userById, userDataExport } from './users.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
-import { appendInquiryMessage, inquiryTimelineMessage } from './inquiries.mjs';
+import { appendInquiryMessage, awaitingReply, inquiryTimelineMessage } from './inquiries.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
 import { json, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
@@ -30,6 +30,18 @@ function attachmentDelivery(mimeType) {
   const type = cleanText(mimeType, 100).toLowerCase();
   if (INLINE_SAFE_TYPES.test(type)) return { type, disposition: 'inline' };
   return { type: 'application/octet-stream', disposition: 'attachment' };
+}
+
+// «Закрытые и отвеченные» — это закрытые плюс те, где ответ отправлен, клиент
+// ничего не ждёт и обращение не взято в работу. Раньше сюда попадало всё, что
+// не «новое», то есть и дела в работе, и переписка, где ждут ответа: нажатие
+// «Очистить» стирало живую работу.
+function cleanupMatches(inquiry, scope) {
+  if (scope === 'all') return true;
+  if (inquiry.status === 'closed') return true;
+  if (scope === 'closed') return false;
+  const replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
+  return inquiry.status !== 'in_progress' && !awaitingReply(inquiry) && replies.length > 0;
 }
 
 async function handleClientsApi(req, res, url) {
@@ -232,8 +244,7 @@ async function handleClientsApi(req, res, url) {
     let removed = 0;
     for (const inquiry of data.inquiries) {
       const old = (Date.parse(inquiry.updatedAt || inquiry.createdAt) || 0) < before;
-      const matches = scope === 'all' ? true : scope === 'closed' ? inquiry.status === 'closed' : inquiry.status !== 'new';
-      if (matches && old) removed += 1;
+      if (cleanupMatches(inquiry, scope) && old) removed += 1;
       else keep.push(inquiry);
     }
     data.inquiries = keep;
