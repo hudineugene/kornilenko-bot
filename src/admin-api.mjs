@@ -18,7 +18,7 @@ import { configureBotCommands } from './menus.mjs';
 import { validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { restartPolling } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
-import { BOT_TOKEN_PATTERN, DOWNLOAD_TICKET_MS, MAX_UNAUTHENTICATED_BODY_BYTES, clientAddress, headerPassword, issueDownloadTicket, passwordAccepted, useDownloadTicket, createSession, isLocalRequest, json, loginAttempts, parseUploadedImage, readBackup, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
+import { BOT_TOKEN_PATTERN, DOWNLOAD_TICKET_MS, MAX_UNAUTHENTICATED_BODY_BYTES, clientAddress, headerPassword, issueDownloadTicket, passwordAccepted, useDownloadTicket, createSession, isLocalRequest, json, ownPageRequest, loginAttempts, parseUploadedImage, readBackup, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
 import { REMOTE_LOGIN_CODE_ATTEMPTS, pendingRemoteLogins, remoteLoginCodeHash, startDecoyRemoteLogin, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
 import { attemptKey, loginAllowed, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { handleGroupApi } from './group-api.mjs';
@@ -69,6 +69,8 @@ async function handleApi(req, res, url) {
   if (url.pathname === '/api/setup' && req.method === 'POST') {
     if (configured()) return json(res, 409, { error: 'Первичная настройка уже выполнена' });
     if (!isLocalRequest(req)) return json(res, 403, { error: 'Настройка доступна только с этого компьютера' });
+    // Иначе чужая страница в браузере могла бы настроить бота на свой токен.
+    if (!ownPageRequest(req)) return json(res, 403, { error: 'Запрос пришёл со стороннего сайта' });
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
     const token = cleanText(body.token, 256);
     const password = String(body.password || '');
@@ -96,6 +98,9 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === '/api/login' && req.method === 'POST') {
     if (!configured()) return json(res, 409, { error: 'Сначала завершите настройку' });
+    // Проверяем до счётчика попыток: иначе чужая страница могла бы забить
+    // счётчик и запереть вход владельцу.
+    if (!ownPageRequest(req)) return json(res, 403, { error: 'Запрос пришёл со стороннего сайта' });
     const ip = clientAddress(req);
     if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
@@ -120,6 +125,7 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === '/api/login/verify' && req.method === 'POST') {
+    if (!ownPageRequest(req)) return json(res, 403, { error: 'Запрос пришёл со стороннего сайта' });
     const ip = clientAddress(req);
     if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);

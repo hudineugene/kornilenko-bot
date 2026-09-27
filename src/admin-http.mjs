@@ -122,6 +122,27 @@ function createSession(res, req = null) {
 
 // Blocks DNS rebinding: a foreign site's domain that resolves to this
 // computer must not be able to talk to the panel from the user's browser.
+// Запросы, где нет ни сессии, ни защитного кода (первичная настройка, вход),
+// должна присылать сама страница панели. Браузер честно сообщает, откуда пришёл
+// запрос: Sec-Fetch-Site у своей страницы — same-origin, у чужой — cross-site,
+// а Origin совпадает с адресом панели. Команды из терминала этих заголовков не
+// присылают вовсе — для них ничего не меняется, подделать браузерный запрос
+// они и так не могут.
+function ownPageRequest(req) {
+  const headers = (req && req.headers) || {};
+  const site = String(headers['sec-fetch-site'] || '').toLowerCase();
+  if (site && !['same-origin', 'same-site', 'none'].includes(site)) return false;
+  const origin = String(headers.origin || '').trim();
+  if (!origin || origin.toLowerCase() === 'null') return true;
+  let host;
+  try {
+    host = new URL(origin).host.toLowerCase();
+  } catch {
+    return false;
+  }
+  return host === String(headers.host || '').toLowerCase();
+}
+
 function hostAllowed(req) {
   let hostname;
   try {
@@ -613,6 +634,7 @@ function safeState(session) {
 }
 
 export {
+  ownPageRequest,
   DOWNLOAD_TICKET_MS,
   headerPassword,
   issueDownloadTicket,
