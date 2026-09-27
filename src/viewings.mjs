@@ -56,6 +56,28 @@ function monthFromWord(word) {
 // A calendar date from a free-text answer: "25.09", "25/09/2026",
 // "25 сентября", "September 25", "25 de septiembre", "завтра".
 // Only dates from today up to a year ahead count; otherwise ''.
+// Слово, которое уже называет день: «завтра», «в пятницу», «el martes». Если
+// день назван словом, числа рядом — это время.
+const NAMED_DAY = /сегодня|завтра|послезавтра|понедельник|вторник|сред[уа]|четверг|пятниц|суббот|воскресен|today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|hoy|lunes|martes|mi[ée]rcoles|jueves|viernes|s[áa]bado|domingo/;
+// Предлог перед числами: «в 9.10», «с 10», «at 5», «a las 17».
+const TIME_BEFORE = /(?:^|[^a-zа-яё])(?:в|с|до|к|at|from|to|a\s+las|de)\s*$/u;
+// Отметка времени сразу после чисел: «10-11am», «9.10 ч», «17.00 часов».
+const TIME_AFTER = /^\s*(?:am|pm|a\.m|p\.m|h\b|ч\b|час)/u;
+
+function looksLikeTime(value, index, whole, first, separator, second) {
+  const hour = Number(first);
+  const minute = Number(second);
+  if (hour > 24 || minute > 59) return false;
+  const before = value.slice(0, index);
+  const after = value.slice(index + whole.length);
+  if (TIME_AFTER.test(after)) return true;
+  // День уже назван словом — значит числа про время.
+  if (NAMED_DAY.test(value)) return true;
+  if (TIME_BEFORE.test(before)) return true;
+  // «10-12» без года: часы через дефис пишут куда чаще, чем дату.
+  return separator === '-';
+}
+
 function parseViewingDate(text, now = new Date()) {
   const value = String(text || '').toLowerCase();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -73,10 +95,15 @@ function parseViewingDate(text, now = new Date()) {
     if (date.getFullYear() !== fullYear || date.getMonth() !== month - 1 || date.getDate() !== day) return '';
     return date < today || date > limit ? '' : localDayKey(date);
   };
-  const numeric = value.match(/(?<!\d)(\d{1,2})[./-](\d{1,2})(?:[./-](\d{4}|\d{2}))?(?!\d)/);
-  if (numeric) {
-    const year = numeric[3] ? Number(numeric[3].length === 2 ? '20' + numeric[3] : numeric[3]) : 0;
-    const found = calendarDay(Number(numeric[1]), Number(numeric[2]), year);
+  // Два числа через точку или дефис — это не обязательно дата. «с 10-12»,
+  // «10-11am», «в 9.10» люди пишут про время, и бот принимал их за 10 декабря,
+  // 10 ноября и 9 октября: клиент видел в сводке свой же текст и ошибки не
+  // замечал, а менеджеру уходила чужая дата.
+  for (const match of value.matchAll(/(?<!\d)(\d{1,2})([./-])(\d{1,2})(?:[./-](\d{4}|\d{2}))?(?!\d)/g)) {
+    const [whole, first, separator, second, yearText] = match;
+    const year = yearText ? Number(yearText.length === 2 ? '20' + yearText : yearText) : 0;
+    if (!year && looksLikeTime(value, match.index, whole, first, separator, second)) continue;
+    const found = calendarDay(Number(first), Number(second), year);
     // "16.00" is a time, not a date: keep looking.
     if (found) return found;
   }

@@ -83,6 +83,22 @@ test.describe('dates from the viewing form', () => {
     assert.equal(bot.parseViewingDate('05.01', now), '2027-01-05', 'January written in September is next year');
   });
 
+  test('время не превращается в дату', () => {
+    // «с 10-12» — это часы, а не 10 декабря: бот показывал клиенту его же
+    // текст, а менеджеру отправлял чужую дату и ставил напоминание не на тот
+    // день.
+    assert.equal(bot.parseViewingDate('в пятницу с 10-12', now), '', 'интервал часов — не дата');
+    assert.equal(bot.parseViewingDate('10-12', now), '', 'и сам по себе тоже');
+    assert.equal(bot.parseViewingDate('tomorrow 10-11am', now), '2026-09-19', 'день из слова, а не из часов');
+    assert.equal(bot.parseViewingDate('завтра в 9.10', now), '2026-09-19');
+    assert.equal(bot.parseViewingDate('в 9.10', now), '', 'время с предлогом — не 9 октября');
+    assert.equal(bot.parseViewingDate('сегодня 17.00', now), '2026-09-18');
+    assert.equal(bot.parseViewingDate('в субботу 14-16', now), '', 'день недели бот не распознаёт — переспросит');
+    // Настоящие даты по-прежнему читаются.
+    assert.equal(bot.parseViewingDate('10-12-2026', now), '2026-12-10', 'дата с годом остаётся датой');
+    assert.equal(bot.parseViewingDate('25.09', now), '2026-09-25');
+  });
+
   test('"tomorrow" in the form is stored as a date, "at the weekend" is not', async () => {
     const chat = createChat();
     const tomorrow = await requestViewing(chat, 1, 1);
