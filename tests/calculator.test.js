@@ -10,7 +10,7 @@ const { bot, telegram, callbacksOf, createChat, property, resetData, cleanup } =
 const telegramStub = global.fetch;
 global.fetch = (url, init) => (String(url).startsWith('http://127.0.0.1') ? realFetch(url, init) : telegramStub(url, init));
 
-const RATES = { enabled: true, resaleTaxPercent: 10, newBuildTaxPercent: 10, stampDutyPercent: 1.5, otherCostsPercent: 1.5, downPaymentPercent: 30, interestPercent: 4, years: 25 };
+const RATES = { enabled: true, resaleTaxPercent: 10, newBuildTaxPercent: 10, businessTaxPercent: 21, stampDutyPercent: 1.5, otherCostsPercent: 1.5, downPaymentPercent: 30, interestPercent: 4, years: 25 };
 
 test.beforeEach(() => resetData((data) => {
   data.config.calculator = { ...RATES };
@@ -18,6 +18,10 @@ test.beforeEach(() => resetData((data) => {
   data.objects.push(property('newbuild-02', 'Новостройка в Финестрате', 'active', { dealType: 'sale', propertyType: 'newbuild', priceValue: 300000, currency: 'EUR' }));
   data.objects.push(property('rent-03', 'Аренда у моря', 'active', { dealType: 'rent', propertyType: 'apartment', priceValue: 1200, pricePeriod: 'month' }));
   data.objects.push(property('on-request-04', 'Вилла, цена по запросу', 'active', { dealType: 'sale', propertyType: 'villa' }));
+  // Квартира без ремонта: состояние «новое», но продаёт её частное лицо.
+  data.objects.push(property('fresh-05', 'Квартира без ремонта', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 200000, currency: 'EUR', condition: 'new' }));
+  data.objects.push(property('land-06', 'Участок под застройку', 'active', { dealType: 'sale', propertyType: 'land', priceValue: 150000, currency: 'EUR', plotArea: 800 }));
+  data.objects.push(property('shop-07', 'Помещение на первой линии', 'active', { dealType: 'sale', propertyType: 'commercial', priceValue: 250000, currency: 'EUR' }));
 }));
 test.after(cleanup);
 
@@ -96,4 +100,48 @@ test('the panel saves the rates and checks them', async () => {
   } finally {
     await new Promise((resolve) => bot.server.close(resolve));
   }
+});
+
+test('состояние «новое» у вторички — это ITP, а не НДС новостройки', async () => {
+  const { estimateText } = await import('../src/calculator.mjs');
+  const record = bot.getData().objects.find((item) => item.id === 'fresh-05');
+  const estimate = bot.purchaseEstimate(record);
+  assert.equal(estimate.newBuild, false, 'квартиру без ремонта продаёт частное лицо');
+  assert.deepEqual(estimate.costs.map((item) => item.key), ['resaleTax', 'otherCosts']);
+  const text = estimateText(record, 'ru');
+  assert.match(text, /ITP/);
+  assert.doesNotMatch(text, /IVA/);
+});
+
+test('участок и коммерция считаются по своей ставке IVA с припиской', async () => {
+  const { estimateText } = await import('../src/calculator.mjs');
+  const data = bot.getData();
+  for (const id of ['land-06', 'shop-07']) {
+    const record = data.objects.find((item) => item.id === id);
+    const estimate = bot.purchaseEstimate(record);
+    assert.equal(estimate.business, true, id + ': продаёт компания');
+    assert.deepEqual(estimate.costs.map((item) => item.key), ['businessTax', 'stampDuty', 'otherCosts'], id);
+    assert.equal(estimate.costs[0].percent, 21, id + ': ставка 21 %');
+    const text = estimateText(record, 'ru');
+    assert.match(text, /IVA/, id);
+    assert.match(text, /частное лицо/, id + ': клиент предупреждён про ITP у частного продавца');
+  }
+});
+
+test('новостройка и стройка остаются на IVA', () => {
+  const data = bot.getData();
+  const newBuild = data.objects.find((item) => item.id === 'newbuild-02');
+  assert.equal(bot.purchaseEstimate(newBuild).newBuild, true);
+  const building = { ...data.objects.find((item) => item.id === 'resale-01'), condition: 'under_construction' };
+  assert.equal(bot.purchaseEstimate(building).newBuild, true, 'строящийся объект продаёт застройщик');
+});
+
+test('панель шлёт те же имена полей, что проверяет бот', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  // Панель слала mortgageRatePercent и mortgageYears, а бот ждал interestPercent
+  // и years — из-за этого настройки калькулятора не сохранялись вовсе.
+  for (const field of ['resaleTaxPercent', 'newBuildTaxPercent', 'businessTaxPercent', 'stampDutyPercent', 'otherCostsPercent', 'downPaymentPercent', 'interestPercent', 'years']) {
+    assert.ok(PANEL_HTML.includes('"' + field + ':'), 'в панели нет поля ' + field);
+  }
+  assert.ok(!PANEL_HTML.includes('mortgageRatePercent'), 'старое имя поля убрано');
 });

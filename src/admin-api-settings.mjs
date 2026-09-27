@@ -375,6 +375,7 @@ function refreshStaffCommands(previousChatIds = []) {
     const limits = {
       resaleTaxPercent: ['Налог на вторичное жильё', 0, 30],
       newBuildTaxPercent: ['НДС на новостройку', 0, 30],
+      businessTaxPercent: ['НДС на участок и коммерцию', 0, 30],
       stampDutyPercent: ['Гербовый сбор', 0, 10],
       otherCostsPercent: ['Нотариус и прочие расходы', 0, 10],
       downPaymentPercent: ['Первый взнос', 0, 100],

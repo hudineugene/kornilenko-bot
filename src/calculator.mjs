@@ -14,9 +14,21 @@ function calculatorSettings() {
   return normalizeCalculator(data.config && data.config.calculator);
 }
 
-// A new build pays VAT and stamp duty; a resale pays the transfer tax.
+// Новостройка — это первая продажа от застройщика: платится IVA и гербовый
+// сбор. Состояние «новое» у обычной квартиры этого не означает: квартиру без
+// ремонта продаёт частное лицо, и там ITP. Раньше такой объект считался
+// новостройкой, и расчёт показывал клиенту не тот налог.
 function isNewBuild(record) {
-  return record.propertyType === 'newbuild' || record.condition === 'new' || record.condition === 'under_construction';
+  return record.propertyType === 'newbuild' || record.condition === 'under_construction';
+}
+
+// Участок и коммерческий объект продаёт, как правило, компания: там IVA 21 %
+// вместо 10 % и гербовый сбор сверху. У частного продавца вместо IVA был бы
+// ITP — об этом бот честно предупреждает в расчёте.
+const BUSINESS_RATE_TYPES = ['land', 'commercial'];
+
+function businessRateApplies(record) {
+  return BUSINESS_RATE_TYPES.includes(record && record.propertyType);
 }
 
 function calculatorAvailable(record, settings = calculatorSettings()) {
@@ -33,10 +45,13 @@ function monthlyPayment(loan, interestPercent, years) {
 
 function purchaseEstimate(record, settings = calculatorSettings()) {
   const price = Number(record.priceValue);
+  const business = businessRateApplies(record);
   const newBuild = isNewBuild(record);
-  const lines = newBuild
-    ? [['newBuildTax', settings.newBuildTaxPercent], ['stampDuty', settings.stampDutyPercent]]
-    : [['resaleTax', settings.resaleTaxPercent]];
+  const lines = business
+    ? [['businessTax', settings.businessTaxPercent], ['stampDuty', settings.stampDutyPercent]]
+    : newBuild
+      ? [['newBuildTax', settings.newBuildTaxPercent], ['stampDuty', settings.stampDutyPercent]]
+      : [['resaleTax', settings.resaleTaxPercent]];
   lines.push(['otherCosts', settings.otherCostsPercent]);
   const costs = lines.filter(([, percent]) => percent > 0).map(([key, percent]) => ({ key, percent, amount: price * percent / 100 }));
   const costsTotal = costs.reduce((sum, item) => sum + item.amount, 0);
@@ -45,6 +60,7 @@ function purchaseEstimate(record, settings = calculatorSettings()) {
   return {
     price,
     newBuild,
+    business,
     costs,
     costsTotal,
     total: price + costsTotal,
@@ -88,7 +104,9 @@ function estimateText(record, language, estimate = purchaseEstimate(record)) {
         + ': ≈ ' + money(estimate.monthly, currency, language) + ' ' + copy.monthly,
     );
   }
-  lines.push('💼 ' + copy.upfront + ': ≈ ' + money(estimate.upfront, currency, language), '', copy.disclaimer);
+  lines.push('💼 ' + copy.upfront + ': ≈ ' + money(estimate.upfront, currency, language), '');
+  if (estimate.business) lines.push(copy.businessNote);
+  lines.push(copy.disclaimer);
   return lines.filter((line, index) => line !== '' || index > 0).join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
@@ -117,6 +135,7 @@ async function handleCalculatorCallback(query, token) {
 }
 
 export {
+  businessRateApplies,
   calculatorAvailable,
   calculatorButton,
   calculatorSettings,

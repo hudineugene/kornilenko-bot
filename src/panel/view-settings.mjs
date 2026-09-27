@@ -222,11 +222,13 @@ function renderWork(host) {
     '<div class="card"><header><h3>Калькулятор покупки</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="calcOn"' + (calculator.enabled ? " checked" : "") + "> показывать расчёт расходов в карточке</label>" +
       '<div class="grid cols-2">' +
-        ["resaleTaxPercent:Налог, вторичка %", "newBuildTaxPercent:Налог, новостройка %", "stampDutyPercent:Гербовый сбор %", "otherCostsPercent:Прочие расходы %", "downPaymentPercent:Первый взнос %", "mortgageRatePercent:Ставка ипотеки %", "mortgageYears:Срок ипотеки, лет"].map(function (pair) {
+        ["resaleTaxPercent:Налог, вторичка (ITP) %", "newBuildTaxPercent:Налог, новостройка (IVA) %", "businessTaxPercent:Налог, участок и коммерция (IVA) %", "stampDutyPercent:Гербовый сбор (AJD) %", "otherCostsPercent:Прочие расходы %", "downPaymentPercent:Первый взнос %", "interestPercent:Ставка ипотеки %", "years:Срок ипотеки, лет"].map(function (pair) {
           var parts = pair.split(":");
           return '<div class="field"><label>' + parts[1] + '</label><input data-calc="' + parts[0] + '" type="number" step="0.1" value="' + esc(calculator[parts[0]] != null ? calculator[parts[0]] : "") + '"></div>';
         }).join("") +
-      "</div><button class=\"btn secondary small\" id=\"saveCalc\" type=\"button\">Сохранить</button>" +
+      "</div>" +
+      '<div class="hint">Какую ставку бот применяет: квартира, дом или вилла со статусом «новостройка» либо «строится» — IVA и гербовый сбор; те же объекты в остальных состояниях (включая «новое») — ITP; участок и коммерция — IVA как при продаже от компании, о чём клиент видит приписку. Ставки перед включением калькулятора сверьте с гестором.</div>' +
+      "<button class=\"btn secondary small\" id=\"saveCalc\" type=\"button\">Сохранить</button>" +
     "</div></div>" +
     '<div class="card"><header><h3>Напоминания</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="remindHours">Напомнить об обращении без ответа</label><select id="remindHours">' +
