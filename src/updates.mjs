@@ -37,6 +37,33 @@ function findRule(text, language) {
   });
 }
 
+// --- Альбом от клиента -------------------------------------------------------
+// Телеграм присылает альбом отдельными сообщениями с общим media_group_id, с
+// паузой в доли секунды между ними. Раньше каждое проходило весь путь: своё
+// уведомление менеджеру и свой ответ клиенту. Десять фотографий — больше
+// двадцати сообщений, и Telegram начинал отбрасывать их по лимиту на чат.
+// Ждём, пока придут все части, и дальше ведём альбом как одно сообщение.
+const ALBUM_WINDOW_MS = 2500;
+const ALBUM_MAX_PARTS = 50;
+const pendingAlbums = new Map();
+
+function collectAlbumMessage(message, handle) {
+  const key = String(message.chat.id) + ':' + String(message.media_group_id);
+  const album = pendingAlbums.get(key) || { parts: [], timer: null };
+  if (album.parts.length < ALBUM_MAX_PARTS) album.parts.push(message);
+  if (album.timer) clearTimeout(album.timer);
+  album.timer = setTimeout(() => {
+    pendingAlbums.delete(key);
+    const [first, ...rest] = album.parts;
+    if (!first) return;
+    const caption = album.parts.map((part) => cleanText(part.caption, 4000)).filter(Boolean).join('\n');
+    Promise.resolve(handle({ ...first, caption, albumMessageIds: rest.map((part) => part.message_id) }))
+      .catch((error) => recordError('Альбом от клиента', error));
+  }, ALBUM_WINDOW_MS);
+  if (album.timer.unref) album.timer.unref();
+  pendingAlbums.set(key, album);
+}
+
 async function handleUpdate(update, token) {
   // The bot was added to a group, promoted or removed.
   if (update.my_chat_member) {
@@ -129,6 +156,12 @@ async function handleUpdate(update, token) {
   const adminOwnChat = Boolean(adminChatFor(message.chat.id));
 
   const user = normalizeUser(message.from, message.chat.id);
+  // Части альбома собираются в одно сообщение и приходят сюда ещё раз уже
+  // вместе (albumMessageIds), поэтому проверку повторов они проходят один раз.
+  if (message.media_group_id && !message.albumMessageIds && !adminOwnChat) {
+    collectAlbumMessage(message, (assembled) => handleUpdate({ ...update, message: assembled }, token));
+    return;
+  }
   if (duplicateInboundMessage(user, message.message_id)) return;
   recordBroadcastResponse(user, 'response');
   const expiredPending = pendingActionExpired(user) ? user.pendingAction : null;

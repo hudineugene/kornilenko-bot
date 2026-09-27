@@ -504,8 +504,39 @@ function selectionMatchingAttention(inquiry) {
 async function copyUserMessageToAdministrator(message, token, inquiry = null) {
   const copies = new Map();
   if (!message || !message.chat || adminChatFor(message.chat.id)) return copies;
+  // Альбом уходит менеджеру одним запросом и приходит альбомом же: иначе это
+  // десять отдельных сообщений подряд, а у Telegram есть предел на чат.
+  const album = Array.isArray(message.albumMessageIds) ? message.albumMessageIds : [];
   for (const chat of inquiryChats()) {
     try {
+      if (album.length) {
+        const all = [message.message_id, ...album];
+        let copiedAlbum = null;
+        try {
+          copiedAlbum = await telegramRequest(token, 'copyMessages', { chat_id: chat.chatId, from_chat_id: message.chat.id, message_ids: all });
+        } catch (error) {
+          // Старый Telegram не знает копирования пачкой: копируем по одному,
+          // чтобы менеджер всё-таки увидел все снимки.
+          recordError('Копирование альбома', error);
+          copiedAlbum = [];
+          for (const id of all) {
+            const one = await telegramRequest(token, 'copyMessage', { chat_id: chat.chatId, from_chat_id: message.chat.id, message_id: id }).catch(() => null);
+            if (one) copiedAlbum.push(one);
+          }
+        }
+        const ids = (Array.isArray(copiedAlbum) ? copiedAlbum : [])
+          .map((item) => Number(item && item.message_id))
+          .filter((id) => Number.isFinite(id));
+        if (ids.length) {
+          rememberAdminReplyTarget(ids, {
+            chatId: message.chat.id,
+            inquiryId: inquiry ? inquiry.id : '',
+            sourceMessageId: message.message_id,
+          }, chat.chatId);
+          copies.set(String(chat.chatId), ids[ids.length - 1]);
+        }
+        continue;
+      }
       const copied = await telegramRequest(token, 'copyMessage', {
         chat_id: chat.chatId,
         from_chat_id: message.chat.id,
@@ -530,6 +561,13 @@ async function copyUserMessageToAdministrator(message, token, inquiry = null) {
 function messageSummary(message) {
   if (!message) return 'Сообщение';
   if (message.text) return cleanText(message.text, 4000);
+  // Альбом: подпись есть только у одного снимка, остальное — «ещё N файлов».
+  const albumCount = Array.isArray(message.albumMessageIds) ? message.albumMessageIds.length + 1 : 0;
+  if (albumCount > 1) {
+    const kind = message.video ? 'файлов' : 'фотографий';
+    const title = 'Альбом, ' + kind + ': ' + albumCount;
+    return message.caption ? title + '\n' + cleanText(message.caption, 4000) : title;
+  }
   if (message.caption) return cleanText(message.caption, 4000);
   if (message.photo) return 'Фотография';
   if (message.video) return 'Видео';
