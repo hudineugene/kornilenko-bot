@@ -12,6 +12,7 @@ import { sendMessage, telegramRequest } from './telegram.mjs';
 import { localized } from './catalog.mjs';
 import { acknowledgeCallback, propertyRequestText } from './sections.mjs';
 import { recordBroadcastResponse, userUnavailableError } from './broadcasts.mjs';
+import { sendStatusNotice } from './status.mjs';
 
 const MAX_INQUIRIES = 5000;
 const MAX_INQUIRY_MESSAGES = 200;
@@ -96,9 +97,15 @@ function withinRateLimit(store, key, limit, now = Date.now()) {
 
 // Closed inquiries are dropped first, so a flood of new messages cannot push
 // out open requests from other clients.
+//
+// Раньше это происходило совсем молча: когда закрытых не хватало, под нож
+// уходили и обращения в работе — клиент ждёт ответа, а его карточки в панели
+// уже нет. Теперь бот считает, сколько живых обращений пришлось удалить, и
+// сообщает об этом владельцу.
 function trimInquiries() {
   let excess = data.inquiries.length - MAX_INQUIRIES;
-  if (excess <= 0) return;
+  if (excess <= 0) return { removed: 0, open: 0 };
+  const total = excess;
   const kept = [];
   for (let index = data.inquiries.length - 1; index >= 0; index -= 1) {
     const item = data.inquiries[index];
@@ -109,8 +116,30 @@ function trimInquiries() {
     kept.push(item);
   }
   kept.reverse();
+  // Закрытых не хватило: дальше уходят самые старые из живых.
+  const openRemoved = Math.max(0, excess);
   if (excess > 0) kept.length -= excess;
   data.inquiries = kept;
+  if (openRemoved > 0) reportInquiryOverflow(openRemoved);
+  return { removed: total, open: openRemoved };
+}
+
+// Сообщение владельцу — не чаще раза в сутки, чтобы поток обращений не
+// превратился в поток предупреждений.
+function reportInquiryOverflow(openRemoved, now = new Date()) {
+  const today = localDayKey(now);
+  recordError('Предел обращений', new Error('Список обращений упёрся в предел ' + MAX_INQUIRIES
+    + ': удалено самых старых обращений в работе — ' + openRemoved));
+  if (data.lastInquiryOverflowFor === today) return;
+  data.lastInquiryOverflowFor = today;
+  scheduleSave();
+  void sendStatusNotice([
+    '⚠️ Обращений стало больше ' + MAX_INQUIRIES,
+    '',
+    'Место закончилось, и самые старые обращения в работе пришлось удалить: ' + openRemoved + '.',
+    'Закройте отработанные обращения или очистите старые в панели: «Переписка» → «Очистить».',
+    'Перед очисткой их можно выгрузить в Excel — там же, кнопкой «Выгрузить в Excel».',
+  ].join('\n')).catch(() => {});
 }
 
 // Messages sent in a row go into the client's latest open inquiry instead of

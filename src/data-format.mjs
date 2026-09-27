@@ -941,7 +941,19 @@ function normalizeLoadedData(parsed) {
       updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
       // The client's last message, to tell whose turn it is.
       clientMessageAt: cleanText(item.clientMessageAt, 40) || item.createdAt || '',
-    })).slice(0, 5000) : [];
+    })) : [];
+    // Если обращений больше предела, в первую очередь сохраняем живые: молча
+    // потерять обращение, где клиент ждёт ответа, нельзя.
+    const MAX_STORED_INQUIRIES = 5000;
+    if (inquiries.length > MAX_STORED_INQUIRIES) {
+      const open = inquiries.filter((item) => item.status !== 'closed');
+      const closed = inquiries.filter((item) => item.status === 'closed');
+      const kept = open.slice(0, MAX_STORED_INQUIRIES)
+        .concat(closed.slice(0, Math.max(0, MAX_STORED_INQUIRIES - open.length)));
+      kept.sort((first, second) => (Date.parse(second.createdAt) || 0) - (Date.parse(first.createdAt) || 0));
+      inquiries.length = 0;
+      inquiries.push(...kept);
+    }
     const normalized = {
       ...clone(defaultData),
       ...parsed,
@@ -1016,6 +1028,7 @@ function normalizeLoadedData(parsed) {
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
     normalized.lastDiskWarningFor = cleanText(parsed.lastDiskWarningFor, 10);
+    normalized.lastInquiryOverflowFor = cleanText(parsed.lastInquiryOverflowFor, 10);
     normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
     normalized.lastWeeklyReportFor = cleanText(parsed.lastWeeklyReportFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
