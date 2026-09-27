@@ -171,6 +171,35 @@ function confirmDialog(title, text, confirmText, danger) {
   });
 }
 
+// Опасные действия просят текущий пароль: одной открытой сессии недостаточно,
+// чтобы скачать данные с токенами, заменить их или отдать заявки другому чату.
+function askPassword(title, text) {
+  return new Promise(function (resolve) {
+    var dialog = openDialog({
+      title: title,
+      body: '<p class="muted small">' + esc(text) + '</p>' +
+        '<div class="field"><label for="gatePassword">Текущий пароль панели</label>' +
+        '<input id="gatePassword" type="password" autocomplete="current-password"></div>',
+      footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="gateConfirm" type="button">Продолжить</button>',
+      ready: function (node) {
+        var input = node.querySelector("#gatePassword");
+        var done = false;
+        node.querySelector("#gateConfirm").onclick = function () {
+          var value = input.value;
+          if (!value) return toast("Введите текущий пароль панели", true);
+          done = true;
+          node.closeClean();
+          resolve(value);
+        };
+        input.onkeydown = function (event) { if (event.key === "Enter") node.querySelector("#gateConfirm").click(); };
+        node.addEventListener("close", function () { if (!done) resolve(""); });
+        setTimeout(function () { input.focus(); }, 50);
+      },
+    });
+    return dialog;
+  });
+}
+
 function openDialog(options) {
   var dialog = document.createElement("dialog");
   var dialogDirty = false, closingDialog = false;

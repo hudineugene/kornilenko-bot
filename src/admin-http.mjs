@@ -10,7 +10,7 @@ import { cleanText } from './util.mjs';
 import { normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { decryptBackup, isEncryptedBackup } from './offsite.mjs';
 import { imageBytes, imageExists } from './media.mjs';
-import { data, runtime } from './store.mjs';
+import { data, runtime, verifyPassword } from './store.mjs';
 import { publicRuntime } from './menus.mjs';
 import { propertyPublicationReadiness, recordImages } from './catalog.mjs';
 import { adminNotifications } from './admin-notifications.mjs';
@@ -382,6 +382,63 @@ async function readBackup(req) {
   return payload && payload.backup && typeof payload.backup === 'object' ? payload.backup : payload;
 }
 
+// Опасные действия просят текущий пароль отдельно от входа: украденной сессии
+// недостаточно, чтобы увести бота или выкачать данные с токенами.
+// Тот же счётчик попыток, что и у входа (loginAttempts объявлен здесь же),
+// проверяется на месте: admin-input импортировать нельзя — будет круг.
+function attemptAllowed(ip) {
+  const now = Date.now();
+  let item = loginAttempts.get(ip);
+  if (!item || item.resetAt < now) item = { count: 0, resetAt: now + 15 * 60 * 1000 };
+  item.count += 1;
+  loginAttempts.set(ip, item);
+  return item.count <= 10;
+}
+
+function passwordAccepted(req, res, supplied) {
+  const ip = clientAddress(req);
+  if (!attemptAllowed(ip)) {
+    json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
+    return false;
+  }
+  if (!verifyPassword(String(supplied || ''))) {
+    json(res, 403, { error: 'Введите текущий пароль панели' });
+    return false;
+  }
+  loginAttempts.delete(ip);
+  return true;
+}
+
+// Пароль в заголовке — для запросов, где тело занято файлом.
+function headerPassword(req) {
+  const header = String(req.headers['x-current-password'] || '');
+  if (!header) return '';
+  try {
+    return Buffer.from(header, 'base64').toString('utf8');
+  } catch {
+    return '';
+  }
+}
+
+// Скачивание копии открывается ссылкой, а в ссылку пароль не положить: панель
+// сначала берёт одноразовый пропуск на две минуты.
+const DOWNLOAD_TICKET_MS = 2 * 60 * 1000;
+const downloadTickets = new Map();
+
+function issueDownloadTicket() {
+  const ticket = crypto.randomBytes(24).toString('hex');
+  for (const [key, expiresAt] of downloadTickets) if (expiresAt < Date.now()) downloadTickets.delete(key);
+  downloadTickets.set(ticket, Date.now() + DOWNLOAD_TICKET_MS);
+  return ticket;
+}
+
+function useDownloadTicket(ticket) {
+  const key = String(ticket || '');
+  const expiresAt = downloadTickets.get(key);
+  downloadTickets.delete(key);
+  return Boolean(expiresAt && expiresAt >= Date.now());
+}
+
 function requireAuth(req, res, requireCsrf = false) {
   const session = getSession(req);
   if (!session) {
@@ -556,6 +613,11 @@ function safeState(session) {
 }
 
 export {
+  DOWNLOAD_TICKET_MS,
+  headerPassword,
+  issueDownloadTicket,
+  passwordAccepted,
+  useDownloadTicket,
   BOT_TOKEN_PATTERN,
   MAX_UNAUTHENTICATED_BODY_BYTES,
   PersistentSessionStore,

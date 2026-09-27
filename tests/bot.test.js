@@ -543,6 +543,11 @@ test.describe('admin API', () => {
 
   test('a downloaded backup restores with its photos', async () => {
     const data = bot.getData();
+    // Предыдущая проверка меняет пароль панели, а скачивание и восстановление
+    // копии просят текущий: ставим известный.
+    const known = bot.hashPassword('correct-password');
+    data.config.passwordSalt = known.salt;
+    data.config.passwordHash = known.hash;
     data.objects.push({
       id: 'backup-object',
       imagesByLanguage: {
@@ -552,12 +557,16 @@ test.describe('admin API', () => {
       },
     });
     bot.saveDataNow();
-    const backup = Buffer.from(await (await call('GET', '/api/backup')).arrayBuffer());
+    const ticket = await (await call('POST', '/api/backup/ticket', { currentPassword: 'correct-password' })).json();
+    const backup = Buffer.from(await (await call('GET', '/api/backup?ticket=' + ticket.ticket)).arrayBuffer());
     data.objects = [];
     bot.saveDataNow();
     const response = await fetch(baseUrl + '/api/restore', {
       method: 'POST',
-      headers: { 'content-type': 'application/gzip', cookie, 'x-csrf-token': csrf },
+      headers: {
+        'content-type': 'application/gzip', cookie, 'x-csrf-token': csrf,
+        'x-current-password': Buffer.from('correct-password', 'utf8').toString('base64'),
+      },
       body: backup,
     });
     assert.equal(response.status, 200);

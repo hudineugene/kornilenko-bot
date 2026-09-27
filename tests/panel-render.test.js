@@ -190,8 +190,10 @@ async function panelSandbox() {
   await new Promise((resolve) => setTimeout(resolve, 60));
   sandbox.state = state;
   sandbox.csrf = 'test-csrf';
-  // Диалоги подтверждения в заглушке никто не нажмёт, поэтому отвечаем «да».
+  // Диалоги подтверждения в заглушке никто не нажмёт, поэтому отвечаем «да»,
+  // а на просьбу ввести пароль — известным паролем.
   sandbox.confirmDialog = async () => true;
+  sandbox.askPassword = async () => 'пароль-панели';
   return { sandbox, errors, state, requests };
 }
 
@@ -331,6 +333,7 @@ test.describe('восстановление копии из панели', () =>
     assert.equal(typeof sent.raw, 'object', 'тело запроса — файл, а не строка');
     assert.ok(typeof sent.raw.arrayBuffer === 'function', 'отправлен сам файл');
     assert.equal(sent.headers['content-type'], 'application/octet-stream');
+    assert.ok(sent.headers['x-current-password'], 'вместе с файлом уходит текущий пароль панели');
   });
 
   test('для зашифрованной копии спрашивается пароль и уходит в заголовке', async () => {

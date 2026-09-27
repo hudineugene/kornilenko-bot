@@ -84,9 +84,11 @@ test('the file goes to the admin chat and restores the data with its password', 
   assert.equal(inside.config.telegramBackup.key, undefined, 'the key is not in the file');
 
   delete bot.getData().users['42'];
+  // Восстановление просит и текущий пароль панели, и пароль самой копии.
+  const adminPass = Buffer.from('admin-password-1', 'utf8').toString('base64');
   const restore = (password) => realFetch(base + '/api/restore', {
     method: 'POST',
-    headers: { 'content-type': 'application/octet-stream', cookie: headers.cookie, 'x-csrf-token': headers['x-csrf-token'], ...(password ? { 'x-backup-password': Buffer.from(password, 'utf8').toString('base64') } : {}) },
+    headers: { 'content-type': 'application/octet-stream', cookie: headers.cookie, 'x-csrf-token': headers['x-csrf-token'], 'x-current-password': adminPass, ...(password ? { 'x-backup-password': Buffer.from(password, 'utf8').toString('base64') } : {}) },
     body: document.bytes,
   });
   let response = await restore('');
@@ -105,7 +107,7 @@ test('on a new computer the copy restores without the photos, and the panel says
   await realFetch(base + '/api/telegram-backup/send', { method: 'POST', headers, body: '{}' });
   const response = await realFetch(base + '/api/restore', {
     method: 'POST',
-    headers: { 'content-type': 'application/octet-stream', cookie: headers.cookie, 'x-csrf-token': headers['x-csrf-token'], 'x-backup-password': Buffer.from('copy-password-2026').toString('base64') },
+    headers: { 'content-type': 'application/octet-stream', cookie: headers.cookie, 'x-csrf-token': headers['x-csrf-token'], 'x-current-password': Buffer.from('admin-password-1').toString('base64'), 'x-backup-password': Buffer.from('copy-password-2026').toString('base64') },
     body: documents[0].bytes,
   });
   assert.equal(response.status, 200);
@@ -117,7 +119,11 @@ test('on a new computer the copy restores without the photos, and the panel says
 
 test('the panel backup file does not carry the key of the Telegram copy', async () => {
   assert.equal((await put(ENABLE)).status, 200);
-  const response = await realFetch(base + '/api/backup', { headers });
+  // Скачивание копии открывается по одноразовому пропуску, выданному по паролю.
+  const ticket = await (await realFetch(base + '/api/backup/ticket', {
+    method: 'POST', headers, body: JSON.stringify({ currentPassword: 'admin-password-1' }),
+  })).json();
+  const response = await realFetch(base + '/api/backup?ticket=' + ticket.ticket, { headers });
   const backup = JSON.parse(zlib.gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8'));
   assert.deepEqual(backup.config.telegramBackup, { enabled: false });
   assert.ok(bot.getData().config.telegramBackup.key, 'the bot itself keeps it');

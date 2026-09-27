@@ -18,7 +18,7 @@ import { configureBotCommands } from './menus.mjs';
 import { validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { restartPolling } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
-import { BOT_TOKEN_PATTERN, MAX_UNAUTHENTICATED_BODY_BYTES, clientAddress, createSession, isLocalRequest, json, loginAttempts, parseUploadedImage, readBackup, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
+import { BOT_TOKEN_PATTERN, DOWNLOAD_TICKET_MS, MAX_UNAUTHENTICATED_BODY_BYTES, clientAddress, headerPassword, issueDownloadTicket, passwordAccepted, useDownloadTicket, createSession, isLocalRequest, json, loginAttempts, parseUploadedImage, readBackup, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
 import { REMOTE_LOGIN_CODE_ATTEMPTS, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
 import { loginAllowed, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { handleGroupApi } from './group-api.mjs';
@@ -251,9 +251,22 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // Пропуск на скачивание копии: выдаётся по текущему паролю на две минуты.
+  if (url.pathname === '/api/backup/ticket' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    if (!passwordAccepted(req, res, body.currentPassword)) return;
+    return json(res, 200, { ticket: issueDownloadTicket(), validMs: DOWNLOAD_TICKET_MS });
+  }
+
   if (url.pathname === '/api/backup' && req.method === 'GET') {
     const session = requireAuth(req, res);
     if (!session) return;
+    // В копии лежат токен бота и данные клиентов, поэтому одной сессии мало.
+    if (!useDownloadTicket(url.searchParams.get('ticket'))) {
+      return json(res, 403, { error: 'Ссылка на копию устарела. Запросите копию заново и введите пароль.' });
+    }
     try {
       return sendBackupDownload(res, 'telegram-bot-backup-' + dayKey() + '.json.gz');
     } catch (error) {
@@ -265,6 +278,8 @@ async function handleApi(req, res, url) {
   if (url.pathname === '/api/restore' && req.method === 'POST') {
     const session = requireAuth(req, res, true);
     if (!session) return;
+    // Восстановление заменяет все данные бота: просим текущий пароль.
+    if (!passwordAccepted(req, res, headerPassword(req))) return;
     try {
       const backup = await readBackup(req);
       if (!backup || typeof backup !== 'object') throw new Error('Выберите корректный файл резервной копии');

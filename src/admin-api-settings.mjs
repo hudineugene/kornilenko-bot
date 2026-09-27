@@ -12,6 +12,7 @@ import { inquiryChats } from './inquiries.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { findRule, restartPolling } from './updates.mjs';
 import { BOT_TOKEN_PATTERN, clientAddress, json, loginAttempts, readJson, requireAuth, sessions } from './admin-http.mjs';
+import { passwordAccepted } from './admin-http.mjs';
 import { loginAllowed, menuInput, messagesInput, rulesConflict } from './admin-input.mjs';
 import { announceActiveChange } from './status.mjs';
 import { MIN_BACKUP_PASSWORD_LENGTH, sendTelegramBackup, setBackupPassword, telegramBackupSettings } from './offsite.mjs';
@@ -135,17 +136,21 @@ function refreshStaffCommands(previousChatIds = []) {
       return json(res, 400, { error: error.message });
     }
 
+    // Смена админ-чата отдаёт заявки клиентов в другой Telegram-чат, поэтому
+    // тоже просит пароль.
+    const nextAdminChatId = body.adminChatId == null ? String(data.config.adminChatId || '') : cleanText(body.adminChatId, 40);
+    const adminChatChanged = nextAdminChatId !== String(data.config.adminChatId || '');
     let tokenChanged = false;
     let nextBot = data.bot;
     const newToken = cleanText(body.token, 256);
     const newPassword = String(body.password || '');
     // A session alone must not be enough to take over the panel or the bot.
-    if (newToken || newPassword) {
+    if (newToken || newPassword || adminChatChanged) {
       const ip = clientAddress(req);
       if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
       if (!verifyPassword(String(body.currentPassword || ''))) {
         await delay(250);
-        return json(res, 403, { error: 'Для смены пароля или токена введите текущий пароль' });
+        return json(res, 403, { error: 'Для смены пароля, токена или чата администратора введите текущий пароль' });
       }
       loginAttempts.delete(ip);
     }
@@ -251,6 +256,11 @@ function refreshStaffCommands(previousChatIds = []) {
     if (!session) return;
     const body = await readJson(req);
     const list = Array.isArray(body.managers) ? body.managers.slice(0, 20) : [];
+    // Менеджер получает заявки клиентов и может отвечать от имени компании:
+    // список меняется только с текущим паролем.
+    const before = JSON.stringify((data.config.managers || []).map((manager) => [manager.name, manager.chatId]));
+    const after = JSON.stringify(list.map((manager) => [cleanText(manager && manager.name, 60), cleanText(manager && manager.chatId, 40)]));
+    if (before !== after && !passwordAccepted(req, res, body.currentPassword)) return;
     const adminChatId = cleanText(data.config.adminChatId, 40);
     const seen = new Set();
     for (const item of list) {

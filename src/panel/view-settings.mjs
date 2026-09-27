@@ -51,12 +51,21 @@ function renderConnection(host) {
     '</div></div></div></div>';
 
   var watcher = watchForm(host.querySelector(".stack"), async function () {
-    await send("/api/settings", "PUT", Object.assign(settingsPayload(), {
-      adminChatId: host.querySelector("#setAdminChat").value.trim(),
+    var adminChatId = host.querySelector("#setAdminChat").value.trim();
+    var payload = Object.assign(settingsPayload(), {
+      adminChatId: adminChatId,
       notifyMode: host.querySelector("#setNotify").value,
       statusNotices: host.querySelector("#setStatusNotices").checked,
       active: host.querySelector("#setActive").checked,
-    }));
+    });
+    // Смена чата администратора отдаёт заявки клиентов в другой Telegram-чат:
+    // спрашиваем текущий пароль.
+    if (adminChatId !== String(state.config.adminChatId || "")) {
+      var password = await askPassword("Сменить чат администратора?", "Заявки клиентов будут приходить в другой чат Telegram. Нужен текущий пароль панели.");
+      if (!password) throw new Error("Смена чата администратора отменена");
+      payload.currentPassword = password;
+    }
+    await send("/api/settings", "PUT", payload);
   }, "Настройки подключения изменены");
 
   host.querySelector("#saveToken").onclick = async function () {
@@ -165,8 +174,17 @@ function renderConnection(host) {
   drawManagers();
   host.querySelector("#addManager").onclick = function () { managers.push({ name: "", chatId: "" }); drawManagers(); };
   host.querySelector("#saveManagers").onclick = async function () {
+    // Пароль спрашиваем только когда список действительно меняется.
+    var next = managers.filter(function (manager) { return manager.name || manager.chatId; });
+    var before = JSON.stringify((state.config.managers || []).map(function (manager) { return [manager.name, manager.chatId]; }));
+    var after = JSON.stringify(next.map(function (manager) { return [manager.name, manager.chatId]; }));
+    var password = "";
+    if (before !== after) {
+      password = await askPassword("Изменить список менеджеров?", "Менеджер получает заявки клиентов и отвечает от имени компании. Нужен текущий пароль панели.");
+      if (!password) return;
+    }
     try {
-      await send("/api/managers", "PUT", { adminName: host.querySelector("#adminName").value, managers: managers.filter(function (manager) { return manager.name || manager.chatId; }) });
+      await send("/api/managers", "PUT", { adminName: host.querySelector("#adminName").value, managers: next, currentPassword: password });
       toast("Менеджеры сохранены");
       await reload();
     } catch (error) { fail(error); }
@@ -323,7 +341,14 @@ function renderData(host) {
       '<div class="hint">Обращения и клиенты при этом не удаляются.</div>' +
     "</div></div></div>";
 
-  host.querySelector("#downloadBackup").onclick = function () { window.location.href = "/api/backup"; };
+  host.querySelector("#downloadBackup").onclick = async function () {
+    var password = await askPassword("Скачать копию данных?", "В копии есть токен бота и данные клиентов, поэтому нужен текущий пароль панели.");
+    if (!password) return;
+    try {
+      var pass = await send("/api/backup/ticket", "POST", { currentPassword: password });
+      window.location.href = "/api/backup?ticket=" + encodeURIComponent(pass.ticket);
+    } catch (error) { fail(error); }
+  };
   host.querySelector("#restoreFile").onchange = async function (event) {
     var input = event.target;
     var file = input.files && input.files[0];
@@ -331,6 +356,8 @@ function renderData(host) {
     input.value = "";
     var encrypted = /\.kbk$/i.test(file.name);
     if (!(await confirmDialog("Восстановить данные?", "Текущие данные бота будут заменены содержимым файла «" + file.name + "».", "Восстановить", true))) return;
+    var current = await askPassword("Восстановить данные?", "Текущие данные будут заменены. Для этого нужен текущий пароль панели.");
+    if (!current) return;
     var password = encrypted ? prompt("Пароль от зашифрованной копии") : "";
     if (encrypted && !password) return toast("Без пароля зашифрованную копию не прочитать", true);
     try {
@@ -338,7 +365,10 @@ function renderData(host) {
       // их портит — сервер потом не может ни распаковать, ни расшифровать.
       var result = await api("/api/restore", {
         method: "POST",
-        headers: Object.assign({ "content-type": "application/octet-stream" }, password ? { "x-backup-password": btoa(unescape(encodeURIComponent(password))) } : {}),
+        headers: Object.assign(
+          { "content-type": "application/octet-stream", "x-current-password": btoa(unescape(encodeURIComponent(current))) },
+          password ? { "x-backup-password": btoa(unescape(encodeURIComponent(password))) } : {},
+        ),
         body: file,
       });
       toast(result && result.missingPhotos ? "Данные восстановлены, не найдено фотографий: " + result.missingPhotos : "Данные восстановлены");

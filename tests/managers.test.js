@@ -138,7 +138,10 @@ test('changing the main admin chat forgets the old chat\'s reply routes', async 
     const base = 'http://127.0.0.1:' + bot.server.address().port;
     const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
     const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
-    const response = await realFetch(base + '/api/settings', { method: 'PUT', headers, body: JSON.stringify({ messages: data.config.messages, active: false, adminChatId: MANAGER_CHAT }) });
+    // Смена чата администратора требует текущий пароль панели.
+    const without = await realFetch(base + '/api/settings', { method: 'PUT', headers, body: JSON.stringify({ messages: data.config.messages, active: false, adminChatId: MANAGER_CHAT }) });
+    assert.equal(without.status, 403, 'без пароля чат администратора не сменить');
+    const response = await realFetch(base + '/api/settings', { method: 'PUT', headers, body: JSON.stringify({ messages: data.config.messages, active: false, adminChatId: MANAGER_CHAT, currentPassword: 'correct-password' }) });
     assert.equal(response.status, 200);
   } finally {
     await new Promise((resolve) => bot.server.close(resolve));
@@ -157,7 +160,9 @@ test('the panel saves the managers and checks their chats', async () => {
     const base = 'http://127.0.0.1:' + bot.server.address().port;
     const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
     const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
-    const save = (body) => realFetch(base + '/api/managers', { method: 'PUT', headers, body: JSON.stringify(body) });
+    // Список менеджеров меняется только с текущим паролем панели.
+    const save = (body) => realFetch(base + '/api/managers', { method: 'PUT', headers, body: JSON.stringify({ currentPassword: 'correct-password', ...body }) });
+    assert.equal((await realFetch(base + '/api/managers', { method: 'PUT', headers, body: JSON.stringify({ managers: [{ name: 'Иван', chatId: '12345' }] }) })).status, 403, 'без пароля список не меняется');
 
     assert.equal((await save({ managers: [{ name: '', chatId: '12345' }] })).status, 400, 'a name is needed');
     assert.equal((await save({ managers: [{ name: 'Иван', chatId: 'abc' }] })).status, 400);
