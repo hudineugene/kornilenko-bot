@@ -18,6 +18,7 @@ function fakeElement(tag = 'div') {
   // Один и тот же селектор должен возвращать один и тот же элемент: иначе
   // назначенный обработчик тут же терялся бы, и проверить нажатие было нельзя.
   const found = new Map();
+  const classes = new Set();
   const node = {
     tagName: String(tag).toUpperCase(),
     innerHTML: '',
@@ -35,7 +36,18 @@ function fakeElement(tag = 'div') {
     attributes: [],
     dataset: {},
     style: {},
-    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    // Классы запоминаем по-настоящему: панель прячет и показывает экраны
+    // именно классом hidden, и проверить это иначе нельзя.
+    classList: {
+      add(...names) { names.forEach((name) => classes.add(name)); },
+      remove(...names) { names.forEach((name) => classes.delete(name)); },
+      toggle(name, force) {
+        const on = force === undefined ? !classes.has(name) : Boolean(force);
+        if (on) classes.add(name); else classes.delete(name);
+        return on;
+      },
+      contains(name) { return classes.has(name); },
+    },
     querySelector: (selector) => {
       const key = String(selector);
       if (!found.has(key)) found.set(key, fakeElement());
@@ -475,4 +487,33 @@ test('беседа помечается прочитанной только ко
   // И только один раз: следующая перерисовка не шлёт запрос заново.
   await sandbox.VIEWS.inquiries.render(fakeElement('main'), 'inbox');
   assert.equal(readRequests().length, 1, 'повторных запросов нет');
+});
+
+test('истёкший вход возвращает на экран входа, а не сыплет ошибками', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const document = sandbox.document;
+  assert.equal(document.getElementById('app').classList.contains('hidden'), false, 'панель открыта');
+
+  // Бот перезапустили: сессии больше нет.
+  const working = sandbox.fetch;
+  sandbox.fetch = async (url, options) => {
+    if (String(url).includes('/api/state') || String(url).includes('/api/inquiries')) {
+      return { ok: false, status: 401, json: async () => ({ error: 'Требуется вход' }), text: async () => '', headers: { get: () => '' } };
+    }
+    return working(url, options);
+  };
+
+  await assert.rejects(() => sandbox.api('/api/state'), (error) => error.status === 401);
+  assert.equal(document.getElementById('app').classList.contains('hidden'), true, 'старые данные убраны с экрана');
+  assert.equal(document.getElementById('loginScreen').classList.contains('hidden'), false, 'показан экран входа');
+  assert.match(document.getElementById('loginError').textContent, /перестал действовать/i, 'сказано, что случилось');
+  assert.equal(document.getElementById('loginError').classList.contains('hidden'), false, 'сообщение видно');
+
+  // Неверный пароль на самом входе экран не ломает: это не истёкшая сессия.
+  sandbox.fetch = async (url) => (String(url).includes('/api/login')
+    ? { ok: false, status: 401, json: async () => ({ error: 'Неверный пароль' }), text: async () => '', headers: { get: () => '' } }
+    : working(url));
+  await assert.rejects(() => sandbox.send('/api/login', 'POST', { password: 'не тот' }), (error) => error.status === 401);
+  assert.match(document.getElementById('loginError').textContent, /перестал действовать/i, 'текст про сессию не затёрт входом');
 });

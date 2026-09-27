@@ -118,6 +118,33 @@ function localized(value, language) { return value && typeof value === "object" 
 // второе сообщение, создало второй объект или вторую публикацию.
 var pendingChanges = 0;
 
+// Сам вход и первичная настройка отвечают 401 на неверный пароль — это не
+// истёкшая сессия.
+function authRequest(url) {
+  var path = String(url).split("?")[0];
+  return path.indexOf("/api/login") === 0 || path.indexOf("/api/setup") === 0;
+}
+
+var appStarted = false, sessionEnded = false;
+
+function sessionExpired() {
+  if (sessionEnded || !appStarted) return;
+  sessionEnded = true;
+  clearInterval(refreshTimer);
+  var message = "Вход в панель перестал действовать. Введите пароль ещё раз.";
+  if (isDirty()) message += " Несохранённые изменения придётся внести заново.";
+  clearDirty();
+  hideRefreshHint();
+  el("app").classList.add("hidden");
+  el("loginScreen").classList.remove("hidden");
+  el("loginCodeField").classList.add("hidden");
+  el("loginPassword").value = "";
+  var error = el("loginError");
+  error.textContent = message;
+  error.classList.remove("hidden");
+  el("loginPassword").focus();
+}
+
 function api(url, options) {
   options = options || {};
   options.headers = Object.assign({ "content-type": "application/json" }, options.headers || {});
@@ -127,7 +154,16 @@ function api(url, options) {
   return fetch(url, options).then(async function (response) {
     var body = {};
     try { body = await response.json(); } catch (e) {}
-    if (!response.ok) { var error = new Error(body.error || "Ошибка запроса"); error.status = response.status; throw error; }
+    if (!response.ok) {
+      var error = new Error(body.error || "Ошибка запроса");
+      error.status = response.status;
+      // Вход перестал действовать: сессия истекла или бот перезапустили. Раньше
+      // панель оставалась на экране со старыми данными и на каждое нажатие
+      // показывала всплывающую ошибку — войти заново можно было только
+      // перезагрузив страницу.
+      if (response.status === 401 && !authRequest(url)) sessionExpired();
+      throw error;
+    }
     return body;
   }).finally(function () {
     if (changing) pendingChanges = Math.max(0, pendingChanges - 1);
@@ -556,6 +592,9 @@ async function boot() {
 
 async function startApp() {
   await reload(false);
+  appStarted = true;
+  sessionEnded = false;
+  el("loginError").classList.add("hidden");
   el("loginScreen").classList.add("hidden");
   el("setupScreen").classList.add("hidden");
   el("app").classList.remove("hidden");
