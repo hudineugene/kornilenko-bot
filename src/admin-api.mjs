@@ -2,7 +2,7 @@
 
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
-import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
+import { cleanText, clone, delay, hashPassword, localDayKey } from './util.mjs';
 import { normalizeLoadedData } from './data-format.mjs';
 import { backupChunks } from './backup-file.mjs';
 import { dropMissingImages, storedMediaFiles } from './media.mjs';
@@ -285,7 +285,7 @@ async function handleApi(req, res, url) {
       return json(res, 403, { error: 'Ссылка на копию устарела. Запросите копию заново и введите пароль.' });
     }
     try {
-      return sendBackupDownload(res, 'telegram-bot-backup-' + dayKey() + '.kbz');
+      return sendBackupDownload(res, 'telegram-bot-backup-' + localDayKey() + '.kbz');
     } catch (error) {
       recordError('Создание резервной копии', error);
       return json(res, 500, { error: 'Не удалось создать резервную копию: ' + error.message });

@@ -52,7 +52,7 @@ async function runDailyDigest(now = new Date()) {
   if (data.config.notifyMode !== 'inquiries' || !adminChatId || !data.config.botToken || now.getHours() < adminMorningHour(DIGEST_HOUR)) return '';
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  const key = dayKey(yesterday);
+  const key = localDayKey(yesterday);
   if (data.lastDigestFor === key) return '';
   const text = activityDigest(key);
   const markedBefore = data.lastDigestFor;

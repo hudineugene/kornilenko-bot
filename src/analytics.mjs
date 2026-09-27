@@ -1,11 +1,14 @@
 // Статистика, журнал ошибок и история действий пользователей.
 
 import crypto from 'node:crypto';
-import { cleanText, dayKey } from './util.mjs';
+import { cleanText, localDayKey } from './util.mjs';
 import { data, scheduleSave } from './store.mjs';
 
+// Сутки считаются по времени бота (часовой пояс из настроек), а не по
+// Гринвичу: иначе летом всё, что происходит с полуночи до двух ночи, попадает
+// во вчерашний день — и /stats, и «Обзор» показывают вчерашние цифры.
 function recordDaily(kind, detail = '', amount = 1) {
-  const key = dayKey();
+  const key = localDayKey();
   const daily = data.analytics.daily[key] || { received: 0, sent: 0, reactions: 0, inquiries: 0, menu: {} };
   if (kind === 'received' || kind === 'sent') daily[kind] = Number(daily[kind] || 0) + 1;
   if (kind === 'reaction') daily.reactions = Number(daily.reactions || 0) + Math.max(1, Number(amount) || 1);
@@ -13,9 +16,9 @@ function recordDaily(kind, detail = '', amount = 1) {
   if (kind === 'menu' && detail) daily.menu[detail] = Number(daily.menu[detail] || 0) + 1;
   data.analytics.daily[key] = daily;
   const cutoff = new Date();
-  cutoff.setUTCDate(cutoff.getUTCDate() - 120);
+  cutoff.setDate(cutoff.getDate() - 120);
   for (const storedKey of Object.keys(data.analytics.daily)) {
-    if (storedKey < dayKey(cutoff)) delete data.analytics.daily[storedKey];
+    if (storedKey < localDayKey(cutoff)) delete data.analytics.daily[storedKey];
   }
 }
 

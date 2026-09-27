@@ -1,6 +1,6 @@
 // Уведомления клиентам об объектах: избранное и подбор.
 
-import { cleanText, dayKey, delay, largestMoneyAmount } from './util.mjs';
+import { cleanText, delay, largestMoneyAmount, localDayKey } from './util.mjs';
 import { imageExists } from './media.mjs';
 import { PROPERTY_ALERT_TEXT, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
 import { configured, data, saveDataNow, scheduleSave } from './store.mjs';
@@ -227,7 +227,7 @@ function propertyAlertDeliveries(record, before) {
       if (!alertsEnabled(user) || !Array.isArray(user.favorites) || !user.favorites.includes(record.id)) continue;
       if (!propertyReadyForLanguage(record, user.preferredLanguage)) continue;
       const copy = PROPERTY_ALERT_TEXT[user.preferredLanguage] || PROPERTY_ALERT_TEXT.ru;
-      const key = priceDropped ? 'price:' + record.id + ':' + newPrice : 'available:' + record.id + ':' + dayKey();
+      const key = priceDropped ? 'price:' + record.id + ':' + newPrice : 'available:' + record.id + ':' + localDayKey();
       if (user.alertsSent && user.alertsSent[key]) continue;
       const heading = priceDropped
         ? copy.priceDrop + '\n💰 ' + objectPriceText({ ...record, priceValue: oldPrice }, user.preferredLanguage) + ' → ' + objectPriceText(record, user.preferredLanguage)
@@ -242,7 +242,7 @@ function propertyAlertDeliveries(record, before) {
     for (const user of Object.values(data.users)) {
       if (!alertsEnabled(user) || notified.has(user.id) || !savedSearchMatches(user, record)) continue;
       const key = becameAvailable
-        ? 'saved-available:' + record.id + ':' + dayKey()
+        ? 'saved-available:' + record.id + ':' + localDayKey()
         : 'saved-match:' + record.id;
       if (user.alertsSent && user.alertsSent[key]) continue;
       deliveries.push({

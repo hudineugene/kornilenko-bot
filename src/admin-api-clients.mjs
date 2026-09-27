@@ -1,7 +1,7 @@
 // API панели: клиенты, обращения, переписка и шаблоны ответов.
 
 import crypto from 'node:crypto';
-import { cleanText, dayKey } from './util.mjs';
+import { cleanText, localDayKey } from './util.mjs';
 import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAGES } from './data-format.mjs';
 import { MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow } from './store.mjs';
@@ -186,12 +186,12 @@ async function handleClientsApi(req, res, url) {
     const byId = new Map(data.inquiries.map((item) => [item.id, item]));
     const inquiries = ids ? ids.map((id) => byId.get(id)).filter(Boolean) : data.inquiries;
     const file = xlsxWorkbook('Обращения', INQUIRY_EXPORT_COLUMNS, inquiryExportRows(inquiries));
-    const name = 'Обращения ' + dayKey() + '.xlsx';
+    const name = 'Обращения ' + localDayKey() + '.xlsx';
     securityHeaders(res);
     res.writeHead(200, {
       'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'content-length': file.length,
-      'content-disposition': 'attachment; filename="inquiries-' + dayKey() + '.xlsx"; filename*=UTF-8\'\'' + encodeURIComponent(name),
+      'content-disposition': 'attachment; filename="inquiries-' + localDayKey() + '.xlsx"; filename*=UTF-8\'\'' + encodeURIComponent(name),
     });
     return res.end(file);
   }

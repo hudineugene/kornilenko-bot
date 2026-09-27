@@ -3,7 +3,7 @@
 // случилась внутренняя ошибка. Отключаются в панели («Уведомления
 // администратору»). Приходят только главному администратору.
 
-import { cleanText, dayKey, delay } from './util.mjs';
+import { cleanText, delay, localDayKey } from './util.mjs';
 import { data, runtime, scheduleSave } from './store.mjs';
 import { sendMessage } from './telegram.mjs';
 
@@ -30,7 +30,7 @@ function statusNoticesOn() {
 
 function clock(date) {
   const pad = (value) => String(value).padStart(2, '0');
-  const today = dayKey(new Date()) === dayKey(date);
+  const today = localDayKey(new Date()) === localDayKey(date);
   return (today ? '' : pad(date.getDate()) + '.' + pad(date.getMonth() + 1) + ' ') + pad(date.getHours()) + ':' + pad(date.getMinutes());
 }
 

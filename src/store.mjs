@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA_FILE, MEDIA_DIRECTORY } from './config.mjs';
-import { clone, dayKey } from './util.mjs';
+import { clone, localDayKey } from './util.mjs';
 import { DATA_VERSION, defaultData, normalizeLoadedData, normalizeTimeZone } from './data-format.mjs';
 import { cleanupOrphanImages, containsEmbeddedImages, contentAddressImages, ensureMigrationBackup, externalizeImages, forEachStoredImage, needsContentAddressing, referencedImageFiles, storedImageFile } from './media.mjs';
 import { applyInterfaceText } from './texts.mjs';
@@ -405,7 +405,7 @@ function restoreMissingMedia(root) {
 // it. Only the newest DAILY_BACKUPS_KEPT snapshots are kept, and photos that
 // none of them references any more are removed.
 function runDailyBackup(now = new Date()) {
-  const target = path.join(DAILY_BACKUP_DIRECTORY, 'bot-data-' + dayKey(now) + '.json');
+  const target = path.join(DAILY_BACKUP_DIRECTORY, 'bot-data-' + localDayKey(now) + '.json');
   if (fs.existsSync(target)) return '';
   saveDataNow();
   fs.mkdirSync(DAILY_BACKUP_DIRECTORY, { recursive: true });

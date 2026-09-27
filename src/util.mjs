@@ -64,12 +64,15 @@ function fillTemplate(template, user) {
     .replaceAll('{username}', user.username ? '@' + user.username : '');
 }
 
+// Дата по Гринвичу. В самом боте она больше не используется: сутки статистики,
+// ежедневная копия и «раз в сутки» считаются по времени бота — иначе летом всё,
+// что происходит с полуночи до двух ночи, попадало во вчерашний день.
 function dayKey(value = new Date()) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
-// The calendar date on this computer, for things planned in local days
-// (viewings, follow-ups). dayKey() above is the UTC date used by statistics.
+// Календарная дата по часовому поясу бота (он задаётся в настройках и
+// выставляется процессу при запуске): просмотры, сутки статистики, «сегодня».
 function localDayKey(value = new Date()) {
   const date = new Date(value);
   return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');

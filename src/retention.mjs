@@ -2,7 +2,7 @@
 // дольше, чем нужно. Раз в сутки бот удаляет данные клиентов, от которых давно
 // ничего не было, и старые закрытые обращения. Открытые дела не трогаются.
 
-import { cleanText, dayKey } from './util.mjs';
+import { cleanText, localDayKey } from './util.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { eraseUserData } from './users.mjs';
 import { awaitingReply } from './inquiries.mjs';
@@ -69,7 +69,7 @@ function retentionPlan(now = new Date()) {
 async function runRetentionCleanup(now = new Date(), token = data.config.botToken) {
   const months = retentionMonths();
   if (!months) return { months: 0, users: 0, inquiries: 0 };
-  const today = dayKey(now);
+  const today = localDayKey(now);
   if (data.lastRetentionRunFor === today) return { months, users: 0, inquiries: 0, skipped: true };
   data.lastRetentionRunFor = today;
 

@@ -1,7 +1,7 @@
 // Команды администратора и менеджеров в их чатах с ботом: обращения без
 // ответа, просмотры, цифры за день и неделю — без панели, с телефона.
 
-import { dayKey } from './util.mjs';
+import { localDayKey } from './util.mjs';
 import { data } from './store.mjs';
 import { sendMessage } from './telegram.mjs';
 import { adminChatFor, awaitingReply, inquiryTypeLabel } from './inquiries.mjs';
@@ -50,7 +50,7 @@ async function sendInbox(chat, token, now = new Date()) {
 }
 
 function statsText(now = new Date()) {
-  const today = activityDigest(dayKey(now)).split('\n').slice(2).filter((line) => /^(Новых|Сообщений)/.test(line));
+  const today = activityDigest(localDayKey(now)).split('\n').slice(2).filter((line) => /^(Новых|Сообщений)/.test(line));
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
   const week = weekFigures(monday, now);
   const pad = (value) => String(value).padStart(2, '0');

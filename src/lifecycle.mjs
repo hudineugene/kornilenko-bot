@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { DATA_FILE, HOST, PORT } from './config.mjs';
-import { cleanText, dayKey, delay } from './util.mjs';
+import { cleanText, delay, localDayKey } from './util.mjs';
 import { configured, data, runDailyBackupSafely, runtime, saveDataNow, saveTimer } from './store.mjs';
 import { runScheduledNotices } from './notices.mjs';
 import { recordError } from './analytics.mjs';
@@ -94,7 +94,7 @@ function previousRunEndedAbruptly() {
 
 function clockTime(date) {
   const pad = (value) => String(value).padStart(2, '0');
-  const today = dayKey(new Date()) === dayKey(date);
+  const today = localDayKey(new Date()) === localDayKey(date);
   return (today ? '' : pad(date.getDate()) + '.' + pad(date.getMonth() + 1) + ' ') + pad(date.getHours()) + ':' + pad(date.getMinutes());
 }
 
