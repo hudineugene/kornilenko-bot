@@ -148,3 +148,44 @@ test('панель видит и ожидающие, и несостоявшие
   assert.match(PANEL_HTML, /data-cancel-post=/, 'публикацию можно убрать');
   assert.match(PANEL_HTML, /\/api\/group-posts\//, 'кнопка зовёт отмену публикации');
 });
+
+test('обрыв после отправки не публикует пост второй раз', async () => {
+  addGroup();
+  const post = duePost({ text: 'Пост с закреплением', pin: true });
+  let sends = 0;
+  // Сообщение уходит, а закрепление обрывается: раньше это считалось
+  // временной ошибкой, и весь пост публиковался заново — до пяти раз.
+  await withTelegram(async (url, init) => {
+    if (String(url).endsWith('/sendMessage')) sends += 1;
+    if (String(url).endsWith('/pinChatMessage')) return Promise.reject(new TypeError('fetch failed'));
+    return stubFetch(url, init);
+  }, () => bot.runDueGroupPosts(new Date(), TOKEN));
+
+  assert.equal(sends, 1, 'сообщение ушло один раз');
+  assert.equal(post.status, 'sent', 'пост считается опубликованным');
+  assert.ok(bot.getData().errors.some((item) => item.area === 'Закрепление поста'), 'неудачное закрепление записано в журнал');
+
+  // Следующая проверка очереди ничего не публикует повторно.
+  sends = 0;
+  await bot.runDueGroupPosts(new Date(), TOKEN);
+  assert.equal(sends, 0);
+});
+
+test('обрыв на тексте под фотографией не повторяет фотографию', async () => {
+  addGroup();
+  const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('post photo')]).toString('base64');
+  const post = duePost({
+    text: 'о'.repeat(1200),
+    image: { id: 'post-photo', mimeType: 'image/png', dataBase64: png },
+  });
+  let photos = 0;
+  await withTelegram(async (url, init) => {
+    if (String(url).endsWith('/sendPhoto')) photos += 1;
+    if (String(url).endsWith('/sendMessage')) return Promise.reject(new TypeError('fetch failed'));
+    return stubFetch(url, init);
+  }, () => bot.runDueGroupPosts(new Date(), TOKEN));
+
+  assert.equal(photos, 1, 'фотография ушла один раз');
+  assert.equal(post.status, 'sent', 'пост не встаёт в очередь заново');
+  assert.ok(bot.getData().errors.some((item) => item.area === 'Текст поста под фотографией'), 'потерянный текст записан в журнал');
+});

@@ -408,7 +408,12 @@ async function sendPost(group, post, token = data.config.botToken) {
       sent = await sendImage(group.id, topImage, text, token, markup, { parseMode });
     } else {
       sent = await sendImage(group.id, topImage, '', token, null);
-      if (text) await sendMessage(group.id, text, token, { track: false, ...(parseMode ? { parse_mode: parseMode } : {}), ...(markup ? { reply_markup: markup } : {}) });
+      // Фотография уже в группе: если текст под ней не уйдёт, повторять весь
+      // пост нельзя — в группе оказались бы две фотографии.
+      if (text) {
+        await sendMessage(group.id, text, token, { track: false, ...(parseMode ? { parse_mode: parseMode } : {}), ...(markup ? { reply_markup: markup } : {}) })
+          .catch((error) => recordError('Текст поста под фотографией', error));
+      }
     }
   } else {
     if (!text) throw new Error('Сообщение пустое');
@@ -426,8 +431,15 @@ async function sendPost(group, post, token = data.config.botToken) {
     rememberOwnMessage(group, plate && Number(plate.message_id), '🏷 ' + rubric.name, 'photo');
   }
   if (messageId && post.pin) {
-    await telegramRequest(token, 'pinChatMessage', { chat_id: group.id, message_id: messageId, disable_notification: !post.notify });
-    group.pinnedMessageId = messageId;
+    // Сообщение уже опубликовано: неудачное закрепление — повод для записи в
+    // журнал, а не для повторной публикации.
+    const pinned = await telegramRequest(token, 'pinChatMessage', { chat_id: group.id, message_id: messageId, disable_notification: !post.notify })
+      .then(() => true)
+      .catch((error) => {
+        recordError('Закрепление поста', error);
+        return false;
+      });
+    if (pinned) group.pinnedMessageId = messageId;
   }
   group.lastPostAt = new Date().toISOString();
   scheduleSave();
