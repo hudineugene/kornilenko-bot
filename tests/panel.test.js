@@ -238,3 +238,18 @@ test('несохранённая плашка рубрики привязана 
   assert.match(PANEL_HTML, /rubrics\[index\]\.pendingImage = reader\.result/, 'выбранная картинка кладётся в саму рубрику');
   assert.match(PANEL_HTML, /imageDataUrl: rubric\.pendingImage/, 'и сохраняется вместе с ней');
 });
+
+test('действия, которые видят клиенты, спрашивают подтверждение', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  // Выключение бота останавливает ответы клиентам, пост уходит всем сразу,
+  // отозванная ссылка перестаёт работать у всех, кому её отправили.
+  assert.match(PANEL_HTML, /Выключить бота\?/, 'переключатель «Бот включён» спрашивает');
+  assert.match(PANEL_HTML, /Клиенты перестанут получать ответы/);
+  assert.match(PANEL_HTML, /Опубликовать\?/, 'публикация в группу спрашивает');
+  assert.match(PANEL_HTML, /Запланировать публикацию\?/, 'и отложенная тоже');
+  assert.match(PANEL_HTML, /Отозвать ссылку-приглашение\?/, 'отзыв ссылки спрашивает');
+  // Включение бота подтверждения не требует: оно ничего не ломает.
+  const toggle = PANEL_HTML.match(/if \(toggle\) toggle\.onchange = async function \(\) \{([\s\S]*?)\n    \};/);
+  assert.ok(toggle, 'обработчик переключателя найден');
+  assert.match(toggle[1], /!toggle\.checked &&/, 'спрашиваем только при выключении');
+});

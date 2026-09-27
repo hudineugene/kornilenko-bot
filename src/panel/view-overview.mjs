@@ -149,6 +149,17 @@ VIEWS.overview = {
     });
     var toggle = host.querySelector("#botActive");
     if (toggle) toggle.onchange = async function () {
+      // Выключение останавливает бота для всех клиентов: спрашиваем. Включение
+      // ничего не ломает, поэтому проходит сразу.
+      if (!toggle.checked && !(await confirmDialog(
+        "Выключить бота?",
+        "Клиенты перестанут получать ответы: каталог, заявки и напоминания работать не будут, пока бот выключен.",
+        "Выключить",
+        true
+      ))) {
+        toggle.checked = true;
+        return;
+      }
       try {
         await send("/api/settings", "PUT", Object.assign(settingsPayload(), { active: toggle.checked }));
         toast(toggle.checked ? "Бот включён" : "Бот выключен");

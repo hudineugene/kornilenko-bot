@@ -600,6 +600,15 @@ function renderGroupCard(host, group) {
   };
   host.querySelector("#groupSend").onclick = async function () {
     var payload = postPayload();
+    // Пост уходит всем подписчикам сразу и правке не подлежит: спрашиваем, куда
+    // и когда. Кнопка стоит рядом с «Себе для проверки», промахнуться легко.
+    var where = (group.title || groupKindName(group)) + (group.memberCount ? ", " + counted(group.memberCount, "подписчик", "подписчика", "подписчиков") : "");
+    var when = payload.sendAt ? "Отправим " + dateTime(payload.sendAt) + "." : "Сообщение уйдёт сразу.";
+    if (!(await confirmDialog(
+      payload.sendAt ? "Запланировать публикацию?" : "Опубликовать?",
+      where + ". " + when + " Изменить отправленное сообщение нельзя, только удалить.",
+      payload.sendAt ? "Запланировать" : "Опубликовать"
+    ))) return;
     try {
       await send(base + "/post", "POST", payload);
       toast(payload.sendAt ? "Публикация запланирована" : group.type === "channel" ? "Опубликовано в канале" : "Отправлено в группу");
@@ -657,7 +666,14 @@ function renderGroupCard(host, group) {
   };
   var revoke = host.querySelector("#revokeInvite");
   if (revoke) revoke.onclick = async function () {
-    try { await send(base + "/invite-link", "POST", { revoke: true }); await reload(); } catch (error) { fail(error); }
+    // Отзыв ломает ссылку у всех, кому её уже отправили или где её разместили.
+    if (!(await confirmDialog(
+      "Отозвать ссылку-приглашение?",
+      "Прежняя ссылка перестанет работать у всех, кому вы её отправили или где разместили. Вместо неё нужно будет создать новую.",
+      "Отозвать",
+      true
+    ))) return;
+    try { await send(base + "/invite-link", "POST", { revoke: true }); toast("Ссылка отозвана"); await reload(); } catch (error) { fail(error); }
   };
   var copy = host.querySelector("#copyInvite");
   if (copy) copy.onclick = function () {
