@@ -701,10 +701,11 @@ test.describe('property card', () => {
 
     const draft = bot.parseContentRecord({ title: { ru: 'Черновик' }, status: 'hidden' }, 'objects');
     assert.equal(draft.status, 'hidden', 'an incomplete card can be kept as a draft');
-    assert.throws(
-      () => bot.parseContentRecord({ title: { ru: 'Неполный объект' }, status: 'active' }, 'objects'),
-      /Чтобы показывать объект в каталоге/
-    );
+    // An incomplete card can also be saved as active: the catalog hides it per
+    // language anyway, and refusing the save made imported cards uneditable.
+    const incomplete = bot.parseContentRecord({ title: { ru: 'Неполный объект' }, status: 'active' }, 'objects');
+    assert.equal(incomplete.status, 'active');
+    assert.equal(bot.propertyReadyForLanguage(incomplete, 'ru'), false, 'clients still do not see it');
   });
 
   test('the Telegram card emphasizes the title and price and safely escapes text', async () => {

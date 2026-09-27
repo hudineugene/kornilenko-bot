@@ -288,6 +288,28 @@ function storedImageNames(root) {
   return names;
 }
 
+// Перед восстановлением копии складываем прежние данные рядом: если файл
+// оказался не тем, вернуться будет куда. Держим последние снимки, старые убираем.
+const RESTORE_SNAPSHOTS_KEPT = 10;
+
+function snapshotBeforeRestore(now = new Date()) {
+  if (!fs.existsSync(DATA_FILE)) return '';
+  fs.mkdirSync(BACKUP_DIRECTORY, { recursive: true });
+  const target = path.join(BACKUP_DIRECTORY, 'pre-restore-' + fileStamp(now) + '.json');
+  fs.copyFileSync(DATA_FILE, target);
+  const snapshots = jsonFilesIn(BACKUP_DIRECTORY)
+    .filter((file) => path.basename(file).startsWith('pre-restore-'))
+    .sort((first, second) => fs.statSync(second).mtimeMs - fs.statSync(first).mtimeMs);
+  for (const old of snapshots.slice(RESTORE_SNAPSHOTS_KEPT)) {
+    try {
+      fs.rmSync(old, { force: true });
+    } catch {
+      // Лишний снимок не мешает работе.
+    }
+  }
+  return target;
+}
+
 // Brings back photos that are referenced by the data but missing from
 // bot-media, using the copies made by the daily backup.
 function restoreMissingMedia(root) {
@@ -406,6 +428,7 @@ function replaceData(next) {
 }
 
 export {
+  snapshotBeforeRestore,
   verifyPasswordAsync,
   onSaveFailure,
   BACKUP_DIRECTORY,

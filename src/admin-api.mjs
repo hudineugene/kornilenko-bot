@@ -6,7 +6,7 @@ import { cleanText, clone, dayKey, delay, hashPassword } from './util.mjs';
 import { normalizeLoadedData } from './data-format.mjs';
 import { dropMissingImages, forEachStoredImage, imageBytes } from './media.mjs';
 import { applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
-import { configured, data, replaceData, restoreMissingMedia, runtime, saveDataNow, verifyPassword, verifyPasswordAsync } from './store.mjs';
+import { configured, data, replaceData, restoreMissingMedia, runtime, saveDataNow, snapshotBeforeRestore, verifyPassword, verifyPasswordAsync } from './store.mjs';
 import { mediaReport, runSelfCheck } from './selfcheck.mjs';
 import { handleContentApi } from './admin-api-content.mjs';
 import { handleClientsApi } from './admin-api-clients.mjs';
@@ -304,9 +304,15 @@ async function handleApi(req, res, url) {
     try {
       const backup = await readBackup(req);
       if (!backup || typeof backup !== 'object') throw new Error('Выберите корректный файл резервной копии');
+      // Порядок важен. Сначала возвращаем файлы фотографий из копии медиа:
+      // иначе снимки, которые лежат рядом в backups/media, потерялись бы сразу.
+      // Потом отбрасываем то, чего нет нигде, проверяем файл целиком и только
+      // перед самой заменой складываем рядом снимок прежних данных.
+      const restoredPhotos = restoreMissingMedia(backup);
       const missingPhotos = dropMissingImages(backup);
       validateBackupPayload(backup);
       const restored = normalizeLoadedData(backup);
+      const snapshot = snapshotBeforeRestore();
       replaceData(restored);
       rebuildUserIndex();
       telegramFileIds.clear();
@@ -315,7 +321,13 @@ async function handleApi(req, res, url) {
       restartPolling();
       sessions.clear();
       const nextSession = createSession(res, req);
-      return json(res, 200, { ok: true, csrf: nextSession.csrf, missingPhotos });
+      return json(res, 200, {
+        ok: true,
+        csrf: nextSession.csrf,
+        missingPhotos,
+        restoredPhotos,
+        snapshot: snapshot ? snapshot.split(/[\\/]/).pop() : '',
+      });
     } catch (error) {
       return json(res, 400, { error: 'Не удалось восстановить копию: ' + error.message });
     }

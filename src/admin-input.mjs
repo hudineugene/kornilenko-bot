@@ -6,7 +6,7 @@ import { cleanText } from './util.mjs';
 import { PIPELINE_STAGES, normalizePropertyImages, normalizeStoredImages } from './data-format.mjs';
 import { imageBytes, imageExists } from './media.mjs';
 import { data } from './store.mjs';
-import { propertyPublicationReadiness, validHttpUrl } from './catalog.mjs';
+import { validHttpUrl } from './catalog.mjs';
 import { loginAttempts, parseUploadedImage } from './admin-http.mjs';
 
 function replyTemplateInput(body) {
@@ -243,13 +243,10 @@ function parseContentRecord(body, kind, existing = {}) {
       badges: Array.isArray(body.badges) ? body.badges.filter((item) => ['new', 'recommended', 'exclusive', 'price_reduced'].includes(item)) : [],
       status: ['active', 'hidden', 'reserved', 'sold'].includes(body.status) ? body.status : 'active',
     };
-    if (['active', 'reserved'].includes(record.status)) {
-      const readiness = propertyPublicationReadiness(record);
-      const missing = Object.entries(readiness).filter(([, issues]) => issues.length);
-      if (missing.length) {
-        throw new Error('Чтобы показывать объект в каталоге, заполните обязательные поля: ' + missing.map(([language, issues]) => language.toUpperCase() + ' — ' + issues.join(', ')).join('; '));
-      }
-    }
+    // Карточку сохраняем и незаполненной: клиент видит объект только на тех
+    // языках, где заполнено всё (catalog.mjs), поэтому недоделанная карточка
+    // никуда не попадёт сама. Отказ в сохранении означал бы, что объект из
+    // выгрузки нельзя даже поправить — ни город, ни название.
     return record;
   }
   const startAt = cleanText(body.startAt, 40);

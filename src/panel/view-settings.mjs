@@ -311,7 +311,7 @@ function renderData(host) {
       '<p class="muted small">Копия содержит объекты, тексты, клиентов и обращения. Храните её в надёжном месте.</p>' +
       '<div class="row wrap"><button class="btn secondary" id="downloadBackup" type="button">⬇ Скачать копию</button>' +
       '<label class="btn ghost" style="cursor:pointer">⬆ Восстановить<input type="file" id="restoreFile" accept=".json,.gz,.kbk,application/json,application/gzip" class="hidden"></label></div>' +
-      '<div class="hint">Подходит файл этой кнопки (.json.gz), обычный .json и зашифрованная копия из Telegram (.kbk — понадобится её пароль). Ежедневная копия создаётся сама в папке backups рядом с ботом.</div>' +
+      '<div class="hint">Подходит файл этой кнопки (.json.gz), обычный .json и зашифрованная копия из Telegram (.kbk — понадобится её пароль). Ежедневная копия создаётся сама в папке backups рядом с ботом. Перед восстановлением прежние данные складываются туда же файлом pre-restore-…json.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> присылать зашифрованную копию раз в неделю</label>" +
@@ -371,7 +371,11 @@ function renderData(host) {
         ),
         body: file,
       });
-      toast(result && result.missingPhotos ? "Данные восстановлены, не найдено фотографий: " + result.missingPhotos : "Данные восстановлены");
+      var parts = ["Данные восстановлены"];
+      if (result && result.restoredPhotos) parts.push("вернули фотографий: " + result.restoredPhotos);
+      if (result && result.missingPhotos) parts.push("не найдено фотографий: " + result.missingPhotos);
+      if (result && result.snapshot) parts.push("прежние данные сохранены: " + result.snapshot);
+      toast(parts.join(". "));
       setTimeout(function () { location.reload(); }, 1200);
     } catch (error) { fail(error); }
   };

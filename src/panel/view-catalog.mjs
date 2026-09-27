@@ -333,7 +333,7 @@ function openRecordEditor(kind, id) {
           '<div class="publication-rows">' + rows.map(function (row) {
             return '<div class="publication-row"><b>' + row.code.toUpperCase() + '</b><span class="grow">' + esc(row.name) + '</span><span class="' + (row.issues.length ? "warn-text" : "ok-text") + '">' + (row.issues.length ? esc(row.issues.join(", ")) : "готово") + "</span></div>";
           }).join("") + "</div>" +
-          (liveAndIncomplete ? '<div class="publication-warning">Чтобы сохранить статус «Активен» или «Забронирован», заполните все обязательные поля. Для незавершённой карточки выберите статус «Скрыт».</div>' : "");
+          (liveAndIncomplete ? '<div class="publication-warning">Сохранить карточку можно и так, но клиенты видят её только на тех языках, где заполнено всё. Пока не хватает данных, объект в каталоге не показывается.</div>' : "");
         var type = value("fType");
         var residential = ["apartment", "house", "villa", "townhouse", "newbuild"].indexOf(type) >= 0;
         dialog.querySelectorAll("[data-required]").forEach(function (marker) {
@@ -493,15 +493,12 @@ function openRecordEditor(kind, id) {
       // грузятся отдельно, поэтому обновляем его, когда они приедут.
       loadInterfaceText().then(renderRecordPreview).catch(function () {});
       dialog.querySelector("#saveRecord").onclick = async function () {
-        if (isObject && ["active", "reserved"].indexOf(value("fStatus")) >= 0) {
-          var incomplete = LANGUAGES.map(function (language) { return { language: language[0], issues: editorPublicationIssues(language[0]) }; }).filter(function (entry) { return entry.issues.length; });
-          if (incomplete.length) {
-            dialog.querySelectorAll("details.editor-section").forEach(function (section) { section.open = true; });
-            toast("Заполните обязательные поля или сохраните объект как скрытый", true);
-            renderPublicationCheck();
-            return;
-          }
-        }
+        // Незаполненную карточку сохраняем: клиент увидит её только на тех
+        // языках, где всё заполнено. Раньше кнопка «Сохранить» здесь молча
+        // ничего не делала, и поправить город в карточке было нельзя.
+        var incomplete = isObject && ["active", "reserved"].indexOf(value("fStatus")) >= 0
+          ? LANGUAGES.map(function (language) { return { language: language[0], issues: editorPublicationIssues(language[0]) }; }).filter(function (entry) { return entry.issues.length; })
+          : [];
         var payload = {
           title: collectTranslated(dialog, "title"),
           url: (dialog.querySelector("#fUrl") || {}).value || "",
@@ -546,7 +543,12 @@ function openRecordEditor(kind, id) {
             ? await send("/api/" + kind + "/" + encodeURIComponent(record.id), "PATCH", payload)
             : await send("/api/" + kind, "POST", payload);
           dialog.closeClean();
-          toast(result.alertsQueued ? "Сохранено, уведомления получат " + counted(result.alertsQueued, "клиент", "клиента", "клиентов") : "Сохранено");
+          var done = result.alertsQueued ? "Сохранено, уведомления получат " + counted(result.alertsQueued, "клиент", "клиента", "клиентов") : "Сохранено";
+          if (incomplete.length) {
+            done += ". Клиенты пока не видят карточку на " + incomplete.map(function (entry) { return entry.language.toUpperCase(); }).join(", ") +
+              ": не хватает " + incomplete[0].issues.join(", ");
+          }
+          toast(done, incomplete.length > 0);
           await reload();
         } catch (error) { fail(error); }
       };

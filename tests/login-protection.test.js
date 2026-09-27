@@ -49,6 +49,11 @@ test('проверка пароля не останавливает бота', a
   // Пока считаются пароли, бот обязан отвечать на другие запросы. Восемь
   // проверок подряд синхронным способом заняли бы почти секунду, и всё это
   // время клиенты не получали бы ответов.
+  // Стоимость одной проверки измеряем здесь же: на разных машинах и под
+  // нагрузкой она разная, а жёсткий порог ложно падал бы на полном прогоне тестов.
+  const oneCheckStarted = Date.now();
+  bot.hashPassword('сколько стоит одна проверка');
+  const oneCheck = Math.max(Date.now() - oneCheckStarted, 1);
   const flood = [];
   for (let attempt = 0; attempt < 8; attempt += 1) flood.push(login('неверный-поток-' + attempt, false));
   await new Promise((resolve) => setTimeout(resolve, 10));
@@ -56,7 +61,8 @@ test('проверка пароля не останавливает бота', a
   const status = await realFetch(base + '/api/status');
   const waited = Date.now() - started;
   assert.equal(status.status, 200, 'бот отвечает, пока проверяются пароли');
-  assert.ok(waited < 150, 'ответ пришёл сразу, а не после всех проверок: ' + waited + ' мс');
+  // Синхронная проверка задержала бы ответ на все восемь проверок.
+  assert.ok(waited < Math.max(150, oneCheck * 3), 'ответ пришёл сразу, а не после всех проверок: ' + waited + ' мс при стоимости проверки ' + oneCheck + ' мс');
   const answers = await Promise.all(flood);
   assert.ok(answers.every((response) => [401, 429].includes(response.status)), 'все попытки отклонены');
 });

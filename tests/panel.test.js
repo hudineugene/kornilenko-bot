@@ -69,7 +69,7 @@ test('редакторы объекта и рассылки имеют живо�
   assert.match(PANEL_HTML, /function renderCampaignPreview\(\)/);
   assert.ok((PANEL_HTML.match(/wide: true/g) || []).length >= 2, 'оба редактора должны использовать широкую компоновку');
   assert.match(PANEL_HTML, /Готовность карточки/);
-  assert.match(PANEL_HTML, /сохраните объект как скрытый/);
+  assert.match(PANEL_HTML, /клиенты видят её только на тех языках, где заполнено всё/, 'карточка объясняет готовность, а не запрещает сохранение');
   assert.match(PANEL_HTML, /encodeURIComponent\(record\.id\), "PATCH"/);
   assert.match(PANEL_HTML, /comparison\.cardAddShort/, 'предпросмотр должен показывать компактную кнопку сравнения');
   assert.match(PANEL_HTML, /actions\.bedroomsLabel/, 'характеристики в предпросмотре должны иметь локализованные подписи');
