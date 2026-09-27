@@ -154,6 +154,20 @@ function forgetTelegramFileIds(root) {
   });
 }
 
+// Ошибка именно про сохранённый file_id: он устарел, принадлежит другому боту
+// или файла в Telegram больше нет — тогда идентификатор надо забыть и загрузить
+// файл заново. Всё остальное (клиент заблокировал бота, чат не найден, нет
+// связи) к file_id отношения не имеет: если забывать его и там, рассылка после
+// первого же заблокировавшего клиента начнёт грузить фотографию заново каждому
+// получателю — это мегабайты и минуты на ровном месте.
+function staleFileIdError(error) {
+  const telegramCode = Number(error && error.telegramCode);
+  const status = Number(error && error.status);
+  if (telegramCode !== 400 && status !== 400) return false;
+  const message = String((error && error.message) || '').toLocaleLowerCase('en-US');
+  return ['file', 'media', 'photo', 'thumb'].some((word) => message.includes(word));
+}
+
 // options.captionAbove ставит подпись над фотографией: так картинка-плашка
 // оказывается внизу сообщения (Telegram Bot API, show_caption_above_media).
 async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, options = {}) {
@@ -172,7 +186,8 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
         reply_parameters: options.replyParameters || undefined,
         reply_markup: replyMarkup,
       });
-    } catch {
+    } catch (error) {
+      if (!staleFileIdError(error)) throw error;
       rememberFileId(image, '');
     }
   }
@@ -239,7 +254,8 @@ async function sendPhotoAlbum(chatId, images, token, caption = '') {
           ...(index === 0 && firstCaption ? { caption: firstCaption } : {}),
         })),
       });
-    } catch {
+    } catch (error) {
+      if (!staleFileIdError(error)) throw error;
       for (const image of album) rememberFileId(image, '');
     }
   }
@@ -345,6 +361,7 @@ function markTelegramFailure(error, status = 'reconnecting') {
 }
 
 export {
+  staleFileIdError,
   TELEGRAM_MAX_RETRY_AFTER_SECONDS,
   TELEGRAM_RATE_LIMIT_RETRIES,
   TELEGRAM_REQUEST_TIMEOUT_MS,
