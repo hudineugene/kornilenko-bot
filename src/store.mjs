@@ -59,8 +59,41 @@ function backupBeforeUpgrade(raw) {
   }
 }
 
+// Первая копия, которую удалось прочитать: .bak, потом снимки в backups/.
+function recoverFromCopy() {
+  for (const candidate of recoveryCandidates()) {
+    try {
+      return { data: readDataFile(candidate), name: path.basename(candidate) };
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+// Запись в журнале ошибок: владелец увидит её в панели и поймёт, почему
+// последние изменения могли не сохраниться.
+function noteRecovery(recovered, message) {
+  recovered.errors.unshift({
+    id: crypto.randomUUID(),
+    area: 'Загрузка данных',
+    message,
+    createdAt: new Date().toISOString(),
+  });
+}
+
 function loadData() {
-  if (!fs.existsSync(DATA_FILE)) return clone(defaultData);
+  if (!fs.existsSync(DATA_FILE)) {
+    // Файла нет: либо это первый запуск, либо файл унесли (перенесли папку,
+    // удалил антивирус, не подключился сетевой диск). Начинать «с чистого
+    // листа» нельзя — первое же сохранение записало бы пустые данные, а через
+    // час пустой файл затёр бы .bak, и всё было бы потеряно окончательно.
+    const recovered = recoverFromCopy();
+    if (!recovered) return clone(defaultData);
+    console.error('Файл данных не найден. Данные восстановлены из копии:', recovered.name);
+    noteRecovery(recovered.data, 'Файл данных не найден рядом с ботом. Данные восстановлены из копии ' + recovered.name + ' — последние изменения могли потеряться. Проверьте, не перемещали ли папку бота.');
+    return recovered.data;
+  }
   try {
     const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     const snapshot = backupBeforeUpgrade(raw);
@@ -69,24 +102,14 @@ function loadData() {
   } catch (error) {
     console.error('Не удалось прочитать файл данных:', error.message);
   }
-  for (const candidate of recoveryCandidates()) {
-    let recovered;
-    try {
-      recovered = readDataFile(candidate);
-    } catch {
-      continue;
-    }
+  const recovered = recoverFromCopy();
+  if (recovered) {
     const corruptCopy = DATA_FILE + '.corrupt-' + fileStamp();
     fs.copyFileSync(DATA_FILE, corruptCopy);
-    console.error('Данные восстановлены из копии:', candidate);
+    console.error('Данные восстановлены из копии:', recovered.name);
     console.error('Повреждённый файл сохранён как:', corruptCopy);
-    recovered.errors.unshift({
-      id: crypto.randomUUID(),
-      area: 'Загрузка данных',
-      message: 'Файл данных был повреждён. Данные восстановлены из копии ' + path.basename(candidate) + ', последние изменения могли потеряться. Повреждённый файл: ' + path.basename(corruptCopy),
-      createdAt: new Date().toISOString(),
-    });
-    return recovered;
+    noteRecovery(recovered.data, 'Файл данных был повреждён. Данные восстановлены из копии ' + recovered.name + ', последние изменения могли потеряться. Повреждённый файл: ' + path.basename(corruptCopy));
+    return recovered.data;
   }
   console.error('Подходящая резервная копия не найдена. Исправьте или удалите файл:', DATA_FILE);
   process.exit(1);
@@ -135,8 +158,34 @@ let saveRetryPause = 0;
 // Keeps a known-good copy of the data file that loadData can fall back to.
 // Неудачная копия не должна мешать самой записи: лучше сохранить данные без
 // свежего .bak, чем не сохранить вовсе.
+// Пустые данные — это бот, который ещё не настроен и ничего не завёл.
+function looksEmpty(root) {
+  if (!root) return true;
+  const hasToken = Boolean(root.config && root.config.botToken);
+  const hasObjects = Array.isArray(root.objects) && root.objects.length > 0;
+  const hasUsers = root.users && typeof root.users === 'object' && Object.keys(root.users).length > 0;
+  return !hasToken && !hasObjects && !hasUsers;
+}
+
+// Вторая защита к восстановлению при загрузке: даже если бот всё-таки запустился
+// пустым, запасную копию с настоящими данными он не затрёт.
+function backupWorthKeeping() {
+  if (!looksEmpty(data) || !fs.existsSync(DATA_BACKUP_FILE)) return false;
+  try {
+    return !looksEmpty(JSON.parse(fs.readFileSync(DATA_BACKUP_FILE, 'utf8')));
+  } catch {
+    // Копию прочитать не удалось — тем более не трогаем.
+    return true;
+  }
+}
+
 function rotateDataBackup() {
   if (Date.now() - lastDataBackupAt < DATA_BACKUP_INTERVAL_MS || !fs.existsSync(DATA_FILE)) return;
+  if (backupWorthKeeping()) {
+    console.error('Запасная копия bot-data.json.bak не тронута: сейчас данные пустые, а в копии они есть.');
+    lastDataBackupAt = Date.now();
+    return;
+  }
   try {
     JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     fs.copyFileSync(DATA_FILE, DATA_BACKUP_FILE);
@@ -428,6 +477,7 @@ function replaceData(next) {
 }
 
 export {
+  looksEmpty,
   snapshotBeforeRestore,
   verifyPasswordAsync,
   onSaveFailure,
