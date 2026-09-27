@@ -337,9 +337,9 @@ function publicAddress(address) {
   return !privateIp(host);
 }
 
-// Имя может указывать куда угодно, в том числе на адрес внутри сети. Если
-// разрешить его не удалось — пропускаем: скачать по такому имени всё равно не
-// выйдет, а лишний отказ только запутает.
+// Имя может указывать куда угодно, в том числе внутрь сети. Не разрешилось —
+// отказываем: раньше такая ошибка означала «пропустить проверку», и достаточно
+// было подгадать момент, когда DNS молчит.
 async function addressResolvesOutside(address, lookup) {
   const host = new URL(address).hostname.replace(/^\[|\]$/g, '');
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':')) return !privateIp(host);
@@ -347,10 +347,26 @@ async function addressResolvesOutside(address, lookup) {
   try {
     records = await lookup(host, { all: true });
   } catch {
-    return true;
+    return false;
   }
-  if (!Array.isArray(records) || !records.length) return true;
+  if (!Array.isArray(records) || !records.length) return false;
   return records.every((record) => !privateIp(record && record.address));
+}
+
+// Один и тот же путь для фотографий и для самого файла выгрузки: проверяем
+// адрес, разрешаем имя, идём по перенаправлениям сами и проверяем каждый шаг.
+async function fetchChecked(address, fetcher, lookup, signal, what) {
+  let current = address;
+  for (let hop = 0; ; hop += 1) {
+    if (!publicAddress(current)) throw new Error(what + ': адрес недоступен');
+    if (!(await addressResolvesOutside(current, lookup))) throw new Error(what + ': адрес ведёт во внутреннюю сеть');
+    const response = await fetcher(current, { signal, redirect: 'manual' });
+    if (!REDIRECT_CODES.has(Number(response.status))) return response;
+    if (hop >= MAX_IMAGE_REDIRECTS) throw new Error(what + ': слишком много перенаправлений');
+    const location = response.headers.get('location');
+    if (!location) throw new Error(what + ': перенаправление без адреса');
+    current = new URL(location, current).toString();
+  }
 }
 
 // The body up to a limit, without first taking a huge answer into memory.
@@ -385,20 +401,7 @@ async function downloadImage(address, fetcher, lookup = dnsLookup) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
   try {
-    let current = address;
-    let response = null;
-    for (let hop = 0; ; hop += 1) {
-      if (!publicAddress(current)) throw new Error('адрес фото недоступен');
-      if (!(await addressResolvesOutside(current, lookup))) throw new Error('адрес фото ведёт во внутреннюю сеть');
-      // Перенаправления проходим сами: каждый следующий адрес проверяется так
-      // же, как первый.
-      response = await fetcher(current, { signal: controller.signal, redirect: 'manual' });
-      if (!REDIRECT_CODES.has(Number(response.status))) break;
-      if (hop >= MAX_IMAGE_REDIRECTS) throw new Error('слишком много перенаправлений');
-      const location = response.headers.get('location');
-      if (!location) throw new Error('перенаправление без адреса');
-      current = new URL(location, current).toString();
-    }
+    const response = await fetchChecked(address, fetcher, lookup, controller.signal, 'адрес фото');
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const type = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     const bytes = await readLimited(response, MAX_IMAGE_BYTES, 'Фото');
@@ -416,7 +419,7 @@ function photoBudget(now = Date.now()) {
   return { left: MAX_IMAGES_PER_IMPORT, deadline: now + PHOTO_TIME_LIMIT_MS, skipped: 0 };
 }
 
-async function downloadImages(addresses, fetcher, budget, result) {
+async function downloadImages(addresses, fetcher, budget, result, lookup = dnsLookup) {
   const images = [];
   for (const address of addresses) {
     if (budget.left <= 0 || Date.now() > budget.deadline) {
@@ -425,7 +428,7 @@ async function downloadImages(addresses, fetcher, budget, result) {
     }
     budget.left -= 1;
     try {
-      images.push(await downloadImage(address, fetcher));
+      images.push(await downloadImage(address, fetcher, lookup));
       result.images += 1;
     } catch {
       result.imageErrors += 1;
@@ -455,6 +458,8 @@ async function applyImport(items, options = {}) {
 
 async function runImport(items, options) {
   const fetcher = options.fetcher || fetch;
+  // Разрешение имён можно подменить в проверках: настоящий DNS там ни к чему.
+  const lookup = options.lookup || dnsLookup;
   const plan = planImport(items);
   const now = new Date().toISOString();
   const budget = photoBudget();
@@ -462,7 +467,7 @@ async function runImport(items, options) {
   // Alerts of the whole import are sent together, at most one per client.
   const deliveries = [];
   for (const item of plan.create) {
-    const images = await downloadImages(item.images, fetcher, budget, result);
+    const images = await downloadImages(item.images, fetcher, budget, result, lookup);
     const record = {
       id: crypto.randomUUID(),
       status: 'hidden',
@@ -510,7 +515,7 @@ async function runImport(items, options) {
     if (!record.url && item.texts.url) record.url = item.texts.url;
     if (!record.mapUrl && item.texts.mapUrl) record.mapUrl = item.texts.mapUrl;
     if (!hasImages(record) && item.images.length) {
-      const images = await downloadImages(item.images, fetcher, budget, result);
+      const images = await downloadImages(item.images, fetcher, budget, result, lookup);
       if (images.length) record.imagesByLanguage = imagesForAllLanguages(images);
     }
     record.importedAt = now;
@@ -531,12 +536,15 @@ async function runImport(items, options) {
 
 // Сам файл выгрузки — тоже адрес со стороны: настройку мог поменять кто угодно
 // с доступом к панели.
-async function fetchFeed(address, fetcher = fetch) {
+async function fetchFeed(address, fetcher = fetch, lookup = dnsLookup) {
   if (!/^https?:\/\//i.test(String(address || ''))) throw new Error('Ссылка на выгрузку должна начинаться с http:// или https://');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetcher(address, { signal: controller.signal, redirect: 'follow' });
+    // Адрес выгрузки задаётся в панели, но проверяем его так же, как ссылки
+    // на фотографии: настройку мог поменять кто угодно с доступом к панели, а
+    // перенаправление увести бота во внутреннюю сеть.
+    const response = await fetchChecked(address, fetcher, lookup, controller.signal, 'адрес выгрузки');
     if (!response.ok) throw new Error('сайт ответил ' + response.status);
     return (await readLimited(response, MAX_FEED_BYTES, 'Выгрузка')).toString('utf8');
   } catch (error) {
@@ -560,7 +568,7 @@ function feedSettings() {
 
 // Once a day from the saved link, when that is switched on, in the daytime:
 // clients may get alerts about new properties.
-async function runDailyFeedImport(now = new Date(), fetcher = fetch) {
+async function runDailyFeedImport(now = new Date(), fetcher = fetch, lookup = dnsLookup) {
   const settings = feedSettings();
   if (!settings.daily || !settings.url || importRunning) return null;
   if (now.getHours() < DAILY_IMPORT_HOURS.from || now.getHours() >= DAILY_IMPORT_HOURS.to) return null;
@@ -568,7 +576,7 @@ async function runDailyFeedImport(now = new Date(), fetcher = fetch) {
   if (Number.isFinite(last) && now.getTime() - last < FEED_REFRESH_MS - 60 * 60 * 1000) return null;
   data.config.feedImport = { ...settings, lastRunAt: now.toISOString() };
   try {
-    const result = await applyImport(readFeed(await fetchFeed(settings.url, fetcher)), { publishNew: settings.publishNew, fetcher });
+    const result = await applyImport(readFeed(await fetchFeed(settings.url, fetcher, lookup)), { publishNew: settings.publishNew, fetcher, lookup });
     data.config.feedImport = { ...data.config.feedImport, lastResult: result, lastError: '' };
     saveDataNow();
     return result;
@@ -582,6 +590,7 @@ async function runDailyFeedImport(now = new Date(), fetcher = fetch) {
 
 export {
   applyImport,
+  fetchChecked,
   downloadImage,
   privateIp,
   feedItemOf,

@@ -39,6 +39,10 @@ const FEED = `<?xml version="1.0" encoding="UTF-8"?>
   <property><ref>KB-202</ref><price>1300</price></property>
 </root>`;
 
+// Имена в проверках выдуманные: подменяем разрешение имён, чтобы прогон не
+// зависел от настоящего DNS и не ждал его молчания.
+const lookup = async () => [{ address: '93.184.216.34', family: 4 }];
+
 function imageFetcher(url) {
   if (String(url).includes('missing')) return Promise.resolve(new Response('no', { status: 404 }));
   return Promise.resolve(new Response(PNG, { status: 200, headers: { 'content-type': 'image/png' } }));
@@ -81,7 +85,7 @@ test('new properties are added hidden with their photos; the admin\'s texts are 
   assert.deepEqual(preview.skipped.map((item) => item.reason), ['нет номера объекта (<ref>)', 'номер повторяется в выгрузке']);
   assert.equal(data.objects.length, 2, 'the preview changes nothing');
 
-  const result = await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher });
+  const result = await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher, lookup });
   assert.deepEqual([result.create, result.update, result.images, result.imageErrors], [1, 1, 1, 1]);
   const villa = data.objects.find((record) => record.reference === 'KB-101');
   assert.equal(villa.status, 'hidden');
@@ -100,7 +104,7 @@ test('new properties are added hidden with their photos; the admin\'s texts are 
 test('a feed that leaves fields out does not overwrite them', async () => {
   const data = bot.getData();
   data.objects.push({ id: 'rented', status: 'active', reference: 'R-1', dealType: 'rent', pricePeriod: 'month', currency: 'GBP', propertyType: 'villa', priceValue: 2000, title: { ru: 'Вилла', en: '', es: '' }, imagesByLanguage: { ru: [], en: [], es: [] } });
-  await bot.applyImport(bot.readFeed('<root><property><ref>R-1</ref><price>2200</price></property></root>'), { fetcher: imageFetcher });
+  await bot.applyImport(bot.readFeed('<root><property><ref>R-1</ref><price>2200</price></property></root>'), { fetcher: imageFetcher, lookup });
   const record = data.objects.find((item) => item.id === 'rented');
   assert.deepEqual([record.priceValue, record.dealType, record.pricePeriod, record.currency, record.propertyType], [2200, 'rent', 'month', 'GBP', 'villa']);
 });
@@ -116,8 +120,8 @@ test('a broken file is read quickly; photos from local addresses are refused; on
   }
   let release;
   const slow = () => new Promise((resolve) => { release = () => resolve(new Response(PNG, { status: 200, headers: { 'content-type': 'image/png' } })); });
-  const first = bot.applyImport(bot.readFeed(FEED), { fetcher: slow });
-  await assert.rejects(bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher }), /уже идёт/);
+  const first = bot.applyImport(bot.readFeed(FEED), { fetcher: slow, lookup });
+  await assert.rejects(bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher, lookup }), /уже идёт/);
   while (!release) await new Promise((resolve) => setTimeout(resolve, 5));
   release();
   release = null;
@@ -131,12 +135,12 @@ test('an import sends each client at most one alert', async () => {
   data.config.active = true;
   data.users.fan = { id: 'fan', chatId: 777001, firstName: 'Fan', preferredLanguage: 'ru', activity: [] };
   data.inquiries.push({ id: 'sel', userId: 'fan', type: 'selection', language: 'ru', selection: { deal: '', type: '', location: '', budget: '', bedrooms: '' }, status: 'new', text: '', replies: [], createdAt: new Date().toISOString() });
-  const result = await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher, publishNew: true });
+  const result = await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher, publishNew: true, lookup });
   assert.equal(result.alerts, 1);
 });
 
 test('with "show at once" new properties with photos are published', async () => {
-  await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher, publishNew: true });
+  await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher, publishNew: true, lookup });
   const data = bot.getData();
   assert.equal(data.objects.find((record) => record.reference === 'KB-101').status, 'active');
   assert.equal(data.objects.find((record) => record.reference === 'KB-202').status, 'hidden', 'no photos: not shown yet');
@@ -144,16 +148,16 @@ test('with "show at once" new properties with photos are published', async () =>
 
 test('"show at once" keeps an incomplete multilingual card hidden', async () => {
   const withoutRussianDescription = FEED.replace('<ru>Современная вилла с видом на море и бассейном</ru>', '');
-  await bot.applyImport(bot.readFeed(withoutRussianDescription), { fetcher: imageFetcher, publishNew: true });
+  await bot.applyImport(bot.readFeed(withoutRussianDescription), { fetcher: imageFetcher, publishNew: true, lookup });
   const villa = bot.getData().objects.find((record) => record.reference === 'KB-101');
   assert.equal(villa.status, 'hidden');
   assert.deepEqual(bot.propertyPublicationIssues(villa, 'ru'), ['описание']);
 });
 
 test('a second import updates instead of duplicating, and reports what left the feed', async () => {
-  await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher });
+  await bot.applyImport(bot.readFeed(FEED), { fetcher: imageFetcher, lookup });
   const smaller = FEED.replace(/<property>\s*<ref>KB-202<\/ref><price>1200[\s\S]*?<\/property>/, '').replace('<price>450000</price>', '<price>430000</price>');
-  const result = await bot.applyImport(bot.readFeed(smaller), { fetcher: imageFetcher });
+  const result = await bot.applyImport(bot.readFeed(smaller), { fetcher: imageFetcher, lookup });
   assert.deepEqual([result.create, result.update], [0, 2]);
   assert.equal(bot.getData().objects.filter((record) => record.reference === 'KB-101').length, 1);
   assert.equal(bot.getData().objects.find((record) => record.reference === 'KB-101').priceValue, 430000);
@@ -189,9 +193,9 @@ test('the panel previews and imports a feed; daily updates run once a day', asyn
   };
   const monday = new Date(2026, 8, 21, 10, 0);
   bot.getData().config.feedImport.lastRunAt = new Date(2026, 8, 20, 20, 0).toISOString();
-  assert.equal(await bot.runDailyFeedImport(monday, feedFetcher), null, 'less than a day ago');
+  assert.equal(await bot.runDailyFeedImport(monday, feedFetcher, lookup), null, 'less than a day ago');
   bot.getData().config.feedImport.lastRunAt = new Date(2026, 8, 20, 9, 0).toISOString();
-  const result = await bot.runDailyFeedImport(monday, feedFetcher);
+  const result = await bot.runDailyFeedImport(monday, feedFetcher, lookup);
   assert.equal(downloads, 1);
   assert.deepEqual([result.create, result.update], [0, 0]);
 });

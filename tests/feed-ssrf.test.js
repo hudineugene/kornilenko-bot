@@ -55,7 +55,7 @@ test('перенаправление во внутреннюю сеть не п�
   };
   await assert.rejects(
     () => downloadImage('https://img.example.com/a.png', fetcher, outside),
-    /адрес фото недоступен/,
+    /адрес фото: адрес недоступен/,
   );
   assert.deepEqual(visited, ['https://img.example.com/a.png'], 'по внутреннему адресу бот не пошёл');
 });
@@ -86,10 +86,34 @@ test('имя, которое указывает на домашний адрес
   );
 });
 
-test('если имя не разрешается, загрузка идёт как обычно', async () => {
+test('если имя не разрешается, фотография не скачивается', async () => {
+  // Раньше ошибка DNS означала «пропустить проверку»: достаточно было
+  // подгадать момент, когда имя не разрешается, чтобы увести бота куда угодно.
   const failing = async () => { throw new Error('ENOTFOUND'); };
-  const image = await downloadImage('https://img.example.com/a.png', async () => photoAnswer(), failing);
-  assert.equal(image.mimeType, 'image/png', 'проверка не мешает работе, когда DNS молчит');
+  await assert.rejects(
+    () => downloadImage('https://img.example.com/a.png', async () => photoAnswer(), failing),
+    /внутреннюю сеть/,
+  );
+});
+
+test('файл выгрузки проверяется так же, как фотографии', async () => {
+  const { fetchFeed } = await import('../src/feed-import.mjs');
+  const feed = '<?xml version="1.0"?><root></root>';
+  const answer = (body) => ({ ok: true, status: 200, headers: { get: () => null }, arrayBuffer: async () => Buffer.from(body) });
+
+  const text = await fetchFeed('https://feed.example.com/export.xml', async () => answer(feed), outside);
+  assert.match(text, /<root>/, 'обычная выгрузка скачивается');
+
+  // Перенаправление на домашний адрес не проходит.
+  const redirecting = async (address) => (address.includes('feed.example.com')
+    ? redirectTo('http://127.0.0.1:3000/api/state')
+    : answer(feed));
+  await assert.rejects(() => fetchFeed('https://feed.example.com/export.xml', redirecting, outside), /недоступен|внутренн/i);
+  // Имя, которое указывает внутрь сети, тоже.
+  await assert.rejects(
+    () => fetchFeed('https://feed.example.com/export.xml', async () => answer(feed), lookupAs('10.0.0.5')),
+    /внутренн/i,
+  );
 });
 
 test('адреса внутренней сети распознаются во всех видах', () => {
