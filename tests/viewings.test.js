@@ -501,3 +501,29 @@ test.describe('reminder, feedback and the day\'s list', () => {
     assert.equal(ADMIN_CHAT, bot.getData().config.adminChatId);
   });
 });
+
+test('два менеджера жмут «Подтвердить» одновременно — клиент получает одно подтверждение', async () => {
+  const chat = createChat();
+  const inquiry = await (async () => {
+    await chat.press('property:viewing:villa-marbella-01');
+    await chat.say(ru.dateOptions[1]);
+    await chat.say(ru.timeOptions[0]);
+    await chat.say(ru.confirm);
+    return chat.inquiries[chat.inquiries.length - 1];
+  })();
+  telegram.calls = [];
+
+  // Нажатия приходят из двух чатов одновременно: проверка «уже подтверждён»
+  // успевает пройти в обоих, пока первое подтверждение ещё отправляется.
+  const results = await Promise.allSettled([
+    bot.confirmViewing(inquiry, { source: 'telegram' }),
+    bot.confirmViewing(inquiry, { source: 'telegram' }),
+  ]);
+  const confirmations = telegram.calls.filter((call) => call.method === 'sendMessage'
+    && String(call.body.chat_id) === String(chat.id)
+    && /Просмотр подтверждён|Viewing confirmed/i.test(String(call.body.text)));
+  assert.equal(confirmations.length, 1, 'клиенту ушло одно подтверждение');
+  assert.equal(results.filter((item) => item.status === 'rejected').length, 1, 'второе нажатие получило отказ');
+  assert.match(results.find((item) => item.status === 'rejected').reason.message, /уже подтверждается/);
+  assert.equal(inquiry.replies.filter((item) => /Просмотр подтверждён/.test(item.text)).length, 1, 'и запись в переписке одна');
+});

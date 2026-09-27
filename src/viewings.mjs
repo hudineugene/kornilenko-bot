@@ -202,8 +202,25 @@ async function sendViewingConfirmation(inquiry, user, token = data.config.botTok
 // The manager confirms a viewing from the admin chat (the client's own date)
 // or from the panel (an exact date and time). The client gets a message with
 // the details; reminders and the follow-up question are planned from it.
+// Пока подтверждение в пути, второе нажатие на ту же запись не принимается.
+// Между проверкой «уже подтверждён» и записью есть ожидание отправки, и два
+// менеджера, нажавшие кнопку одновременно, отправляли клиенту два одинаковых
+// подтверждения. С тех пор как чаты обрабатываются параллельно, это стало
+// делом одной секунды.
+const confirmingViewings = new Set();
+
 async function confirmViewing(inquiry, options = {}, token = data.config.botToken) {
   if (!inquiry || inquiry.type !== 'viewing') throw new Error('Это не запись на просмотр');
+  if (confirmingViewings.has(inquiry.id)) throw new Error('Просмотр уже подтверждается — подождите секунду');
+  confirmingViewings.add(inquiry.id);
+  try {
+    return await confirmViewingOnce(inquiry, options, token);
+  } finally {
+    confirmingViewings.delete(inquiry.id);
+  }
+}
+
+async function confirmViewingOnce(inquiry, options, token) {
   const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
   if (!user || !user.chatId) throw new Error('У пользователя нет доступного чата');
   const viewing = normalizeViewing(inquiry.viewing || {});
