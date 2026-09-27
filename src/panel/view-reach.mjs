@@ -6,6 +6,16 @@ var selectedGroup = "";
 function campaignPropertySignalLabel(signal) {
   return { any: "любой интерес", favorite: "в избранном", comparison: "сравнивает", viewed: "просматривал", match: "подходит по запросу", inquiry: "обращался" }[signal || "any"] || "любой интерес";
 }
+// Пауза из-за обрыва связи — не ошибка: рассылка продолжится сама.
+function campaignStatusChip(entry) {
+  if (entry.status === "failed") return '<span class="chip bad">ошибка</span>';
+  if (entry.status === "queued" && entry.pausedAt) {
+    return '<span class="chip warn" title="' + esc(entry.error || "") + '">пауза, продолжится сама</span>';
+  }
+  if (entry.status === "queued" || entry.status === "running") return '<span class="chip warn">идёт</span>';
+  return '<span class="chip ok">отправлена</span>';
+}
+
 function campaignAudienceLabel(entry) {
   var parts = [];
   if ((entry.languages || []).length) parts.push((entry.languages || []).join(", ").toUpperCase());
@@ -36,7 +46,7 @@ function renderCampaigns(host) {
     (history.length ? history.map(function (entry) {
       return "<tr><td class=\"nowrap\">" + dateShort(entry.startedAt) + "</td><td>" + esc(String(localized(entry.messages, "ru")).slice(0, 60)) + "</td><td class=\"small\">" + esc(campaignAudienceLabel(entry)) + "</td>" +
         '<td class="right">' + num(entry.sent) + '</td><td class="right">' + num(entry.responses) + '</td><td class="right">' + num(entry.unsubscribes) + "</td>" +
-        "<td>" + (entry.status === "failed" ? '<span class="chip bad">ошибка</span>' : entry.status === "queued" || entry.status === "running" ? '<span class="chip warn">идёт</span>' : '<span class="chip ok">отправлена</span>') + "</td></tr>";
+        "<td>" + campaignStatusChip(entry) + "</td></tr>";
     }).join("") : '<tr><td colspan="7"><div class="empty"><b>Рассылок ещё не было</b>Сообщение получат клиенты, которые не отписались</div></td></tr>') +
     "</tbody></table></div></div>";
   host.querySelectorAll("tr[data-id]").forEach(function (row) {

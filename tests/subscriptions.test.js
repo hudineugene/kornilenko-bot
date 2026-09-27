@@ -150,3 +150,110 @@ test('the setting survives a restart', () => {
   bot.setData(saved);
   assert.equal(bot.userById(String(chat.id)).broadcastsOptOut, true);
 });
+
+// --- Рассылка и обрывы связи -------------------------------------------------
+
+test.describe('рассылка при сбое связи', () => {
+  // Подменяем Telegram: первые получатели проходят, затем связь «падает».
+  function failAfter(count, error) {
+    let seen = 0;
+    const original = global.fetch;
+    global.fetch = (url, init) => {
+      if (String(url).includes('api.telegram.org') && String(url).endsWith('sendMessage')) {
+        seen += 1;
+        if (seen > count) return Promise.reject(error());
+      }
+      return original(url, init);
+    };
+    return () => { global.fetch = original; };
+  }
+
+  test('обрыв связи ставит рассылку в очередь, а не сжигает получателей', async () => {
+    const first = createChat();
+    const second = createChat();
+    const third = createChat();
+    const entry = { ...broadcast, id: 'bc-outage', languages: [], tags: [], status: 'queued', processedUserIds: [] };
+    bot.getData().broadcasts.unshift(entry);
+
+    const restore = failAfter(1, () => Object.assign(new Error('fetch failed'), { name: 'TypeError' }));
+    try {
+      await bot.runBroadcast(entry);
+    } finally {
+      restore();
+    }
+
+    assert.equal(entry.status, 'queued', 'рассылка ждёт связи, а не «выполнена»');
+    assert.equal(entry.sent, 1, 'успевшие получить — засчитаны');
+    assert.equal(entry.failed, 0, 'остальные не записаны как неудача');
+    assert.equal(entry.processedUserIds.length, 1, 'необработанные получатели останутся в очереди');
+    assert.ok(entry.pausedAt, 'видно, что была пауза');
+    assert.match(entry.error, /Связь с Telegram/);
+    assert.ok([second.id, third.id].every((id) => !entry.processedUserIds.includes(String(id))));
+  });
+
+  test('после возвращения связи рассылка продолжается с того же места', async () => {
+    const first = createChat();
+    const second = createChat();
+    const entry = { ...broadcast, id: 'bc-resume', languages: [], tags: [], status: 'queued', processedUserIds: [] };
+    bot.getData().broadcasts.unshift(entry);
+
+    const restore = failAfter(1, () => Object.assign(new Error('Bad Gateway'), { status: 502, telegramCode: 502 }));
+    try { await bot.runBroadcast(entry); } finally { restore(); }
+    assert.equal(entry.status, 'queued');
+    const delivered = entry.processedUserIds.slice();
+
+    telegram.calls = [];
+    await bot.runBroadcast(entry);
+    assert.equal(entry.status, 'done', 'со второго прохода рассылка завершается');
+    assert.equal(entry.sent, 2, 'каждый получил один раз');
+    assert.equal(entry.error, '', 'сообщение о паузе снимается');
+    const receivers = telegram.calls.filter((call) => call.method === 'sendMessage').map((call) => String(call.body.chat_id));
+    assert.ok(!receivers.includes(delivered[0]), 'уже получивший второй раз не получает');
+  });
+
+  test('клиент, заблокировавший бота, остаётся неудачей и не останавливает рассылку', async () => {
+    const blocking = createChat();
+    const other = createChat();
+    const entry = { ...broadcast, id: 'bc-blocked', languages: [], tags: [], status: 'queued', processedUserIds: [] };
+    bot.getData().broadcasts.unshift(entry);
+
+    const original = global.fetch;
+    global.fetch = (url, init) => {
+      const body = init && typeof init.body === 'string' ? JSON.parse(init.body) : {};
+      if (String(url).endsWith('sendMessage') && String(body.chat_id) === String(blocking.id)) {
+        return Promise.reject(Object.assign(new Error('Forbidden: bot was blocked by the user'), { telegramCode: 403, status: 403 }));
+      }
+      return original(url, init);
+    };
+    try { await bot.runBroadcast(entry); } finally { global.fetch = original; }
+
+    assert.equal(entry.status, 'done', 'отказ одного клиента не останавливает рассылку');
+    assert.equal(entry.failed, 1);
+    assert.equal(entry.sent, 1);
+    assert.equal(blocking.user.blocked, true, 'клиент помечен недоступным');
+    assert.equal(blocking.user.blockedBy, 'telegram');
+  });
+
+  test('файл данных при рассылке пишется не чаще раза в 5 секунд', async () => {
+    const readers = Array.from({ length: 12 }, () => createChat());
+    const entry = { ...broadcast, id: 'bc-writes', languages: [], tags: [], status: 'queued', processedUserIds: [] };
+    bot.getData().broadcasts.unshift(entry);
+    const fs = require('node:fs');
+    const writes = [];
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = function (file, ...rest) {
+      if (String(file).includes('bot-data')) writes.push(Date.now());
+      return realWrite.call(fs, file, ...rest);
+    };
+    try {
+      await bot.runBroadcast(entry);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    assert.equal(entry.sent, readers.length);
+    // Рассылка короче пяти секунд: только старт и завершение, без записи на
+    // каждого получателя.
+    assert.ok(writes.length <= 3, 'записей файла должно быть немного, а не по одной на получателя: ' + writes.length);
+  });
+});

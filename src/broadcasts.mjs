@@ -111,6 +111,20 @@ function userUnavailableError(error) {
   return message.includes('chat not found') || message.includes('user is deactivated');
 }
 
+// Связь пропала, Telegram ответил 5xx или попросил подождать: получатель не
+// виноват, отправлять ему заново можно. Рассылка встаёт в очередь и продолжится
+// сама, когда связь вернётся (runDueBroadcasts проверяет каждые 30 секунд).
+function temporaryDeliveryError(error) {
+  if (!error) return false;
+  if (error.name === 'AbortError' || error.name === 'TimeoutError') return true;
+  const code = Number(error.telegramCode);
+  const status = Number(error.status);
+  if (code === 429 || status === 429) return true;
+  if (status >= 500 || code >= 500) return true;
+  // Сетевые ошибки приходят без кода Telegram: сюда попадают обрывы связи.
+  return !Number.isFinite(code) && !Number.isFinite(status);
+}
+
 async function runBroadcast(entry) {
   if (runtime.broadcastRunning) throw new Error('Рассылка уже выполняется');
   runtime.broadcastRunning = true;
@@ -136,6 +150,16 @@ async function runBroadcast(entry) {
         entry.sent += 1;
         rememberBroadcastDelivery(user, entry);
       } catch (error) {
+        if (temporaryDeliveryError(error)) {
+          // Не считаем неудачей и не помечаем получателя обработанным:
+          // рассылка продолжится с него же.
+          entry.status = 'queued';
+          entry.pausedAt = new Date().toISOString();
+          entry.error = cleanText('Связь с Telegram потеряна, рассылка продолжится сама: ' + error.message, 400);
+          recordError('Рассылка приостановлена', error);
+          saveDataNow();
+          return;
+        }
         entry.failed += 1;
         if (userUnavailableError(error)) markUnavailable(user);
         entry.failures.push({
@@ -153,12 +177,12 @@ async function runBroadcast(entry) {
       if (Date.now() - lastProgressSaveAt >= 5000) {
         saveDataNow();
         lastProgressSaveAt = Date.now();
-      } else {
-        scheduleSave();
       }
       await delay(45);
     }
     entry.status = 'done';
+    entry.error = '';
+    entry.pausedAt = '';
     entry.finishedAt = new Date().toISOString();
   } finally {
     runtime.broadcastRunning = false;

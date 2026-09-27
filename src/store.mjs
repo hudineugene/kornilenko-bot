@@ -142,6 +142,10 @@ function saveDataNow() {
 // Throttled rather than debounced: a steady stream of updates must not
 // postpone the write indefinitely.
 function scheduleSave() {
+  // Во время рассылки файл сохраняет сама рассылка — раз в пять секунд и в
+  // конце. Иначе каждый получатель тянул бы за собой запись всего файла:
+  // на пяти тысячах клиентов это тысячи перезаписей за одну рассылку.
+  if (runtime.broadcastRunning) return;
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
