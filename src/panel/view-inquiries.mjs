@@ -3,6 +3,14 @@
 const INQUIRIES_JS = String.raw`
 var inquiryFilter = { status: "waiting", type: "", search: "" };
 var selectedInquiry = "";
+// Беседу помечает прочитанной только человек, который её открыл. Панель сама
+// выбирает первую беседу в списке (и заново при каждой перерисовке) — раньше
+// из-за этого непрочитанные обращения «прочитывались» без участия владельца.
+var conversationOpenedByUser = false;
+function selectConversation(id) {
+  selectedInquiry = id;
+  conversationOpenedByUser = Boolean(id);
+}
 var clientSearch = "";
 var clientStageFilter = "";
 var pipelineFilter = { search: "", assignee: "" };
@@ -141,7 +149,7 @@ function conversationMatches(group) {
 }
 
 function openInquiry(id) {
-  selectedInquiry = id;
+  selectConversation(id);
   go("inquiries", "inbox");
 }
 
@@ -223,7 +231,7 @@ function renderPipeline(host) {
   };
   host.querySelector("#pipelineAssignee").onchange = function (event) { pipelineFilter.assignee = event.target.value; renderPipeline(host); };
   host.querySelectorAll("[data-inquiry]").forEach(function (button) {
-    button.onclick = function () { selectedInquiry = button.dataset.inquiry; go("inquiries", "inbox"); };
+    button.onclick = function () { selectConversation(button.dataset.inquiry); go("inquiries", "inbox"); };
   });
   host.querySelectorAll("[data-pipeline-stage]").forEach(function (select) {
     select.onchange = async function () {
@@ -315,7 +323,7 @@ function renderTasks(host) {
   var search = host.querySelector("#taskSearch");
   search.oninput = function () { taskFilter.search = search.value.trim(); clearTimeout(search._timer); search._timer = setTimeout(function () { renderTasks(host); var next = host.querySelector("#taskSearch"); if (next) next.focus(); }, 250); };
   host.querySelector("#taskAssignee").onchange = function (event) { taskFilter.assignee = event.target.value; renderTasks(host); };
-  host.querySelectorAll("[data-task-open]").forEach(function (button) { button.onclick = function () { selectedInquiry = button.dataset.taskOpen; go("inquiries", "inbox"); }; });
+  host.querySelectorAll("[data-task-open]").forEach(function (button) { button.onclick = function () { selectConversation(button.dataset.taskOpen); go("inquiries", "inbox"); }; });
   host.querySelectorAll("[data-task-plan]").forEach(function (button) { button.onclick = function () { var row = allRows.find(function (entry) { return entry.item.id === button.dataset.taskPlan; }); if (row) openTaskSchedule(row.item); }; });
   host.querySelectorAll("[data-task-done]").forEach(function (button) {
     button.onclick = async function () {
@@ -384,8 +392,13 @@ function openTemplates() {
 function renderInquiryList(host) {
   var allGroups = conversationGroups();
   var rows = allGroups.filter(conversationMatches);
-  if (!rows.length) selectedInquiry = "";
-  else if (!rows.some(function (group) { return group.inquiries.some(function (item) { return item.id === selectedInquiry; }); })) selectedInquiry = rows[0].active.id;
+  // Выбор «сам собой»: список пуст или прежняя беседа не попала в фильтр.
+  // Такая беседа показывается, но прочитанной не считается.
+  if (!rows.length) selectConversation("");
+  else if (!rows.some(function (group) { return group.inquiries.some(function (item) { return item.id === selectedInquiry; }); })) {
+    selectedInquiry = rows[0].active.id;
+    conversationOpenedByUser = false;
+  }
   pageAction("✎ Шаблоны ответов", openTemplates, "secondary");
   pageAction("🧹 Очистить", openCleanup, "ghost");
   var counts = {
@@ -444,7 +457,7 @@ function renderInquiryList(host) {
   };
   host.querySelector("#exportInq").onclick = exportInquiries;
   host.querySelectorAll(".conversation-item[data-id]").forEach(function (row) {
-    row.onclick = function () { selectedInquiry = row.dataset.id; renderInquiryList(host); };
+    row.onclick = function () { selectConversation(row.dataset.id); renderInquiryList(host); };
   });
   renderInquiryCard(host.querySelector("#inquiryCard"));
 }
@@ -487,7 +500,7 @@ function openCleanup() {
         try {
           var result = await send("/api/inquiries/cleanup", "POST", { scope: dialog.querySelector("#cleanScope").value, olderThanDays: Number(dialog.querySelector("#cleanAge").value) });
           dialog.close();
-          selectedInquiry = "";
+          selectConversation("");
           toast("Удалено: " + result.removed + ", осталось: " + result.left);
           await reload();
         } catch (error) { fail(error); }
@@ -557,7 +570,12 @@ function renderInquiryCard(host) {
   var viewing = item.viewing || null;
   var managers = [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
   var timeline = conversationTimeline(item.userId);
-  markConversationRead(item.userId);
+  // Открыл человек — значит прочитал. Перерисовка того же экрана (обновление по
+  // таймеру, смена фильтра) больше ничего не помечает.
+  if (conversationOpenedByUser) {
+    conversationOpenedByUser = false;
+    markConversationRead(item.userId);
+  }
   host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions">' + statusChip(item) + "</div></header>" +
     '<div class="card-body conversation-body">' +
       '<div class="conversation-context">' +
@@ -585,7 +603,7 @@ function renderInquiryCard(host) {
     "</div></div>";
 
   var activeInquiry = host.querySelector("#activeInquiry");
-  if (activeInquiry) activeInquiry.onchange = function () { selectedInquiry = activeInquiry.value; renderInquiryList(el("viewBody")); };
+  if (activeInquiry) activeInquiry.onchange = function () { selectConversation(activeInquiry.value); renderInquiryList(el("viewBody")); };
   var linkedProperty = host.querySelector("#linkedProperty");
   if (linkedProperty) linkedProperty.onclick = function () { openRecordEditor("objects", property.id); };
 
@@ -715,7 +733,7 @@ function renderInquiryCard(host) {
     if (!(await confirmDialog("Удалить обращение?", "Оно исчезнет из панели. Переписка в Telegram останется.", "Удалить", true))) return;
     try {
       await api("/api/inquiries/" + encodeURIComponent(item.id), { method: "DELETE" });
-      selectedInquiry = "";
+      selectConversation("");
       toast("Удалено");
       await reload();
     } catch (error) { fail(error); }
@@ -1022,14 +1040,14 @@ function openClient(id) {
           dialog.closeClean();
           toast(result.duplicate ? "Сообщение уже было отправлено" : "Сообщение отправлено");
           await reload(false);
-          selectedInquiry = result.inquiryId || (active && active.id) || "";
+          selectConversation(result.inquiryId || (active && active.id) || "");
           await go("inquiries", "inbox");
         } catch (error) { fail(error); }
       };
       async function openConversation(inquiryId) {
         if (!(await confirmNavigation("Перейти без сохранения?", "Перейти"))) return;
         dialog.closeClean();
-        selectedInquiry = inquiryId;
+        selectConversation(inquiryId);
         await go("inquiries", "inbox");
       }
       dialog.querySelectorAll("[data-client-inquiry]").forEach(function (button) { button.onclick = function () { openConversation(button.dataset.clientInquiry); }; });

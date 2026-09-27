@@ -441,3 +441,38 @@ test.describe('автообновление панели раз в 45 секун
     assert.equal(sandbox.__scrolls.length, 1, 'при обычной отрисовке страница прокручивается наверх');
   });
 });
+
+test('беседа помечается прочитанной только когда её открыл человек', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.users['700001'] = { id: '700001', chatId: 700001, firstName: 'Анна', preferredLanguage: 'ru', activity: [], lastSeenAt: new Date().toISOString() };
+    data.inquiries.push({
+      id: 'inq-unread', userId: '700001', chatId: '700001', language: 'ru', type: 'general',
+      text: 'Есть ли парковка?', status: 'new', pipelineStage: 'new', replies: [], messages: [], readAt: '',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), clientMessageAt: new Date().toISOString(),
+    });
+  });
+  const { sandbox, requests } = await panelSandbox();
+  const readRequests = () => requests.filter((request) => /\/api\/conversations\/.+\/read/.test(request.url));
+
+  // Экран открыт: первую беседу панель выбирает сама, а не человек.
+  requests.length = 0;
+  await sandbox.VIEWS.inquiries.render(fakeElement('main'), 'inbox');
+  assert.deepEqual(readRequests(), [], 'сама по себе беседа прочитанной не становится');
+  assert.equal(sandbox.state.inquiries[0].readAt, '', 'обращение осталось непрочитанным');
+
+  // Перерисовка по таймеру тоже ничего не помечает.
+  await sandbox.VIEWS.inquiries.render(fakeElement('main'), 'inbox');
+  assert.deepEqual(readRequests(), [], 'обновление экрана не помечает беседу');
+
+  // Человек нажал на беседу в списке.
+  sandbox.selectConversation('inq-unread');
+  await sandbox.VIEWS.inquiries.render(fakeElement('main'), 'inbox');
+  assert.equal(readRequests().length, 1, 'открытая беседа помечается прочитанной');
+  assert.equal(readRequests()[0].method, 'POST');
+  assert.ok(sandbox.state.inquiries[0].readAt, 'отметка проставлена и в панели');
+
+  // И только один раз: следующая перерисовка не шлёт запрос заново.
+  await sandbox.VIEWS.inquiries.render(fakeElement('main'), 'inbox');
+  assert.equal(readRequests().length, 1, 'повторных запросов нет');
+});

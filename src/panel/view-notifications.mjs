@@ -51,7 +51,7 @@ async function openNotification(item, button) {
     }
     var target = item.route || {};
     if (target.inquiryId && target.view === "inquiries" && target.tab === "inbox") {
-      selectedInquiry = target.inquiryId;
+      selectConversation(target.inquiryId);
       await go("inquiries", "inbox");
     } else if (target.view) await go(target.view, target.tab || "");
   } catch (error) { if (button) button.disabled = false; fail(error); }

@@ -193,7 +193,7 @@ async function openObjectInsights(id) {
         root.querySelectorAll("[data-insight-conversation]").forEach(function (button) {
           button.onclick = async function () {
             root.closeClean();
-            selectedInquiry = button.dataset.insightConversation;
+            selectConversation(button.dataset.insightConversation);
             await go("inquiries", "inbox");
           };
         });
