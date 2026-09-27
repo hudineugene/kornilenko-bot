@@ -6,7 +6,6 @@ Set-Location $PSScriptRoot
 
 $logDirectory = Join-Path $PSScriptRoot 'logs'
 $log = Join-Path $logDirectory 'bot.log'
-$maxLogBytes = 5MB
 New-Item -ItemType Directory -Force $logDirectory | Out-Null
 
 if (Test-Path (Join-Path $PSScriptRoot 'bot.exe')) {
@@ -17,13 +16,13 @@ if (Test-Path (Join-Path $PSScriptRoot 'bot.exe')) {
 
 $quickFailures = 0
 while ($true) {
-  if ((Test-Path $log) -and (Get-Item $log).Length -gt $maxLogBytes) {
-    Move-Item -Force $log ($log + '.1')
-  }
   $startedAt = Get-Date
   Add-Content -Encoding UTF8 $log ('[' + $startedAt.ToString('s') + '] Запуск: ' + $command)
   Write-Host ('Бот запущен, журнал: ' + $log)
-  cmd.exe /c ($command + ' >> "' + $log + '" 2>&1')
+  # Журнал ведёт сам бот: он пишет в logsot.log и сам переносит разросшийся
+  # файл в bot.log.1. Перенаправлять вывод сюда нельзя — пока окно держит файл
+  # открытым, Windows не даёт его ни переименовать, ни укоротить.
+  cmd.exe /c $command
   $exitCode = $LASTEXITCODE
   Add-Content -Encoding UTF8 $log ('[' + (Get-Date).ToString('s') + '] Процесс завершился с кодом ' + $exitCode)
   if ($exitCode -eq 0) { break }

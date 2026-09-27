@@ -14,6 +14,7 @@ import { startTunnel, stopTunnel } from './remote.mjs';
 import { server } from './server.mjs';
 import { announceError, announceStart, rememberShutdown, sendStatusNotice, statusNoticesOn, stopNoticeText } from './status.mjs';
 import { diskSpaceNotice, runSelfCheck, selfCheckLines, selfCheckNotice } from './selfcheck.mjs';
+import { startLogFile } from './logfile.mjs';
 
 const RUN_MARKER_FILE = path.join(path.dirname(DATA_FILE), 'bot-running.json');
 const RUN_HEARTBEAT_MS = 60 * 1000;
@@ -188,6 +189,9 @@ function shutdown(signal) {
 }
 
 function start() {
+  // Журнал ведёт сам бот: всё, что он выводит на экран, попадает в
+  // logs/bot.log, а разросшийся файл переносится в bot.log.1.
+  startLogFile();
   const running = runningCopy();
   if (running && process.env.BOT_ALLOW_SECOND_COPY !== '1') {
     console.log('');
@@ -235,6 +239,7 @@ function start() {
     // не сохранятся, а не после.
     watchDiskSpace();
     setInterval(watchDiskSpace, 60 * 60 * 1000).unref();
+
     // Первая проверка — вскоре после запуска, а не через 15 минут: пост,
     // время которого пришло, пока бот был выключен, не должен ждать четверть
     // часа. Небольшая задержка нужна, чтобы связь с Telegram успела ожить.
