@@ -41,6 +41,24 @@ function menuItemForText(text, language) {
   }) || '';
 }
 
+// The picker is inline buttons, but people type the answer too: "Русский",
+// "English", "es", a flag. A typed name counts as a choice, so the picker is
+// not sent again and again.
+const LANGUAGE_TEXT_ALIASES = {
+  ru: ['русский', 'руский', 'россия', 'russian', 'ru', 'rus', '🇷🇺'],
+  en: ['english', 'английский', 'англ', 'en', 'eng', '🇬🇧', '🇺🇸'],
+  es: ['español', 'espanol', 'espanol', 'испанский', 'испания', 'spanish', 'es', 'spa', '🇪🇸'],
+};
+
+function languageFromText(text) {
+  const value = String(text || '').toLocaleLowerCase('ru-RU').replace(/[^\p{L}\p{Emoji_Presentation}]+/gu, ' ').trim();
+  if (!value || value.length > 20) return '';
+  for (const [language, aliases] of Object.entries(LANGUAGE_TEXT_ALIASES)) {
+    if (aliases.some((alias) => value === alias || value.split(' ').includes(alias))) return language;
+  }
+  return '';
+}
+
 function isLanguageChangeText(text, language) {
   const labels = MENU_LABELS[language] || MENU_LABELS.ru;
   const legacy = LEGACY_MENU_LABELS[language] || LEGACY_MENU_LABELS.ru;
@@ -171,6 +189,7 @@ function publicRuntime() {
 export {
   configureBotCommands,
   isLanguageChangeText,
+  languageFromText,
   languageMessages,
   menuItemForText,
   menuKeyboard,

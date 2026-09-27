@@ -69,6 +69,7 @@ test('the client answering the manager continues the same inquiry', async () => 
 
   // The client answers an hour later.
   inquiry.updatedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  inquiry.acknowledgedAt = inquiry.updatedAt;
   const answer = await client.say('Да, давайте завтра');
   assert.equal(client.inquiries.length, 1, 'one conversation, one inquiry');
   assert.match(client.inquiries[0].text, /рассрочка[\s\S]*давайте завтра/);

@@ -248,8 +248,8 @@ function renderData(host) {
     "</div></div>" +
     '<div class="card"><header><h3>Журнал ошибок</h3><div class="actions"><button class="btn ghost small" id="clearErrors" type="button">Очистить</button></div></header>' +
       ((state.errors || []).length ? '<div class="list">' + state.errors.slice(0, 20).map(function (error) {
-        return '<div class="list-item"><span class="grow"><b>' + esc(error.context || "Ошибка") + '</b><br><span class="muted small">' + esc(error.message) + "</span></span>" +
-          '<span class="small faint nowrap">' + dateTime(error.at) + "</span></div>";
+        return '<div class="list-item"><span class="grow"><b>' + esc(error.area || error.context || "Ошибка") + '</b><br><span class="muted small">' + esc(error.message) + "</span></span>" +
+          '<span class="small faint nowrap">' + dateTime(error.createdAt || error.at) + "</span></div>";
       }).join("") + "</div>" : '<div class="empty"><b>Ошибок нет</b></div>') +
     "</div>" +
     '<div class="card"><header><h3>Статистика и история</h3></header><div class="card-body stack">' +

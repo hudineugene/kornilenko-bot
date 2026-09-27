@@ -6,7 +6,7 @@ import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mj
 import { recordActivity, recordDaily, recordError, recordPropertyEvent } from './analytics.mjs';
 import { leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from './users.mjs';
 import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
-import { configureBotCommands, isLanguageChangeText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
+import { configureBotCommands, isLanguageChangeText, languageFromText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
 import { adminChatFor, createInquiry, handleAdministratorReply, handleInquiryStatusCallback, handleMessageReaction, inquiryWasMerged, messageSummary, notifyAdministratorAction } from './inquiries.mjs';
 import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard } from './catalog.mjs';
@@ -166,6 +166,16 @@ async function handleUpdate(update, token) {
       await openPendingStartPayload(user, token);
       return;
     }
+  }
+  // A newcomer may type the language instead of tapping the button; without
+  // this the picker would be sent again for every message.
+  const typedLanguage = !user.preferredLanguage && command !== '/language' ? languageFromText(text) : '';
+  if (typedLanguage) {
+    user.preferredLanguage = typedLanguage;
+    scheduleSave();
+    void notifyAdministratorAction(user, 'Выбрал язык сообщением', LANGUAGE_NAMES[typedLanguage]);
+    await sendWelcome(message.chat.id, user, token);
+    return;
   }
   if (command === '/language' || (user.preferredLanguage && isLanguageChangeText(text, user.preferredLanguage)) || !user.preferredLanguage) {
     user.pendingAction = null;
@@ -399,7 +409,10 @@ async function handleUpdate(update, token) {
           user.catalogFilter = normalizedCatalogFilter(found.filter);
           scheduleSave();
           const summary = catalogFilterSummary(user.catalogFilter, user.preferredLanguage);
-          void notifyAdministratorAction(user, 'Искал объекты по параметрам', summary);
+          // The client asked in their own words: the catalog answers right
+          // away, and the manager still sees the request in the panel.
+          if (!adminOwnChat) createInquiry(user, '🔎 ' + summary + '\n\n' + text, { type: 'general', searchLead: true, sourceMessage: message });
+          else void notifyAdministratorAction(user, 'Искал объекты по параметрам', summary);
           await clearUiMessages(message.chat.id, user, token);
           await clearGalleryMessages(message.chat.id, user, token);
           await sendCatalogPage(message.chat.id, user, token, 0, 'all');

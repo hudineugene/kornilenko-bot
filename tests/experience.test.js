@@ -95,8 +95,9 @@ test.describe('client', () => {
     assert.equal(second.replies.length, 0, 'no second "message received"');
     assert.equal(chat.inquiries.length, 1);
     assert.match(chat.inquiries[0].text, /ипотеку/);
-    // After a pause the client is told again that the message was received.
-    chat.inquiries[0].updatedAt = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+    // After a pause the client is told again that the message was received:
+    // the pause counts from the last confirmation, not from any activity.
+    chat.inquiries[0].acknowledgedAt = new Date(Date.now() - 11 * 60 * 1000).toISOString();
     const later = await chat.say('Добрый вечер, есть новости?');
     assert.equal(later.replies.length, 1);
   });

@@ -79,7 +79,7 @@ function hoursAgoText(milliseconds) {
 // An inquiry nobody has taken yet: still "new", no reply from the panel or
 // Telegram. Once reminded, it is not reminded again.
 function inquiryNeedsReminder(inquiry, now, thresholdMs) {
-  if (inquiry.status !== 'new' || inquiry.remindedAt) return false;
+  if (inquiry.status !== 'new' || inquiry.remindedAt || inquiry.searchLead) return false;
   if (Array.isArray(inquiry.replies) && inquiry.replies.length) return false;
   const age = now - Date.parse(inquiry.createdAt);
   return Number.isFinite(age) && age >= thresholdMs && age <= REMINDER_MAX_AGE_MS;

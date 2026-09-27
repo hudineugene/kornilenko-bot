@@ -290,6 +290,8 @@ function navItems() {
 
 function awaitsReply(inquiry) {
   if (!inquiry || inquiry.status === "closed") return false;
+  // Клиент искал сам и получил каталог — ответа никто не ждёт.
+  if (inquiry.searchLead) return false;
   var replies = inquiry.replies || [];
   if (!replies.length) return inquiry.status === "new";
   var lastReply = Math.max.apply(null, replies.map(function (reply) { return Date.parse(reply.createdAt) || 0; }));

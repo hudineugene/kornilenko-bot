@@ -135,6 +135,8 @@ function mergeIntoLatestInquiry(user, text, type, context) {
   // Past the limit the text is kept only while it fits; every message is
   // still in the user's activity history.
   if (combined.length <= 4000) latest.text = combined;
+  // A real message turns a search lead into a conversation that waits for an answer.
+  if (!context.searchLead) latest.searchLead = false;
   latest.updatedAt = new Date().toISOString();
   latest.clientMessageAt = latest.updatedAt;
   if (context.sourceMessage && Number.isFinite(Number(context.sourceMessage.message_id))) latest.sourceMessageId = Number(context.sourceMessage.message_id);
@@ -159,17 +161,27 @@ function inquiryWasMerged(inquiry) {
   return Boolean(inquiry && mergedInquiries.has(inquiry));
 }
 
+// A form confirmation ("your request is sent") is not an acknowledgement of a
+// free message: only the answer to a message counts, so a question right
+// after a form is answered instead of silently merged.
+function acknowledgesMessage(type, context) {
+  return ['general', 'question'].includes(type) && !context.searchLead;
+}
+
 function createInquiry(user, text, context = {}) {
   const type = ['question', 'interest', 'selection', 'viewing', 'lead', 'general'].includes(context.type) ? context.type : 'general';
   recordBroadcastResponse(user, 'inquiry');
   const latest = data.inquiries.find((item) => item.userId === String(user.id));
-  const lastActivity = latest ? Date.parse(latest.updatedAt) || 0 : 0;
+  const acknowledgedAt = latest ? Date.parse(latest.acknowledgedAt || '') || 0 : 0;
   const merged = mergeIntoLatestInquiry(user, cleanText(text, 4000), type, context);
   if (merged) {
-    // Messages in a row are acknowledged once; after a pause the client
-    // hears again that the message was received.
-    if (Date.now() - lastActivity < INQUIRY_ACKNOWLEDGED_WINDOW_MS) mergedInquiries.add(merged);
-    else mergedInquiries.delete(merged);
+    // Messages in a row are acknowledged once; after a pause, or after a form
+    // confirmation, the client hears again that the message was received.
+    if (Date.now() - acknowledgedAt < INQUIRY_ACKNOWLEDGED_WINDOW_MS) mergedInquiries.add(merged);
+    else {
+      mergedInquiries.delete(merged);
+      if (acknowledgesMessage(type, context)) merged.acknowledgedAt = new Date().toISOString();
+    }
     scheduleSave();
     const notify = (copies) => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в обращении', replyTo: copies });
     if (isClientMedia(context.sourceMessage)) {
@@ -212,6 +224,8 @@ function createInquiry(user, text, context = {}) {
     replies: [],
     messages: [inquiryTimelineMessage(context.sourceMessage, 'in', { text: cleanText(text, 4000), source: 'telegram', createdAt: now })],
     readAt: '',
+    acknowledgedAt: acknowledgesMessage(type, context) ? now : '',
+    searchLead: context.searchLead === true,
     createdAt: now,
     updatedAt: now,
     clientMessageAt: now,
@@ -225,7 +239,7 @@ function createInquiry(user, text, context = {}) {
       .then((copies) => notifyAdministrator(inquiry, user, { replyTo: copies }))
       .catch((error) => recordError('Уведомление администратору', error));
   } else {
-    void notifyAdministrator(inquiry, user);
+    void notifyAdministrator(inquiry, user, inquiry.searchLead ? { title: 'Запрос клиента' } : {});
   }
   return inquiry;
 }
@@ -244,6 +258,8 @@ const INQUIRY_TYPE_LABELS = {
 // the chat (the manager calls) is not waiting.
 function awaitingReply(inquiry) {
   if (!inquiry || inquiry.status === 'closed') return false;
+  // The client searched on their own and got the catalog: nobody is waiting.
+  if (inquiry.searchLead) return false;
   const replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
   if (!replies.length) return inquiry.status === 'new';
   const lastReply = Math.max(...replies.map((reply) => Date.parse(reply.createdAt) || 0));
@@ -251,6 +267,7 @@ function awaitingReply(inquiry) {
 }
 
 function inquiryTypeLabel(inquiry) {
+  if (inquiry.searchLead) return 'искал объекты сам';
   if (inquiry.type === 'question' && !inquiry.propertyId) return 'вопрос менеджеру';
   return INQUIRY_TYPE_LABELS[inquiry.type] || 'сообщение';
 }

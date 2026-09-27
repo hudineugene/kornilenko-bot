@@ -910,6 +910,12 @@ function normalizeLoadedData(parsed) {
       messages: normalizeInquiryMessages(item),
       readAt: cleanText(item.readAt, 40) || (storedVersion < 26 ? (cleanText(item.clientMessageAt, 40) || item.updatedAt || item.createdAt || new Date().toISOString()) : ''),
       remindedAt: cleanText(item.remindedAt, 40),
+      // When the client was last told that the message is with the manager:
+      // messages in a row are acknowledged once, a later one again.
+      acknowledgedAt: cleanText(item.acknowledgedAt, 40),
+      // The client searched in their own words and got the catalog: the
+      // manager sees the request, but nobody is waiting for an answer.
+      searchLead: item.searchLead === true,
       viewing: item.type === 'viewing' ? normalizeViewing(item.viewing || {}) : null,
       // When the manager plans to contact the client again.
       followUpDate: DAY_KEY_PATTERN.test(String(item.followUpDate || '')) ? String(item.followUpDate) : '',

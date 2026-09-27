@@ -53,10 +53,24 @@ function attentionItems() {
   if (!state.config.active) items.push({ what: "Бот выключен", why: "Клиенты не получают ответов", go: ["settings", "connection"], kind: "bad" });
   if (state.config.active && !state.config.adminNotificationVerifiedAt) items.push({ what: "Админ-чат не проверен", why: "Уведомления о заявках могут не приходить", go: ["settings", "connection"], kind: "warn" });
   var hidden = (state.objects || []).filter(function (record) { return record.status !== "active"; }).length;
-  var active = (state.objects || []).filter(function (record) { return record.status === "active"; }).length;
+  var activeRecords = (state.objects || []).filter(function (record) { return record.status === "active"; });
+  var active = activeRecords.length;
   if (!active) items.push({ what: "В каталоге нет активных объектов", why: hidden ? counted(hidden, "объект скрыт", "объекта скрыто", "объектов скрыто") : "Добавьте первый объект", go: ["catalog", "objects"], kind: "warn" });
+  // Активный объект ещё не значит видимый: без обязательных полей карточка
+  // не попадает в каталог, и клиент видит пустоту.
+  if (active) {
+    var invisible = activeRecords.filter(function (record) {
+      var issues = record.publicationIssues || {};
+      return ["ru", "en", "es"].every(function (language) { return (issues[language] || []).length > 0; });
+    });
+    if (invisible.length >= active) {
+      items.push({ what: "Клиенты не видят ни одного объекта", why: "В карточках не хватает обязательных полей — каталог у клиента пустой", go: ["catalog", "objects"], kind: "bad" });
+    } else if (invisible.length) {
+      items.push({ what: counted(invisible.length, "объект не показывается", "объекта не показываются", "объектов не показываются") + " клиентам", why: "В карточках не хватает обязательных полей", go: ["catalog", "objects"], kind: "warn" });
+    }
+  }
   var errors = (state.errors || []).length;
-  if (errors) items.push({ what: counted(errors, "ошибка", "ошибки", "ошибок") + " в журнале", why: "Последняя — " + ago(state.errors[0] && state.errors[0].at), go: ["settings", "data"], kind: "warn" });
+  if (errors) items.push({ what: counted(errors, "ошибка", "ошибки", "ошибок") + " в журнале", why: "Последняя — " + ago(state.errors[0] && (state.errors[0].createdAt || state.errors[0].at)), go: ["settings", "data"], kind: "warn" });
   var requests = (state.groups || []).reduce(function (total, group) { return total + ((group.joinRequests || []).length); }, 0);
   if (requests) items.push({ what: counted(requests, "заявка", "заявки", "заявок") + " на вступление в группу", why: "Ждут одобрения", go: ["reach", "group"], kind: "warn" });
   return items;
@@ -101,7 +115,7 @@ VIEWS.overview = {
                 '<span class="avatar">' + esc(initials(user.firstName)) + "</span>" +
                 '<span class="grow"><b>' + esc(user.firstName || "Клиент") + "</b> <span class=\"faint small\">" + esc(inquiryTypeName(item)) + "</span><br><span class=\"muted small\">" + esc(String(item.text || "").slice(0, 90)) + "</span></span>" +
                 '<span class="small faint nowrap">' + ago(item.clientMessageAt || item.createdAt) + "</span>" +
-                (awaitsReply(item) ? '<span class="chip bad">ждёт</span>' : '<span class="chip ok">ответ дан</span>') + "</div>";
+                (item.searchLead ? '<span class="chip">ответ не нужен</span>' : awaitsReply(item) ? '<span class="chip bad">ждёт</span>' : '<span class="chip ok">ответ дан</span>') + "</div>";
             }).join("") + "</div>" : '<div class="empty"><b>Обращений пока нет</b>Они появятся, когда клиенты напишут боту</div>') +
           "</div>" +
         "</div>" +
@@ -153,6 +167,7 @@ function connectionText() {
 }
 
 function inquiryTypeName(item) {
+  if (item.searchLead) return "искал объекты сам";
   return { lead: "заявка на звонок", viewing: "запись на просмотр", selection: "подбор", question: "вопрос по объекту", interest: "интерес к объекту", general: "сообщение" }[item.type] || "сообщение";
 }
 

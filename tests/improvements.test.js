@@ -432,7 +432,11 @@ test.describe('search in client messages', () => {
     await russian.say('Ищу купить квартиру в Марбелье до 500 000 €, 2 спальни');
     assert.deepEqual(russian.user.catalogFilter, { deal: 'sale', type: 'apartment', bedrooms: 2, city: 'Марбелья', district: '', minPrice: 0, maxPrice: 500000, sort: '' });
     assert.deepEqual(bot.catalogRecords(russian.user).map((record) => record.id), ['natural-flat-01']);
-    assert.equal(russian.inquiries.length, 0);
+    // A request in the client's own words is a lead: the manager sees it in
+    // the panel, but the client already got the catalog, so nobody waits.
+    assert.equal(russian.inquiries.length, 1);
+    assert.equal(russian.inquiries[0].searchLead, true);
+    assert.equal(bot.awaitingReply(russian.inquiries[0]), false);
     const customPricePanel = await russian.press('cfilter:open');
     const customPriceButton = customPricePanel.last.markup.inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:price:500000');
     assert.ok(customPriceButton && customPriceButton.text.startsWith('✓ '), 'a price typed by the client stays visible in the filter');
@@ -474,7 +478,8 @@ test.describe('search in client messages', () => {
       assert.equal(chat.user.catalogFilter.maxPrice, 500000);
       assert.equal(chat.user.catalogFilter.city, item.city);
       assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['range-fit-02']);
-      assert.equal(chat.inquiries.length, 0);
+      assert.equal(chat.inquiries[0].searchLead, true, 'запрос словами виден менеджеру как лид');
+      assert.equal(bot.awaitingReply(chat.inquiries[0]), false);
     }
   });
 

@@ -87,6 +87,8 @@ function selectionMatchingPanel(item) {
 }
 function statusChip(item) {
   if (item.status === "closed") return '<span class="chip">закрыто</span>';
+  // Клиент искал сам и получил каталог: это лид, а не вопрос без ответа.
+  if (item.searchLead) return '<span class="chip">ответ не нужен</span>';
   if (awaitsReply(item)) return '<span class="chip bad">ждёт ответа</span>';
   if (item.status === "in_progress") return '<span class="chip warn">в работе</span>';
   return '<span class="chip">новое</span>';
@@ -113,6 +115,8 @@ function conversationGroups() {
     group.inProgress = group.inquiries.some(function (item) { return item.status === "in_progress"; });
     group.answered = group.inquiries.some(function (item) { return item.status !== "closed" && !awaitsReply(item) && (item.replies || []).length; });
     group.closed = group.inquiries.every(function (item) { return item.status === "closed"; });
+    // Диалог, где клиент только искал объекты сам: отвечать не на что.
+    group.searchOnly = group.inquiries.every(function (item) { return item.searchLead; });
     return group;
   }).sort(function (a, b) { return (Date.parse(b.latest.updatedAt || b.latest.createdAt) || 0) - (Date.parse(a.latest.updatedAt || a.latest.createdAt) || 0); });
 }
@@ -397,7 +401,7 @@ function renderInquiryList(host) {
     var selected = group.inquiries.some(function (entry) { return entry.id === selectedInquiry; });
     var lastMessage = (item.messages || [])[item.messages && item.messages.length ? item.messages.length - 1 : -1];
     var preview = lastMessage ? lastMessage.text || lastMessage.fileName : item.text;
-    var stateText = group.waiting ? "Ждёт ответа" : group.inProgress ? "В работе" : group.closed ? "Закрыт" : "Отвечено";
+    var stateText = group.waiting ? "Ждёт ответа" : group.inProgress ? "В работе" : group.closed ? "Закрыт" : group.searchOnly ? "Ответ не нужен" : "Отвечено";
     var stateClass = group.waiting ? "bad" : group.inProgress ? "warn" : group.closed ? "" : "ok";
     return '<button class="conversation-item' + (selected ? " selected" : "") + (group.unread ? " unread" : "") + '" data-id="' + esc(group.active.id) + '" data-user="' + esc(group.userId) + '" type="button">' +
       '<span class="conversation-avatar">' + esc(initials(user.firstName)) + (group.unread ? '<i></i>' : '') + '</span>' +
