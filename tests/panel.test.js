@@ -228,3 +228,13 @@ test('отложенное время переводится через часо
     back: '2026-07-15T10:00:00.000Z',
   });
 });
+
+test('несохранённая плашка рубрики привязана к самой рубрике, а не к номеру строки', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  // Хранение по номеру строки ломалось при удалении рубрики: список сдвигался,
+  // а выбранная картинка доставалась соседней рубрике.
+  assert.doesNotMatch(PANEL_HTML, /pendingImages\[index\]/, 'картинки рубрик больше не хранятся по номеру');
+  assert.doesNotMatch(PANEL_HTML, /delete pendingImages/, 'удалять записи по номеру больше не нужно');
+  assert.match(PANEL_HTML, /rubrics\[index\]\.pendingImage = reader\.result/, 'выбранная картинка кладётся в саму рубрику');
+  assert.match(PANEL_HTML, /imageDataUrl: rubric\.pendingImage/, 'и сохраняется вместе с ней');
+});

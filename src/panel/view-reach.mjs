@@ -752,8 +752,10 @@ function checkPlateWidth(row, index, onPad) {
 
 function renderPostStyle(host) {
   var current = publishing();
+  // Выбранная, но ещё не сохранённая картинка живёт в самой рубрике
+  // (rubric.pendingImage). Раньше картинки хранились отдельно по номеру строки:
+  // удалил рубрику — список сдвинулся, а картинка досталась соседней.
   var rubrics = (current.rubrics || []).map(function (rubric) { return Object.assign({}, rubric); });
-  var pendingImages = {};
   // Перерисовка не должна стирать то, что уже набрали.
   var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false, signatureWrap: current.signatureWrap || "keep", signatureQuote: Boolean(current.signatureQuote), signatureDivider: current.signatureDivider || "none" };
   var buttons = (current.buttons || []).map(function (button) { return { text: button.text, url: button.url }; });
@@ -801,7 +803,7 @@ function renderPostStyle(host) {
         '<div id="plateSizes" class="hint"></div>' +
         (rubrics.length ? rubrics.map(function (rubric, index) {
           return '<div class="row wrap" data-rubric="' + index + '" style="border-top:1px solid var(--line-soft);padding-top:8px">' +
-            (rubric.image && rubric.image.exists ? '<img class="thumb" style="width:74px;height:52px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + "?rev=" + encodeURIComponent(rubric.image.updatedAt || "") + '" alt="">' : pendingImages[index] ? '<img class="thumb" style="width:74px;height:52px" src="' + pendingImages[index] + '" alt="">' : '<span class="thumb" style="width:74px;height:52px"></span>') +
+            (rubric.pendingImage ? '<img class="thumb" style="width:74px;height:52px" src="' + rubric.pendingImage + '" alt="">' : rubric.image && rubric.image.exists ? '<img class="thumb" style="width:74px;height:52px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + "?rev=" + encodeURIComponent(rubric.image.updatedAt || "") + '" alt="">' : '<span class="thumb" style="width:74px;height:52px"></span>') +
             '<input data-field="name" value="' + esc(rubric.name || "") + '" placeholder="Название рубрики" style="max-width:220px">' +
             '<select data-field="placement" style="max-width:210px">' +
               '<option value="bottom"' + (rubric.placement === "bottom" || !rubric.placement ? " selected" : "") + '>внизу сообщения</option>' +
@@ -882,18 +884,17 @@ function renderPostStyle(host) {
       });
       row.querySelector("[data-drop]").onclick = function () {
         rubrics.splice(index, 1);
-        delete pendingImages[index];
         draw();
       };
       row.querySelector("[data-file]").onchange = function (event) {
         var file = event.target.files && event.target.files[0];
         if (!file) return;
         var reader = new FileReader();
-        reader.onload = function () { pendingImages[index] = reader.result; draw(); };
+        reader.onload = function () { rubrics[index].pendingImage = reader.result; draw(); };
         reader.readAsDataURL(file);
       };
       checkPlateWidth(row, index, function (position, padded) {
-        pendingImages[position] = padded;
+        if (rubrics[position]) rubrics[position].pendingImage = padded;
         draw();
       });
     });
@@ -907,8 +908,8 @@ function renderPostStyle(host) {
           signatureDivider: draft.signatureDivider,
           buttons: buttons.filter(function (button) { return button.text && button.url; }),
           buttonsPerRow: perRow,
-          rubrics: rubrics.map(function (rubric, index) {
-            return { id: rubric.id, name: rubric.name, placement: rubric.placement, imageDataUrl: pendingImages[index] || "" };
+          rubrics: rubrics.map(function (rubric) {
+            return { id: rubric.id, name: rubric.name, placement: rubric.placement, imageDataUrl: rubric.pendingImage || "" };
           }),
         });
         toast("Сохранено");
