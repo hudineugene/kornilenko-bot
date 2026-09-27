@@ -20,6 +20,18 @@ import { confirmViewing } from './viewings.mjs';
 // Каждая ветка сама отвечает клиенту и возвращает управление. Если не подошла
 // ни одна, функция возвращает false — тогда запрос ищут в других модулях.
 
+// Вложение прислал клиент, а открывается оно на адресе панели: страница
+// text/html или SVG могла бы показать поддельную форму входа. Поэтому встроенно
+// отдаём только картинки, аудио и видео, остальное — скачиванием, и в любом
+// случае запрещаем такой странице что-либо делать (sandbox).
+const INLINE_SAFE_TYPES = /^(?:image\/(?:jpeg|jpg|png|gif|webp|bmp)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i;
+
+function attachmentDelivery(mimeType) {
+  const type = cleanText(mimeType, 100).toLowerCase();
+  if (INLINE_SAFE_TYPES.test(type)) return { type, disposition: 'inline' };
+  return { type: 'application/octet-stream', disposition: 'attachment' };
+}
+
 async function handleClientsApi(req, res, url) {
   const directMessageMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/message$/);
   if (directMessageMatch && req.method === 'POST') {
@@ -253,10 +265,14 @@ async function handleClientsApi(req, res, url) {
       if (bytes.length > 25 * 1024 * 1024) throw new Error('Файл больше 25 МБ');
       const fallbackName = filePath.split('/').pop() || 'attachment';
       const fileName = (attachment.fileName || fallbackName).replace(/[^\p{L}\p{N}._ -]+/gu, '_').slice(0, 180) || 'attachment';
+      const delivery = attachmentDelivery(attachment.mimeType || response.headers.get('content-type'));
       securityHeaders(res);
+      // Даже картинку отдаём в песочнице: браузер не станет считать её
+      // страницей панели и ничего из неё не выполнит.
+      res.setHeader('content-security-policy', "default-src 'none'; sandbox; frame-ancestors 'none'");
       res.writeHead(200, {
-        'content-type': attachment.mimeType || response.headers.get('content-type') || 'application/octet-stream',
-        'content-disposition': "inline; filename*=UTF-8''" + encodeURIComponent(fileName),
+        'content-type': delivery.type,
+        'content-disposition': delivery.disposition + "; filename*=UTF-8''" + encodeURIComponent(fileName),
         'content-length': bytes.length,
         'cache-control': 'private, no-store',
       });
