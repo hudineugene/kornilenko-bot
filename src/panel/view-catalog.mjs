@@ -122,9 +122,12 @@ function renderObjects(host) {
         "<td>" + esc(localized(record.city, "ru") || "—") + "</td>" +
         '<td class="right nowrap">' + (record.priceValue ? esc(money(record.priceValue, record.currency)) : esc(localized(record.price, "ru") || "по запросу")) + "</td>" +
         '<td><span class="chip ' + statusKind(record.status) + '">' + esc(statusName(record.status)) + "</span></td>" +
-        '<td class="right"><button class="object-performance" data-insights="1" type="button" title="Открыть аналитику объекта"><b>' + num(stats.impressions) + '</b><small>' + num(stats.inquiries) + ' обращ.</small></button></td>' +
-        '<td class="right nowrap"><button class="btn ghost small" data-move="up" title="Выше">↑</button><button class="btn ghost small" data-move="down" title="Ниже">↓</button>' +
-        '<button class="btn ghost small" data-copy="1" title="Копия">⧉</button><button class="btn ghost small" data-delete="1" title="Удалить">✕</button></td></tr>';
+        // Цифры с подписями: сколько показов и сколько заявок. Иначе два числа подряд
+        // читаются как что угодно.
+        '<td class="right"><button class="object-performance" data-insights="1" type="button" title="Открыть аналитику объекта">' +
+          '<span>👁 ' + counted(stats.impressions, "показ", "показа", "показов") + "</span>" +
+          '<span>📩 ' + counted(stats.inquiries, "заявка", "заявки", "заявок") + "</span></button></td>" +
+        '<td class="right nowrap"><button class="btn ghost small" data-more="1" title="Ещё действия">⋯</button></td></tr>';
     }).join("") : '<tr><td colspan="8"><div class="empty"><b>Объектов нет</b>Добавьте первый или загрузите выгрузку с сайта</div></td></tr>') +
     "</tbody></table></div></div>";
 
@@ -139,18 +142,65 @@ function renderObjects(host) {
     var id = row.dataset.id;
     row.querySelector("[data-edit]").onclick = function () { openRecordEditor("objects", id); };
     row.querySelector("[data-insights]").onclick = function () { openObjectInsights(id); };
+    row.querySelector("[data-more]").onclick = function () { openObjectExtras(id); };
     row.querySelectorAll("[data-move]").forEach(function (button) {
       button.onclick = async function () {
         try { await send("/api/objects/" + encodeURIComponent(id) + "/move", "POST", { step: button.dataset.move === "up" ? -1 : 1 }); await reload(); } catch (error) { fail(error); }
       };
     });
-    row.querySelector("[data-copy]").onclick = async function () {
+    row.querySelectorAll("[data-copy]").forEach(function (button) { button.onclick = async function () {
       try { await send("/api/objects/" + encodeURIComponent(id) + "/duplicate", "POST", {}); toast("Копия создана"); await reload(); } catch (error) { fail(error); }
-    };
-    row.querySelector("[data-delete]").onclick = async function () {
+    }; });
+    row.querySelectorAll("[data-delete]").forEach(function (button) { button.onclick = async function () {
       if (!(await confirmDialog("Удалить объект?", "Карточка исчезнет из каталога бота.", "Удалить", true))) return;
       try { await api("/api/objects/" + encodeURIComponent(id), { method: "DELETE" }); toast("Удалено"); await reload(); } catch (error) { fail(error); }
-    };
+    }; });
+  });
+}
+
+// «⋯» у объекта: порядок в списке, копия и удаление. Раньше это были четыре
+// значка подряд — ↑ ↓ ⧉ ✕, — и «✕» (удалить) стоял вплотную к стрелке «ниже»,
+// которую нажимают часто.
+function openObjectExtras(id) {
+  var record = (state.objects || []).find(function (item) { return String(item.id) === String(id); });
+  var title = record ? localized(record.title, "ru") || "Без названия" : "Объект";
+  openDialog({
+    title: "Ещё действия",
+    body: '<div class="stack"><div class="small muted">' + esc(title) + "</div>" +
+      '<div class="row"><button class="btn secondary" data-move="up" type="button">↑ Поднять в списке</button>' +
+      '<button class="btn secondary" data-move="down" type="button">↓ Опустить в списке</button></div>' +
+      '<button class="btn secondary" data-copy="1" type="button">⧉ Создать копию</button>' +
+      '<span class="small muted">Копия создаётся черновиком — клиенты её не видят, пока не опубликуете.</span>' +
+      '<button class="btn danger" data-delete="1" type="button">Удалить объект</button>' +
+      '<span class="small muted">Карточка исчезнет из каталога бота без возможности вернуть.</span></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
+    ready: function (dialog) {
+      dialog.querySelectorAll("[data-move]").forEach(function (button) {
+        button.onclick = async function () {
+          try {
+            await send("/api/objects/" + encodeURIComponent(id) + "/move", "POST", { step: button.dataset.move === "up" ? -1 : 1 });
+            await reload();
+          } catch (error) { fail(error); }
+        };
+      });
+      dialog.querySelector("[data-copy]").onclick = async function () {
+        try {
+          await send("/api/objects/" + encodeURIComponent(id) + "/duplicate", "POST", {});
+          dialog.closeClean();
+          toast("Копия создана");
+          await reload();
+        } catch (error) { fail(error); }
+      };
+      dialog.querySelector("[data-delete]").onclick = async function () {
+        if (!(await confirmDialog("Удалить объект?", "Карточка исчезнет из каталога бота.", "Удалить", true))) return;
+        try {
+          await api("/api/objects/" + encodeURIComponent(id), { method: "DELETE" });
+          dialog.closeClean();
+          toast("Удалено");
+          await reload();
+        } catch (error) { fail(error); }
+      };
+    },
   });
 }
 

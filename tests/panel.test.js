@@ -76,6 +76,23 @@ test('редакторы предупреждают перед закрытие�
   assert.match(PANEL_HTML, /dialog\.closeClean\(\)/);
 });
 
+test('в списке объектов цифры подписаны, а редкие действия — под «⋯»', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  // Колонка «Эффективность»: видно, что за числа.
+  assert.match(PANEL_HTML, /👁 ' \+ counted\(stats\.impressions, "показ", "показа", "показов"\)/);
+  assert.match(PANEL_HTML, /📩 ' \+ counted\(stats\.inquiries, "заявка", "заявки", "заявок"\)/);
+
+  // Вместо четырёх значков в строке — одно меню.
+  assert.match(PANEL_HTML, /function openObjectExtras\(id\)/);
+  assert.match(PANEL_HTML, /data-more="1" title="Ещё действия"/);
+  assert.match(PANEL_HTML, /↑ Поднять в списке/);
+  assert.match(PANEL_HTML, /↓ Опустить в списке/);
+  assert.match(PANEL_HTML, /⧉ Создать копию/);
+  assert.match(PANEL_HTML, /Удалить объект/);
+  assert.ok(!/title="Выше"/.test(PANEL_HTML), 'голых значков в строке не осталось');
+  assert.ok(!/title="Копия"/.test(PANEL_HTML));
+});
+
 test('у объекта есть кнопка «Опубликовать», а значок говорит про клиента', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /id="togglePublish"/);

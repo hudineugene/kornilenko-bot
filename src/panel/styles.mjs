@@ -319,7 +319,8 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .client-inquiry small{overflow:hidden;color:var(--muted);font-size:var(--fs-sm);text-overflow:ellipsis;white-space:nowrap}
 .client-inquiry time{color:var(--faint);font-size:var(--fs-xs);white-space:nowrap}
 .client-inquiry i{color:var(--faint);font-style:normal}
-.object-performance{display:inline-flex;min-width:64px;flex-direction:column;align-items:flex-end;padding:2px 6px;border:0;border-radius:7px;background:transparent;color:var(--text);font:inherit;cursor:pointer}
+.object-performance{display:flex;flex-direction:column;gap:2px;align-items:flex-end;background:none;border:0;cursor:pointer;color:inherit;font:inherit;padding:2px 0;white-space:nowrap}
+.object-performance small{color:var(--muted);font-size:var(--fs-xs)}
 .object-performance:hover{background:var(--brand-soft);color:var(--brand-dark)}
 .object-performance b{font-size:var(--fs)}
 .object-performance small{color:var(--muted);font-size:var(--fs-xs);white-space:nowrap}
