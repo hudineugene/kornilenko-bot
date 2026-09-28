@@ -3,9 +3,9 @@
 const PANEL_CSS = String.raw`
 *{box-sizing:border-box}
 :root{
-  --bg:#f5f6f8; --surface:var(--surface); --surface-soft:#fafbfc; --line:var(--line); --line-soft:var(--line-soft);
-  --text:var(--text); --muted:var(--muted); --faint:var(--faint);
-  --brand:#2f56d9; --brand-soft:#eef2ff; --brand-dark:var(--brand-dark);
+  --bg:#f5f6f8; --surface:#fff; --surface-soft:#fafbfc; --line:#e4e7ec; --line-soft:#eef1f4;
+  --text:#101828; --muted:#667085; --faint:#98a2b3;
+  --brand:#2f56d9; --brand-soft:#eef2ff; --brand-dark:#2344b5;
   --brand-soft-line:#c7d7fe; --warn-line:#fedf89; --live:#12b76a; --amber:#f79009; --bad-line:#fecdca; --bad-line-strong:#fda29b; --warn-tint:#fffcf5; --ok-line:#abefc6; --stage-contact:#6172f3; --stage-selection:#7f56d9; --today-line:#9db4ff; --chat-bg:#e8ecf1; --chat-text:#222; --ink:#1d2939; --ink-soft:#475467; --stage-lost:#ee46bc; --alarm:#f04438; --tint:#f8fafc; --ok:#067647; --ok-soft:#ecfdf3; --warn:#b54708; --warn-soft:#fffaeb; --bad:#b42318; --bad-soft:#fef3f2;
   --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.06); --shadow-lg:0 12px 32px rgba(16,24,40,.14);
   --header:60px;
@@ -201,7 +201,7 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .conversation-split{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--sp-4);align-items:start}
 .conversation-main{display:flex;flex-direction:column;gap:var(--sp-3);min-width:0}
 .conversation-side{position:sticky;top:var(--sp-3)}
-.conversation-side-inner{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:var(--sp-3)}
+.conversation-side-inner{background:var(--surface-soft);border:1px solid var(--line);border-radius:var(--radius);padding:var(--sp-3)}
 .conversation-side .conversation-save{display:flex;flex-direction:column;gap:var(--sp-2);align-items:stretch}
 @media (max-width:1100px){.conversation-split{grid-template-columns:minmax(0,1fr)}.conversation-side{position:static}}
 .conversation-thread{display:flex;flex-direction:column;gap:8px;min-height:300px;max-height:min(54vh,620px);overflow:auto;padding:12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--tint);overscroll-behavior:contain}

@@ -301,6 +301,52 @@ test('редкие действия убраны под «⋯»', async () => {
   assert.match(PANEL_HTML, /id="inquiryExtras"/);
 });
 
+test.describe('стили панели', () => {
+  async function css() {
+    const { PANEL_HTML } = await import('../src/panel/index.mjs');
+    const style = PANEL_HTML.match(/<style[^>]*>([\s\S]*?)<\/style>/);
+    assert.ok(style, 'в странице есть стили');
+    return style[1];
+  }
+  // Объявления переменных в :root: имя → значение.
+  function rootVariables(sheet) {
+    const root = sheet.match(/:root\s*\{([\s\S]*?)\n\}/);
+    assert.ok(root, 'в стилях есть :root');
+    const variables = new Map();
+    for (const match of root[1].matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/gi)) variables.set(match[1], match[2].trim());
+    return variables;
+  }
+
+  test('ни одна переменная не задана через саму себя', async () => {
+    // --surface:var(--surface) недействительна: диалоги и карточки остаются
+    // без фона, а текст и рамки теряют цвет. Именно так панель «побелела».
+    const variables = rootVariables(await css());
+    for (const [name, value] of variables) {
+      assert.ok(!new RegExp('^var\\(\\s*' + name + '\\s*[,)]').test(value), name + ' задана через саму себя: ' + value);
+    }
+  });
+
+  test('каждая используемая переменная где-то определена', async () => {
+    const sheet = await css();
+    const defined = new Set(Array.from(sheet.matchAll(/(--[a-z0-9-]+)\s*:/gi)).map((match) => match[1]));
+    const missing = new Set();
+    for (const match of sheet.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi)) {
+      if (!defined.has(match[1])) missing.add(match[1]);
+    }
+    assert.deepEqual(Array.from(missing), [], 'используются, но нигде не заданы');
+  });
+
+  test('основные цвета — настоящие цвета, а не ссылки', async () => {
+    const variables = rootVariables(await css());
+    const color = /^#[0-9a-f]{3,8}$|^rgba?\(|^hsla?\(/i;
+    for (const name of ['--surface', '--line', '--line-soft', '--text', '--muted', '--faint', '--brand', '--brand-dark']) {
+      assert.ok(variables.has(name), name + ' объявлена');
+      assert.match(variables.get(name), color, name + ' должна быть цветом, а не ' + variables.get(name));
+    }
+    assert.equal(variables.get('--surface').toLowerCase(), '#fff', 'фон карточек и окон — белый, непрозрачный');
+  });
+});
+
 test('«Скрыть» в списке дел шлёт действие, которое бот принимает', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   // Кнопка «Скрыть» на экране «Сегодня» отправляла «handled» — такого действия
