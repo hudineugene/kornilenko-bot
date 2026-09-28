@@ -19,7 +19,31 @@ import { configureBotCommands } from './menus.mjs';
 import { validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { restartPolling } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
-import { BOT_TOKEN_PATTERN, DOWNLOAD_TICKET_MS, MAX_UNAUTHENTICATED_BODY_BYTES, clientAddress, headerPassword, issueDownloadTicket, passwordAccepted, useDownloadTicket, createSession, isLocalRequest, json, ownPageRequest, loginAttempts, parseUploadedImage, readBackup, writeBackupMedia, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
+import {
+  BOT_TOKEN_PATTERN,
+  clientAddress,
+  createSession,
+  DOWNLOAD_TICKET_MS,
+  headerPassword,
+  isLocalRequest,
+  issueDownloadTicket,
+  json,
+  loginAttempts,
+  MAX_UNAUTHENTICATED_BODY_BYTES,
+  ownPageRequest,
+  parseUploadedImage,
+  passwordAccepted,
+  readBackup,
+  readJson,
+  requestIsRemote,
+  requireAuth,
+  safeState,
+  securityHeaders,
+  sessions,
+  stateFingerprint,
+  useDownloadTicket,
+  writeBackupMedia,
+} from './admin-http.mjs';
 import { REMOTE_LOGIN_ANSWER_MS, REMOTE_LOGIN_CODE_ATTEMPTS, decoyRemoteLogin, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
 import { attemptKey, forgetLoginAttempts, loginAllowed, rememberFailedLogin, validateBackupStructure, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { handleGroupApi } from './group-api.mjs';
@@ -231,8 +255,9 @@ async function handleApi(req, res, url) {
     // The panel polls every few seconds. When nothing changed since the
     // version it already has, answer with a tiny body and let it skip
     // re-rendering.
-    const serialized = JSON.stringify(safeState(session));
-    const stateVersion = crypto.createHash('sha256').update(serialized).digest('hex').slice(0, 24);
+    const state = safeState(session);
+    const serialized = JSON.stringify(state);
+    const stateVersion = stateFingerprint(state);
     if (url.searchParams.get('since') === stateVersion) return json(res, 200, { unchanged: true, stateVersion });
     securityHeaders(res);
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });

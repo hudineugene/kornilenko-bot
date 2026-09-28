@@ -646,6 +646,22 @@ function inquiryUnread(inquiry) {
   return lastIncoming > (Date.parse(inquiry.readAt || '') || 0);
 }
 
+// Отпечаток состояния, по которому панель решает, перерисовывать ли экран.
+// Считается не по всему состоянию: `lastSuccessfulContactAt` меняется после
+// каждого опроса Telegram (то есть каждые несколько секунд), и из-за него
+// «ничего не изменилось» не срабатывало никогда, пока бот онлайн. Точное время
+// заменяем на «связь свежая»: пока ответы приходят, отпечаток не меняется, а
+// как только они пропали — меняется сразу, и панель это показывает.
+const CONTACT_FRESH_MS = 2 * 60 * 1000;
+
+function stateFingerprint(state, now = Date.now()) {
+  const botRuntime = state && state.runtime ? state.runtime : {};
+  const contact = Date.parse(botRuntime.lastSuccessfulContactAt || '');
+  const fresh = Number.isFinite(contact) && now - contact <= CONTACT_FRESH_MS;
+  const steady = { ...state, runtime: { ...botRuntime, lastSuccessfulContactAt: fresh ? 'fresh' : botRuntime.lastSuccessfulContactAt || '' } };
+  return crypto.createHash('sha256').update(JSON.stringify(steady)).digest('hex').slice(0, 24);
+}
+
 function safeState(session) {
   // В панель уходит вся карточка клиента, кроме истории действий: из неё нужны
   // только реакции для ленты в «Обзоре». Остальное — лишний вес в каждом
@@ -817,6 +833,7 @@ export {
   requestIsRemote,
   requireAuth,
   safeState,
+  stateFingerprint,
   secureRequest,
   securityHeaders,
   sessionKey,

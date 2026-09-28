@@ -174,7 +174,12 @@ function connectionText() {
   if (!state.config.active) return "бот выключен в панели";
   if (runtime.status === "error") return "ошибка: " + (runtime.lastError || "нет связи");
   if (runtime.consecutiveFailures) return "переподключение, попыток: " + runtime.consecutiveFailures;
-  return "работает" + (runtime.lastSuccessfulContactAt ? ", последний ответ " + ago(runtime.lastSuccessfulContactAt) : "");
+  // Пока ответы приходят, время последнего не показываем: оно меняется каждые
+  // несколько секунд, а экран от этого перерисовывался целиком. Как только
+  // ответов нет дольше двух минут — показываем, это уже важно.
+  var contact = Date.parse(runtime.lastSuccessfulContactAt || "");
+  var stale = isFinite(contact) && Date.now() - contact > 120000;
+  return "работает" + (stale ? ", последний ответ " + ago(runtime.lastSuccessfulContactAt) : "");
 }
 
 function inquiryTypeName(item) {
