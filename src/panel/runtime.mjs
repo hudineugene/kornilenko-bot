@@ -376,6 +376,13 @@ function watchForm(root, save, label) {
 function clearDirty() { dirtyForm = null; el("savebar").classList.add("hidden"); }
 function isDirty() { return Boolean(dirtyForm); }
 
+// Экран перерисовал себя сам (сменили фильтр, набрали в поиске, пролистали
+// список): отметка «человек что-то вводил» относилась к прежнему содержимому и
+// снимается — иначе она остаётся до конца сеанса и автообновление больше ничего
+// не показывает. Пока курсор стоит в поле, экран всё равно считается занятым:
+// это проверяет pageBusy по фокусу.
+function screenSettled() { pageTouched = false; }
+
 async function confirmPageLeave() {
   if (!isDirty()) return true;
   return confirmDialog("Перейти без сохранения?", "На этой странице есть несохранённые изменения.", "Перейти", true);

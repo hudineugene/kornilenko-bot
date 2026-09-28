@@ -776,3 +776,55 @@ test('после смены токена полоса сохранения не 
   assert.equal(sandbox.document.getElementById('savebar').classList.contains('hidden'), true, 'полоса сохранения убрана');
   assert.equal(await sandbox.confirmPageLeave(), true, 'уход со страницы больше ничего не спрашивает');
 });
+
+test('фильтр в «Переписке» не замораживает экран до конца сеанса', async () => {
+  // Раздел перерисовывает список сам, мимо общей отрисовки, которая снимает
+  // отметку «человек что-то вводит». Поэтому после одного щелчка по фильтру
+  // новые сообщения сами уже не появлялись — только полоска сверху.
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.users['730001'] = { id: '730001', chatId: 730001, firstName: 'Елена', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(2) };
+    data.inquiries.push({
+      id: 'inq-filter', userId: '730001', chatId: '730001', language: 'ru', type: 'general',
+      text: 'Вопрос по вилле', status: 'new', pipelineStage: 'new', replies: [], messages: [],
+      createdAt: minutesAgo(10), updatedAt: minutesAgo(2), clientMessageAt: minutesAgo(2),
+    });
+  });
+  const { sandbox } = await panelSandbox();
+  sandbox.currentView = 'inquiries';
+  sandbox.currentTab = 'inbox';
+  sandbox.renderView();
+
+  const body = sandbox.document.getElementById('viewBody');
+  // Так это и происходит: выбор в списке поднимает событие input на странице.
+  sandbox.pageTouched = true;
+  body.querySelector('#inqType').onchange({ target: { value: 'lead' } });
+  assert.equal(sandbox.pageTouched, false, 'после перерисовки экран снова свободен');
+
+  // И теперь обновление действительно обновляет экран, а не только полоску.
+  const page = sandbox.document.getElementById('page');
+  page.innerHTML = 'ЧЕРНОВИК НА ЭКРАНЕ';
+  sandbox.stateVersion = 'старая-версия';
+  const timer = sandbox.__timers.find((entry) => entry.ms === 45000);
+  await timer.fn();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.notEqual(page.innerHTML, 'ЧЕРНОВИК НА ЭКРАНЕ', 'новые данные появились на экране сами');
+});
+
+test('поиск по диалогам тоже не оставляет экран занятым', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.currentView = 'inquiries';
+  sandbox.currentTab = 'inbox';
+  sandbox.renderView();
+
+  const body = sandbox.document.getElementById('viewBody');
+  const search = body.querySelector('#inqSearch');
+  sandbox.pageTouched = true;
+  search.value = 'паркинг';
+  search.oninput();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(sandbox.pageTouched, false, 'после перерисовки списка экран свободен');
+  assert.equal(sandbox.inquiryFilter.search, 'паркинг', 'а поиск остался как набрали');
+});

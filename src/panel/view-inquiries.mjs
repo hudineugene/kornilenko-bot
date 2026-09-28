@@ -205,6 +205,7 @@ function pipelineCardHtml(row) {
     '</div><select class="pipeline-stage-select" data-pipeline-stage="' + esc(item.id) + '" aria-label="Этап воронки">' + pipelineStageOptions(row.stage, false) + '</select></article>';
 }
 function renderPipeline(host) {
+  screenSettled();
   var allRows = pipelineOpportunityRows();
   var managers = [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).concat(allRows.map(function (row) { return row.item.assignee; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
   var searchText = pipelineFilter.search.toLowerCase();
@@ -294,6 +295,7 @@ function taskCardHtml(row, scope) {
     (item.followUpDate ? '<button class="btn secondary small" data-task-done="' + esc(item.id) + '" type="button">✓ Выполнено</button>' : "") + '</div></article>';
 }
 function renderTasks(host) {
+  screenSettled();
   var today = pipelineToday();
   var allRows = pipelineOpportunityRows().filter(function (row) { return row.stage !== "won" && row.stage !== "lost"; }).map(function (row) { row.taskScope = taskScopeOf(row, today); return row; }).filter(function (row) { return row.taskScope; });
   var counts = {
@@ -397,6 +399,7 @@ function openTemplates() {
 }
 
 function renderInquiryList(host) {
+  screenSettled();
   var allGroups = conversationGroups();
   var rows = allGroups.filter(conversationMatches);
   var selectedGroup = selectedInquiry ? allGroups.find(function (group) {
@@ -945,6 +948,7 @@ function viewingHistoryHtml(rows, today) {
   }).join("") + '</div></div>';
 }
 function renderViewings(host) {
+  screenSettled();
   var today = pipelineToday();
   var rows = (state.inquiries || []).filter(function (item) { return item.type === "viewing" && item.viewing; });
   var active = rows.filter(function (item) { return !item.viewing.cancelledAt && item.status !== "closed"; });
@@ -1038,6 +1042,7 @@ var CLIENTS_PAGE = 300;
 var clientsShown = CLIENTS_PAGE;
 
 function renderClients(host) {
+  screenSettled();
   var rows = (state.users || []).map(function (user) {
     var inquiries = (state.inquiries || []).filter(function (item) { return String(item.userId) === user.id; });
     return { user: user, inquiries: inquiries, latest: clientActiveInquiry(inquiries), active: clientOpenInquiry(inquiries) };
