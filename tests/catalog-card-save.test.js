@@ -114,11 +114,30 @@ test('клиенту недозаполненный объект всё равн
   assert.deepEqual(shown, ['ready'], 'в каталоге остаётся только готовая карточка');
 });
 
+test('фотографии загружаются один раз на все языки', async () => {
+  const record = objectById('from-feed');
+  // У объекта фотографии только в русском наборе.
+  assert.equal(record.imagesByLanguage.en.length, 0);
+  assert.equal(record.imagesByLanguage.es.length, 0);
+  assert.equal(bot.recordImages(record, 'en').length, 1, 'английская карточка берёт общие фотографии');
+  assert.equal(bot.recordImages(record, 'es')[0].id, 'feed-ru', 'и это тот же файл, второй раз его не грузили');
+
+  // Свой набор для языка остаётся возможным и важнее общего.
+  const own = objectById('ready');
+  assert.equal(bot.recordImages(own, 'en')[0].id, 'r-en', 'если набор для языка есть — показываем его');
+
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /Эти фотографии видят клиенты на всех языках/, 'в панели сказано, что набор общий');
+  assert.match(PANEL_HTML, /Свои фотографии для языка/, 'отдельный набор — по желанию');
+  assert.ok(!/Для каждого языка загружается свой набор/.test(PANEL_HTML), 'прежняя подсказка убрана');
+});
+
 test('панель говорит, чего не хватает, а не отказывает', async () => {
   const response = await realFetch(base + '/api/state', { headers });
   const state = await response.json();
   const record = state.objects.find((item) => item.id === 'from-feed');
-  assert.deepEqual(record.publicationIssues.en, ['название', 'описание', 'фотография', 'номер объекта', 'площадь', 'спальни', 'санузлы']);
+  // Фотографии общие: русского набора хватает и английской карточке.
+  assert.deepEqual(record.publicationIssues.en, ['название', 'описание', 'номер объекта', 'площадь', 'спальни', 'санузлы']);
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.doesNotMatch(PANEL_HTML, /Заполните обязательные поля или сохраните объект как скрытый/, 'кнопка «Сохранить» больше не отказывает');
   assert.match(PANEL_HTML, /Клиенты пока не видят карточку на /, 'вместо отказа — понятное предупреждение');

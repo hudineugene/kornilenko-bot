@@ -206,14 +206,23 @@ async function openObjectInsights(id) {
 // --- Редактор объекта и акции ------------------------------------------------
 function imageBlock(kind, record, language) {
   var images = record ? propertyImages(record, language) : [];
-  return '<div data-langpane="' + language + '" class="' + (language === "ru" ? "" : "hidden") + '">' +
-    '<div class="image-list" data-images="' + language + '">' + images.map(function (image) {
+  // Русский набор — общий: его видят клиенты на всех языках, пока для языка
+  // не загрузили свой. Поэтому у остальных языков блок свёрнут и подписан
+  // как необязательный.
+  var common = language === "ru";
+  var body = '<div class="image-list" data-images="' + language + '">' + images.map(function (image) {
       return '<span class="media-thumb"><img src="' + imageUrl(kind, record.id, image, language) + '" alt="">' +
         '<button class="media-remove" data-remove="' + esc(image.id) + '" type="button" title="Убрать фото">✕</button></span>';
     }).join("") + "</div>" +
     '<div class="image-upload-row"><label class="btn secondary small">＋ Добавить фото<input type="file" accept="image/jpeg,image/png" multiple data-upload="' + language + '" class="file-hidden"></label>' +
-    '<span class="small muted" data-image-count="' + language + '">' + images.length + ' из 10</span></div>' +
-    '<div class="hint">Первое фото станет обложкой. Для каждого языка загружается свой набор.</div></div>';
+    '<span class="small muted" data-image-count="' + language + '">' + images.length + ' из 10</span></div>';
+  if (common) {
+    return '<div data-langpane="ru">' + body +
+      '<div class="hint">Первое фото станет обложкой. Эти фотографии видят клиенты на всех языках.</div></div>';
+  }
+  return '<details class="editor-section" data-langpane="' + language + '"' + (images.length ? " open" : "") + '>' +
+    '<summary><b>Свои фотографии для языка ' + language.toUpperCase() + '</b><span>необязательно: без них показываются общие</span></summary>' +
+    '<div class="editor-section-body stack">' + body + "</div></details>";
 }
 
 function openRecordEditor(kind, id) {
@@ -226,7 +235,7 @@ function openRecordEditor(kind, id) {
     '<details class="editor-section" open><summary><b>Карточка для клиента</b><span>название, описание и фотографии</span></summary><div class="editor-section-body stack">' +
       translatedField("title", "Название", record && record.title, false, "", true) +
       (isObject ? translatedField("description", "Описание", record && record.description, true, "", true) : translatedField("text", "Текст акции", record && record.text, true)) +
-      '<div class="field"><span class="field-label">Фотографии' + (isObject ? ' <span class="required">*</span>' : "") + '</span>' + LANGUAGES.map(function (language) { return imageBlock(kind, record, language[0]); }).join("") + "</div>" +
+      '<div class="field photo-field"><span class="field-label">Фотографии' + (isObject ? ' <span class="required">*</span>' : "") + '</span>' + LANGUAGES.map(function (language) { return imageBlock(kind, record, language[0]); }).join("") + "</div>" +
     "</div></details>" +
     (isObject
       ? '<details class="editor-section" open><summary><b>Цена и расположение</b><span>главные данные карточки</span></summary><div class="editor-section-body stack"><div class="grid cols-3">' +
@@ -309,7 +318,9 @@ function openRecordEditor(kind, id) {
         if (!translatedValue("title", language)) issues.push("название");
         if (!translatedValue("description", language)) issues.push("описание");
         if (!translatedValue("city", language)) issues.push("город");
-        if (!dialog.querySelector('[data-images="' + language + '"] .media-thumb')) issues.push("фотография");
+        var ownPhotos = dialog.querySelector('[data-images="' + language + '"] .media-thumb');
+        var commonPhotos = dialog.querySelector('[data-images="ru"] .media-thumb');
+        if (!ownPhotos && !commonPhotos) issues.push("фотография");
         if (!value("fReference")) issues.push("номер объекта");
         if (type === "land") {
           if (!(Number(value("fPlot")) > 0)) issues.push("площадь участка");
@@ -362,7 +373,8 @@ function openRecordEditor(kind, id) {
         dialog.querySelector("#recordPreviewLanguage").textContent = languageName;
         var preview = dialog.querySelector("#recordPreview");
         var titleText = translatedValue("title", language);
-        var cover = dialog.querySelector('[data-images="' + language + '"] .media-thumb img');
+        var cover = dialog.querySelector('[data-images="' + language + '"] .media-thumb img')
+          || dialog.querySelector('[data-images="ru"] .media-thumb img');
         var imageHtml = cover ? '<img src="' + esc(cover.src) + '" alt="">' : "";
         var lines = [];
         var buttons = [];

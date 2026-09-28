@@ -45,15 +45,18 @@ function whatsappContactUrl(value, fallbackPhone = '') {
   return digits.length >= 7 ? 'https://wa.me/' + digits : '';
 }
 
+// Фотографии дома от языка клиента не зависят. Свой набор для языка бывает
+// нужен (планировка с подписями, например), но если его нет — показываем
+// общие, а не прячем объект от целого языка.
 function recordImages(record, language) {
   if (record && record.imagesByLanguage && typeof record.imagesByLanguage === 'object') {
-    if (['ru', 'en', 'es'].includes(language)) {
-      const exact = record.imagesByLanguage[language];
-      return Array.isArray(exact) ? exact.filter(imageExists).slice(0, 10) : [];
-    }
-    for (const candidate of ['ru', 'en', 'es']) {
+    const order = ['ru', 'en', 'es'].includes(language)
+      ? [language, ...['ru', 'en', 'es'].filter((code) => code !== language)]
+      : ['ru', 'en', 'es'];
+    for (const candidate of order) {
       const images = record.imagesByLanguage[candidate];
-      if (Array.isArray(images) && images.length) return images.filter(imageExists).slice(0, 10);
+      const ready = Array.isArray(images) ? images.filter(imageExists).slice(0, 10) : [];
+      if (ready.length) return ready;
     }
     return [];
   }

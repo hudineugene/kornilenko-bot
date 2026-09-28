@@ -218,23 +218,37 @@ test.describe('property alerts', () => {
     const fan = user(9101, { favorites: ['villa-a'] });
     user(9102, { favorites: ['villa-a'], propertyAlerts: false });
     user(9103, { favorites: ['villa-a'], blocked: true });
-    user(9104, { favorites: ['villa-a'], preferredLanguage: 'es' });
+    // У объекта нет своих испанских фотографий — но они общие, поэтому
+    // испанская карточка готова и клиент получает уведомление.
+    const spanish = user(9104, { favorites: ['villa-a'], preferredLanguage: 'es' });
     user(9105);
     const record = bot.getData().objects[0];
     record.priceValue = 450000;
     const deliveries = bot.propertyAlertDeliveries(record, { status: 'active', priceValue: 500000 });
-    assert.deepEqual(deliveries.map((delivery) => delivery.user.id), [fan.id], 'opted out, blocked and clients without a card in their language are skipped');
+    assert.deepEqual(deliveries.map((delivery) => delivery.user.id), [fan.id, spanish.id], 'opted out and blocked clients are skipped');
     assert.match(deliveries[0].heading, new RegExp('^' + ALERTS.ru.priceDrop));
     assert.match(deliveries[0].heading, /500\s000 € → 450\s000 €/);
 
     telegram.calls = [];
-    assert.equal(await bot.deliverPropertyAlerts(deliveries, TOKEN), 1);
+    assert.equal(await bot.deliverPropertyAlerts(deliveries, TOKEN), 2);
     const [card] = telegram.calls.filter((call) => call.method === 'sendPhoto');
     assert.equal(String(card.body.chat_id), fan.id);
     assert.ok(card.body.caption.startsWith('<i>' + ALERTS.ru.priceDrop));
     assert.equal(card.body.parse_mode, 'HTML');
     assert.ok(callbacksOf(card.body.reply_markup).includes('alerts:off'));
     assert.deepEqual(bot.propertyAlertDeliveries(record, { status: 'active', priceValue: 500000 }), [], 'the same drop is not announced twice');
+  });
+
+  test('a client whose language has no card text is still skipped', async () => {
+    const fan = user(9111, { favorites: ['villa-a'] });
+    const spanish = user(9112, { favorites: ['villa-a'], preferredLanguage: 'es' });
+    const record = bot.getData().objects[0];
+    // Фотографии общие, а текста на испанском нет — такую карточку не шлём.
+    record.description = { ...record.description, es: '' };
+    record.priceValue = 450000;
+    const deliveries = bot.propertyAlertDeliveries(record, { status: 'active', priceValue: 500000 });
+    assert.deepEqual(deliveries.map((delivery) => delivery.user.id), [fan.id], 'клиент без описания на своём языке пропущен');
+    assert.ok(!deliveries.some((delivery) => delivery.user.id === spanish.id));
   });
 
   test('a higher or unchanged price sends nothing', () => {
