@@ -1101,6 +1101,44 @@ test('счётчик у «Переписки» — это клиенты, кот
   assert.match(String(list.innerHTML), /Ждут ответа · 2/, 'и во вкладке «Переписки»');
 });
 
+test('числа на «Сегодня» и в «Отчётах» сходятся: одно окно и один источник', async () => {
+  const daysAgo = (days) => new Date(Date.now() - days * 864e5).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.users['790001'] = { id: '790001', chatId: 790001, firstName: 'Ирина', preferredLanguage: 'ru', activity: [], firstSeenAt: daysAgo(3), lastSeenAt: daysAgo(1) };
+    // Три заявки за последний месяц (две из них за неделю) и одна старая.
+    for (const [id, type, age] of [['c-1', 'general', 1], ['c-2', 'lead', 5], ['c-3', 'general', 20], ['c-old', 'viewing', 90]]) {
+      data.inquiries.push({
+        id, userId: '790001', chatId: '790001', language: 'ru', type, text: 'Вопрос',
+        status: 'closed', pipelineStage: 'contact', replies: [], messages: [], readAt: daysAgo(age),
+        createdAt: daysAgo(age), updatedAt: daysAgo(age), clientMessageAt: daysAgo(age),
+      });
+    }
+    // Суточный счётчик аналитики намеренно «врёт»: он не должен попадать на экран.
+    const day = new Date().toISOString().slice(0, 10);
+    data.analytics.daily[day] = { received: 40, inquiries: 99 };
+  });
+  const { sandbox } = await panelSandbox();
+
+  const reports = fakeElement('main');
+  await sandbox.VIEWS.reports.render(reports, '');
+  const html = String(reports.innerHTML).replace(/ /g, ' ');
+  assert.match(html, /Заявок за 30 дней<\/span><span class="value">3</, 'плитка считает заявки списка за 30 дней');
+  assert.match(html, /Заявки по типам, 30 дней/, 'и «по типам» — в том же окне');
+  const typeBars = Array.from(html.slice(html.indexOf('Заявки по типам')).split('Откуда приходят клиенты')[0].matchAll(/<b class="right">(\d+) /g)).map((match) => Number(match[1]));
+  assert.equal(typeBars.reduce((sum, value) => sum + value, 0), 3, 'по типам сумма 3, как в плитке: старая заявка не считается');
+  assert.ok(!/заявок: 99/.test(html), 'счётчик аналитики на экран не попадает');
+  assert.match(html, /заявок: 3 ·/, 'подпись под графиком — то же число');
+  assert.ok(sandbox.VIEWS.reports.render.toString().includes('Открыли карточку'), 'колонка «Интерес» названа по смыслу');
+
+  const today = fakeElement('main');
+  await sandbox.VIEWS.today.render(today, '');
+  const text = String(today.innerHTML).replace(/ /g, ' ');
+  assert.match(text, /Сообщения и заявки, 7 дней/, 'график — за 7 дней, как и строка цифр');
+  assert.match(text, /<b>2<\/b> заявки за 7 дней/, 'строка цифр: заявок за 7 дней две');
+  assert.match(text, /2 заявки<\/span>/, 'под графиком то же число, а не 99');
+});
+
 test('когда все отвечены, ноль везде', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, state } = await panelSandbox();

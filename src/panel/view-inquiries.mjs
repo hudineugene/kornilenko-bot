@@ -247,11 +247,11 @@ function renderPipeline(host) {
   var waiting = active.filter(function (row) { return row.group.waiting; }).length;
   var unassigned = active.filter(function (row) { return !row.item.assignee; }).length;
   host.innerHTML = '<div class="grid cols-4 funnel-kpis">' +
-      kpiCard("Активные клиенты", num(active.length), "в текущей работе") +
+      kpiCard("Активные клиенты", num(active.length), "без «Выиграно» и «Проиграно»") +
       kpiCard("Ждут ответа", num(waiting), "нужно ответить", waiting ? "down" : "") +
       kpiCard("Связаться", num(due), "сегодня или просрочено", due ? "down" : "") +
       kpiCard("Без менеджера", num(unassigned), "нужно назначить", unassigned ? "down" : "") +
-    '</div><div class="funnel-toolbar"><div class="search"><input id="pipelineSearch" placeholder="Найти клиента, объект или сообщение" value="' + esc(pipelineFilter.search) + '"></div><select id="pipelineAssignee"><option value="">Все менеджеры</option><option value="none"' + (pipelineFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (pipelineFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select><span class="small muted">Показано: ' + rows.length + " из " + allRows.length + '</span></div>' +
+    '</div><div class="funnel-toolbar"><div class="search"><input id="pipelineSearch" placeholder="Найти клиента, объект или сообщение" value="' + esc(pipelineFilter.search) + '"></div><select id="pipelineAssignee"><option value="">Все менеджеры</option><option value="none"' + (pipelineFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (pipelineFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select><span class="small muted">На доске: ' + rows.length + " из " + allRows.length + ' (вместе с завершёнными)</span></div>' +
     '<div class="funnel-board">' + PIPELINE_STAGES.map(function (stage) {
       var stageRows = rows.filter(function (row) { return row.stage === stage[0]; });
       return '<section class="funnel-column stage-' + stage[0] + '"><header><div><h3>' + stage[1] + '</h3><span>' + stage[2] + '</span></div><b>' + stageRows.length + '</b></header><div class="funnel-column-body">' + (stageRows.length ? stageRows.map(pipelineCardHtml).join("") : '<div class="funnel-empty">Нет клиентов</div>') + "</div></section>";

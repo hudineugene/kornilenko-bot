@@ -106,7 +106,7 @@ VIEWS.today = {
   render: function (host) {
     var today = startOfToday(), week = startOfWeek();
     var waiting = waitingClients();
-    var weekDays = lastDays(14);
+    var weekDays = lastDays(7);
     var deeds = deedList();
     var unconfirmed = unconfirmedViewings().length;
     host.innerHTML =
@@ -132,16 +132,16 @@ VIEWS.today = {
               '</div>';
             }).join("") + '</div>' : '<div class="empty"><b>Дел нет</b>Все клиенты отвечены, просмотры подтверждены</div>') +
           "</div>" +
-          '<div class="card"><header><h3>Сообщения и заявки, 14 дней</h3></header><div class="card-body">' +
+          '<div class="card"><header><h3>Сообщения и заявки, 7 дней</h3></header><div class="card-body">' +
             sparkline(weekDays, "received", "var(--brand)") +
-            '<div class="legend"><span><i class="brand-dot"></i>сообщения от клиентов</span><span>' + num(sumDays(weekDays, "received")) + " за 14 дней · " + num(sumDays(weekDays, "inquiries")) + " заявок</span></div>" +
+            '<div class="legend"><span><i class="brand-dot"></i>сообщения от клиентов</span><span>' + num(sumDays(weekDays, "received")) + " сообщений за 7 дней · " + num(inquiriesInRange(week).length) + " " + plural(inquiriesInRange(week).length, "заявка", "заявки", "заявок") + "</span></div>" +
           "</div></div>" +
         "</div>" +
         '<div class="stack">' +
           '<div class="card"><header><h3>Состояние бота</h3></header><div class="card-body stack">' +
             '<label class="switch"><input type="checkbox" id="botActive"' + (state.config.active ? " checked" : "") + '><span class="track"></span><span>' + (state.config.active ? "Бот включён" : "Бот выключен") + "</span></label>" +
             '<div class="small muted">Связь: ' + esc(connectionText()) + "</div>" +
-            '<div class="small muted">Клиентов в базе: ' + num(state.userCount) + " · активных: " + num(state.activeUserCount) + "</div>" +
+            '<div class="small muted">Клиентов в базе: ' + num(state.userCount) + " · им можно писать: " + num(state.activeUserCount) + "</div>" +
             '<div class="row wrap"><button class="btn secondary small" type="button" data-go="settings" data-tab="team">Настройки</button>' +
             '<button class="btn secondary small" type="button" data-go="settings" data-tab="reports">Отчёты</button></div>' +
           "</div></div>" +
@@ -263,11 +263,16 @@ VIEWS.reports = {
   subtitle: function () { return "Аудитория, заявки, объекты и рассылки"; },
   render: function (host) {
     var days = lastDays(30);
+    // Заявки считаем по самому списку заявок и в одном окне — 30 дней: и плитка,
+    // и «по типам», и подпись под графиком. Раньше плитка брала суточный счётчик
+    // аналитики, а «по типам» — всё время, и числа не сходились.
+    var monthStart = Date.now() - 30 * 864e5;
+    var monthInquiries = inquiriesInRange(monthStart);
     var inquiries = state.inquiries || [];
     var inquiryUsers = new Set(inquiries.map(function (item) { return String(item.userId || ""); }).filter(Boolean)).size;
     var week = startOfWeek();
     var byType = {};
-    inquiries.forEach(function (item) { byType[inquiryTypeName(item)] = (byType[inquiryTypeName(item)] || 0) + 1; });
+    monthInquiries.forEach(function (item) { byType[inquiryTypeName(item)] = (byType[inquiryTypeName(item)] || 0) + 1; });
     var typeRows = Object.keys(byType).map(function (name) { return [name, byType[name]]; }).sort(function (a, b) { return b[1] - a[1]; });
     var sources = (state.sources || []).map(function (item) { return [item.source || "без метки", item.users || 0]; }).sort(function (a, b) { return b[1] - a[1]; });
     var properties = (state.objects || []).map(function (record) {
@@ -282,15 +287,15 @@ VIEWS.reports = {
       '<div class="grid cols-4 gap-bottom">' +
         kpiCard("Всего клиентов", num(state.userCount), "+" + usersInRange(week) + " за 7 дней") +
         kpiCard("Сообщений за 30 дней", num(sumDays(days, "received"))) +
-        kpiCard("Заявок за 30 дней", num(sumDays(days, "inquiries"))) +
+        kpiCard("Заявок за 30 дней", num(monthInquiries.length)) +
         kpiCard("Конверсия в заявку", (state.userCount ? Math.round((inquiryUsers / state.userCount) * 100) : 0) + "%", "клиенты, оставившие заявку") +
       "</div>" +
       '<div class="card gap-bottom"><header><h3>Активность за 30 дней</h3></header><div class="card-body">' +
         sparkline(days, "received", "var(--brand)") +
-        '<div class="legend"><span><i class="brand-dot"></i>сообщения</span><span>заявок: ' + num(sumDays(days, "inquiries")) + " · новых клиентов: " + num(usersInRange(Date.now() - 30 * 864e5)) + "</span></div>" +
+        '<div class="legend"><span><i class="brand-dot"></i>сообщения</span><span>заявок: ' + num(monthInquiries.length) + " · новых клиентов: " + num(usersInRange(monthStart)) + "</span></div>" +
       "</div></div>" +
       '<div class="grid cols-2 gap-bottom">' +
-        '<div class="card"><header><h3>Заявки по типам</h3></header>' + barList(typeRows, inquiries.length) + "</div>" +
+        '<div class="card"><header><h3>Заявки по типам, 30 дней</h3></header>' + barList(typeRows, monthInquiries.length) + "</div>" +
         '<div class="card"><header><h3>Откуда приходят клиенты</h3></header>' + barList(sources, state.userCount) + "</div>" +
       "</div>" +
       '<div class="grid cols-2 gap-bottom">' +
@@ -312,9 +317,9 @@ VIEWS.reports = {
         }).join("") + "</div>" : '<div class="empty">Клиенты ещё не ставили реакции на сообщения бота</div>') +
       "</div>" +
       '<div class="card"><header><h3>Эффективность объектов</h3><div class="actions"><span class="small faint">видели в каталоге · открыли карточку · заявки</span></div></header>' +
-        (properties.length ? '<div class="table-wrap"><table><thead><tr><th>Объект</th><th class="right">Показы</th><th class="right">Подробнее</th><th class="right">Заявки</th><th class="right">Интерес</th></tr></thead><tbody>' +
+        (properties.length ? '<div class="table-wrap"><table><thead><tr><th>Объект</th><th class="right">Показы</th><th class="right">Подробнее</th><th class="right">Заявки</th><th class="right" title="Какая доля показов закончилась открытой карточкой">Открыли карточку</th></tr></thead><tbody>' +
           properties.map(function (row) {
-            var rate = row.views ? Math.round((row.inquiries / row.views) * 100) : 0;
+            var rate = row.views ? Math.round((row.details / row.views) * 100) : 0;
             return '<tr class="clickable" data-property-insights="' + esc(row.id) + '"><td><b>' + esc(row.title) + '</b><br><span class="small faint">открыть клиентов и действия</span></td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + '%</td></tr>';
           }).join("") + "</tbody></table></div>" : '<div class="empty">Объектов пока нет</div>') +
       "</div>";

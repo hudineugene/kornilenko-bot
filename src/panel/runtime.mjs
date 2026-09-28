@@ -590,11 +590,13 @@ function renderNav() {
 
 function renderNotificationBell() {
   var button = el("notificationBell"), badge = el("notificationCount");
-  var count = Number(state && state.notificationUnreadCount || 0);
+  // Колокольчик считает то же, что и «Список дел»: нерешённые дела, а не только непрочитанные.
+  var count = state ? deedList().length : 0;
   badge.textContent = count > 99 ? "99+" : String(count);
   badge.classList.toggle("hidden", count === 0);
   button.classList.toggle("active", currentView === "today" || currentView === "notifications");
-  button.setAttribute("aria-label", count ? "Открыть уведомления: непрочитанных " + count : "Открыть уведомления");
+  button.setAttribute("aria-label", count ? "Открыть список дел: " + count + " " + plural(count, "дело", "дела", "дел") : "Открыть список дел");
+  button.title = count ? count + " " + plural(count, "дело", "дела", "дел") + " требуют внимания" : "Дел нет";
 }
 
 // Запись на диск не удалась: полоса видна на всех экранах, пока не получится.
