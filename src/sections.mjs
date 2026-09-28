@@ -9,11 +9,11 @@ import { recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
-import { knownLeadPhone, startLeadEdit, startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs';
+import { knownLeadPhone, startLeadEdit, startLeadForm, startViewingForm } from './forms.mjs';
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { replyPromise, withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
-import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
 import { similarPropertyRanking } from './similar.mjs';
 
@@ -201,7 +201,8 @@ async function handleSelectionCallback(query, token) {
   const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
   const user = normalizeUser(query.from, chatId, false);
   await acknowledgeCallback(query, token);
-  await startSelectionForm(user, token);
+  // Подбор — мастер в одном сообщении: сделка, тип, город, бюджет, спальни.
+  await sendSelectionWizard(chatId, user, token, 'deal');
 }
 
 async function handleAboutCallback(query, token) {

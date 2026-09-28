@@ -320,137 +320,42 @@ test.describe('viewing form', () => {
 
 // --- Selection form ----------------------------------------------------------
 
-test.describe('selection form', () => {
-  const ru = SELECTION.ru;
+test.describe('selection wizard', () => {
+  const SELECTION = bot.text.selection.ru;
 
-  test('the full path from the menu sends the wishes to the manager', async () => {
+  test('подбор ведёт по шагам и отдаёт пожелания менеджеру', async () => {
     const chat = createChat();
-    let step = await chat.say(MENU.ru.selection);
-    assert.equal(step.last.text, ru.intro + '\n\n' + ru.askDeal);
-    assert.deepEqual(step.last.buttons, [...ru.dealOptions, ru.cancel]);
-    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 1, 1], 'short answers share a row');
+    const start = await chat.say(MENU.ru.selection);
+    assert.match(start.last.text, new RegExp(SELECTION.wizardDeal), 'первый вопрос — о сделке');
 
-    step = await chat.say(ru.dealOptions[0]);
-    assert.equal(step.last.text, ru.askType);
-    assert.deepEqual(step.last.buttons, [...ru.typeOptions, ru.cancel]);
-    step = await chat.say(ru.typeOptions[1]);
-    assert.equal(step.last.text, ru.askLocation);
-    assert.deepEqual(step.last.buttons, [ru.anyLocation, ru.cancel]);
-    step = await chat.say('Марбелья, у моря');
-    assert.equal(step.last.text, ru.askBudget);
-    step = await chat.say('до 600 000 €');
-    assert.equal(step.last.text, ru.askBedrooms);
-    step = await chat.say(ru.bedroomOptions[2]);
-    assert.equal(step.last.text, [ru.review, '', 'Цель: Покупка', 'Тип: Дом или вилла', 'Район: Марбелья, у моря', 'Бюджет: до 600 000 €', 'Спальни: 3 спальни'].join('\n'));
+    await chat.press('sel:deal:sale');
+    await chat.press('sel:skip:city');
+    await chat.press('sel:skip:budget');
+    await chat.press('sel:skip:bedrooms');
+    const done = await chat.press('sel:skip:done');
+    const callbacks = callbacksOf(done.calls.filter((call) => call.method === 'editMessageText').pop().body.reply_markup);
+    assert.ok(callbacks.includes('cfilter:manager'), 'в конце можно передать менеджеру');
 
-    assert.deepEqual(step.last.markup.keyboard[0], [{ text: ru.confirm }], '«Send» has a row of its own');
-    assert.deepEqual(step.last.markup.keyboard[1], [{ text: ru.editDeal }, { text: ru.editType }], 'the edit buttons go two to a row');
-
-    step = await chat.say(ru.confirm);
-    assert.equal(step.replies[0].text, ru.success, 'nothing in the catalog fits yet');
-    assert.equal(step.last.text, ru.noMatchesYet);
-    assert.deepEqual(callbacksOf(step.last.markup), ['catalog:all:0'], 'the whole catalog is one tap away');
-    const [inquiry] = chat.inquiries;
-    assert.equal(inquiry.type, 'selection');
-    assert.deepEqual(inquiry.selection, { deal: 'Покупка', type: 'Дом или вилла', location: 'Марбелья, у моря', budget: 'до 600 000 €', bedrooms: '3 спальни' });
-    assert.ok(inquiry.text.startsWith(ru.summaryTitle));
-    assert.ok(adminNotifications().some((text) => text.includes('подбор недвижимости') && text.includes('до 600 000 €')));
+    const sent = await chat.press('cfilter:manager');
+    const inquiry = chat.inquiries.find((item) => item.type === 'selection');
+    assert.ok(inquiry, 'заявка на подбор ушла менеджеру');
+    assert.match(inquiry.text, /Продажа/, 'в ней видно, что клиент выбрал');
+    assert.ok(sent.popups.length > 0, 'клиент получил подтверждение');
   });
 
-  test('the quick answers for location and budget are accepted', async () => {
+  test('мастер не спрашивает то, чего нет в каталоге', async () => {
+    resetData((data) => {
+      data.objects.push(property('only-rent', 'Квартира в аренду', 'active', { dealType: 'rent', propertyType: 'apartment' }));
+    });
     const chat = createChat();
     await chat.say(MENU.ru.selection);
-    await chat.say(ru.dealOptions[1]);
-    await chat.say(ru.typeOptions[4]);
-    await chat.say(ru.anyLocation);
-    await chat.say(ru.noBudget);
-    const step = await chat.say(ru.bedroomOptions[4]);
-    assert.match(step.last.text, new RegExp('Район: ' + ru.anyLocation + '\nБюджет: ' + ru.noBudget));
-  });
-
-  test('editing the budget from the review keeps the other answers', async () => {
-    const chat = createChat();
-    await chat.say(MENU.ru.selection);
-    await chat.say(ru.dealOptions[0]);
-    await chat.say(ru.typeOptions[0]);
-    await chat.say('Малага');
-    await chat.say('300 000 €');
-    await chat.say(ru.bedroomOptions[1]);
-    let step = await chat.say(ru.editBudget);
-    assert.equal(step.last.text, ru.askBudget);
-    step = await chat.say('450 000 €');
-    assert.equal(step.last.text, [ru.review, '', 'Цель: Покупка', 'Тип: Квартира', 'Район: Малага', 'Бюджет: 450 000 €', 'Спальни: 2 спальни'].join('\n'));
-  });
-
-  test('land and commercial property skip the bedrooms question', async () => {
-    const chat = createChat();
-    await chat.say(MENU.ru.selection);
-    await chat.say(ru.dealOptions[0]);
-    await chat.say(ru.typeOptions[2]);
-    await chat.say('Эстепона');
-    let step = await chat.say('200 000 €');
-    assert.equal(step.last.text, [ru.review, '', 'Цель: Покупка', 'Тип: Участок', 'Район: Эстепона', 'Бюджет: 200 000 €', 'Спальни: Не важно'].join('\n'));
-
-    step = await chat.say(ru.editType);
-    assert.equal(step.last.text, ru.askType);
-    step = await chat.say(ru.typeOptions[1]);
-    assert.equal(step.last.text, ru.askBedrooms, 'a house needs the question that was skipped');
-    step = await chat.say(ru.bedroomOptions[3]);
-    assert.match(step.last.text, /Тип: Дом или вилла\nРайон: Эстепона\nБюджет: 200 000 €\nСпальни: 4\+ спальни$/);
-  });
-
-  test('what already fits is shown right after the form', async () => {
-    const data = bot.getData();
-    data.objects.push(property('villa-fit-03', 'Вилла с садом', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 4, priceValue: 550000, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
-    data.objects.push(property('villa-costly-04', 'Вилла на холме', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 5, priceValue: 2500000, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
-    data.objects.push(property('house-fit-05', 'Дом у гольфа', 'active', { dealType: 'sale', propertyType: 'house', bedrooms: 3, priceValue: 480000, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
-    data.objects.push(property('flat-fit-06', 'Квартира в центре', 'active', { dealType: 'sale', propertyType: 'apartment', bedrooms: 3, priceValue: 300000, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
-    data.objects.push(property('villa-price-07', 'Вилла с ценой по запросу', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 3, priceValue: null, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
-    const chat = createChat();
-    await chat.say(MENU.ru.selection);
-    await chat.say(ru.dealOptions[0]);
-    await chat.say(ru.typeOptions[1]);
-    await chat.say('Марбелья');
-    await chat.say('до 600 000 €');
-    await chat.say(ru.bedroomOptions[2]);
-    const step = await chat.say(ru.confirm);
-    assert.equal(step.replies[0].text, ru.successMatches + '\n\n' + ru.matchSummary.replace('{exact}', '2').replace('{close}', '1').replace('{consider}', '0'));
-    assert.deepEqual(chat.user.selectionMatchIds, ['villa-fit-03', 'house-fit-05', 'villa-price-07'], 'exact results come before a useful card with missing price');
-    assert.deepEqual(chat.user.selectionMatchDetails.map((item) => [item.id, item.tier]), [['villa-fit-03', 'exact'], ['house-fit-05', 'exact'], ['villa-price-07', 'close']]);
-    assert.deepEqual(chat.inquiries[0].matching.results, chat.user.selectionMatchDetails, 'the inquiry keeps the result snapshot for the manager');
-    const card = step.calls.find((call) => call.method === 'sendPhoto');
-    assert.ok(card.body.caption.startsWith('<i>' + ru.matchesHeading + '</i>\n\n<b>' + ru.tierExact + '</b>\n'));
-    assert.match(card.body.caption, /Почему: формат сделки · тип объекта · нужный район · в рамках бюджета · нужное число спален/);
-    assert.match(card.body.caption, /<b>Вилла с садом<\/b>/);
-    assert.equal(card.body.parse_mode, 'HTML');
-    assert.ok(callbacksOf(card.body.reply_markup).includes('catalog:matches:1'));
-    assert.equal(chat.inquiries.length, 1, 'the manager still gets the request');
-    assert.ok(adminNotifications().some((text) => text.includes('В карточках нужно уточнить данные') && text.includes('Вилла с ценой по запросу: цена')));
-
-    const next = await chat.press('catalog:matches:1');
-    const edited = next.calls.find((call) => call.method === 'editMessageMedia' || call.method === 'sendPhoto');
-    assert.match(edited.body.media ? JSON.stringify(edited.body.media) : edited.body.caption, /Дом у гольфа/);
-  });
-
-  test('answers outside the options are asked again, with the options listed', async () => {
-    const chat = createChat();
-    await chat.say(MENU.ru.selection);
-    let step = await chat.say('хочу виллу');
-    assert.ok(step.last.text.startsWith(ru.invalid));
-    assert.ok(step.last.text.includes(ru.dealOptions[1]), 'the options are listed in the message');
-    assert.equal(chat.user.pendingAction.step, 'deal');
-    await chat.say(ru.dealOptions[0]);
-    step = await chat.say('Дача');
-    assert.ok(step.last.text.startsWith(ru.invalid));
-    assert.equal(chat.user.pendingAction.step, 'type');
-    await chat.say(ru.typeOptions[0]);
-    step = await chat.say('М');
-    assert.ok(step.last.text.startsWith(ru.invalid));
-    assert.equal(chat.user.pendingAction.step, 'location');
+    const types = await chat.press('sel:deal:rent');
+    const markup = types.calls.filter((call) => call.method === 'editMessageText').pop().body.reply_markup;
+    const labels = markup.inline_keyboard.flat().map((button) => button.text);
+    assert.ok(labels.includes('Квартира'), 'квартиры в каталоге есть');
+    assert.ok(!labels.includes('Вилла'), 'вилл нет — и кнопки нет');
   });
 });
-
-// --- Reminder about an unfinished form --------------------------------------
 
 test.describe('unfinished form reminder', () => {
   const HOUR = 60 * 60 * 1000;
@@ -485,8 +390,10 @@ test.describe('unfinished form reminder', () => {
     const lastSeen = Date.parse(fresh.user.lastSeenAt);
     assert.equal(bot.formReminderDue(fresh.user, new Date(lastSeen + HOUR)), false, 'an hour is too early');
 
+    // Подбор стал мастером без незавершённой формы, поэтому берём заявку.
     const night = createChat();
-    await night.press('selection:start');
+    await night.press('contact:lead');
+    await night.press('lead:call');
     night.user.pendingAction.createdAt = new Date(2026, 8, 18, 20, 0).toISOString();
     night.user.lastSeenAt = night.user.pendingAction.createdAt;
     assert.equal(bot.formReminderDue(night.user, new Date(2026, 8, 18, 23, 0)), false, 'not at night');
@@ -518,16 +425,15 @@ test.describe('interrupted forms', () => {
   });
 
   test('/start during a form offers to continue from the saved step', async () => {
+    // Подбор стал мастером без незавершённой формы — проверяем на записи
+    // на просмотр: там шаги по-прежнему сохраняются.
     const chat = createChat();
-    await chat.say(MENU.ru.selection);
-    await chat.say(SELECTION.ru.dealOptions[0]);
+    await chat.press('property:viewing:villa-marbella-01');
     let step = await chat.say('/start');
     assert.equal(step.last.text, INTERACTION.ru.unfinished);
     assert.deepEqual(step.last.buttons, [INTERACTION.ru.continueForm, INTERACTION.ru.discardForm]);
     step = await chat.say(INTERACTION.ru.continueForm);
-    assert.equal(step.last.text, SELECTION.ru.askType);
-    step = await chat.say(SELECTION.ru.typeOptions[0]);
-    assert.equal(step.last.text, SELECTION.ru.askLocation);
+    assert.match(step.last.text, new RegExp(bot.text.viewing.ru.askDate.slice(0, 20)), 'форма продолжается с того же шага');
   });
 
   test('closing the unfinished form returns to the main menu', async () => {

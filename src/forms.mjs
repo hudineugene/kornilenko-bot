@@ -112,8 +112,7 @@ function pendingActionExpired(user) {
 
 function rememberExpiredAction(user, pending) {
   if (!user || !pending) return null;
-  const type = pending.type === 'property_selection' ? 'selection'
-    : pending.type === 'viewing_form' ? 'viewing'
+  const type = pending.type === 'viewing_form' ? 'viewing'
       : pending.type === 'manager_question' ? 'manager_question'
         : pending.type === 'question' ? 'property_question'
           : pending.type === 'lead' ? 'lead'
@@ -176,16 +175,6 @@ async function showPendingActionStep(user, token) {
     const prompt = step === 'time' ? copy.askTime : step === 'custom_time' ? copy.askCustomTime : step === 'custom' ? copy.askCustom : copy.askDate;
     const title = step === 'date' ? localizedExact(property.title, language) || property.reference || '' : '';
     await sendMessage(user.chatId, [title ? '🏠 ' + title : '', prompt].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, step, pending) });
-    return true;
-  }
-  if (pending.type === 'property_selection') {
-    const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
-    const step = SELECTION_STEPS.concat('confirm').includes(pending.step) ? pending.step : 'deal';
-    if (step === 'confirm') {
-      await sendSelectionReview(user, pending, token, language);
-      return true;
-    }
-    await sendMessage(user.chatId, selectionPrompt(copy, step), token, { reply_markup: selectionKeyboard(language, step) });
     return true;
   }
   if (pending.type === 'manager_question') {
@@ -913,224 +902,13 @@ async function saveViewingPhone(message, user, token) {
   return true;
 }
 
-const SELECTION_STEPS = ['deal', 'type', 'location', 'budget', 'bedrooms'];
-
-function selectionPrompt(copy, step) {
-  return { deal: copy.askDeal, type: copy.askType, location: copy.askLocation, budget: copy.askBudget, bedrooms: copy.askBedrooms }[step] || copy.askDeal;
-}
-
-function selectionKeyboard(language, step) {
-  const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
-  if (step === 'deal') return optionReplyKeyboard(copy.dealOptions, copy.cancel, copy.askDeal);
-  if (step === 'type') return optionReplyKeyboard(copy.typeOptions, copy.cancel, copy.askType);
-  if (step === 'location') return optionReplyKeyboard([copy.anyLocation], copy.cancel, copy.askLocation);
-  if (step === 'budget') return optionReplyKeyboard([copy.noBudget], copy.cancel, copy.askBudget);
-  if (step === 'bedrooms') return optionReplyKeyboard(copy.bedroomOptions, copy.cancel, copy.askBedrooms);
-  return optionReplyKeyboard([copy.confirm, copy.editDeal, copy.editType, copy.editLocation, copy.editBudget, copy.editBedrooms], copy.cancel, copy.review, 1);
-}
-
-// Land and commercial property have no bedrooms, so that question is skipped.
-function selectionNeedsBedrooms(copy, type) {
-  const index = copy.typeOptions.indexOf(type);
-  return index !== 2 && index !== 3;
-}
-
-function selectionReviewText(copy, pending) {
-  const values = SELECTION_STEPS.map((step) => pending.data[step]);
-  return [copy.review, '', ...copy.labels.map((label, index) => label + ': ' + cleanText(values[index], 200))].join('\n');
-}
-
-function selectionMatchSummary(copy, ranking) {
-  const counts = { exact: 0, close: 0, consider: 0 };
-  for (const item of ranking) if (Object.hasOwn(counts, item.tier)) counts[item.tier] += 1;
-  return String(copy.matchSummary || '')
-    .replace('{exact}', String(counts.exact))
-    .replace('{close}', String(counts.close))
-    .replace('{consider}', String(counts.consider));
-}
-
-async function sendSelectionReview(user, pending, token, language) {
-  const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
-  pending.step = 'confirm';
-  pending.editing = '';
-  scheduleSave();
-  await sendMessage(user.chatId, selectionReviewText(copy, pending), token, { reply_markup: selectionKeyboard(language, 'confirm') });
-}
-
-async function startSelectionForm(user, token) {
-  const language = user.preferredLanguage || 'ru';
-  const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
-  user.pendingAction = { type: 'property_selection', step: 'deal', data: {}, createdAt: new Date().toISOString() };
-  scheduleSave();
-  await sendMessage(user.chatId, copy.intro + '\n\n' + copy.askDeal, token, { reply_markup: selectionKeyboard(language, 'deal') });
-}
-
-async function handleSelectionFormMessage(message, user, token) {
-  const pending = user.pendingAction;
-  if (!pending || pending.type !== 'property_selection') return false;
-  const language = user.preferredLanguage || 'ru';
-  const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
-  const text = typeof message.text === 'string' ? message.text.trim() : '';
-  if (text === copy.cancel) {
-    user.pendingAction = null;
-    scheduleSave();
-    await sendMessage(user.chatId, copy.cancelled, token, { reply_markup: menuKeyboard(language) });
-    return true;
-  }
-  pending.data = pending.data && typeof pending.data === 'object' ? pending.data : {};
-  if (pending.step === 'deal') {
-    const chosen = copy.dealOptions.includes(text) ? text : optionFromText(text, copy.dealOptions);
-    if (!chosen) {
-      await sendMessage(user.chatId, invalidWithOptions(copy, copy.dealOptions), token, { reply_markup: selectionKeyboard(language, 'deal') });
-      return true;
-    }
-    pending.data.deal = chosen;
-    if (pending.editing === 'deal') {
-      await sendSelectionReview(user, pending, token, language);
-      return true;
-    }
-    pending.step = 'type';
-    scheduleSave();
-    await sendMessage(user.chatId, copy.askType, token, { reply_markup: selectionKeyboard(language, 'type') });
-    return true;
-  }
-  if (pending.step === 'type') {
-    const chosen = copy.typeOptions.includes(text) ? text : optionFromText(text, copy.typeOptions);
-    if (!chosen) {
-      await sendMessage(user.chatId, invalidWithOptions(copy, copy.typeOptions), token, { reply_markup: selectionKeyboard(language, 'type') });
-      return true;
-    }
-    pending.data.type = chosen;
-    if (!selectionNeedsBedrooms(copy, chosen)) {
-      pending.data.bedrooms = copy.bedroomOptions[copy.bedroomOptions.length - 1];
-      pending.data.bedroomsSkipped = true;
-    } else if (pending.editing === 'type' && pending.data.bedroomsSkipped) {
-      // Changed from land to a house: the bedrooms were never asked.
-      pending.step = 'bedrooms';
-      pending.editing = 'bedrooms';
-      scheduleSave();
-      await sendMessage(user.chatId, copy.askBedrooms, token, { reply_markup: selectionKeyboard(language, 'bedrooms') });
-      return true;
-    }
-    if (pending.editing === 'type') {
-      await sendSelectionReview(user, pending, token, language);
-      return true;
-    }
-    pending.step = 'location';
-    scheduleSave();
-    await sendMessage(user.chatId, copy.askLocation, token, { reply_markup: selectionKeyboard(language, 'location') });
-    return true;
-  }
-  if (pending.step === 'location' || pending.step === 'budget') {
-    if (text.length < 2) {
-      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: selectionKeyboard(language, pending.step) });
-      return true;
-    }
-    const completedStep = pending.step;
-    pending.data[completedStep] = text;
-    if (pending.editing === completedStep) {
-      await sendSelectionReview(user, pending, token, language);
-      return true;
-    }
-    if (completedStep === 'budget' && !selectionNeedsBedrooms(copy, pending.data.type)) {
-      await sendSelectionReview(user, pending, token, language);
-      return true;
-    }
-    pending.step = completedStep === 'location' ? 'budget' : 'bedrooms';
-    scheduleSave();
-    await sendMessage(user.chatId, selectionPrompt(copy, pending.step), token, { reply_markup: selectionKeyboard(language, pending.step) });
-    return true;
-  }
-  if (pending.step === 'bedrooms') {
-    const chosen = copy.bedroomOptions.includes(text) ? text : optionFromText(text, copy.bedroomOptions);
-    if (!chosen) {
-      await sendMessage(user.chatId, invalidWithOptions(copy, copy.bedroomOptions), token, { reply_markup: selectionKeyboard(language, 'bedrooms') });
-      return true;
-    }
-    pending.data.bedrooms = chosen;
-    pending.data.bedroomsSkipped = false;
-    await sendSelectionReview(user, pending, token, language);
-    return true;
-  }
-  if (pending.step === 'confirm') {
-    const editStep = text === copy.editDeal ? 'deal'
-      : text === copy.editType ? 'type'
-        : text === copy.editLocation ? 'location'
-          : text === copy.editBudget ? 'budget'
-            : text === copy.editBedrooms ? 'bedrooms'
-              : '';
-    if (editStep) {
-      pending.step = editStep;
-      pending.editing = editStep;
-      scheduleSave();
-      await sendMessage(user.chatId, selectionPrompt(copy, editStep), token, { reply_markup: selectionKeyboard(language, editStep) });
-      return true;
-    }
-    if (text === copy.restart) {
-      pending.step = 'deal';
-      pending.data = {};
-      pending.editing = '';
-      pending.createdAt = new Date().toISOString();
-      scheduleSave();
-      await sendMessage(user.chatId, copy.askDeal, token, { reply_markup: selectionKeyboard(language, 'deal') });
-      return true;
-    }
-    if (text !== copy.confirm) {
-      await sendMessage(user.chatId, selectionReviewText(copy, pending), token, { reply_markup: selectionKeyboard(language, 'confirm') });
-      return true;
-    }
-    const selection = {
-      deal: cleanText(pending.data.deal, 200),
-      type: cleanText(pending.data.type, 200),
-      location: cleanText(pending.data.location, 200),
-      budget: cleanText(pending.data.budget, 200),
-      bedrooms: cleanText(pending.data.bedrooms, 200),
-    };
-    const ranking = currentSelectionRanking(user, selection);
-    const matchSummary = selectionMatchSummary(copy, ranking);
-    const inquiryText = [selectionReviewText(copy, pending).replace(copy.review, copy.summaryTitle).trim(), matchSummary].filter(Boolean).join('\n\n');
-    const matchDetails = ranking.map((item) => ({
-      id: item.record.id,
-      tier: item.tier,
-      score: item.score,
-      reasons: item.reasons,
-      warnings: item.warnings,
-    }));
-    user.pendingAction = null;
-    createInquiry(user, inquiryText, {
-      type: 'selection',
-      selection,
-      matching: { results: matchDetails, generatedAt: new Date().toISOString() },
-      sourceMessage: message,
-    });
-    // Exact matches come first, then useful nearby alternatives. The short
-    // explanation stored with each id follows the user through catalog pages.
-    user.selectionMatchIds = ranking.map((item) => item.record.id);
-    user.selectionMatchDetails = matchDetails;
-    saveDataNow();
-    if (!ranking.length) {
-      await sendMessage(user.chatId, withOffHoursNote(copy.success, language), token, { reply_markup: menuKeyboard(language) });
-      // Nothing fits yet: the rest of the catalog is one tap away.
-      if (publishedCatalog(user).length) {
-        const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
-        await sendUiMessage(user.chatId, user, copy.noMatchesYet, token, { reply_markup: { inline_keyboard: [[{ text: '🏘 ' + navigation.browse, callback_data: 'catalog:all:0' }]] } });
-      }
-      return true;
-    }
-    await sendMessage(user.chatId, withOffHoursNote([copy.successMatches, matchSummary].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
-    await sendCatalogPage(user.chatId, user, token, 0, 'matches');
-    return true;
-  }
-  return false;
-}
-
 // A client who started a form and went quiet hears about it once, a couple
 // of hours later and before the form expires, in the daytime. The buttons
 // are the same as after /start in the middle of a form.
 const FORM_REMINDER_IDLE_MS = 2 * 60 * 60 * 1000;
 const FORM_REMINDER_HOURS = { from: 9, to: 21 };
 const FORM_REMINDERS_PER_RUN = 20;
-const FORM_REMINDER_TEXT_KEYS = { lead: 'reminderLead', viewing_form: 'reminderViewing', property_selection: 'reminderSelection' };
+const FORM_REMINDER_TEXT_KEYS = { lead: 'reminderLead', viewing_form: 'reminderViewing' };
 
 function formReminderDue(user, now = new Date()) {
   const pending = user && user.pendingAction;
@@ -1180,10 +958,6 @@ async function restartExpiredAction(user, token) {
   const property = action.propertyId
     ? data.objects.find((item) => item.id === action.propertyId && ['active', 'reserved'].includes(item.status))
     : null;
-  if (action.type === 'selection') {
-    await startSelectionForm(user, token);
-    return true;
-  }
   if (action.type === 'lead') {
     await startLeadForm(user, token, { propertyId: property ? property.id : '' });
     return true;
@@ -1227,7 +1001,6 @@ export {
   duplicateInboundMessage,
   expiredActionKeyboard,
   handleLeadFormMessage,
-  handleSelectionFormMessage,
   handleViewingFormMessage,
   isStaleFormControl,
   leadFormKeyboard,
@@ -1239,10 +1012,7 @@ export {
   rememberExpiredAction,
   restartExpiredAction,
   savedLeadOption,
-  selectionKeyboard,
-  selectionReviewText,
   sendLeadReview,
-  sendSelectionReview,
   sendViewingReview,
   showPendingActionStep,
   handleLeadMethodCallback,
@@ -1250,7 +1020,6 @@ export {
   saveViewingPhone,
   startLeadEdit,
   startLeadForm,
-  startSelectionForm,
   startViewingForm,
   unfinishedActionKeyboard,
   validLeadPhone,

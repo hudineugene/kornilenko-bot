@@ -1246,6 +1246,138 @@ function catalogLocationPanel(user, facet = 'city', requestedPage = 0) {
   };
 }
 
+// --- Мастер подбора ---------------------------------------------------------
+// Пять шагов в одном сообщении: сделка, тип, город, бюджет, спальни. На каждом
+// шаге видно, сколько объектов подходит, поэтому клиент не собирает вслепую
+// условия, под которые ничего нет.
+const SELECTION_WIZARD_STEPS = ['deal', 'type', 'city', 'budget', 'bedrooms', 'done'];
+
+function selectionWizardPanel(user, step) {
+  const language = user.preferredLanguage || 'ru';
+  const copy = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
+  const filter = normalizedCatalogFilter(user.catalogFilter, language);
+  const published = publishedCatalog(user);
+  const found = applyCatalogFilter(published, filter, language).length;
+  const current = SELECTION_WIZARD_STEPS.includes(step) ? step : 'deal';
+  const rows = [];
+  const skip = (next) => ({ text: copy.wizardSkip, callback_data: 'sel:skip:' + next });
+  const summary = catalogFilterSummary(filter, language);
+  const heading = [
+    copy.wizardTitle,
+    summary,
+    found ? copy.wizardFound.replace('{count}', String(found)) : copy.wizardNothing,
+  ].filter(Boolean).join('\n\n');
+
+  if (current === 'deal') {
+    const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+    rows.push([{ text: action.forSale, callback_data: 'sel:deal:sale' }, { text: action.forRent, callback_data: 'sel:deal:rent' }]);
+    rows.push([skip('type')]);
+  } else if (current === 'type') {
+    const labels = PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru;
+    const types = Object.keys(labels).filter((type) => published.some((record) => record.propertyType === type));
+    for (let index = 0; index < types.length; index += 2) {
+      rows.push(types.slice(index, index + 2).map((type) => ({ text: labels[type], callback_data: 'sel:type:' + type })));
+    }
+    rows.push([skip('city')]);
+  } else if (current === 'city') {
+    const cities = catalogCities(published, language).slice(0, 8);
+    for (let index = 0; index < cities.length; index += 2) {
+      rows.push(cities.slice(index, index + 2).map((city) => ({ text: city, callback_data: 'sel:city:' + cityKey(city) })));
+    }
+    rows.push([skip('budget')]);
+  } else if (current === 'budget') {
+    const deal = catalogPriceDeal(filter, published) || 'sale';
+    const prices = CATALOG_FILTER_PRICES[deal] || [];
+    for (let index = 0; index < prices.length; index += 2) {
+      rows.push(prices.slice(index, index + 2).map((price) => ({
+        text: (CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru).upTo + ' ' + formattedPriceLimit(price, language),
+        callback_data: 'sel:price:' + price,
+      })));
+    }
+    rows.push([skip('bedrooms')]);
+  } else if (current === 'bedrooms') {
+    rows.push(CATALOG_FILTER_BEDROOMS.map((count) => ({ text: count + '+', callback_data: 'sel:bed:' + count })));
+    rows.push([skip('done')]);
+  } else {
+    // Итог: посмотреть подходящие, подписаться на новые или отдать менеджеру.
+    if (found) rows.push([{ text: copy.wizardShow.replace('{count}', String(found)), callback_data: 'sel:show' }]);
+    rows.push([{ text: copy.wizardNotify, callback_data: 'saved:save' }]);
+    rows.push([{ text: copy.wizardManager, callback_data: 'cfilter:manager' }]);
+  }
+  if (current !== 'deal') {
+    const previous = SELECTION_WIZARD_STEPS[Math.max(0, SELECTION_WIZARD_STEPS.indexOf(current) - 1)];
+    rows.push([{ text: copy.wizardBack, callback_data: 'sel:back:' + previous }]);
+  }
+  const question = {
+    deal: copy.wizardDeal, type: copy.wizardType, city: copy.wizardCity,
+    budget: copy.wizardBudget, bedrooms: copy.wizardBedrooms, done: '',
+  }[current];
+  return { text: [heading, question].filter(Boolean).join('\n\n'), markup: { inline_keyboard: rows } };
+}
+
+async function sendSelectionWizard(chatId, user, token, step = 'deal') {
+  // Мастер начинается с чистого листа: прежний фильтр не должен молча
+  // подмешиваться в новые пожелания.
+  if (step === 'deal') {
+    user.catalogFilter = null;
+    scheduleSave();
+  }
+  const panel = selectionWizardPanel(user, step);
+  await sendUiMessage(chatId, user, panel.text, token, { reply_markup: panel.markup });
+}
+
+async function handleSelectionWizardCallback(query, token) {
+  const [, action, value] = String(query.data || '').split(':');
+  const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
+  const user = normalizeUser(query.from, chatId, false);
+  const language = user.preferredLanguage || 'ru';
+  const filter = normalizedCatalogFilter(user.catalogFilter, language);
+  const published = publishedCatalog(user);
+  let step = 'deal';
+  if (action === 'deal') {
+    filter.deal = ['sale', 'rent'].includes(value) ? value : '';
+    step = 'type';
+  } else if (action === 'type') {
+    filter.type = Object.hasOwn(PROPERTY_TYPE_LABELS.ru, value) ? value : '';
+    step = 'city';
+  } else if (action === 'city') {
+    filter.city = catalogCities(published, language).find((city) => cityKey(city) === value) || '';
+    step = 'budget';
+  } else if (action === 'price') {
+    filter.maxPrice = normalizedCatalogFilter({ maxPrice: value }).maxPrice;
+    step = 'bedrooms';
+  } else if (action === 'bed') {
+    filter.bedrooms = CATALOG_FILTER_BEDROOMS.includes(Number(value)) ? Number(value) : 0;
+    step = 'done';
+  } else if (action === 'skip' || action === 'back') {
+    step = SELECTION_WIZARD_STEPS.includes(value) ? value : 'deal';
+  } else if (action === 'show') {
+    user.catalogFilter = catalogFilterActive(filter) ? filter : null;
+    scheduleSave();
+    await acknowledgeCallback(query, token);
+    await sendCatalogPage(chatId, user, token, 0, 'all');
+    return;
+  }
+  user.catalogFilter = catalogFilterActive(filter) ? filter : null;
+  scheduleSave();
+  await acknowledgeCallback(query, token);
+  const panel = selectionWizardPanel(user, step);
+  if (query.message && query.message.message_id) {
+    try {
+      await telegramRequest(token, 'editMessageText', {
+        chat_id: chatId,
+        message_id: query.message.message_id,
+        text: panel.text,
+        reply_markup: panel.markup,
+      });
+      return;
+    } catch {
+      // Сообщение уже не изменить — покажем мастер заново.
+    }
+  }
+  await sendUiMessage(chatId, user, panel.text, token, { reply_markup: panel.markup });
+}
+
 function catalogFilterPanel(user) {
   const language = user.preferredLanguage || 'ru';
   const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
@@ -1614,6 +1746,8 @@ export {
   catalogSearchActive,
   catalogSearchFilter,
   catalogFilterPanel,
+  handleSelectionWizardCallback,
+  sendSelectionWizard,
   catalogFilterState,
   catalogFilterSummary,
   catalogRecords,

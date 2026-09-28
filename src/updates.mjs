@@ -7,7 +7,7 @@ import { recordActivity, recordDaily, recordError, recordPropertyEvent } from '.
 import { languageWasGuessed, leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from './users.mjs';
 import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, isLanguageChangeText, languageFromText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
-import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleLeadMethodCallback, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, saveViewingPhone, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
+import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleLeadMethodCallback, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, saveViewingPhone, showPendingActionStep, startLeadForm, unfinishedActionKeyboard } from './forms.mjs';
 import {
   adminChatFor,
   createInquiry,
@@ -20,7 +20,7 @@ import {
   recordBotAnswer,
   serviceMessage,
 } from './inquiries.mjs';
-import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, openPendingStartPayload, propertyIdFromStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
+import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, handleSelectionWizardCallback, openPendingStartPayload, propertyIdFromStartPayload, sendSelectionWizard, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
 import { catalogRequest } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
@@ -183,6 +183,7 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('about:')) await handleAboutCallback(update.callback_query, token);
       else if (callbackData.startsWith('nav:')) await handleNavigationCallback(update.callback_query, token);
       else if (callbackData.startsWith('selection:')) await handleSelectionCallback(update.callback_query, token);
+      else if (callbackData.startsWith('sel:')) await handleSelectionWizardCallback(update.callback_query, token);
       else if (callbackData.startsWith('alerts:')) await handleAlertsCallback(update.callback_query, token);
       else if (callbackData.startsWith('cfilter:')) await handleCatalogFilterCallback(update.callback_query, token);
       else if (callbackData.startsWith('myreq:')) await handleMyRequestsCallback(update.callback_query, token);
@@ -433,10 +434,6 @@ async function handleUpdate(update, token) {
     await handleViewingFormMessage(message, user, token);
     return;
   }
-  else if (user.pendingAction && user.pendingAction.type === 'property_selection' && (!text || !menuItemForText(text, user.preferredLanguage))) {
-    await handleSelectionFormMessage(message, user, token);
-    return;
-  }
   else if (user.pendingAction && user.pendingAction.type === 'catalog_filter_price' && (!text || !menuItemForText(text, user.preferredLanguage))) {
     await handleCatalogPriceInputMessage(message, user, token);
     return;
@@ -484,13 +481,13 @@ async function handleUpdate(update, token) {
         await clearGalleryMessages(message.chat.id, user, token);
         if (!['objects', 'favorites', 'promotions'].includes(menuItem)) await clearCatalogMessages(message.chat.id, user, token);
         if (menuItem === 'objects' && await sendCatalog(message.chat.id, user, token)) return;
-        if (menuItem === 'selection') {
-          await startSelectionForm(user, token);
-          return;
-        }
         if (menuItem === 'promotions' && await sendPromotions(message.chat.id, user, token)) return;
         if (menuItem === 'favorites') {
           await sendCatalogPage(message.chat.id, user, token, catalogPageFromContext(user, 'favorites'), 'favorites');
+          return;
+        }
+        if (menuItem === 'selection') {
+          await sendSelectionWizard(message.chat.id, user, token, 'deal');
           return;
         }
         if (menuItem === 'request') {

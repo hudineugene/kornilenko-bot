@@ -548,6 +548,61 @@ test.describe('search in client messages', () => {
   });
 });
 
+test.describe('мастер подбора', () => {
+  const SELECTION = bot.text.selection.ru;
+
+  test.beforeEach(() => resetData((data) => {
+    const city = (ru) => ({ ru, en: ru, es: ru });
+    data.objects.push(property('wiz-1', 'Квартира в Альтеа', 'active', { dealType: 'sale', propertyType: 'apartment', priceValue: 240000, bedrooms: 2, city: city('Альтеа') }));
+    data.objects.push(property('wiz-2', 'Вилла в Кальпе', 'active', { dealType: 'sale', propertyType: 'villa', priceValue: 890000, bedrooms: 4, city: city('Кальпе') }));
+    data.objects.push(property('wiz-3', 'Квартира в аренду', 'active', { dealType: 'rent', propertyType: 'apartment', priceValue: 1200, bedrooms: 1, city: city('Альтеа') }));
+  }));
+
+  test('подбор идёт одним сообщением и считает подходящие объекты', async () => {
+    const chat = createChat();
+    const start = await chat.say(MENU.ru.selection);
+    assert.match(start.last.text, new RegExp('^' + SELECTION.wizardTitle.replace(/[✨]/g, '.')), 'мастер начинается заголовком');
+    assert.match(start.last.text, /Подходит: 3/, 'видно, сколько всего подходит');
+    assert.match(start.last.text, new RegExp(SELECTION.wizardDeal), 'и первый вопрос');
+    assert.equal(start.replies.length, 1, 'одно сообщение, а не пять');
+
+    // Дальше сообщение меняется на месте.
+    const deal = await chat.press('sel:deal:sale');
+    assert.ok(deal.calls.some((call) => call.method === 'editMessageText'), 'то же сообщение, а не новое');
+    const dealText = deal.calls.filter((call) => call.method === 'editMessageText').pop().body.text;
+    assert.match(dealText, /Подходит: 2/, 'счётчик пересчитался под покупку');
+    assert.match(dealText, new RegExp(SELECTION.wizardType));
+
+    await chat.press('sel:type:apartment');
+    const city = await chat.press('sel:city:' + encodeURIComponent('альтеа'));
+    const cityText = city.calls.filter((call) => call.method === 'editMessageText').pop().body.text;
+    assert.match(cityText, /Подходит: 1/, 'квартира в Альтеа — одна');
+
+    await chat.press('sel:skip:bedrooms');
+    const done = await chat.press('sel:skip:done');
+    const doneBody = done.calls.filter((call) => call.method === 'editMessageText').pop().body;
+    const callbacks = callbacksOf(doneBody.reply_markup);
+    assert.ok(callbacks.some((value) => value === 'sel:show'), 'кнопка «Показать N»');
+    assert.ok(callbacks.includes('saved:save'), 'кнопка «Сообщать о новых»');
+    assert.ok(callbacks.includes('cfilter:manager'), 'кнопка «Передать менеджеру»');
+    assert.match(doneBody.reply_markup.inline_keyboard.flat()[0].text, /Показать 1/);
+
+    // «Показать» открывает каталог с этими условиями.
+    const shown = await chat.press('sel:show');
+    assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['wiz-1']);
+    assert.ok(shown.calls.some((call) => ['sendPhoto', 'editMessageMedia'].includes(call.method)), 'карточка показана');
+  });
+
+  test('шаг назад возвращает к предыдущему вопросу', async () => {
+    const chat = createChat();
+    await chat.say(MENU.ru.selection);
+    await chat.press('sel:deal:rent');
+    const back = await chat.press('sel:back:deal');
+    const text = back.calls.filter((call) => call.method === 'editMessageText').pop().body.text;
+    assert.match(text, new RegExp(SELECTION.wizardDeal), 'снова первый вопрос');
+  });
+});
+
 test.describe('catalog filter', () => {
   const FILTER = bot.text.catalogFilter.ru;
   const catalog = [

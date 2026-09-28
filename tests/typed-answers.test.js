@@ -75,31 +75,14 @@ test.describe('подбор объекта', () => {
     return chat;
   }
 
-  test('цель и тип, написанные словами, принимаются', async () => {
+  test('подбор идёт кнопками, а написанное словами становится поиском', async () => {
+    // В мастере отвечают нажатием, но клиент может и просто написать, что
+    // ищет, — тогда это превращается в условия поиска.
     const chat = await startSelection();
-    await chat.say('покупка');
-    assert.equal(chat.user.pendingAction.data.deal, SELECTION.dealOptions[0]);
-    assert.equal(chat.user.pendingAction.step, 'type');
-    await chat.say('квартира');
-    assert.equal(chat.user.pendingAction.data.type, SELECTION.typeOptions[0]);
-    assert.equal(chat.user.pendingAction.step, 'location');
-  });
-
-  test('ответ длиннее варианта тоже понятен', async () => {
-    const chat = await startSelection();
-    await chat.say('Покупка квартиры у моря');
-    assert.equal(chat.user.pendingAction.data.deal, SELECTION.dealOptions[0]);
-  });
-
-  test('спальни можно ответить числом', async () => {
-    const chat = await startSelection();
-    await chat.say(SELECTION.dealOptions[0]);
-    await chat.say(SELECTION.typeOptions[0]);
-    await chat.say('Бенидорм');
-    await chat.say('до 300 000 €');
-    assert.equal(chat.user.pendingAction.step, 'bedrooms');
-    await chat.say('2');
-    assert.equal(chat.user.pendingAction.data.bedrooms, SELECTION.bedroomOptions[1]);
+    await chat.say('Хочу купить квартиру в Бенидорме до 300 000 €');
+    assert.equal(chat.user.catalogFilter.deal, 'sale');
+    assert.equal(chat.user.catalogFilter.type, 'apartment');
+    assert.equal(chat.user.catalogFilter.maxPrice, 300000);
   });
 
   test('число больше самого большого варианта попадает в «4+»', async () => {
@@ -144,13 +127,12 @@ test.describe('подбор объекта', () => {
     assert.equal(optionFromText('снять', es.dealOptions), es.dealOptions[1]);
   });
 
-  test('анкета целиком проходится своими словами', async () => {
+  test('слова клиента о покупке понятны поиску', async () => {
     const chat = await startSelection();
-    await chat.say('Купить');
-    assert.equal(chat.user.pendingAction.data.deal, SELECTION.dealOptions[0]);
-    await chat.say('виллу');
-    assert.equal(chat.user.pendingAction.data.type, SELECTION.typeOptions[1]);
-    assert.equal(chat.user.pendingAction.step, 'location');
+    await chat.say('Купить квартиру до 600 000 €');
+    assert.equal(chat.user.catalogFilter.deal, 'sale');
+    assert.equal(chat.user.catalogFilter.type, 'apartment');
+    assert.equal(chat.user.catalogFilter.maxPrice, 600000);
   });
 
   test('двусмысленный ответ не угадывается', async () => {

@@ -82,24 +82,13 @@ test.describe('бюджет в подборе разбирается тем же
     assert.equal(limit('2 спальни'), 0);
   });
 
-  test('подбор с бюджетом «300к» находит подходящий объект', async () => {
+  test('бюджет «300к» в обычном сообщении становится границей поиска', async () => {
     const chat = createChat();
     await chat.say('/start');
-    const { selection: SELECTION } = bot.text;
-    const ru = SELECTION.ru;
-    await chat.say(ru.menuButton || '✨ Подбор');
-    await chat.say(ru.dealOptions ? ru.dealOptions[0] : 'Покупка');
-    await chat.say('Квартира');
-    await chat.say('Бенидорм');
-    await chat.say('300к');
-    await chat.say('2 спальни');
-    const done = await chat.say(ru.confirm);
-    assert.match(done.text, /отправлен|получил|менеджер/i);
-    const inquiry = chat.inquiries.find((item) => item.type === 'selection');
-    assert.ok(inquiry, 'подбор создан');
-    assert.equal(bot.budgetLimit(inquiry.selection.budget), 300000, 'бюджет понят как 300 000');
-    const exact = (inquiry.matching && inquiry.matching.results || []).filter((result) => result.tier === 'exact');
-    assert.ok(exact.length >= 1, 'квартира за 250 000 попадает в бюджет');
-    assert.ok(exact[0].reasons.includes('budget'), 'бюджет учтён в подборе');
+    await chat.say('Ищу квартиру в Бенидорме до 300к');
+    assert.equal(chat.user.catalogFilter.maxPrice, 300000, 'бюджет понят как 300 000');
+    assert.equal(chat.user.catalogFilter.type, 'apartment');
+    const shown = bot.catalogRecords(chat.user).map((record) => record.id);
+    assert.ok(shown.length >= 1, 'квартира за 250 000 попадает в бюджет');
   });
 });
