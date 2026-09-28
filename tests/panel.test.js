@@ -336,6 +336,17 @@ test.describe('стили панели', () => {
     assert.deepEqual(Array.from(missing), [], 'используются, но нигде не заданы');
   });
 
+  test('на телефоне страница и окна не шире экрана', async () => {
+    const sheet = await css();
+    // Всё, что касается узкого экрана, лежит в одном блоке @media.
+    const mobile = sheet.slice(sheet.lastIndexOf('@media', sheet.indexOf('.topbar{padding:10px 14px')));
+    assert.match(mobile, /\.topbar\{padding:10px 14px;flex-wrap:wrap\}/, 'верхняя полоса переносится, а не выталкивает кнопки за экран');
+    assert.match(mobile, /\.topbar #pageActions\{flex-wrap:wrap;width:100%\}/, 'кнопки действий делят строку');
+    assert.match(mobile, /\.drawer,\.drawer\.wide\{left:0;right:0;width:100%;max-width:100%\}/, 'выдвижное окно прижато к левому краю и занимает экран');
+    // Страховка от горизонтальной прокрутки всей страницы.
+    assert.match(sheet, /html,body\{max-width:100%;overflow-x:clip\}/);
+  });
+
   test('основные цвета — настоящие цвета, а не ссылки', async () => {
     const variables = rootVariables(await css());
     const color = /^#[0-9a-f]{3,8}$|^rgba?\(|^hsla?\(/i;

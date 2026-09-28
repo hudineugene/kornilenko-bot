@@ -2,6 +2,7 @@
 
 const PANEL_CSS = String.raw`
 *{box-sizing:border-box}
+html,body{max-width:100%;overflow-x:clip}
 :root{
   --bg:#f5f6f8; --surface:#fff; --surface-soft:#fafbfc; --line:#e4e7ec; --line-soft:#eef1f4;
   --text:#101828; --muted:#667085; --faint:#98a2b3;
@@ -557,10 +558,15 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .head-nav.open{display:block}
   .head-nav>.nav-item{width:100%;padding:10px}
   .page{padding:14px 14px 92px}
-  .topbar{padding:10px 14px}
+  /* Верхняя полоса на телефоне переносится: две кнопки действий («Рассылка» и
+     «Пост в канал») рядом не помещаются в 375 px и растягивали всю страницу —
+     а вместе с ней и выдвижные окна, которые «уезжали» вправо. */
+  .topbar{padding:10px 14px;flex-wrap:wrap}
+  .topbar #pageActions{flex-wrap:wrap;width:100%}
+  .topbar #pageActions .btn{flex:1 1 auto;min-width:0}
   .savebar{left:14px;right:14px}
   .cols-3,.cols-2{grid-template-columns:minmax(0,1fr)}
-  .drawer{width:100vw}
+  .drawer,.drawer.wide{left:0;right:0;width:100%;max-width:100%}
   .editor-layout{grid-template-columns:minmax(0,1fr)}
   .editor-preview-panel{position:static}
   .editor-language{top:-16px}
