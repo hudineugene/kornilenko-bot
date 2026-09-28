@@ -17,6 +17,10 @@ import { replyTemplateInput } from './admin-input.mjs';
 import { INQUIRY_EXPORT_COLUMNS, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { confirmViewing } from './viewings.mjs';
 
+// Сколько бесед вернуть в ответ на поиск: больше в списке всё равно не читают,
+// а перебор пяти тысяч переписок не должен занимать заметное время.
+const CONVERSATION_SEARCH_LIMIT = 200;
+
 // Каждая ветка сама отвечает клиенту и возвращает управление. Если не подошла
 // ни одна, функция возвращает false — тогда запрос ищут в других модулях.
 
@@ -273,6 +277,25 @@ async function handleClientsApi(req, res, url) {
     }
     messages.sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
     return json(res, 200, { userId, messages: messages.slice(-400) });
+  }
+
+  // Поиск по переписке. Сами сообщения в панель не уезжают, поэтому искать по
+  // ним панель не может — ищет бот и отвечает списком найденных обращений.
+  if (url.pathname === '/api/conversations/search' && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const query = cleanText(url.searchParams.get('q'), 100).toLocaleLowerCase('ru-RU');
+    if (query.length < 2) return json(res, 200, { query, inquiryIds: [] });
+    const inquiryIds = [];
+    for (const inquiry of data.inquiries) {
+      const found = (Array.isArray(inquiry.messages) ? inquiry.messages : []).some((message) => {
+        const text = String((message && message.text) || '') + ' ' + String((message && message.fileName) || '');
+        return text.toLocaleLowerCase('ru-RU').includes(query);
+      });
+      if (found) inquiryIds.push(inquiry.id);
+      if (inquiryIds.length >= CONVERSATION_SEARCH_LIMIT) break;
+    }
+    return json(res, 200, { query, inquiryIds });
   }
 
   const conversationReadMatch = url.pathname.match(/^\/api\/conversations\/([^/]+)\/read$/);

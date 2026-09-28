@@ -646,6 +646,23 @@ function inquiryUnread(inquiry) {
   return lastIncoming > (Date.parse(inquiry.readAt || '') || 0);
 }
 
+// Короткая выжимка последнего сообщения беседы для списка диалогов: целиком
+// переписка в панель не уезжает — она тяжёлая и нужна только для той беседы,
+// которую открыли.
+const PREVIEW_TEXT_LIMIT = 160;
+
+function lastMessagePreview(messages) {
+  if (!Array.isArray(messages) || !messages.length) return null;
+  const message = messages[messages.length - 1];
+  if (!message || typeof message !== 'object') return null;
+  return {
+    text: cleanText(message.text, PREVIEW_TEXT_LIMIT),
+    fileName: cleanText(message.fileName, 120),
+    direction: message.direction === 'out' ? 'out' : 'in',
+    createdAt: message.createdAt || '',
+  };
+}
+
 // Отпечаток состояния, по которому панель решает, перерисовывать ли экран.
 // Считается не по всему состоянию: `lastSuccessfulContactAt` меняется после
 // каждого опроса Telegram (то есть каждые несколько секунд), и из-за него
@@ -763,6 +780,9 @@ function safeState(session) {
       ...item,
       messageCount: Array.isArray(messages) ? messages.length : 0,
       lastMessageAt: Array.isArray(messages) && messages.length ? messages[messages.length - 1].createdAt || '' : '',
+      // Последнее сообщение — то, что видно в списке диалогов. Без него панель
+      // показывала первое сообщение клиента, то есть месяцами одно и то же.
+      lastMessage: lastMessagePreview(messages),
     })),
     replyTemplates: data.replyTemplates || [],
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,

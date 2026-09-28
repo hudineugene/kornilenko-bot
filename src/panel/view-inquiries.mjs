@@ -2,6 +2,9 @@
 
 const INQUIRIES_JS = String.raw`
 var inquiryFilter = { status: "waiting", type: "", search: "" };
+// Ответ бота на поиск по переписке: сами сообщения в панель не уезжают, поэтому
+// по ним ищет бот. Здесь — на какой запрос и какие беседы он нашёл.
+var conversationSearch = { query: "", ids: {} };
 var selectedInquiry = "";
 // Беседу помечает прочитанной только человек, который её открыл. Панель сама
 // выбирает первую беседу в списке (и заново при каждой перерисовке) — раньше
@@ -138,11 +141,15 @@ function conversationMatches(group) {
   if (inquiryFilter.search) {
     var user = group.user;
     var parts = [userName(user), user.username, user.phone, user.id];
+    var foundInMessages = false;
     group.inquiries.forEach(function (item) {
       parts.push(item.text, item.note, item.assignee);
-      (item.messages || []).forEach(function (message) { parts.push(message.text, message.fileName); });
+      if (item.lastMessage) parts.push(item.lastMessage.text, item.lastMessage.fileName);
       (item.replies || []).forEach(function (reply) { parts.push(reply.text); });
+      // По всей переписке ищет бот: у панели её нет.
+      if (conversationSearch.query === inquiryFilter.search && conversationSearch.ids[item.id]) foundInMessages = true;
     });
+    if (foundInMessages) return true;
     if (parts.filter(Boolean).join(" ").toLowerCase().indexOf(inquiryFilter.search.toLowerCase()) < 0) return false;
   }
   return true;
@@ -412,8 +419,12 @@ function renderInquiryList(host) {
   var conversationItems = rows.map(function (group) {
     var item = group.latest, user = group.user;
     var selected = group.inquiries.some(function (entry) { return entry.id === selectedInquiry; });
-    var lastMessage = (item.messages || [])[item.messages && item.messages.length ? item.messages.length - 1 : -1];
-    var preview = lastMessage ? lastMessage.text || lastMessage.fileName : item.text;
+    // Последнее сообщение беседы приходит в состоянии отдельно: сама переписка
+    // в панель не уезжает. Раньше здесь всегда оставалось item.text — первое
+    // сообщение клиента, то есть месяцами одно и то же.
+    var lastMessage = item.lastMessage;
+    var preview = lastMessage ? (lastMessage.text || lastMessage.fileName) : item.text;
+    if (lastMessage && lastMessage.direction === "out" && preview) preview = "Вы: " + preview;
     var stateText = group.waiting ? "Ждёт ответа" : group.inProgress ? "В работе" : group.closed ? "Закрыт" : group.searchOnly ? "Ответ не нужен" : "Отвечено";
     var stateClass = group.waiting ? "bad" : group.inProgress ? "warn" : group.closed ? "" : "ok";
     return '<button class="conversation-item' + (selected ? " selected" : "") + (group.unread ? " unread" : "") + '" data-id="' + esc(group.active.id) + '" data-user="' + esc(group.userId) + '" type="button">' +
@@ -453,13 +464,43 @@ function renderInquiryList(host) {
   search.oninput = function () {
     inquiryFilter.search = search.value.trim();
     clearTimeout(search._timer);
-    search._timer = setTimeout(function () { renderInquiryList(host); host.querySelector("#inqSearch").focus(); }, 250);
+    search._timer = setTimeout(function () {
+      renderInquiryList(host);
+      var next = host.querySelector("#inqSearch");
+      if (next) next.focus();
+      searchConversations(host, inquiryFilter.search);
+    }, 250);
   };
   host.querySelector("#exportInq").onclick = exportInquiries;
   host.querySelectorAll(".conversation-item[data-id]").forEach(function (row) {
     row.onclick = function () { selectConversation(row.dataset.id); renderInquiryList(host); };
   });
   renderInquiryCard(host.querySelector("#inquiryCard"));
+}
+
+// Поиск по переписке спрашиваем у бота и перерисовываем список, когда пришёл
+// ответ. Пока ответа нет, список показывает то, что нашлось по именам,
+// телефонам, темам обращений и последним сообщениям.
+function searchConversations(host, query) {
+  if (!query || query.length < 2) {
+    conversationSearch = { query: "", ids: {} };
+    return;
+  }
+  api("/api/conversations/search?q=" + encodeURIComponent(query)).then(function (answer) {
+    if (inquiryFilter.search !== query) return;
+    var ids = {};
+    (answer.inquiryIds || []).forEach(function (id) { ids[id] = true; });
+    conversationSearch = { query: query, ids: ids };
+    if (!answer.inquiryIds || !answer.inquiryIds.length) return;
+    renderInquiryList(host);
+    var next = host.querySelector("#inqSearch");
+    if (next) {
+      next.focus();
+      next.setSelectionRange(next.value.length, next.value.length);
+    }
+  }).catch(function () {
+    // Не ответил — ищем по тому, что есть в панели.
+  });
 }
 
 // Уборка списка: закрытые, отвеченные или всё подряд, с отсечкой по возрасту.

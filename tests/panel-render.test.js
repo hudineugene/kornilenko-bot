@@ -517,3 +517,66 @@ test('истёкший вход возвращает на экран входа,
   await assert.rejects(() => sandbox.send('/api/login', 'POST', { password: 'не тот' }), (error) => error.status === 401);
   assert.match(document.getElementById('loginError').textContent, /перестал действовать/i, 'текст про сессию не затёрт входом');
 });
+
+test('в списке диалогов видно последнее сообщение, а не первое', async () => {
+  // Переписка перестала уезжать в панель целиком (она тяжёлая и нужна только для
+  // открытой беседы), а список диалогов всё ещё искал последнее сообщение в
+  // ней — и показывал item.text, первое сообщение клиента. В живой панели
+  // превью всех бесед месяцами оставалось «Есть ли парковка?».
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.users['700002'] = { id: '700002', chatId: 700002, firstName: 'Мария', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(1) };
+    data.inquiries.push({
+      id: 'inq-preview', userId: '700002', chatId: '700002', language: 'ru', type: 'general',
+      text: 'Есть ли парковка?', status: 'in_progress', pipelineStage: 'contact', replies: [],
+      messages: [
+        { id: 'm1', direction: 'in', kind: 'text', text: 'Есть ли парковка?', createdAt: minutesAgo(30) },
+        { id: 'm2', direction: 'out', kind: 'text', text: 'Да, два места в подземном', createdAt: minutesAgo(20) },
+        { id: 'm3', direction: 'in', kind: 'text', text: 'Отлично, когда можно посмотреть?', createdAt: minutesAgo(5) },
+      ],
+      createdAt: minutesAgo(30), updatedAt: minutesAgo(5), clientMessageAt: minutesAgo(5),
+    });
+  });
+
+  const { sandbox, state } = await panelSandbox();
+  const stored = state.inquiries.find((item) => item.id === 'inq-preview');
+  assert.ok(stored, 'обращение попало в состояние');
+  assert.equal(stored.messages, undefined, 'переписка целиком в панель по-прежнему не уезжает');
+  assert.equal(stored.lastMessage.text, 'Отлично, когда можно посмотреть?', 'а последнее сообщение — да');
+  assert.equal(stored.lastMessage.direction, 'in');
+  assert.equal(stored.messageCount, 3);
+
+  const host = fakeElement('main');
+  // Смотрим все беседы, а не только ждущие ответа.
+  sandbox.inquiryFilter.status = '';
+  await sandbox.VIEWS.inquiries.render(host, '');
+  const previews = String(host.innerHTML).match(/class="conversation-preview">([^<]*)</g) || [];
+  assert.ok(previews.length, 'в списке есть беседы');
+  assert.ok(previews.some((line) => line.includes('когда можно посмотреть')), 'показано последнее сообщение, нашлось: ' + previews.join(' | '));
+  assert.ok(!previews.some((line) => line.includes('Есть ли парковка')), 'первое сообщение в превью больше не висит');
+});
+
+test('ответ менеджера в превью подписан «Вы»', async () => {
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.users['700003'] = { id: '700003', chatId: 700003, firstName: 'Пётр', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(2) };
+    data.inquiries.push({
+      id: 'inq-out', userId: '700003', chatId: '700003', language: 'ru', type: 'general',
+      text: 'Сколько стоит содержание?', status: 'in_progress', pipelineStage: 'contact', replies: [],
+      messages: [
+        { id: 'o1', direction: 'in', kind: 'text', text: 'Сколько стоит содержание?', createdAt: minutesAgo(10) },
+        { id: 'o2', direction: 'out', kind: 'text', text: 'Около 120 евро в месяц', createdAt: minutesAgo(2) },
+      ],
+      createdAt: minutesAgo(10), updatedAt: minutesAgo(2), clientMessageAt: minutesAgo(10),
+    });
+  });
+
+  const { sandbox } = await panelSandbox();
+  const host = fakeElement('main');
+  sandbox.inquiryFilter.status = '';
+  await sandbox.VIEWS.inquiries.render(host, '');
+  const previews = String(host.innerHTML).match(/class="conversation-preview">([^<]*)</g) || [];
+  assert.ok(previews.some((line) => line.includes('Вы: Около 120 евро')), 'видно, что последнее слово за менеджером: ' + previews.join(' | '));
+});
