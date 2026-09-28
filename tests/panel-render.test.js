@@ -53,7 +53,10 @@ function fakeElement(tag = 'div') {
       if (!found.has(key)) found.set(key, fakeElement());
       return found.get(key);
     },
-    querySelectorAll: () => [],
+    // Один элемент, а не пустота: панель назначает почти все обработчики
+    // списком (querySelectorAll(...).forEach), и с пустым списком в проверках
+    // не было ни одной живой кнопки.
+    querySelectorAll: (selector) => [node.querySelector(selector)],
     getElementsByTagName: () => [],
     closest: () => fakeElement(),
     contains: () => false,
@@ -971,7 +974,7 @@ test('счётчик у «Переписки» — это клиенты, кот
 
   const host = fakeElement('main');
   await sandbox.VIEWS.today.render(host, '');
-  assert.match(String(host.innerHTML), /Ждут ответа<\/span><span class="value">2</, 'и в карточке на Обзоре');
+  assert.match(String(host.innerHTML), /<b>2<\/b> клиента ждут ответа/, 'и в строке цифр на «Сегодня»');
 
   const list = fakeElement('main');
   sandbox.inquiryFilter.status = 'waiting';
@@ -1064,4 +1067,87 @@ test('сбой записи на диск виден на всех экрана�
   state.runtime.save = { error: '', at: null, nextRetryAt: null };
   sandbox.renderBotState();
   assert.equal(alert.classList.contains('hidden'), true, 'полоса убрана');
+});
+
+test('«Сегодня» — это список дел с одной кнопкой на строку', async () => {
+  // Раньше на Обзоре было четыре KPI-карточки, отдельный список «Требует
+  // внимания» без кнопок, а дела лежали ещё и в Центре уведомлений и в
+  // «Задачах» — три места про одно и то же.
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  const soon = new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10);
+  resetData((data) => {
+    data.config.active = true;
+    data.config.adminNotificationVerifiedAt = new Date().toISOString();
+    data.objects.push(property('villa-today', 'Вилла у моря', 'active'));
+    data.users['790001'] = { id: '790001', chatId: 790001, firstName: 'Нина', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(5) };
+    data.users['790002'] = { id: '790002', chatId: 790002, firstName: 'Егор', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(9) };
+    data.inquiries.push({
+      id: 'today-msg', userId: '790001', chatId: '790001', language: 'ru', type: 'general',
+      text: 'Можно посмотреть в субботу?', status: 'new', pipelineStage: 'new', replies: [], readAt: '',
+      messages: [{ id: 'tm-1', direction: 'in', kind: 'text', text: 'Можно посмотреть в субботу?', createdAt: minutesAgo(5) }],
+      createdAt: minutesAgo(30), updatedAt: minutesAgo(5), clientMessageAt: minutesAgo(5),
+    });
+    data.inquiries.push({
+      id: 'today-viewing', userId: '790002', chatId: '790002', language: 'ru', type: 'viewing', propertyId: 'villa-today',
+      text: 'Запись на просмотр', status: 'new', pipelineStage: 'viewing', replies: [], messages: [], readAt: minutesAgo(1),
+      viewing: { date: soon, dateText: 'в субботу', timeText: '12:00', confirmedAt: '', confirmedDate: '', confirmedTime: '', cancelledAt: '' },
+      createdAt: minutesAgo(60), updatedAt: minutesAgo(60), clientMessageAt: minutesAgo(60),
+    });
+  });
+
+  const { sandbox } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.today.render(host, '');
+  const html = String(host.innerHTML);
+
+  assert.match(html, /class="today-numbers"/, 'цифры одной строкой');
+  assert.doesNotMatch(html, /class="card kpi"/, 'ряда KPI-карточек больше нет');
+  assert.match(html, /Список дел/, 'главное на экране — дела');
+  assert.match(html, /Новое сообщение от Нина[\s\S]*?>Ответить</, 'у сообщения кнопка «Ответить»');
+  assert.match(html, /Просмотр ждёт подтверждения[\s\S]*?>Подтвердить</, 'у просмотра — «Подтвердить»');
+  assert.match(html, /data-deed-hide=/, 'дело можно убрать из списка');
+});
+
+test('«Подтвердить» на «Сегодня» открывает окно просмотра, не уводя в другой раздел', async () => {
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  const soon = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
+  resetData((data) => {
+    data.config.active = true;
+    data.config.adminNotificationVerifiedAt = new Date().toISOString();
+    data.objects.push(property('villa-confirm', 'Вилла', 'active'));
+    data.users['790003'] = { id: '790003', chatId: 790003, firstName: 'Тимур', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(4) };
+    data.inquiries.push({
+      id: 'confirm-me', userId: '790003', chatId: '790003', language: 'ru', type: 'viewing', propertyId: 'villa-confirm',
+      text: 'Запись на просмотр', status: 'new', pipelineStage: 'viewing', replies: [], messages: [], readAt: minutesAgo(1),
+      viewing: { date: soon, dateText: 'в понедельник', timeText: '11:00', confirmedAt: '', confirmedDate: '', confirmedTime: '', cancelledAt: '' },
+      createdAt: minutesAgo(50), updatedAt: minutesAgo(50), clientMessageAt: minutesAgo(50),
+    });
+  });
+
+  const { sandbox } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.today.render(host, '');
+  assert.ok(host.querySelector('[data-deed]').onclick, 'кнопки дел живые');
+  const deed = (sandbox.state.notifications || []).find((item) => item.kind === 'viewing');
+  assert.ok(deed, 'просмотр попал в список дел');
+  await sandbox.runDeed(deed);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const dialog = sandbox.document.querySelector('dialog[open]');
+  assert.ok(dialog, 'окно открылось прямо с «Сегодня»');
+  assert.match(String(dialog.innerHTML), /Клиент просил: в понедельник · 11:00/, 'и в нём видно просьбу клиента');
+  dialog.closeClean();
+});
+
+test('быстрые действия открывают редактор, а не список', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.today.render(host, '');
+  await host.querySelector('#quickObject').onclick();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const dialog = sandbox.document.querySelector('dialog[open]');
+  assert.ok(dialog, 'открылась карточка объекта');
+  assert.match(String(dialog.innerHTML), /Номер объекта|Название/, 'это форма объекта');
+  dialog.closeClean();
 });

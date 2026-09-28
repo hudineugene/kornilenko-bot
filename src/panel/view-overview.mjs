@@ -61,83 +61,131 @@ function sparkline(days, field, color) {
   }).join("") + "</div>";
 }
 
+// Что делать с событием: одна главная кнопка на строку. Клиент ждёт ответа —
+// «Ответить», просмотр без подтверждения — «Подтвердить», остальное —
+// «Открыть».
+function deedAction(item) {
+  if (item.kind === "message") return "Ответить";
+  if (item.kind === "viewing") return "Подтвердить";
+  if (item.kind === "task") return "Открыть диалог";
+  if (item.kind === "catalog") return "Открыть каталог";
+  if (item.kind === "group") return "Открыть заявки";
+  if (item.kind === "broadcast") return "Открыть рассылки";
+  return "Открыть";
+}
+
+function deedIcon(item) {
+  return { message: "✉", task: "⏱", viewing: "📅", catalog: "⌂", group: "👥", broadcast: "➤", error: "!", system: "⚙" }[item.kind] || "•";
+}
+
+// Сначала то, что горит, потом по времени: свежее сверху.
+function deedList() {
+  var rank = { bad: 0, warn: 1 };
+  return (state.notifications || [])
+    .filter(function (item) { return item.active && !item.handledAt; })
+    .slice()
+    .sort(function (first, second) {
+      var weight = (rank[first.severity] === undefined ? 2 : rank[first.severity]) - (rank[second.severity] === undefined ? 2 : rank[second.severity]);
+      if (weight) return weight;
+      return (Date.parse(second.createdAt) || 0) - (Date.parse(first.createdAt) || 0);
+    });
+}
+
+async function runDeed(item, button) {
+  var target = item.route || {};
+  // Просмотр подтверждается прямо отсюда, не уводя менеджера в другой раздел.
+  if (item.kind === "viewing" && target.inquiryId) {
+    var inquiry = (state.inquiries || []).find(function (entry) { return entry.id === target.inquiryId; });
+    if (inquiry) return openViewingSchedule(inquiry);
+  }
+  return openNotification(item, button);
+}
+
 VIEWS.today = {
   subtitle: function () { return "Что нужно сделать прямо сейчас"; },
   render: function (host) {
     var today = startOfToday(), week = startOfWeek();
-    var todayKey = dayKeyOf(new Date());
-    // Одно число на всю панель: сколько клиентов ждут ответа. Считает бот.
     var waiting = waitingClients();
     var weekDays = lastDays(14);
-    var attention = attentionItems();
-    var recent = (state.inquiries || []).slice(0, 6);
+    var deeds = deedList();
+    var unconfirmed = unconfirmedViewings().length;
     host.innerHTML =
-      '<div class="grid cols-4" style="margin-bottom:12px">' +
-        kpiCard("Клиенты", num(state.userCount), "+" + usersInRange(week) + " за 7 дней") +
-        kpiCard("Заявки за 7 дней", num(inquiriesInRange(week).length), inquiriesInRange(today).length + " сегодня") +
-        kpiCard("Ждут ответа", num(waiting), waiting ? "клиентов ждут ответа" : "все отвечены", waiting ? "down" : "up") +
-        kpiCard("Просмотры", num(viewingList().length), unconfirmedViewings().length + " без подтверждения") +
-      "</div>" +
+      // Цифры — одной строкой: ряд из четырёх карточек занимал треть экрана и
+      // повторялся на восьми экранах подряд.
+      '<div class="today-numbers">' +
+        '<span><b>' + num(waiting) + '</b> ' + plural(waiting, "клиент ждёт", "клиента ждут", "клиентов ждут") + ' ответа</span>' +
+        '<span><b>' + num(unconfirmed) + '</b> ' + plural(unconfirmed, "просмотр", "просмотра", "просмотров") + ' без подтверждения</span>' +
+        '<span><b>' + num(inquiriesInRange(week).length) + '</b> ' + plural(inquiriesInRange(week).length, "заявка", "заявки", "заявок") + ' за 7 дней · ' + num(inquiriesInRange(today).length) + ' сегодня</span>' +
+        '<span><b>' + num(state.userCount) + '</b> ' + plural(state.userCount, "клиент", "клиента", "клиентов") + ' в базе · +' + usersInRange(week) + ' за неделю</span>' +
+      '</div>' +
       '<div class="split">' +
         '<div class="stack">' +
-          '<div class="card"><header><h3>Сообщения и обращения, 14 дней</h3></header><div class="card-body">' +
-            sparkline(weekDays, "received", "var(--brand)") +
-            '<div class="legend"><span><i style="background:var(--brand)"></i>сообщения от клиентов</span><span>' + num(sumDays(weekDays, "received")) + " за 14 дней · " + num(sumDays(weekDays, "inquiries")) + " обращений</span></div>" +
-          "</div></div>" +
-          '<div class="card"><header><h3>Последние обращения</h3><div class="actions"><button class="btn ghost small" type="button" data-go="inquiries">Все</button></div></header>' +
-            (recent.length ? '<div class="list">' + recent.map(function (item) {
-              var user = (state.users || []).find(function (entry) { return entry.id === item.userId; }) || {};
-              return '<div class="list-item clickable" data-inquiry="' + esc(item.id) + '">' +
-                '<span class="avatar">' + esc(initials(user.firstName)) + "</span>" +
-                '<span class="grow"><b>' + esc(user.firstName || "Клиент") + "</b> <span class=\"faint small\">" + esc(inquiryTypeName(item)) + "</span><br><span class=\"muted small\">" + esc(String(item.text || "").slice(0, 90)) + "</span></span>" +
-                '<span class="small faint nowrap">' + ago(item.clientMessageAt || item.createdAt) + "</span>" +
-                (item.searchLead ? '<span class="chip">ответ не нужен</span>' : awaitsReply(item) ? '<span class="chip bad">ждёт</span>' : '<span class="chip ok">ответ дан</span>') + "</div>";
-            }).join("") + "</div>" : '<div class="empty"><b>Обращений пока нет</b>Они появятся, когда клиенты напишут боту</div>') +
+          '<div class="card"><header><h3>Список дел</h3><div class="actions">' +
+            (deeds.length ? '<span class="chip ' + (deeds.some(function (item) { return item.severity === "bad"; }) ? "bad" : "warn") + '">' + num(deeds.length) + '</span>' : '') +
+            '<button class="btn ghost small" type="button" data-go="notifications">Все события</button></div></header>' +
+            (deeds.length ? '<div class="deeds">' + deeds.map(function (item) {
+              return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '">' +
+                '<span class="deed-icon">' + deedIcon(item) + '</span>' +
+                '<span class="deed-body"><b>' + esc(item.title) + '</b><span>' + esc(item.text) + '</span></span>' +
+                '<span class="deed-actions"><button class="btn small" type="button" data-deed="' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
+                '<button class="btn ghost small" type="button" data-deed-hide="' + esc(item.id) + '" title="Убрать из списка дел">Скрыть</button></span>' +
+              '</div>';
+            }).join("") + '</div>' : '<div class="empty"><b>Дел нет</b>Все клиенты отвечены, просмотры подтверждены</div>') +
           "</div>" +
+          '<div class="card"><header><h3>Сообщения и заявки, 14 дней</h3></header><div class="card-body">' +
+            sparkline(weekDays, "received", "var(--brand)") +
+            '<div class="legend"><span><i style="background:var(--brand)"></i>сообщения от клиентов</span><span>' + num(sumDays(weekDays, "received")) + " за 14 дней · " + num(sumDays(weekDays, "inquiries")) + " заявок</span></div>" +
+          "</div></div>" +
         "</div>" +
         '<div class="stack">' +
-          '<div class="card"><header><h3>Требует внимания</h3><div class="actions"><button class="btn ghost small" type="button" data-go="notifications">Все события</button></div></header>' +
-            (attention.length ? attention.map(function (item) {
-              var target = item.route || {};
-              return '<div class="attention" data-go="' + esc(target.view || "notifications") + '" data-tab="' + esc(target.tab || "") + '" data-inquiry-open="' + esc(target.inquiryId || "") + '">' +
-                '<span class="chip ' + (item.severity === "bad" ? "bad" : "warn") + '">!</span><span class="grow"><span class="what">' + esc(item.title) + '</span><br><span class="why">' + esc(item.text) + "</span></span>→</div>";
-            }).join("") : '<div class="empty"><b>Всё в порядке</b>Ничего не ждёт вашего действия</div>') +
-          "</div>" +
           '<div class="card"><header><h3>Состояние бота</h3></header><div class="card-body stack">' +
             '<label class="switch"><input type="checkbox" id="botActive"' + (state.config.active ? " checked" : "") + '><span class="track"></span><span>' + (state.config.active ? "Бот включён" : "Бот выключен") + "</span></label>" +
             '<div class="small muted">Связь: ' + esc(connectionText()) + "</div>" +
             '<div class="small muted">Клиентов в базе: ' + num(state.userCount) + " · активных: " + num(state.activeUserCount) + "</div>" +
-            '<div class="row wrap"><button class="btn secondary small" type="button" data-go="settings" data-tab="connection">Настройки</button>' +
-            '<button class="btn secondary small" type="button" data-go="stats">Статистика</button></div>' +
+            '<div class="row wrap"><button class="btn secondary small" type="button" data-go="settings" data-tab="team">Настройки</button>' +
+            '<button class="btn secondary small" type="button" data-go="settings" data-tab="reports">Отчёты</button></div>' +
           "</div></div>" +
           '<div class="card"><header><h3>Быстрые действия</h3></header><div class="card-body row wrap">' +
-            '<button class="btn secondary small" type="button" data-go="catalog" data-tab="objects">Добавить объект</button>' +
-            '<button class="btn secondary small" type="button" data-go="reach" data-tab="campaigns">Создать рассылку</button>' +
-            '<button class="btn secondary small" type="button" data-go="reach" data-tab="group">Написать в группу</button>' +
+            '<button class="btn secondary small" type="button" id="quickObject">Добавить объект</button>' +
+            '<button class="btn secondary small" type="button" id="quickBroadcast">Создать рассылку</button>' +
+            '<button class="btn secondary small" type="button" data-go="posts" data-tab="channel">Написать в канал</button>' +
           "</div></div>" +
         "</div>" +
       "</div>";
 
     host.querySelectorAll("[data-go]").forEach(function (node) {
-      node.onclick = function () {
-        // У события может быть конкретная беседа — открываем сразу её.
-        if (node.dataset.inquiryOpen) return openInquiry(node.dataset.inquiryOpen);
-        go(node.dataset.go, node.dataset.tab || "");
+      node.onclick = function () { go(node.dataset.go, node.dataset.tab || ""); };
+    });
+    host.querySelectorAll("[data-deed]").forEach(function (button) {
+      button.onclick = function () {
+        var item = (state.notifications || []).find(function (entry) { return entry.id === button.dataset.deed; });
+        if (item) runDeed(item, button);
       };
     });
-    host.querySelectorAll("[data-inquiry]").forEach(function (node) {
-      node.onclick = function () { openInquiry(node.dataset.inquiry); };
+    host.querySelectorAll("[data-deed-hide]").forEach(function (button) {
+      button.onclick = function () {
+        var item = (state.notifications || []).find(function (entry) { return entry.id === button.dataset.deedHide; });
+        if (item) changeNotification(item, "handled", button);
+      };
     });
+    // Быстрые действия открывают редактор, а не список: «Добавить объект»
+    // должно добавлять объект.
+    var quickObject = host.querySelector("#quickObject");
+    if (quickObject) quickObject.onclick = async function () {
+      if (await go("objects", "list")) openRecordEditor("objects", null);
+    };
+    var quickBroadcast = host.querySelector("#quickBroadcast");
+    if (quickBroadcast) quickBroadcast.onclick = async function () {
+      if (await go("posts", "broadcast")) openCampaignEditor(null);
+    };
     var toggle = host.querySelector("#botActive");
     if (toggle) toggle.onchange = async function () {
       // Выключение останавливает бота для всех клиентов: спрашиваем. Включение
       // ничего не ломает, поэтому проходит сразу.
       if (!toggle.checked && !(await confirmDialog(
         "Выключить бота?",
-        "Клиенты перестанут получать ответы: каталог, заявки и напоминания работать не будут, пока бот выключен.",
-        "Выключить",
-        true
-      ))) {
+        "Клиенты перестанут получать ответы: меню, каталог и заявки работать не будут.",
+        "Выключить", true))) {
         toggle.checked = true;
         return;
       }
@@ -168,21 +216,12 @@ function inquiryTypeName(item) {
   return { lead: "заявка на звонок", viewing: "запись на просмотр", selection: "подбор", question: "вопрос по объекту", interest: "интерес к объекту", general: "сообщение" }[item.type] || "сообщение";
 }
 
-// --- Статистика ---------------------------------------------------------------
 function barList(rows, total) {
   if (!rows.length) return '<div class="empty">Пока нет данных</div>';
   var top = Math.max.apply(null, rows.map(function (row) { return row[1]; }).concat([1]));
   return '<div class="card-body">' + rows.map(function (row) {
     return '<div class="bar-row"><span>' + esc(row[0]) + '<div class="bar"><span style="width:' + Math.round((row[1] / top) * 100) + '%"></span></div></span><b class="right">' + num(row[1]) + (total ? " <span class=\"faint small\">" + Math.round((row[1] / total) * 100) + "%</span>" : "") + "</b></div>";
   }).join("") + "</div>";
-}
-
-function recentReactions() {
-  var events = [];
-  (state.users || []).forEach(function (user) {
-    (user.activity || []).forEach(function (item) { if (item.kind === "reaction") events.push({ user: user, item: item }); });
-  });
-  return events.sort(function (a, b) { return (Date.parse(b.item.createdAt) || 0) - (Date.parse(a.item.createdAt) || 0); }).slice(0, 10);
 }
 
 function sourceLinkCard() {
@@ -206,6 +245,14 @@ function bindSourceLink(host) {
   host.querySelector("#copySourceLink").onclick = function () {
     navigator.clipboard.writeText(host.querySelector("#sourceLink").value).then(function () { toast("Скопировано"); });
   };
+}
+
+function recentReactions() {
+  var events = [];
+  (state.users || []).forEach(function (user) {
+    (user.activity || []).forEach(function (item) { if (item.kind === "reaction") events.push({ user: user, item: item }); });
+  });
+  return events.sort(function (a, b) { return (Date.parse(b.item.createdAt) || 0) - (Date.parse(a.item.createdAt) || 0); }).slice(0, 10);
 }
 
 // «Отчёты» живут в настройках: это не ежедневная работа.

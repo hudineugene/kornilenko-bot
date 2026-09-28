@@ -417,6 +417,18 @@ code{padding:1px 5px;border-radius:5px;background:var(--surface-soft);border:1px
 .savebar .btn.secondary{background:transparent;color:#fff;border-color:#475467}
 .savebar .btn.secondary:hover{background:#1d2939}
 .refresh-hint{position:fixed;left:20px;right:20px;bottom:16px;z-index:39;display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:11px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-lg)}
+.today-numbers{display:flex;flex-wrap:wrap;gap:6px 22px;margin-bottom:12px;padding:10px 14px;border-radius:11px;background:var(--surface);border:1px solid var(--line);font-size:13px;color:var(--muted)}
+.today-numbers b{font-size:16px;color:var(--text)}
+.deeds{display:flex;flex-direction:column}
+.deed{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-top:1px solid var(--line-soft)}
+.deed:first-child{border-top:0}
+.deed-icon{flex:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--surface-soft);color:var(--muted);font-size:13px}
+.deed.urgent .deed-icon{background:var(--bad-soft);color:var(--bad)}
+.deed-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.deed-body b{font-size:14px}
+.deed-body span{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.deed-actions{flex:none;display:flex;align-items:center;gap:6px}
+@media (max-width:860px){.deed{flex-wrap:wrap}.deed-actions{width:100%;justify-content:flex-end}}
 .save-alert{position:fixed;left:20px;right:20px;top:14px;z-index:45;display:flex;flex-direction:column;gap:3px;padding:10px 14px;border-radius:11px;background:var(--bad-soft);border:1px solid var(--bad);color:var(--bad);box-shadow:var(--shadow-lg);font-size:13px}
 .save-alert b{font-size:14px}
 @media (max-width:860px){.save-alert{left:10px;right:10px;top:8px}}

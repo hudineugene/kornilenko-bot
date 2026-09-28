@@ -565,7 +565,7 @@ function renderNotificationBell() {
   var count = Number(state && state.notificationUnreadCount || 0);
   badge.textContent = count > 99 ? "99+" : String(count);
   badge.classList.toggle("hidden", count === 0);
-  button.classList.toggle("active", currentView === "notifications");
+  button.classList.toggle("active", currentView === "today" || currentView === "notifications");
   button.setAttribute("aria-label", count ? "Открыть уведомления: непрочитанных " + count : "Открыть уведомления");
 }
 
@@ -730,7 +730,8 @@ function bindShell() {
     el("nav").classList.toggle("open", open);
     el("menuToggle").setAttribute("aria-expanded", String(open));
   };
-  el("notificationBell").onclick = function () { go("notifications"); };
+  // Колокольчик ведёт в «Сегодня»: там тот же список дел, но с кнопками.
+  el("notificationBell").onclick = function () { go("today"); };
   document.addEventListener("click", function (event) {
     if (!event.target.closest(".nav-menu")) el("nav").querySelectorAll("details[open]").forEach(function (menu) { menu.open = false; });
     if (window.innerWidth <= 860 && !event.target.closest("#nav") && !event.target.closest("#menuToggle")) {
