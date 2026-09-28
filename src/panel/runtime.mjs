@@ -406,10 +406,13 @@ async function reload(render, options) {
   if (render !== false) renderView(options);
 }
 
-// Пользователь печатает или уже что-то ввёл на этом экране: перерисовка стёрла
-// бы черновик ответа, пост в канал или заметку по обращению.
+// Пользователь печатает, уже что-то ввёл на этом экране или открыл окно:
+// перерисовка стёрла бы черновик ответа, пост в канал или заметку по обращению.
+// «Занят» — только про сам экран: счётчики и колокольчик обновляются всегда.
 function pageBusy() {
-  if (pageTouched) return true;
+  if (pageTouched || isDirty()) return true;
+  // Поверх экрана открыто окно: его содержимое человек как раз и заполняет.
+  if (document.querySelector("dialog[open]")) return true;
   var focused = document.activeElement;
   if (!focused || !el("page").contains(focused)) return false;
   return ["INPUT", "TEXTAREA", "SELECT"].indexOf(focused.tagName) >= 0 || focused.isContentEditable;
@@ -613,7 +616,11 @@ async function startApp() {
   applyRoute();
   clearInterval(refreshTimer);
   refreshTimer = setInterval(function () {
-    if (document.hidden || isDirty() || document.querySelector("dialog[open]")) return;
+    // Вкладку не смотрят — обновлять нечего. А несохранённая форма и открытое
+    // окно больше не отменяют обновление целиком: счётчик «Переписки» и
+    // колокольчик обновляются всегда, а экран под руками не трогаем — про новые
+    // данные скажет полоска сверху.
+    if (document.hidden) return;
     refresh().catch(function () {});
   }, 45000);
 }

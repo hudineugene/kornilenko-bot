@@ -446,6 +446,53 @@ test.describe('автообновление панели раз в 45 секун
     assert.deepEqual(sandbox.__scrolls, [], 'без прокрутки наверх');
   });
 
+  // Сколько диалогов ждут ответа — это число в меню слева и в колокольчике.
+  function waitingBadge(sandbox) {
+    return sandbox.navItems().find(function (item) { return item.id === 'inquiries'; }).count;
+  }
+
+  test('несохранённая форма не отменяет обновление счётчиков', async () => {
+    // Раньше при несохранённой форме автообновление не шло совсем: менеджер
+    // писал заметку и не видел, что пришло новое сообщение от клиента.
+    const { sandbox, page, state, requests } = await screen('settings');
+    sandbox.stateVersion = 'старая-версия';
+    // На экране форма с несохранёнными изменениями.
+    sandbox.watchForm(sandbox.document.getElementById('page'), async () => {}, 'Есть несохранённые изменения').mark();
+    assert.equal(sandbox.isDirty(), true, 'форма считается изменённой');
+
+    const before = waitingBadge(sandbox);
+    // Клиент написал: в новом состоянии одна беседа ждёт ответа.
+    state.unreadConversationCount = before + 3;
+
+    await tick(sandbox);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.ok(requests.some((request) => request.url.includes('/api/state')), 'панель всё равно спросила сервер');
+    assert.equal(waitingBadge(sandbox), before + 3, 'счётчик «Переписки» обновился');
+    assert.equal(page.innerHTML, 'ЧЕРНОВИК НА ЭКРАНЕ', 'а экран с формой не тронут');
+    assert.equal(sandbox.document.getElementById('refreshHint').classList.contains('hidden'), false, 'о новых данных сказано полоской');
+    assert.equal(sandbox.isDirty(), true, 'форма по-прежнему ждёт сохранения');
+  });
+
+  test('открытое окно тоже не отменяет обновление счётчиков', async () => {
+    const { sandbox, page, state, requests } = await screen('catalog');
+    sandbox.stateVersion = 'старая-версия';
+    const dialog = sandbox.openDialog({ title: 'Карточка объекта', body: '<input id="cardTitle">', protectChanges: true });
+    assert.equal(dialog.open, true);
+
+    const before = waitingBadge(sandbox);
+    state.unreadConversationCount = before + 1;
+
+    await tick(sandbox);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.ok(requests.some((request) => request.url.includes('/api/state')), 'обновление не отменено');
+    assert.equal(waitingBadge(sandbox), before + 1, 'счётчик обновился');
+    assert.equal(page.innerHTML, 'ЧЕРНОВИК НА ЭКРАНЕ', 'экран под окном не перерисован');
+    assert.equal(dialog.open, true, 'и окно осталось открытым');
+    dialog.closeClean();
+  });
+
   test('переход между разделами прокручивает наверх, как и раньше', async () => {
     const { sandbox } = await screen('overview');
     sandbox.__scrolls.length = 0;
