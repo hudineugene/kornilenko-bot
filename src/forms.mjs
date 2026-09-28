@@ -546,12 +546,14 @@ function viewingKeyboard(language, step, pending = null) {
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
   const slotMode = Boolean(pending && pending.data && pending.data.slotMode && slotsEnabled());
   if (step === 'date' && slotMode) {
-    return optionReplyKeyboard(availableSlotDays(language).map((day) => day.label).concat(copy.dateOptions[3]), copy.cancel, copy.askDate);
+    return optionReplyKeyboard(availableSlotDays(language).map((day) => day.label).concat(copy.dateOptions[3], copy.online), copy.cancel, copy.askDate);
   }
   if (step === 'time' && slotMode) {
     return optionReplyKeyboard(freeTimes(pending.data.day).concat(copy.timeOptions[3]), copy.cancel, copy.askTime);
   }
-  if (step === 'date') return optionReplyKeyboard(copy.dateOptions, copy.cancel, copy.askDate);
+  // «Онлайн-показ» — такой же вариант ответа, как день: покупателю из другой
+  // страны он часто нужнее любой даты.
+  if (step === 'date') return optionReplyKeyboard(copy.dateOptions.concat(copy.online), copy.cancel, copy.askDate);
   if (step === 'time') return optionReplyKeyboard(copy.timeOptions, copy.cancel, copy.askTime);
   if (step === 'confirm') return optionReplyKeyboard([copy.confirm, copy.editDate, copy.editTime], copy.cancel, copy.review, 1);
   return optionReplyKeyboard([], copy.cancel, step === 'custom_time' ? copy.askCustomTime : copy.askCustom);
@@ -693,6 +695,16 @@ async function handleViewingFormMessage(message, user, token) {
   // Free slots were switched off in the panel while the form was open.
   if (pending.data.slotMode && !slotsEnabled()) pending.data.slotMode = false;
   if (pending.step === 'date') {
+    // Онлайн-показ выбирают вместо дня: дальше всё как обычно — дата и время
+    // нужны и для видеосвязи.
+    if (text === copy.online || optionFromText(text, [copy.online]) === copy.online) {
+      pending.data.online = true;
+      pending.data.slotMode = false;
+      pending.step = 'custom';
+      scheduleSave();
+      await sendMessage(user.chatId, copy.onlineChosen + '\n\n' + copy.askCustom, token, { reply_markup: keyboard('custom') });
+      return true;
+    }
     const chosenDate = copy.dateOptions.includes(text) ? text : optionFromText(text, copy.dateOptions);
     if (chosenDate === copy.dateOptions[3]) {
       pending.data.slotMode = false;
@@ -840,9 +852,11 @@ async function handleViewingFormMessage(message, user, token) {
       propertyRequestText(property, language, 'viewing'),
       copy.reviewLabels[1] + ': ' + cleanText(pending.data.date, 160),
       copy.reviewLabels[2] + ': ' + cleanText(pending.data.time, 160),
+      // Формат показа менеджеру важен: на видеосвязь он не едет.
+      ...(pending.data.online === true ? ['📹 ' + copy.onlineLabel] : []),
       ...(slotBooking ? ['', '✅ Время из свободных окон — просмотр подтверждён автоматически'] : []),
     ].join('\n');
-    const viewing = { date: pending.data.day, dateText: pending.data.date, timeText: pending.data.time };
+    const viewing = { date: pending.data.day, dateText: pending.data.date, timeText: pending.data.time, online: pending.data.online === true };
     if (slotBooking) Object.assign(viewing, { confirmedDate: pending.data.day, confirmedTime: pending.data.time, confirmedAt: new Date().toISOString() });
     user.pendingAction = null;
     const inquiry = createInquiry(user, details, {

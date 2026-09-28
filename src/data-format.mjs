@@ -9,7 +9,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 36;
+const DATA_VERSION = 37;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -714,6 +714,8 @@ function normalizeViewing(value) {
   if (!value || typeof value !== 'object') return null;
   const day = (text) => (DAY_KEY_PATTERN.test(String(text || '')) ? String(text) : '');
   return {
+    // Показ по видеосвязи: менеджеру ехать не надо, клиенту — тем более.
+    online: value.online === true,
     date: day(value.date),
     dateText: cleanText(value.dateText, 160),
     timeText: cleanText(value.timeText, 160),

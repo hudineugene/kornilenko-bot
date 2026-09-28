@@ -217,7 +217,7 @@ test.describe('viewing form', () => {
     const chat = createChat();
     let step = await chat.press('property:viewing:villa-marbella-01');
     assert.equal(step.last.text, '🏠 Вилла в Марбелье\n\n' + ru.askDate);
-    assert.deepEqual(step.last.buttons, [...ru.dateOptions, ru.cancel]);
+    assert.deepEqual(step.last.buttons, [...ru.dateOptions, ru.online, ru.cancel], 'среди вариантов есть онлайн-показ');
 
     step = await chat.say(ru.dateOptions[1]);
     assert.equal(step.last.text, ru.askTime);

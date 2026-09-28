@@ -203,7 +203,7 @@ test.describe('free viewing slots', () => {
     let step = await chat.press('property:viewing:villa-marbella-01');
     const day = tomorrowLabel(step.last.buttons);
     assert.ok(day, 'tomorrow is offered');
-    assert.deepEqual(step.last.buttons.slice(-2), [ru.dateOptions[3], ru.cancel]);
+    assert.deepEqual(step.last.buttons.slice(-3), [ru.dateOptions[3], ru.online, ru.cancel]);
     step = await chat.say(day);
     assert.deepEqual(step.last.buttons, ['10:00', '16:00', ru.timeOptions[3], ru.cancel]);
     await chat.say('10:00');
@@ -224,6 +224,22 @@ test.describe('free viewing slots', () => {
     step = await next.press('property:viewing:villa-marbella-01');
     step = await next.say(tomorrowLabel(step.last.buttons));
     assert.deepEqual(step.last.buttons, ['16:00', ru.timeOptions[3], ru.cancel], 'the booked hour is taken');
+  });
+
+  test('онлайн-показ можно выбрать вместо приезда', async () => {
+    const chat = createChat();
+    let step = await chat.press('property:viewing:villa-marbella-01');
+    assert.ok(step.last.buttons.includes(ru.online), 'вариант «онлайн-показ» предлагается сразу');
+
+    step = await chat.say(ru.online);
+    assert.match(step.last.text, new RegExp(ru.onlineChosen), 'бот объясняет, что приезжать не нужно');
+    assert.equal(chat.user.pendingAction.data.online, true);
+
+    step = await chat.say('в субботу после 16:00');
+    step = await chat.say(ru.confirm);
+    const [inquiry] = chat.inquiries;
+    assert.equal(inquiry.viewing.online, true, 'формат сохранён в заявке');
+    assert.match(inquiry.text, /📹 Онлайн-показ/, 'менеджер видит, что показ по видеосвязи');
   });
 
   test('a phone left after the booking reaches the manager', async () => {
@@ -283,10 +299,10 @@ test.describe('free viewing slots', () => {
   test('without free slots the form offers the usual options', async () => {
     enableSlots({ enabled: false });
     let step = await createChat().press('property:viewing:villa-marbella-01');
-    assert.deepEqual(step.last.buttons, [...ru.dateOptions, ru.cancel]);
+    assert.deepEqual(step.last.buttons, [...ru.dateOptions, ru.online, ru.cancel], 'среди вариантов есть онлайн-показ');
     enableSlots({ days: [] });
     step = await createChat().press('property:viewing:villa-marbella-01');
-    assert.deepEqual(step.last.buttons, [...ru.dateOptions, ru.cancel], 'no days set');
+    assert.deepEqual(step.last.buttons, [...ru.dateOptions, ru.online, ru.cancel], 'no days set');
   });
 });
 

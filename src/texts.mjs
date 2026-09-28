@@ -394,6 +394,9 @@ const LEAD_FORM_TEXT = {
 const VIEWING_FORM_TEXT = {
   ru: {
     askDate: '📅 Когда вам удобно посмотреть этот объект?',
+    online: '📹 Онлайн-показ по видеосвязи',
+    onlineChosen: 'Покажем объект по видеосвязи — приезжать не нужно.',
+    onlineLabel: 'Онлайн-показ',
     dateOptions: ['Сегодня', 'Завтра', 'В выходные', 'Другая дата'],
     askTime: '🕒 В какое время вам удобно?',
     timeOptions: ['Утром', 'Днём', 'Вечером', 'Другое время'],
@@ -419,6 +422,9 @@ const VIEWING_FORM_TEXT = {
   },
   en: {
     askDate: '📅 When would you like to view this property?',
+    online: '📹 Online viewing by video call',
+    onlineChosen: 'We will show the property over a video call — no need to travel.',
+    onlineLabel: 'Online viewing',
     dateOptions: ['Today', 'Tomorrow', 'This weekend', 'Another date'],
     askTime: '🕒 What time is convenient?',
     timeOptions: ['Morning', 'Afternoon', 'Evening', 'Another time'],
@@ -444,6 +450,9 @@ const VIEWING_FORM_TEXT = {
   },
   es: {
     askDate: '📅 ¿Cuándo te gustaría visitar este inmueble?',
+    online: '📹 Visita online por videollamada',
+    onlineChosen: 'Te enseñaremos el inmueble por videollamada: no hace falta viajar.',
+    onlineLabel: 'Visita online',
     dateOptions: ['Hoy', 'Mañana', 'Este fin de semana', 'Otra fecha'],
     askTime: '🕒 ¿A qué hora te viene bien?',
     timeOptions: ['Por la mañana', 'Por la tarde', 'Por la noche', 'Otra hora'],
