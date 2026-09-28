@@ -9,7 +9,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 34;
+const DATA_VERSION = 35;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -310,6 +310,30 @@ const VERSION_17_MY_DEFAULTS = {
     viewingFooter: 'Si cambian tus planes, abre «☰ Más → 📋 Mis solicitudes» o escríbenos.',
   },
 };
+
+// Версия 35: короткое меню («Связаться» вместо «Менеджера»), подсказка про
+// свободный поиск и такое же приглашение в поле ввода. Трогаем только те
+// строки, которые остались прежними значениями по умолчанию.
+const VERSION_34_DEFAULTS = {
+  ru: { contacts: '💬 Менеджер', placeholder: 'Выберите раздел', hint: 'Выберите интересующий раздел в меню ниже 👇' },
+  en: { contacts: '💬 Agent', placeholder: 'Choose a menu item', hint: 'Choose a section from the menu below 👇' },
+  es: { contacts: '💬 Asesor', placeholder: 'Elige una opción', hint: 'Elige una sección del menú 👇' },
+};
+
+function migrateShortGreeting(interfaceText) {
+  for (const language of ['ru', 'en', 'es']) {
+    const previous = VERSION_34_DEFAULTS[language];
+    const labels = interfaceText && interfaceText.menuLabels && interfaceText.menuLabels[language];
+    if (labels && typeof labels === 'object') {
+      if (labels.contacts === previous.contacts) labels.contacts = INTERFACE_TEXT_DEFAULTS.menuLabels[language].contacts;
+      if (labels.placeholder === previous.placeholder) labels.placeholder = INTERFACE_TEXT_DEFAULTS.menuLabels[language].placeholder;
+    }
+    const hints = interfaceText && interfaceText.menuHints && interfaceText.menuHints[language];
+    if (hints && typeof hints === 'object' && hints.text === previous.hint) {
+      hints.text = INTERFACE_TEXT_DEFAULTS.menuHints[language].text;
+    }
+  }
+}
 
 function migrateMyArea(interfaceText, messages) {
   for (const language of ['ru', 'en', 'es']) {
@@ -1042,6 +1066,7 @@ function normalizeLoadedData(parsed) {
     if (storedVersion < 18) migrateMyArea(normalized.interfaceText, normalized.config.messages);
     if (storedVersion < 19) migrateComparison(normalized.interfaceText, normalized.config.messages);
     if (storedVersion < 20) migrateSavedSearch(normalized.interfaceText, normalized.config.messages);
+    if (storedVersion < 35) migrateShortGreeting(normalized.interfaceText);
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
     normalized.lastDiskWarningFor = cleanText(parsed.lastDiskWarningFor, 10);

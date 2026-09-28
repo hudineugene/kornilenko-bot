@@ -9,9 +9,9 @@ const LANGUAGE_SELECTED = {
   es: 'Listo — has seleccionado español',
 };
 const MENU_LABELS = {
-  ru: { objects: '🏘 Объекты', selection: '✨ Подбор', promotions: '🔥 Акции', favorites: '❤️ Избранное', contacts: '💬 Связаться', request: '📞 Позвоните мне', about: 'ℹ️ О компании', help: '❓ Помощь', more: '👤 Моё', language: '🌐 Сменить язык', placeholder: 'Выберите раздел' },
-  en: { objects: '🏘 Properties', selection: '✨ Find for me', promotions: '🔥 Offers', favorites: '❤️ Favorites', contacts: '💬 Contact us', request: '📞 Call me back', about: 'ℹ️ About', help: '❓ Help', more: '👤 My space', language: '🌐 Change language', placeholder: 'Choose a menu item' },
-  es: { objects: '🏘 Inmuebles', selection: '✨ Búsqueda', promotions: '🔥 Promociones', favorites: '❤️ Favoritos', contacts: '💬 Contactar', request: '📞 Llámame', about: 'ℹ️ La empresa', help: '❓ Ayuda', more: '👤 Mi espacio', language: '🌐 Cambiar idioma', placeholder: 'Elige una opción' },
+  ru: { objects: '🏘 Объекты', selection: '✨ Подбор', promotions: '🔥 Акции', favorites: '❤️ Избранное', contacts: '💬 Связаться', request: '📞 Позвоните мне', about: 'ℹ️ О компании', help: '❓ Помощь', more: '👤 Моё', language: '🌐 Сменить язык', placeholder: 'Напишите, что ищете' },
+  en: { objects: '🏘 Properties', selection: '✨ Find for me', promotions: '🔥 Offers', favorites: '❤️ Favorites', contacts: '💬 Contact us', request: '📞 Call me back', about: 'ℹ️ About', help: '❓ Help', more: '👤 My space', language: '🌐 Change language', placeholder: 'Write what you are looking for' },
+  es: { objects: '🏘 Inmuebles', selection: '✨ Búsqueda', promotions: '🔥 Promociones', favorites: '❤️ Favoritos', contacts: '💬 Contactar', request: '📞 Llámame', about: 'ℹ️ La empresa', help: '❓ Ayuda', more: '👤 Mi espacio', language: '🌐 Cambiar idioma', placeholder: 'Escribe qué buscas' },
 };
 // Labels from earlier keyboards: clients may still tap those messages, so
 // both the long labels from before version 17 and "More" from version 17 work.
@@ -26,9 +26,15 @@ const LEGACY_MENU_LABELS = {
   es: { objects: 'Nuestros inmuebles', contacts: 'Contactos', promotions: 'Promociones', favorites: 'Favoritos', request: 'Contactar con un agente', about: 'Sobre nosotros', language: 'Cambiar idioma' },
 };
 const MENU_HINTS = {
-  ru: 'Выберите интересующий раздел в меню ниже 👇',
-  en: 'Choose a section from the menu below 👇',
-  es: 'Elige una sección del menú 👇',
+  ru: 'Можно просто написать, что ищете: «2 спальни в Альтеа до 400 000 €». Или выберите раздел в меню ниже 👇',
+  en: 'You can simply write what you are looking for: “2 bedrooms in Altea under €400,000”. Or choose a section below 👇',
+  es: 'Puedes escribir lo que buscas: «2 dormitorios en Altea hasta 400 000 €». O elige una sección abajo 👇',
+};
+// Живая строка в приветствии: сколько объектов сейчас в каталоге и где они.
+const CATALOG_SUMMARY_TEXT = {
+  ru: { line: 'Сейчас в каталоге: {count} — {cities}', empty: 'Каталог пополняется — напишите, что ищете, и менеджер подберёт варианты.', one: 'объект', few: 'объекта', many: 'объектов' },
+  en: { line: 'In the catalogue right now: {count} — {cities}', empty: 'The catalogue is being filled — write what you are looking for and an agent will help.', one: 'property', few: 'properties', many: 'properties' },
+  es: { line: 'Ahora en el catálogo: {count} — {cities}', empty: 'El catálogo se está completando: escribe qué buscas y un asesor te ayudará.', one: 'inmueble', few: 'inmuebles', many: 'inmuebles' },
 };
 const MAIN_MENU_TEXT = {
   ru: 'Главное меню. Что вас интересует?',
@@ -1084,6 +1090,7 @@ const INTERFACE_TEXT_TARGETS = {
   commandDescriptions: { target: BOT_COMMAND_DESCRIPTIONS },
   menuLabels: { target: MENU_LABELS },
   menuHints: { target: MENU_HINTS, scalarKey: 'text' },
+  catalogSummary: { target: CATALOG_SUMMARY_TEXT },
   mainMenu: { target: MAIN_MENU_TEXT, scalarKey: 'text' },
   myArea: { target: MY_AREA_TEXT },
   savedSearch: { target: SAVED_SEARCH_TEXT },
@@ -1180,6 +1187,7 @@ export {
   LEGACY_MENU_LABELS,
   MAIN_MENU_TEXT,
   MANAGER_CONTACT_TEXT,
+  CATALOG_SUMMARY_TEXT,
   MENU_HINTS,
   MENU_LABELS,
   MY_AREA_TEXT,

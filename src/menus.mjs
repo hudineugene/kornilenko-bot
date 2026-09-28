@@ -2,7 +2,7 @@
 
 import { fillTemplate } from './util.mjs';
 import { imageExists } from './media.mjs';
-import { BOT_COMMAND_DESCRIPTIONS, COMPARISON_TEXT, PRIVACY_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
+import { BOT_COMMAND_DESCRIPTIONS, CATALOG_SUMMARY_TEXT, COMPARISON_TEXT, PRIVACY_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, localizedExact, normalizedSavedSearch, promotionIsActive, sendUiMessage } from './catalog.mjs';
@@ -81,12 +81,37 @@ function isLanguageChangeText(text, language) {
   return text === labels.language || text === legacy.language;
 }
 
+// «Сейчас в каталоге: 12 объектов — Бенидорм, Альтеа, Кальпе». Клиент сразу
+// видит, что бот не пустой и где именно есть дома. Считаем по тому, что видно
+// именно этому клиенту — на его языке.
+function catalogSummaryLine(user, language) {
+  const copy = CATALOG_SUMMARY_TEXT[language] || CATALOG_SUMMARY_TEXT.ru;
+  const records = catalogRecords(user, 'all');
+  if (!records.length) return copy.empty;
+  const cities = [];
+  for (const record of records) {
+    const city = localizedExact(record.city, language, 80);
+    if (city && !cities.includes(city)) cities.push(city);
+    if (cities.length >= 3) break;
+  }
+  const tens = records.length % 100;
+  const ones = records.length % 10;
+  const word = tens >= 11 && tens <= 14 ? copy.many : ones === 1 ? copy.one : ones >= 2 && ones <= 4 ? copy.few : copy.many;
+  return copy.line
+    .replace('{count}', records.length + ' ' + word)
+    .replace('{cities}', cities.join(', '));
+}
+
 async function sendWelcome(chatId, user, token, options = {}) {
   const language = user.preferredLanguage || 'ru';
   await clearUiMessages(chatId, user, token);
   await clearGalleryMessages(chatId, user, token);
   await clearCatalogMessages(chatId, user, token);
-  const greeting = fillTemplate(languageMessages(language).greeting, user) + '\n\n' + MENU_HINTS[language];
+  const greeting = [
+    fillTemplate(languageMessages(language).greeting, user),
+    catalogSummaryLine(user, language),
+    MENU_HINTS[language],
+  ].filter(Boolean).join('\n\n');
   const menu = menuKeyboard(language);
   // Язык выбран за клиента — значит первым делом даём его сменить.
   const keyboard = options.languageButton

@@ -846,6 +846,32 @@ test.describe('property card', () => {
     assert.match(manager.last.text, /./, 'старая кнопка «Менеджер» открывает связь');
   });
 
+  test('приветствие говорит, что в каталоге и что боту можно просто написать', async () => {
+    resetData((data) => {
+      data.objects.push(property('welcome-1', 'Вилла в Альтеа', 'active', { city: { ru: 'Альтеа', en: 'Altea', es: 'Altea' } }));
+      data.objects.push(property('welcome-2', 'Квартира в Кальпе', 'active', { city: { ru: 'Кальпе', en: 'Calpe', es: 'Calpe' } }));
+    });
+    // Приветствие видит новый клиент — тот, кто пишет боту впервые.
+    const chat = createChat();
+    chat.user.preferredLanguage = '';
+    const step = await chat.say('/start');
+    const text = step.last.text || step.last.caption || '';
+    assert.match(text, /Сейчас в каталоге: 2 объекта — Альтеа, Кальпе/, 'видно, что бот не пустой и где есть дома');
+    assert.match(text, /Можно просто написать, что ищете/, 'и что искать можно словами');
+    assert.match(text, /2 спальни в Альтеа до 400 000 €/, 'с примером');
+    assert.equal(step.last.markup.input_field_placeholder, 'Напишите, что ищете', 'тот же пример в поле ввода');
+  });
+
+  test('пустой каталог не обещает того, чего нет', async () => {
+    resetData();
+    const chat = createChat();
+    chat.user.preferredLanguage = '';
+    const step = await chat.say('/start');
+    const text = step.last.text || step.last.caption || '';
+    assert.match(text, /Каталог пополняется/, 'честная строка вместо «0 объектов»');
+    assert.ok(!/Сейчас в каталоге/.test(text));
+  });
+
   test('«Моё» — шесть строк вместо одиннадцати', async () => {
     const chat = createChat();
     const personal = await chat.say(MENU.ru.more);
