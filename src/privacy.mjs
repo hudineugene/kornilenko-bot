@@ -1,7 +1,7 @@
 // Права клиента на свои данные: что бот о нём хранит, как мы с этим обращаемся
 // и кнопка «удалить всё». Клиент не должен просить об этом менеджера.
 
-import { cleanText } from './util.mjs';
+import { cleanText, localDayKey } from './util.mjs';
 import { PRIVACY_TEXT, MY_AREA_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { eraseUserData, normalizeUser } from './users.mjs';
@@ -10,6 +10,9 @@ import { acknowledgeCallback } from './sections.mjs';
 import { clearCatalogMessages, clearGalleryMessages, sendUiMessage } from './catalog.mjs';
 import { menuKeyboard } from './menus.mjs';
 import { notifyAdministratorAction } from './inquiries.mjs';
+import { recordError } from './analytics.mjs';
+import { localized } from './catalog.mjs';
+import { viewingDateLabel } from './viewings.mjs';
 
 function copyFor(user) {
   const language = (user && user.preferredLanguage) || 'ru';
@@ -108,7 +111,16 @@ async function handlePrivacyCallback(query, token) {
     // Сообщаем администратору до удаления: после него имени уже не будет.
     // Важное уведомление: вместе с данными исчезают и обращения клиента,
     // поэтому оно приходит и в режиме «только обращения».
-    void notifyAdministratorAction(user, 'Удалил свои данные', 'Клиент сам удалил данные через «🔒 Мои данные». Его заявки и переписка удалены безвозвратно.', '', null, { important: true });
+    //
+    // Ждём отправки, а не отпускаем «в фоне»: уведомление в конце записывает,
+    // кому адресовать ответ на него. Сделанное после удаления, это оставляло в
+    // данных «адрес» удалённого клиента — ответ менеджера воссоздал бы его
+    // карточку и обращение заново.
+    try {
+      await notifyAdministratorAction(user, 'Удалил свои данные', eraseDetails(user), '', null, { important: true });
+    } catch (error) {
+      recordError('Уведомление администратору', error);
+    }
     const removed = eraseUserData(user);
     scheduleSave();
     return sendMessage(chatId, copy.erased, token, { reply_markup: menuKeyboard(language) }).then(() => removed);
@@ -116,6 +128,33 @@ async function handlePrivacyCallback(query, token) {
 
   await acknowledgeCallback(query, token);
   return sendPrivacyCentre(chatId, user, token);
+}
+
+// Подтверждённые просмотры, которые ещё впереди. Они исчезают вместе с
+// данными клиента, а менеджер о них помнит только по уведомлению бота: без даты
+// и объекта он может приехать на показ зря.
+function upcomingConfirmedViewings(user, now = new Date()) {
+  const today = localDayKey(now);
+  return data.inquiries
+    .filter((inquiry) => String(inquiry.userId) === String(user.id))
+    .filter((inquiry) => inquiry.viewing && inquiry.viewing.confirmedAt && !inquiry.viewing.cancelledAt)
+    .filter((inquiry) => String(inquiry.viewing.confirmedDate || '') >= today)
+    .sort((first, second) => String(first.viewing.confirmedDate).localeCompare(String(second.viewing.confirmedDate)));
+}
+
+function eraseDetails(user, now = new Date()) {
+  const lines = ['Клиент сам удалил данные через «🔒 Мои данные». Его заявки и переписка удалены безвозвратно.'];
+  const viewings = upcomingConfirmedViewings(user, now);
+  if (!viewings.length) return lines.join('\n');
+  lines.push('', '⚠️ Вместе с ними пропадают подтверждённые просмотры:');
+  for (const inquiry of viewings.slice(0, 5)) {
+    const property = data.objects.find((item) => item.id === inquiry.propertyId);
+    const what = property ? localized(property.title, 'ru') || property.reference || '' : '';
+    const when = [viewingDateLabel(inquiry.viewing.confirmedDate, 'ru'), inquiry.viewing.confirmedTime].filter(Boolean).join(', ');
+    lines.push('• ' + [when, what].filter(Boolean).join(' — '));
+  }
+  lines.push('', 'Запишите себе: в /viewings и в панели этих просмотров больше не будет, и напоминание бот никому не пришлёт.');
+  return lines.join('\n');
 }
 
 // Приписка к вопросу о телефоне: зачем он нужен и где посмотреть политику.

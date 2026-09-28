@@ -74,6 +74,42 @@ test.describe('раздел «Мои данные»', () => {
     assert.ok(adminNotifications().some((text) => /удалил свои данные/i.test(text)), 'менеджер знает, что данные удалены по просьбе клиента');
   });
 
+  test('менеджер узнаёт о подтверждённом просмотре, который пропадёт', async () => {
+    // Просмотр назначен на завтра, менеджер собирается приехать. Клиент удаляет
+    // данные — обращение исчезает вместе с датой, и раньше уведомление об этом
+    // молчало: менеджер мог приехать к закрытой двери.
+    const chat = createChat();
+    await chat.say('/start');
+    await chat.say('Хочу посмотреть квартиру');
+    const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+    const inquiry = chat.inquiries[0];
+    inquiry.type = 'viewing';
+    inquiry.propertyId = 'flat-01';
+    inquiry.viewing = { date: tomorrow, dateText: 'завтра', timeText: '12:00', confirmedAt: new Date().toISOString(), confirmedDate: tomorrow, confirmedTime: '12:00', cancelledAt: '' };
+
+    await chat.press('privacy:erased');
+    const notice = adminNotifications().find((text) => /удалил свои данные/i.test(text));
+    assert.ok(notice, 'уведомление пришло');
+    assert.match(notice, /пропадают подтверждённые просмотры/i, 'сказано, что пропадает просмотр');
+    assert.match(notice, /12:00/, 'названо время');
+    assert.match(notice, /Квартира у моря/, 'и объект');
+  });
+
+  test('после удаления не остаётся адреса для ответа менеджера', async () => {
+    // Уведомление записывает, кому адресован ответ на него. Раньше оно
+    // уходило «в фоне» и успевало сделать эту запись уже после удаления —
+    // ответ менеджера воссоздал бы карточку клиента и обращение заново.
+    const chat = createChat();
+    await chat.say('/start');
+    await chat.say('Здравствуйте, интересует квартира');
+    const id = String(chat.id);
+
+    await chat.press('privacy:erased');
+    const targets = Object.values(bot.getData().adminReplyTargets || {});
+    assert.deepEqual(targets.filter((target) => String(target.chatId) === id), [], 'адресов удалённого клиента не осталось');
+    assert.equal(bot.getData().users[id], undefined, 'и самого клиента тоже');
+  });
+
   test('отказ от удаления возвращает в раздел и ничего не теряет', async () => {
     const chat = createChat();
     await chat.say('/start');
