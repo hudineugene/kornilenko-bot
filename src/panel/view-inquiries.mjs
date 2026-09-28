@@ -100,6 +100,26 @@ function selectionMatchingPanel(item) {
   }).join("");
   return '<div class="card flat"><header><h3>Автоматический подбор</h3><div class="actions"><span class="chip ok">точно ' + counts.exact + '</span><span class="chip warn">близко ' + counts.close + '</span><span class="chip">рассмотреть ' + counts.consider + '</span></div></header><div class="list">' + rows + '</div></div>';
 }
+// Просмотр — не обычное сообщение: у него есть дата, время и одно действие,
+// которого от менеджера ждут. Показываем его карточкой прямо в переписке.
+function viewingCardHtml(item, property) {
+  var viewing = item && item.viewing;
+  if (!viewing) return "";
+  var when = [viewing.confirmedDate ? pipelineDate(viewing.confirmedDate) : viewing.dateText || "дата не выбрана",
+    viewing.confirmedTime || viewing.timeText || ""].filter(Boolean).join(" · ");
+  var state = viewing.cancelledAt
+    ? { text: "Клиент отменил", chip: "" }
+    : viewing.confirmedAt
+      ? { text: "Подтверждён", chip: "ok" }
+      : { text: "Ждёт подтверждения", chip: "warn" };
+  return '<div class="viewing-card' + (viewing.confirmedAt ? " confirmed" : "") + '">' +
+    '<div class="viewing-card-head"><b>📅 Запись на просмотр</b><span class="chip ' + state.chip + '">' + state.text + "</span></div>" +
+    '<div class="viewing-card-when">' + esc(when) + "</div>" +
+    (property ? '<div class="small muted">⌂ ' + esc(localized(property.title, "ru") || property.reference || property.id) + "</div>" : "") +
+    (viewing.cancelledAt ? "" : '<button class="btn secondary small" id="confirmViewingInline" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + "</button>") +
+    "</div>";
+}
+
 function statusChip(item) {
   var state = inquiryState(item);
   return '<span class="chip ' + state.chip + '">' + state.text + "</span>";
@@ -687,6 +707,7 @@ function renderInquiryCard(host) {
         (related.length > 1 ? '<div class="field grow"><label>Текущая заявка</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + inquiryState(entry).text + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущая заявка</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
         (property ? '<button class="property-link" id="linkedProperty" type="button">🏠 ' + esc(localized(property.title, "ru") || property.reference || property.id) + '<span>Открыть →</span></button>' : item.propertyId ? '<div class="chip bad">Связанный объект удалён</div>' : "") +
       '</div>' +
+      viewingCardHtml(item, property) +
       '<div class="conversation-thread">' + (timeline.length
         ? timeline.map(conversationMessageHtml).join("")
         : conversationLoading[String(item.userId)] ? '<div class="empty"><b>Загружаем переписку…</b></div>'
@@ -874,6 +895,8 @@ function renderInquiryCard(host) {
   };
   var scheduleButton = host.querySelector("#scheduleViewing");
   if (scheduleButton) scheduleButton.onclick = function () { openViewingSchedule(item); };
+  var inlineViewing = host.querySelector("#confirmViewingInline");
+  if (inlineViewing) inlineViewing.onclick = function () { openViewingSchedule(item); };
 }
 
 // --- Просмотры ----------------------------------------------------------------

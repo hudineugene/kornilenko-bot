@@ -89,6 +89,27 @@ function appendInquiryMessage(inquiry, message) {
   return message;
 }
 
+// Ответ бота попадает в ту же ленту, что и ответы менеджера: иначе в панели
+// видно только вопрос клиента и непонятно, ответили ему хоть что-нибудь.
+// Пишем в последнюю открытую заявку клиента — ту, которую менеджер и читает.
+function recordBotAnswer(user, text, options = {}) {
+  const answer = cleanText(text, 4000);
+  if (!user || !answer) return null;
+  const inquiry = data.inquiries.filter((item) => String(item.userId) === String(user.id) && item.status !== 'closed').pop();
+  if (!inquiry) return null;
+  const message = appendInquiryMessage(inquiry, inquiryTimelineMessage(null, 'out', {
+    text: answer,
+    source: 'bot',
+    by: 'бот',
+    kind: 'text',
+    createdAt: new Date().toISOString(),
+    telegramMessageId: options.messageId || null,
+  }));
+  inquiry.updatedAt = new Date().toISOString();
+  scheduleSave();
+  return message;
+}
+
 // Sliding-window counter per key; returns false once the limit is reached.
 function withinRateLimit(store, key, limit, now = Date.now()) {
   const times = (store.get(key) || []).filter((time) => now - time < limit.windowMs);
@@ -889,6 +910,7 @@ export {
   messageSummary,
   inquiryTimelineMessage,
   appendInquiryMessage,
+  recordBotAnswer,
   nextFollowUpDate,
   notifyAdministrator,
   notifyAdministratorAction,

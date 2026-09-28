@@ -17,6 +17,7 @@ import {
   inquiryWasMerged,
   messageSummary,
   notifyAdministratorAction,
+  recordBotAnswer,
   serviceMessage,
 } from './inquiries.mjs';
 import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard } from './catalog.mjs';
@@ -586,9 +587,10 @@ async function handleUpdate(update, token) {
   if (answer) {
     if (inquiryAnswer) answer = withOffHoursNote(answer, user.preferredLanguage);
     try {
-      await sendMessage(message.chat.id, answer, token, {
+      const sent = await sendMessage(message.chat.id, answer, token, {
         reply_markup: menuKeyboard(user.preferredLanguage),
       });
+      recordBotAnswer(user, answer, { messageId: sent && sent.message_id });
     } catch (error) {
       runtime.lastError = error.message;
       recordError('Ответ пользователю', error);

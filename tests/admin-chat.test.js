@@ -116,7 +116,10 @@ test('the client answering the manager continues the same inquiry', async () => 
   assert.match(sentTo(answer.calls, ADMIN_CHAT)[0].body.text, /^📩 Новое сообщение в обращении/);
   assert.equal(answer.replies.length, 1, 'after a pause the client hears the message was received');
   assert.equal(bot.awaitingReply(client.inquiries[0]), true, 'the client wrote after the answer');
-  assert.deepEqual(client.inquiries[0].messages.map((message) => message.direction), ['in', 'out', 'in'], 'the panel gets one chronological dialogue');
+  // Лента: вопрос клиента, заготовка бота, ответ менеджера, ответ клиента и
+  // подтверждение бота. Менеджер видит весь разговор, а не только клиента.
+  assert.deepEqual(client.inquiries[0].messages.map((message) => message.direction), ['in', 'out', 'out', 'in', 'out'], 'the panel gets one chronological dialogue');
+  assert.deepEqual(client.inquiries[0].messages.filter((message) => message.source === 'bot').map((message) => message.by), ['бот', 'бот'], 'ответы бота подписаны');
 });
 
 test('reactions to a manager reply are visible in the conversation history', async () => {
@@ -228,7 +231,8 @@ test('a direct message from the client card is stored in the unified conversatio
     assert.equal(response.status, 200);
     assert.equal((await response.json()).inquiryId, inquiry.id);
     assert.ok(sentTo(telegram.calls.slice(before), client.id).some((call) => call.body.text.includes('Подобрал для вас подходящий вариант')));
-    assert.deepEqual(inquiry.messages.map((message) => message.direction), ['in', 'out']);
+    // Вопрос клиента, заготовка бота и личное сообщение менеджера.
+    assert.deepEqual(inquiry.messages.map((message) => message.direction), ['in', 'out', 'out']);
     assert.equal(inquiry.messages.at(-1).text, 'Подобрал для вас подходящий вариант');
     assert.equal(inquiry.replies.at(-1).source, 'panel');
     assert.equal(inquiry.replies.at(-1).by, 'Олег');

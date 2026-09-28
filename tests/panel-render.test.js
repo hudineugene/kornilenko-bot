@@ -698,6 +698,47 @@ test('отвеченная беседа остаётся открытой, а н
   assert.match(String(after.innerHTML), /Ольга/, 'и она по-прежнему видна в списке');
 });
 
+test('в переписке видно ответы бота, а запись на просмотр выделена карточкой', async () => {
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push({ id: 'villa-1', title: { ru: 'Вилла у моря' }, status: 'active', images: [], reference: 'REF-1' });
+    data.users['730001'] = { id: '730001', chatId: 730001, firstName: 'Пётр', preferredLanguage: 'ru', activity: [] };
+    data.inquiries.push({
+      id: 'inq-viewing', userId: '730001', chatId: '730001', language: 'ru', type: 'viewing', propertyId: 'villa-1',
+      text: 'Хочу посмотреть виллу', status: 'new', pipelineStage: 'viewing', replies: [],
+      viewing: { dateText: 'в субботу', timeText: '12:00' },
+      messages: [
+        { id: 'v-1', direction: 'in', kind: 'text', text: 'Хочу посмотреть виллу', createdAt: minutesAgo(30) },
+        { id: 'v-2', direction: 'out', kind: 'text', text: 'Спасибо! Заявка на просмотр отправлена.', source: 'bot', by: 'бот', createdAt: minutesAgo(29) },
+      ],
+      createdAt: minutesAgo(30), updatedAt: minutesAgo(29), clientMessageAt: minutesAgo(30),
+    });
+  });
+  const { sandbox } = await panelSandbox();
+  // Переписку панель просит отдельным запросом — отвечаем той же лентой.
+  const timeline = bot.getData().inquiries.find((item) => item.id === 'inq-viewing').messages;
+  const fetchBefore = sandbox.fetch;
+  sandbox.fetch = async (url, options) => (String(url).includes('/timeline')
+    ? { ok: true, status: 200, json: async () => ({ messages: timeline }), text: async () => '', headers: { get: () => '' } }
+    : fetchBefore(url, options));
+  sandbox.selectConversation('inq-viewing');
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  await sandbox.VIEWS.clients.render(host, '');
+  // Переписка подгружается отдельным запросом — ждём его и рисуем ещё раз.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await sandbox.VIEWS.clients.render(host, '');
+
+  const html = String(card.innerHTML);
+  assert.match(html, /Спасибо! Заявка на просмотр отправлена\./, 'ответ бота виден в ленте');
+  assert.match(html, /бот/, 'и подписан, кто ответил');
+  assert.match(html, /class="viewing-card/, 'запись на просмотр — отдельная карточка');
+  assert.match(html, /Ждёт подтверждения/);
+  assert.match(html, /в субботу · 12:00/);
+  assert.ok(card.querySelector('#confirmViewingInline'), 'подтвердить можно прямо из переписки');
+});
+
 test('состояние заявки бот считает сам, руками остаётся только закрыть', async () => {
   twoWaitingConversations();
   const { sandbox, requests } = await panelSandbox();

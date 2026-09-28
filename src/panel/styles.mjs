@@ -189,6 +189,11 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .conversation-context{display:flex;align-items:flex-end;gap:10px;padding:10px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--surface-soft)}
 .conversation-context-title{margin-top:4px;font-weight:600}
 .conversation-context .property-link{width:auto;min-width:240px}
+/* Карточка просмотра в переписке: дата, состояние и одно действие. */
+.viewing-card{display:flex;flex-direction:column;gap:var(--sp-2);align-items:flex-start;padding:var(--sp-3);border:1px solid var(--warn);border-left-width:4px;border-radius:var(--radius);background:var(--tint)}
+.viewing-card.confirmed{border-color:var(--ok)}
+.viewing-card-head{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;width:100%}
+.viewing-card-when{font-size:var(--fs-lg);font-weight:600}
 /* Экран клиента: переписка слева, сопровождение справа. На узком экране одно
    под другим — иначе на телефоне обе колонки становятся нечитаемыми. */
 .conversation-split{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--sp-4);align-items:start}
