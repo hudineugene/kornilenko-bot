@@ -74,7 +74,7 @@ test.describe('callback request form', () => {
     const chat = createChat();
     await chat.press('contact:lead');
     let step = await chat.press('lead:whatsapp');
-    assert.equal(step.last.text, ru.askWhatsapp);
+    assert.ok(step.last.text.startsWith(ru.askWhatsapp));
     step = await chat.say('+34 600 777 888');
     assert.equal(step.last.text, ru.whatsappSuccess.replace('{phone}', '+34 600 777 888'), 'про удобное время не спрашиваем');
     const [inquiry] = chat.inquiries;

@@ -140,6 +140,22 @@ test.describe('согласие на обработку телефона', () =>
     assert.ok(asked.last.text.startsWith(bot.text.lead.ru.askPhone), 'сам вопрос не изменился');
     assert.match(asked.last.text, /\/privacy/, 'есть, где посмотреть, что хранится и как удалить');
   });
+
+  test('о согласии сказано одной строкой, а не двумя', async () => {
+    const chat = createChat();
+    await chat.say('/start');
+    const asked = await chat.press('lead:call');
+    const notice = bot.text.privacy.ru.phoneNotice;
+    assert.equal(asked.last.text, bot.text.lead.ru.askPhone + '\n\n' + notice, 'вопрос плюс одна приписка');
+    assert.equal(asked.last.text.split('/privacy').length - 1, 1, 'ссылка на политику одна');
+    assert.ok(!asked.last.text.includes('вы разрешаете'), 'второй формулировки согласия больше нет');
+
+    // У WhatsApp тот же номер телефона и то же согласие.
+    const second = createChat();
+    await second.press('contact:lead');
+    const whatsapp = await second.press('lead:whatsapp');
+    assert.equal(whatsapp.last.text, bot.text.lead.ru.askWhatsapp + '\n\n' + notice);
+  });
 });
 
 test.describe('политика как черновик', () => {

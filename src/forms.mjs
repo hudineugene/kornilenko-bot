@@ -231,9 +231,9 @@ function duplicateCallback(user, key, intervalMs = 1400) {
 
 // К вопросу о телефоне всегда добавляется, зачем он нужен и где посмотреть,
 // что бот хранит: этого требует RGPD при сборе персональных данных.
-function phonePrompt(copy, language) {
+function phonePrompt(copy, language, question = '') {
   const notice = cleanText((PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).phoneNotice, 300);
-  const prompt = String(copy.askPhone || '');
+  const prompt = String(question || copy.askPhone || '');
   return notice && !prompt.includes('/privacy') ? prompt + '\n\n' + notice : prompt;
 }
 
@@ -364,7 +364,7 @@ async function startLeadForm(user, token, context = {}) {
     createdAt: new Date().toISOString(),
   };
   scheduleSave();
-  const prompt = method === 'whatsapp' ? copy.askWhatsapp : phonePrompt(copy, language);
+  const prompt = phonePrompt(copy, language, method === 'whatsapp' ? copy.askWhatsapp : '');
   await sendMessage(user.chatId, prompt, token, { reply_markup: leadFormKeyboard(language, 'phone', user) });
 }
 

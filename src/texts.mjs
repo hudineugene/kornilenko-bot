@@ -287,7 +287,7 @@ const PROPERTY_ACTION_TEXT = {
 const LEAD_FORM_TEXT = {
   ru: {
     askName: 'Как к вам обращаться?',
-    askPhone: '1 из 2. Укажите номер телефона или нажмите «Отправить мой номер».\n\nОтправляя номер, вы разрешаете использовать его для связи по вашей заявке.',
+    askPhone: '1 из 2. Укажите номер телефона или нажмите «Отправить мой номер».',
     askTime: '2 из 2. Когда вам удобно принять звонок?',
     callbackToast: 'Перезвоним на {phone}',
     instantSuccess: 'Заявка принята. Перезвоним на {phone}.',
@@ -320,7 +320,7 @@ const LEAD_FORM_TEXT = {
   },
   en: {
     askName: 'What is your name?',
-    askPhone: '1 of 2. Enter your phone number or tap “Share my phone number”.\n\nBy sending your number, you allow us to use it to contact you about this request.',
+    askPhone: '1 of 2. Enter your phone number or tap “Share my phone number”.',
     askTime: '2 of 2. When is a convenient time for a call?',
     callbackToast: 'We will call you on {phone}',
     instantSuccess: 'Request received. We will call you on {phone}.',
@@ -353,7 +353,7 @@ const LEAD_FORM_TEXT = {
   },
   es: {
     askName: '¿Cómo te llamas?',
-    askPhone: '1 de 2. Indica tu teléfono o pulsa «Compartir mi teléfono».\n\nAl enviar tu número, permites que lo utilicemos para contactar contigo sobre esta solicitud.',
+    askPhone: '1 de 2. Indica tu teléfono o pulsa «Compartir mi teléfono».',
     askTime: '2 de 2. ¿Cuándo te viene bien recibir una llamada?',
     callbackToast: 'Te llamamos al {phone}',
     instantSuccess: 'Solicitud recibida. Te llamamos al {phone}.',
