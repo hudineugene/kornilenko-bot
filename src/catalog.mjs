@@ -343,6 +343,18 @@ function escapeTelegramHtml(value) {
   return String(value || '').replace(/[&<>]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]);
 }
 
+// Пока снижение свежее, на карточке рядом с ценой стоит прежняя, зачёркнутая.
+// Через месяц пометка снимается сама: старое снижение уже не новость.
+const PRICE_DROP_VISIBLE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function priceDropVisible(record, now = Date.now()) {
+  const previous = Number(record && record.previousPriceValue);
+  const current = Number(record && record.priceValue);
+  if (!Number.isFinite(previous) || previous <= 0 || !Number.isFinite(current) || current <= 0 || current >= previous) return false;
+  const changed = Date.parse(record && record.priceChangedAt || '');
+  return !Number.isFinite(changed) || now - changed <= PRICE_DROP_VISIBLE_MS;
+}
+
 function objectCaptionHtml(record, language, options = {}) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const headings = new Set([copy.specificationsTitle, copy.descriptionTitle]);
@@ -356,6 +368,12 @@ function objectCaptionHtml(record, language, options = {}) {
     // она узнавалась по значку состояния, но «Доступен» мы больше не пишем.
     if (contentLines === 2 && !line.startsWith('💰 ') && !line.startsWith('📍 ')) return '<i>' + escaped + '</i>';
     if (line.startsWith('🟡 ') || line.startsWith('✦ ') || line.startsWith(copy.updated + ':')) return '<i>' + escaped + '</i>';
+    // Цена снизилась — прежняя остаётся рядом зачёркнутой: клиенту видно, что
+    // объект подешевел, а не просто «стоит столько».
+    if (line.startsWith('💰 ') && priceDropVisible(record)) {
+      const previous = escapeTelegramHtml(objectPriceText({ ...record, priceValue: record.previousPriceValue }, language));
+      return '<b>💰 <s>' + previous + '</s> ' + escaped.slice('💰 '.length) + '</b>';
+    }
     if (line.startsWith('💰 ') || headings.has(line)) return '<b>' + escaped + '</b>';
     return escaped;
   }).join('\n');
@@ -1505,6 +1523,7 @@ function promotionButtons(record, language, page, totalPages) {
 }
 
 export {
+  priceDropVisible,
   showPropertyPhoto,
   CATALOG_FILTER_BEDROOMS,
   CATALOG_FILTER_MIN_RECORDS,

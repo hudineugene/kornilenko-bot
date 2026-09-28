@@ -9,7 +9,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 30;
+const DATA_VERSION = 31;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -986,6 +986,9 @@ function normalizeLoadedData(parsed) {
           currency: cleanText(record.currency, 10) || 'EUR',
           pricePeriod: ['total', 'month', 'week'].includes(record.pricePeriod) ? record.pricePeriod : 'total',
           badges: Array.isArray(record.badges) ? record.badges.map((item) => cleanText(item, 30)).filter(Boolean).slice(0, 6) : [],
+          // Прежняя цена: остаётся на карточке зачёркнутой, пока снижение свежее.
+          previousPriceValue: Number(record.previousPriceValue) > 0 ? Number(record.previousPriceValue) : 0,
+          priceChangedAt: cleanText(record.priceChangedAt, 40),
         };
       }) : [],
       promotions: Array.isArray(parsed.promotions) ? parsed.promotions.map((record) => {

@@ -1192,3 +1192,43 @@ test('фотографии листаются в карточке, а чат н�
   assert.ok(cardButtons.includes('property:gallery:flip-01'), 'на карточке снова кнопка «Фото»');
   assert.ok(cardButtons.includes('property:details:flip-01'), 'и «Подробнее»');
 });
+
+test('снижение цены видно на карточке, а не только в уведомлении', async () => {
+  // Раньше прежняя цена существовала лишь мгновение — в уведомлении тем, у
+  // кого объект в избранном. Все остальные видели просто цену и не понимали,
+  // что объект подешевел; плашку «Цена снижена» владелец ставил руками.
+  resetData((data) => {
+    data.objects.push(property('price-01', 'Квартира с историей цены', 'active', { priceValue: 270000, currency: 'EUR', area: 90 }));
+  });
+  const record = bot.getData().objects.find((item) => item.id === 'price-01');
+
+  // Цена снизилась — так это делает и панель, и загрузка с сайта.
+  const before = { status: record.status, priceValue: record.priceValue };
+  record.priceValue = 250000;
+  bot.queuePropertyAlerts(record, before);
+  assert.equal(record.previousPriceValue, 270000, 'прежняя цена сохранена');
+  assert.ok(record.priceChangedAt, 'и время изменения');
+
+  const caption = bot.objectCaptionHtml(record, 'ru');
+  assert.match(caption, /<s>270\s000 €<\/s> 250\s000 €/, 'на карточке видно, что было и стало');
+
+  // Цена вернулась обратно — зачёркивать больше нечего.
+  bot.queuePropertyAlerts(record, { status: 'active', priceValue: 250000 });
+  record.priceValue = 280000;
+  bot.queuePropertyAlerts(record, { status: 'active', priceValue: 250000 });
+  assert.equal(record.previousPriceValue, 0, 'пометка снята');
+  assert.doesNotMatch(bot.objectCaptionHtml(record, 'ru'), /<s>/);
+});
+
+test('старое снижение цены перестаёт показываться через месяц', async () => {
+  resetData((data) => {
+    data.objects.push(property('price-02', 'Давно подешевевшая', 'active', { priceValue: 200000, currency: 'EUR' }));
+  });
+  const record = bot.getData().objects.find((item) => item.id === 'price-02');
+  record.previousPriceValue = 240000;
+  record.priceChangedAt = new Date(Date.now() - 40 * 864e5).toISOString();
+  assert.doesNotMatch(bot.objectCaptionHtml(record, 'ru'), /<s>/, 'снижение сорокадневной давности — уже не новость');
+
+  record.priceChangedAt = new Date(Date.now() - 3 * 864e5).toISOString();
+  assert.match(bot.objectCaptionHtml(record, 'ru'), /<s>240\s000 €<\/s>/, 'свежее — показываем');
+});

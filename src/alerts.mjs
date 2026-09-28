@@ -304,7 +304,27 @@ async function deliverPropertyAlerts(deliveries, token = data.config.botToken) {
 
 // Called after a property is created or saved in the panel. Returns how many
 // clients will be notified; sending runs in the background.
+// Прежняя цена нужна не только для уведомления: она остаётся на карточке
+// зачёркнутой, чтобы снижение было видно всем, а не только избранному.
+// Через месяц пометка снимается сама — старое снижение уже не новость.
+function rememberPriceChange(record, before) {
+  const oldPrice = Number(before && before.priceValue);
+  const newPrice = Number(record.priceValue);
+  if (!Number.isFinite(oldPrice) || oldPrice <= 0) return;
+  if (Number.isFinite(newPrice) && newPrice > 0 && newPrice < oldPrice) {
+    record.previousPriceValue = oldPrice;
+    record.priceChangedAt = new Date().toISOString();
+    return;
+  }
+  // Цена вернулась или выросла — зачёркивать больше нечего.
+  if (!Number.isFinite(newPrice) || newPrice >= oldPrice) {
+    record.previousPriceValue = 0;
+    record.priceChangedAt = '';
+  }
+}
+
 function queuePropertyAlerts(record, before) {
+  rememberPriceChange(record, before);
   if (!configured() || !data.config.active) return 0;
   const deliveries = propertyAlertDeliveries(record, before);
   if (deliveries.length) {
@@ -328,6 +348,7 @@ async function handleAlertsCallback(query, token) {
 }
 
 export {
+  rememberPriceChange,
   ALERT_MEMORY_MS,
   PROPERTY_ALERT_SPACING_MS,
   SELECTION_ALERT_WINDOW_MS,
