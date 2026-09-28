@@ -7,6 +7,7 @@ import { sendMessage } from './telegram.mjs';
 import { adminChatFor, awaitingReply, inquiryTypeLabel } from './inquiries.mjs';
 import { activityDigest, hoursAgoText, sendInquiryToAdministrator, weekFigures } from './notices.mjs';
 import { viewingsOverview } from './viewings.mjs';
+import { BOT_COMMAND_DESCRIPTIONS } from './texts.mjs';
 
 // Shown in the command menu of the admin and manager chats only.
 const ADMIN_COMMAND_DESCRIPTIONS = {
@@ -25,6 +26,32 @@ const ADMIN_CHAT_HINT = [
   '/viewings — просмотры сегодня и завтра',
   '/stats — цифры за сегодня и неделю',
 ].join('\n');
+
+// В группе, назначенной чатом администратора или менеджера, бот отвечает только
+// на команды сотрудников. Раньше всё остальное с косой чертой проваливалось в
+// клиентский сценарий: /start участника заводил «клиента» с номером группы,
+// клиентское меню уходило в группу, а «ответ клиенту» пришёл бы туда же.
+const GROUP_COMMANDS_HINT = [
+  'ℹ️ Это рабочий чат — здесь бот понимает только команды для сотрудников:',
+  '',
+  '/inbox — обращения без ответа',
+  '/viewings — просмотры сегодня и завтра',
+  '/stats — цифры за сегодня и неделю',
+  '',
+  'Меню клиента, заявки и анкеты живут в личной переписке с ботом.',
+].join('\n');
+
+// Команды самого бота: на них в группе отвечаем подсказкой. Чужие (/poll,
+// команда другого бота) молча пропускаем — это не наш разговор.
+const OWN_COMMANDS = new Set(['/inbox', '/viewings', '/stats', '/myid',
+  ...Object.keys(BOT_COMMAND_DESCRIPTIONS.ru).map((name) => '/' + name)]);
+
+function meantForAnotherBot(text) {
+  const mention = (String(text).match(/^\/[A-Za-z0-9_]+@([A-Za-z0-9_]+)/) || [])[1];
+  if (!mention) return false;
+  const ours = String((data.bot && data.bot.username) || '').toLocaleLowerCase('en-US');
+  return Boolean(ours) && mention.toLocaleLowerCase('en-US') !== ours;
+}
 
 // The main admin sees everything; a manager sees what is free or theirs.
 function inboxFor(chat) {
@@ -87,7 +114,19 @@ async function handleAdminChatMessage(message, token) {
     await sendMessage(chat.chatId, statsText(), token, { track: false });
     return true;
   }
-  return message.chat.type !== 'private' && !command.startsWith('/');
+  // Личный чат администратора с ботом — исключение: там клиентский сценарий
+  // работает, чтобы владелец мог посмотреть бота своими глазами.
+  if (message.chat.type === 'private') return false;
+  if (command === '/myid') {
+    await sendMessage(chat.chatId, 'Chat ID этого чата: ' + String(message.chat.id), token, { track: false });
+    return true;
+  }
+  if (OWN_COMMANDS.has(command) && !meantForAnotherBot(text)) {
+    await sendMessage(chat.chatId, GROUP_COMMANDS_HINT, token, { track: false });
+  }
+  // Что бы это ни было — переписка сотрудников или команда другого бота, —
+  // клиентский сценарий в группе не запускаем.
+  return true;
 }
 
 export {

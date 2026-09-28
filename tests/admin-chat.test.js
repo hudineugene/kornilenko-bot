@@ -55,6 +55,46 @@ test('in a manager group the staff talk to each other without the bot answering'
   assert.equal(bot.getData().inquiries.length, 0);
 });
 
+test('в группе-админчате /start участника не заводит клиента с номером группы', async () => {
+  // Раньше любая команда, кроме /inbox, /viewings и /stats, проваливалась в
+  // клиентский сценарий: бот заводил «клиента» с ID группы, присылал туда
+  // клиентское меню, а ответ менеджера этому «клиенту» ушёл бы в ту же группу.
+  bot.getData().config.adminChatId = '-100777888';
+  const calls = await adminSays('/start', { chatId: '-100777888', type: 'supergroup', fromId: 4242 });
+  const answers = sentTo(calls, '-100777888');
+  assert.equal(answers.length, 1, 'бот ответил один раз');
+  assert.match(answers[0].body.text, /^ℹ️ Это рабочий чат/, 'подсказкой для сотрудников');
+  assert.ok(!answers[0].body.reply_markup, 'без клиентского меню');
+  assert.equal(bot.getData().users['-100777888'], undefined, '«клиента» с номером группы нет');
+  assert.equal(Object.keys(bot.getData().users).length, 0, 'вообще никого не завели');
+  assert.equal(bot.getData().inquiries.length, 0, 'и обращений тоже');
+});
+
+test('в группе-админчате команды сотрудников работают как раньше', async () => {
+  bot.getData().config.adminChatId = '-100777888';
+  const calls = await adminSays('/stats', { chatId: '-100777888', type: 'supergroup', fromId: 4242 });
+  const answers = sentTo(calls, '-100777888');
+  assert.equal(answers.length, 1);
+  assert.match(answers[0].body.text, /Сегодня/, 'пришли цифры, а не подсказка');
+});
+
+test('в группе-админчате /myid отвечает номером чата, не заводя клиента', async () => {
+  bot.getData().config.adminChatId = '-100777888';
+  const calls = await adminSays('/myid', { chatId: '-100777888', type: 'supergroup', fromId: 4242 });
+  const answers = sentTo(calls, '-100777888');
+  assert.equal(answers.length, 1);
+  assert.match(answers[0].body.text, /Chat ID этого чата: -100777888/);
+  assert.equal(Object.keys(bot.getData().users).length, 0, 'клиента не завели');
+});
+
+test('команда другого бота в рабочем чате остаётся без ответа', async () => {
+  bot.getData().config.adminChatId = '-100777888';
+  bot.getData().bot = { ...bot.getData().bot, username: 'kornilenko_bot' };
+  const calls = await adminSays('/start@other_agency_bot', { chatId: '-100777888', type: 'supergroup', fromId: 4242 });
+  assert.equal(calls.filter((call) => call.method.startsWith('send')).length, 0, 'бот промолчал');
+  assert.equal(Object.keys(bot.getData().users).length, 0);
+});
+
 test('the client answering the manager continues the same inquiry', async () => {
   const client = createChat();
   const first = await client.say('Есть ли рассрочка?');
