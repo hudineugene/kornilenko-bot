@@ -337,13 +337,14 @@ function propertyManagerMarkup(record, language, returnToCatalog = false) {
   const text = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
   const rows = [];
+  // Экран только про связь: запись на просмотр теперь на самой карточке, а
+  // похожие объекты — в «Подробнее». Раньше здесь было шесть кнопок, и среди
+  // них терялось главное — как связаться.
   if (record.status === 'reserved') {
     rows.push([{ text: '🔔 ' + text.availability, callback_data: 'property:availability:' + record.id }]);
   } else {
     rows.push([{ text: '📞 ' + text.interest, callback_data: 'property:interest:' + record.id }]);
-    rows.push([{ text: '📅 ' + text.viewing, callback_data: 'property:viewing:' + record.id }]);
   }
-  rows.push([{ text: '🏘 ' + text.similar, callback_data: 'property:similar:' + record.id }]);
   rows.push([{ text: '❓ ' + text.question, callback_data: 'property:question:' + record.id }]);
   const whatsapp = configuredWhatsappUrl();
   if (whatsapp) rows.push([{ text: '🟢 WhatsApp', url: whatsapp }]);
@@ -463,7 +464,7 @@ async function handlePropertyCallback(query, token) {
     if (map) rows.push([{ text: '📍 ' + text.openMap, url: map }]);
     if (share) rows.push([{ text: '📤 ' + text.share, url: share }]);
     rows.push([{ text: '🏘 ' + text.similar, callback_data: 'property:similar:' + record.id }]);
-    rows.push([{ text: '💬 ' + text.contactManager, callback_data: 'property:manager:' + record.id }]);
+    rows.push([{ text: '💬 ' + text.contact, callback_data: 'property:manager:' + record.id }]);
     rows.push([{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:return:' + record.id }]);
     await acknowledgeCallback(query, token);
     await sendUiMessage(chatId, user, objectCaptionHtml(record, language, { full: true }), token, {
@@ -604,7 +605,7 @@ async function handlePropertyCallback(query, token) {
     const interaction = INTERACTION_TEXT[language] || INTERACTION_TEXT.ru;
     const nextRows = [
       [{ text: '📋 ' + text.details, callback_data: 'property:details:' + record.id }],
-      [{ text: '💬 ' + text.contactManager, callback_data: 'property:manager:' + record.id }],
+      [{ text: '💬 ' + text.contact, callback_data: 'property:manager:' + record.id }],
     ];
     const context = user.catalogContext && typeof user.catalogContext === 'object' ? user.catalogContext : { mode: 'all', page: 0 };
     const contextRecords = catalogRecords(user, context.mode);

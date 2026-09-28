@@ -116,42 +116,57 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
   const rows = [];
   const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   if (kind === 'property') {
+    // Четыре ряда вместо шести-семи. Карточка должна помещаться на экран
+    // телефона целиком, иначе клиент листает кнопки вместо объектов.
     const isFavorite = Boolean(user && Array.isArray(user.favorites) && user.favorites.includes(record.id));
-    // Without a price the shortest path to a request is asking for it.
-    if (priceOnRequest(record, language)) rows.push([{ text: mobileButtonText('💰', action.askPrice), callback_data: 'property:price:' + record.id }]);
-    // A viewing is what an agency wants from a card; a reserved property
-    // keeps "Check availability" in Details instead.
-    if (record.status === 'active') rows.push([{ text: mobileButtonText('📅', action.viewing), callback_data: 'property:viewing:' + record.id }]);
-    rows.push([{ text: mobileButtonText('📋', action.details), callback_data: 'property:details:' + record.id }]);
+    const first = [];
+    // Без цены самый короткий путь — спросить цену; забронированный объект
+    // на просмотр не записывают, у него остаётся только «Связаться».
+    const askPrice = priceOnRequest(record, language);
+    const canVisit = record.status === 'active';
+    if (askPrice) first.push({ text: mobileButtonText('💰', action.askPrice), callback_data: 'property:price:' + record.id });
+    else if (canVisit) first.push({ text: mobileButtonText('📅', action.viewing), callback_data: 'property:viewing:' + record.id });
+    first.push({ text: mobileButtonText('💬', action.contact), callback_data: 'property:manager:' + record.id });
+    rows.push(first);
+
+    // Фотографии — прямо с карточки, а не через «Подробнее»: это был самый
+    // частый следующий шаг и стоил двух нажатий.
+    const photos = recordImages(record, language);
+    const second = [];
+    // Цену спросили в первом ряду — запись на просмотр не теряется, а стоит тут.
+    if (askPrice && canVisit) second.push({ text: mobileButtonText('📅', action.viewing), callback_data: 'property:viewing:' + record.id });
+    if (photos.length > 1) second.push({ text: '📷 ' + action.photos + ' · ' + photos.length, callback_data: 'property:gallery:' + record.id });
+    second.push({ text: mobileButtonText('📋', action.details), callback_data: 'property:details:' + record.id });
+    rows.push(second);
+
+    // Ряд значков: избранное, сравнение и переход между объектами. Подписи тут
+    // не нужны — значки понятны, а место на телефоне дорого.
     const comparison = COMPARISON_TEXT[language] || COMPARISON_TEXT.ru;
     const compared = Boolean(user && Array.isArray(user.comparisonIds) && user.comparisonIds.includes(record.id));
     const comparisonCount = user ? catalogRecords(user, 'comparison').length : 0;
-    const comparisonLabel = compared
-      ? shortenedText(comparison.cardSelectedShort, 10) + ' · ' + comparisonCount
-      : comparison.cardAddShort;
-    rows.push([
-      { text: mobileButtonText(isFavorite ? '💔' : '❤️', isFavorite ? action.cardFavoriteRemove : action.cardFavorite, 14), callback_data: 'property:favorite:' + record.id },
-      { text: mobileButtonText('⚖️', comparisonLabel, 14), callback_data: compared ? 'compare:view' : 'property:compare:' + record.id },
-    ]);
-    rows.push([{ text: mobileButtonText('💬', action.contactManager), callback_data: 'property:manager:' + record.id }]);
+    const icons = [
+      { text: isFavorite ? '💔' : '❤️', callback_data: 'property:favorite:' + record.id },
+      { text: compared ? '⚖️ · ' + comparisonCount : '⚖️', callback_data: compared ? 'compare:view' : 'property:compare:' + record.id },
+    ];
+    if (catalog && catalog.totalPages > 1) {
+      const previousPage = (catalog.page - 1 + catalog.totalPages) % catalog.totalPages;
+      const nextPage = (catalog.page + 1) % catalog.totalPages;
+      icons.push({ text: '⬅️', callback_data: 'catalog:' + catalog.mode + ':' + previousPage });
+      icons.push({ text: String(catalog.page + 1) + ' / ' + String(catalog.totalPages), callback_data: 'catalog:none:0' });
+      icons.push({ text: '➡️', callback_data: 'catalog:' + catalog.mode + ':' + nextPage });
+    }
+    rows.push(icons);
   }
   const url = validHttpUrl(record.url);
   if (kind !== 'property' && url) {
     rows.push([{ text: '🌐 ' + action.viewWebsite, url }]);
   }
-  if (kind === 'property' && catalog && catalog.totalPages > 1) {
-    const previousPage = (catalog.page - 1 + catalog.totalPages) % catalog.totalPages;
-    const nextPage = (catalog.page + 1) % catalog.totalPages;
-    const navigation = [{ text: '⬅️', callback_data: 'catalog:' + catalog.mode + ':' + previousPage }];
-    navigation.push({ text: String(catalog.page + 1) + ' / ' + String(catalog.totalPages), callback_data: 'catalog:none:0' });
-    navigation.push({ text: '➡️', callback_data: 'catalog:' + catalog.mode + ':' + nextPage });
-    rows.push(navigation);
-  }
   if (kind === 'property' && catalog && catalog.mode === 'all' && catalog.filter && catalog.filter.available) {
     const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
     const filterCount = catalog.filter.summary ? catalogFilterCriteriaCount(user && user.catalogFilter) : 0;
-    rows.push([{ text: shortenedText(copy.button, 24) + (filterCount ? ' · ' + filterCount : ''), callback_data: 'cfilter:open' }]);
-    if (catalog.filter.summary) rows.push([{ text: mobileButtonText('💬', copy.sendToManager), callback_data: 'cfilter:manager' }]);
+    const filterRow = [{ text: shortenedText(copy.button, 24) + (filterCount ? ' · ' + filterCount : ''), callback_data: 'cfilter:open' }];
+    if (catalog.filter.summary) filterRow.push({ text: mobileButtonText('💬', copy.sendToManager), callback_data: 'cfilter:manager' });
+    rows.push(filterRow);
   }
   if (kind === 'property' && catalog && catalog.mode === 'recent') {
     rows.push([{ text: (MENU_LABELS[language] || MENU_LABELS.ru).more, callback_data: 'nav:my' }]);

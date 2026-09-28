@@ -595,8 +595,13 @@ test.describe('property card', () => {
 
     const details = await chat.press('property:details:' + source.id);
     assert.ok(callbacksOf(details.last.markup).includes('property:similar:' + source.id), 'available in Details');
+    // Экран «Связаться» теперь только про связь: похожие объекты живут в
+    // «Подробнее», где их и ищут.
     const manager = await chat.press('property:manager:' + source.id);
-    assert.ok(callbacksOf(manager.last.markup).includes('property:similar:' + source.id), 'available in the manager menu too');
+    const contactButtons = callbacksOf(manager.last.markup);
+    assert.ok(!contactButtons.includes('property:similar:' + source.id), 'на экране связи лишнего нет');
+    assert.ok(contactButtons.some((data) => data.startsWith('property:interest:') || data.startsWith('property:availability:')), 'зато есть заявка на звонок');
+    assert.ok(contactButtons.includes('property:question:' + source.id), 'и вопрос менеджеру');
 
     const first = await chat.press('property:similar:' + source.id);
     const firstCard = first.calls.find((call) => call.method === 'sendPhoto');
@@ -614,7 +619,10 @@ test.describe('property card', () => {
   });
 
   test('the card is short and leads to a viewing', async () => {
-    furnish(bot.getData().objects[0]);
+    const record = bot.getData().objects[0];
+    furnish(record);
+    // Вторая фотография: кнопка «Фото · N» показывается, когда листать есть что.
+    record.imagesByLanguage.ru = [...record.imagesByLanguage.ru, { ...record.imagesByLanguage.ru[0], id: 'second-photo' }];
     const chat = createChat();
     const step = await chat.say(MENU.ru.objects);
     const card = step.calls.find((call) => call.method === 'sendPhoto');
@@ -628,11 +636,17 @@ test.describe('property card', () => {
     assert.ok(!caption.includes('VILLA-MARBELLA-01'), 'the reference is in Details');
     assert.ok(caption.endsWith('Светлая вилла с видом на море и большим садом.'), 'only the first paragraph');
 
+    // Четыре ряда вместо шести-семи: главное — записаться и связаться, следом
+    // фото и подробности, значки одной строкой.
     const rows = card.body.reply_markup.inline_keyboard;
-    assert.deepEqual(rows[0].map((button) => button.callback_data), ['property:viewing:villa-marbella-01']);
-    assert.deepEqual(rows[1].map((button) => button.callback_data), ['property:details:villa-marbella-01']);
-    assert.deepEqual(rows[2].map((button) => button.callback_data), ['property:favorite:villa-marbella-01', 'property:compare:villa-marbella-01']);
-    assert.deepEqual(rows[3].map((button) => button.callback_data), ['property:manager:villa-marbella-01']);
+    assert.ok(rows.length <= 4, 'карточка помещается в четыре ряда, а не в шесть: ' + rows.length);
+    assert.deepEqual(rows[0].map((button) => button.callback_data), ['property:viewing:villa-marbella-01', 'property:manager:villa-marbella-01']);
+    assert.deepEqual(rows[1].map((button) => button.callback_data), ['property:gallery:villa-marbella-01', 'property:details:villa-marbella-01']);
+    // Значки и переход между объектами — одним рядом, без отдельной строки.
+    const icons = rows[2].map((button) => button.callback_data);
+    assert.deepEqual(icons.slice(0, 2), ['property:favorite:villa-marbella-01', 'property:compare:villa-marbella-01']);
+    assert.ok(icons.some((data) => data.startsWith('catalog:')), 'переход между объектами в том же ряду');
+    assert.match(rows[1][0].text, /📷 Фото · \d+/, 'фотографии видно прямо с карточки');
 
     const details = await chat.press('property:details:villa-marbella-01');
     const full = details.replies.map((reply) => reply.text).join('\n');
@@ -662,12 +676,18 @@ test.describe('property card', () => {
       const manager = rowFor('property:manager:villa-marbella-01');
       const filter = rowFor('cfilter:open');
 
-      assert.equal(details.length, 1, language + ': details gets the full phone width');
-      assert.deepEqual(secondary.map((button) => button.callback_data), [
+      // Второй ряд: «Подробнее» и, если есть что листать или цена по запросу,
+      // фотографии и запись на просмотр рядом.
+      assert.ok(details.length <= 3, language + ': во втором ряду не больше трёх кнопок');
+      assert.equal(details[details.length - 1].callback_data, 'property:details:villa-marbella-01', language + ': «Подробнее» замыкает ряд');
+      assert.deepEqual(secondary.map((button) => button.callback_data).slice(0, 2), [
         'property:favorite:villa-marbella-01',
         'property:compare:villa-marbella-01',
       ]);
-      assert.equal(manager.length, 1, language + ': manager gets the full phone width');
+      // В первом ряду — главное действие и «Связаться»: запись на просмотр или,
+      // если цена по запросу, вопрос о цене.
+      assert.match(manager[0].callback_data, /^property:(viewing|price):villa-marbella-01$/, language + ': связаться стоит рядом с главным действием');
+      assert.equal(manager.length, 2, language + ': в первом ряду две кнопки');
       assert.ok(secondary.every((button) => Array.from(button.text.replaceAll('\uFE0F', '')).length <= 18), language + ': paired labels remain compact');
       assert.equal(filter[0].text, bot.text.catalogFilter[language].button + ' · 1', language + ': an active filter is compact');
 
@@ -676,19 +696,19 @@ test.describe('property card', () => {
       const updatedSecondary = updatedMarkup.inline_keyboard
         .find((row) => row.some((button) => button.callback_data === 'property:favorite:villa-marbella-01'));
       assert.equal(updatedSecondary.length, 2, language + ': saving a property does not break the row');
-      assert.equal(updatedSecondary[0].text, '💔 ' + PROPERTY[language].cardFavoriteRemove);
+      assert.equal(updatedSecondary[0].text, '💔', language + ': в ряду значков только значок');
     }
 
-    const originalManagerLabel = PROPERTY.es.contactManager;
+    const originalManagerLabel = PROPERTY.es.contact;
     try {
-      PROPERTY.es.contactManager = 'Contactar ahora mismo con nuestro gestor especializado';
+      PROPERTY.es.contact = 'Contactar ahora mismo con nuestro gestor especializado';
       const user = createChat({ language: 'es' }).user;
       const markup = bot.contentButtons(bot.getData().objects[0], 'es', user, 'property');
       const manager = markup.inline_keyboard.flat().find((button) => button.callback_data === 'property:manager:villa-marbella-01');
       assert.ok(manager.text.endsWith('…'), 'a long administrator label is shortened deliberately');
       assert.ok(Array.from(manager.text.replaceAll('\uFE0F', '')).length <= 31);
     } finally {
-      PROPERTY.es.contactManager = originalManagerLabel;
+      PROPERTY.es.contact = originalManagerLabel;
     }
   });
 

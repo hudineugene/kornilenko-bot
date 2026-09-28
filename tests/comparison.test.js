@@ -48,13 +48,13 @@ test('properties are added from the card and compared by consistent criteria', a
   const catalog = await chat.say(MENU.ru.objects);
   const firstCard = catalog.calls.find((call) => call.method === 'sendPhoto');
   assert.ok(callbacksOf(firstCard.body.reply_markup).includes('property:compare:compare-villa-a'));
-  assert.ok(firstCard.body.reply_markup.inline_keyboard.flat().some((button) => button.text === '⚖️ ' + COMPARE.ru.cardAddShort));
+  assert.ok(firstCard.body.reply_markup.inline_keyboard.flat().some((button) => button.text === '⚖️'), 'на карточке значок сравнения');
 
   let step = await chat.press('property:compare:compare-villa-a');
   assert.deepEqual(chat.user.comparisonIds, ['compare-villa-a']);
   assert.deepEqual(step.popups, ['Добавлено к сравнению: 1 из 3']);
   const changedCard = step.calls.find((call) => call.method === 'editMessageReplyMarkup');
-  assert.ok(changedCard.body.reply_markup.inline_keyboard.flat().some((button) => button.text === '⚖️ ' + COMPARE.ru.cardSelectedShort + ' · 1'));
+  assert.ok(changedCard.body.reply_markup.inline_keyboard.flat().some((button) => button.text === '⚖️ · 1'), 'выбранный объект показан счётчиком');
   assert.ok(callbacksOf(changedCard.body.reply_markup).includes('compare:view'), 'the selected button opens comparison without a second toggle');
 
   step = await chat.press('property:compare:compare-villa-a');
