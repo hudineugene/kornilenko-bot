@@ -96,6 +96,9 @@ function openCampaignEditor(id) {
         '<div class="grid cols-2"><div class="field"><label for="campProperty">Интерес к объекту</label><select id="campProperty"><option value="">Не учитывать объект</option>' + (state.objects || []).map(function (record) { var title = localized(record.title, "ru") || record.reference || record.id; return '<option value="' + esc(record.id) + '"' + (selectedProperty === record.id ? " selected" : "") + '>' + esc(title) + "</option>"; }).join("") + '</select></div><div class="field"><label for="campPropertySignal">Как проявил интерес</label><select id="campPropertySignal"' + (selectedProperty ? "" : " disabled") + '>' + [["any", "Любое действие"], ["favorite", "Добавил в избранное"], ["comparison", "Сравнивает"], ["viewed", "Просматривал"], ["match", "Подходит по запросу"], ["inquiry", "Обращался по объекту"]].map(function (signal) { return '<option value="' + signal[0] + '"' + (selectedSignal === signal[0] ? " selected" : "") + '>' + signal[1] + "</option>"; }).join("") + "</select></div></div>" +
         (tags.length ? '<div class="field"><label for="campTags">Только клиенты с тегами</label><input id="campTags" value="' + esc((entry && entry.tags || []).join(", ")) + '" placeholder="' + esc(tags.join(", ")) + '"><div class="hint">Оставьте пустым, чтобы не ограничивать аудиторию тегами.</div></div>' : "") +
         '<div class="hint">Условия из разных полей применяются одновременно. Например: Spanish + «Подбор» + интерес к выбранной вилле.</div>' +
+        // Карточкой — то есть с фотографией объекта и кнопками «Записаться» и
+        // «Подробнее». Без выбранного объекта отправлять нечего.
+        '<label class="check"><input type="checkbox" id="campAsCard"' + (entry && entry.sendAsCard ? " checked" : "") + (selectedProperty ? "" : " disabled") + '> отправить карточкой этого объекта: фото, цена и кнопки «Записаться» и «Подробнее»</label>' +
         '<div class="recipient-summary"><span>👥</span><div><b id="campEstimate">Считаем получателей…</b><small id="campEstimateDetails">Проверяем выбранный сегмент</small></div></div>' +
       "</div></details>" +
       '<details class="editor-section" open><summary><b>Время отправки</b><span>сейчас или по расписанию</span></summary><div class="editor-section-body">' +
@@ -154,6 +157,7 @@ function openCampaignEditor(id) {
           sources: dialog.querySelector("#campSource").value ? [dialog.querySelector("#campSource").value] : [],
           propertyId: dialog.querySelector("#campProperty").value,
           propertySignal: dialog.querySelector("#campProperty").value ? dialog.querySelector("#campPropertySignal").value : "any",
+          sendAsCard: Boolean(dialog.querySelector("#campProperty").value) && dialog.querySelector("#campAsCard").checked,
         };
         var when = dialog.querySelector("#campDate").value;
         if (when && mode !== "draft") { body.mode = "schedule"; body.scheduledAt = zonedDateTimeToIso(when); }
@@ -181,6 +185,10 @@ function openCampaignEditor(id) {
         var enabled = Boolean(dialog.querySelector("#campProperty").value);
         dialog.querySelector("#campPropertySignal").disabled = !enabled;
         if (!enabled) dialog.querySelector("#campPropertySignal").value = "any";
+        // Карточку можно отправить только когда объект выбран.
+        var asCard = dialog.querySelector("#campAsCard");
+        asCard.disabled = !enabled;
+        if (!enabled) asCard.checked = false;
         estimate();
       };
       var tagsInput = dialog.querySelector("#campTags");

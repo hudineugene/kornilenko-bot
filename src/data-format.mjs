@@ -9,7 +9,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 33;
+const DATA_VERSION = 34;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -895,6 +895,9 @@ function normalizeLoadedData(parsed) {
       entry.pipelineStages = Array.isArray(entry.pipelineStages) ? entry.pipelineStages.filter((stage) => PIPELINE_STAGES.includes(stage)).slice(0, PIPELINE_STAGES.length) : [];
       entry.sources = Array.isArray(entry.sources) ? entry.sources.map((source) => cleanText(source, 80)).filter(Boolean).slice(0, 20) : [];
       entry.propertyId = cleanText(entry.propertyId, 100);
+      // Рассылка карточкой: фотография объекта и кнопки, как под карточкой в
+      // каталоге. Без объекта отправлять нечего, поэтому и флага нет.
+      entry.sendAsCard = Boolean(entry.propertyId) && entry.sendAsCard === true;
       entry.propertySignal = ['any', 'favorite', 'comparison', 'viewed', 'match', 'inquiry'].includes(entry.propertySignal) ? entry.propertySignal : 'any';
       for (const field of ['processedUserIds', 'respondedUserIds', 'inquiryUserIds', 'unsubscribedUserIds', 'photoOnlyUserIds']) {
         entry[field] = Array.isArray(entry[field]) ? entry[field].map(String).slice(0, 100000) : [];

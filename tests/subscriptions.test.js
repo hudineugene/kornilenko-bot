@@ -153,6 +153,37 @@ test('the setting survives a restart', () => {
 
 // --- Рассылка и обрывы связи -------------------------------------------------
 
+test('рассылка уходит карточкой объекта: фото и кнопки, а не текст со ссылкой', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('villa-card', 'Вилла с видом', 'active'));
+    data.users['830001'] = {
+      id: '830001', chatId: 830001, firstName: 'Ольга', preferredLanguage: 'ru',
+      activity: [], favorites: ['villa-card'], newsConsentAt: new Date().toISOString(),
+    };
+    data.broadcasts.push({
+      id: 'bc-card', status: 'queued', messages: { ru: 'Появился объект для вас', en: '', es: '' },
+      languages: [], tags: [], pipelineStages: [], sources: [],
+      propertyId: 'villa-card', propertySignal: 'favorite', sendAsCard: true,
+      buttonText: { ru: '', en: '', es: '' }, buttonUrl: '', image: null,
+      processedUserIds: [], respondedUserIds: [], inquiryUserIds: [], unsubscribedUserIds: [], photoOnlyUserIds: [],
+      failures: [], sent: 0, failed: 0, total: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+  });
+
+  telegram.calls = [];
+  await bot.runBroadcast(bot.getData().broadcasts.find((item) => item.id === 'bc-card'));
+  const card = telegram.calls.find((call) => call.method === 'sendPhoto');
+  assert.ok(card, 'ушла карточка с фотографией, а не текст');
+  assert.equal(String(card.body.chat_id), '830001');
+  assert.match(card.body.caption, /^Появился объект для вас/, 'текст рассылки идёт первой строкой');
+  assert.match(card.body.caption, /Вилла с видом/, 'и подпись карточки объекта');
+  const callbacks = card.body.reply_markup.inline_keyboard.flat().map((button) => button.callback_data);
+  assert.ok(callbacks.includes('property:viewing:villa-card'), 'кнопка «Записаться»');
+  assert.ok(callbacks.includes('property:card:villa-card'), 'кнопка «Подробнее»');
+  assert.ok(callbacks.includes('subs:news:off:bc'), 'и отписка на месте');
+});
+
 test.describe('рассылка при сбое связи', () => {
   // Подменяем Telegram: первые получатели проходят, затем связь «падает».
   function failAfter(count, error) {

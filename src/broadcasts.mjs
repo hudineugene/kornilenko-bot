@@ -3,12 +3,12 @@
 import { cleanText, delay, fillTemplate } from './util.mjs';
 import { PIPELINE_STAGES, normalizePipelineStage } from './data-format.mjs';
 import { imageExists } from './media.mjs';
-import { SUBSCRIPTION_TEXT } from './texts.mjs';
+import { PROPERTY_ACTION_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { markUnavailable } from './users.mjs';
 import { sendMessage, sendPhotoMessage } from './telegram.mjs';
-import { localized, validHttpUrl } from './catalog.mjs';
+import { localized, objectCaption, propertyReadyForLanguage, recordImages, validHttpUrl } from './catalog.mjs';
 
 function broadcastUsers(entry) {
   const languages = Array.isArray(entry.languages) ? entry.languages.filter((language) => ['ru', 'en', 'es'].includes(language)) : [];
@@ -82,8 +82,33 @@ function forgetPhotoSent(entry, user) {
   if (index >= 0) waiting.splice(index, 1);
 }
 
+// Карточка объекта в рассылке: та же фотография и те же кнопки, что в
+// каталоге, — клиент может посмотреть подробности и записаться, не уходя из
+// сообщения. Текст рассылки идёт первой строкой подписи.
+async function deliverPropertyCard(user, entry, record, token) {
+  const language = user.preferredLanguage || 'ru';
+  const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  const intro = fillTemplate(localized(entry.messages, language), user);
+  const caption = [intro, objectCaption(record, language)].filter(Boolean).join('\n\n').slice(0, 1024);
+  const unsubscribe = { text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).unsubscribe, callback_data: 'subs:news:off:bc' };
+  const rows = [];
+  if (record.status === 'active') rows.push([{ text: '📅 ' + copy.viewing, callback_data: 'property:viewing:' + record.id }]);
+  rows.push([{ text: 'ℹ️ ' + copy.details, callback_data: 'property:card:' + record.id }]);
+  rows.push([unsubscribe]);
+  const images = recordImages(record, language);
+  const markup = { inline_keyboard: rows };
+  if (images.length) return sendPhotoMessage(user.chatId, images[0], caption, token, markup);
+  return sendMessage(user.chatId, caption, token, { reply_markup: markup });
+}
+
 async function deliverBroadcast(user, entry, token = data.config.botToken) {
   const language = user.preferredLanguage || 'ru';
+  // Карточкой шлём только тем, у кого объект готов на их языке: иначе клиент
+  // получит пустую карточку.
+  if (entry.sendAsCard && entry.propertyId) {
+    const record = data.objects.find((item) => item.id === entry.propertyId);
+    if (record && propertyReadyForLanguage(record, language)) return deliverPropertyCard(user, entry, record, token);
+  }
   const text = fillTemplate(localized(entry.messages, language), user);
   const url = validHttpUrl(entry.buttonUrl);
   const buttonText = localized(entry.buttonText, language);

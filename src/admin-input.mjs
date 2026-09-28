@@ -283,6 +283,8 @@ function parseBroadcast(body, existing = {}, options = {}) {
     sources,
     propertyId,
     propertySignal: propertyId ? propertySignal : 'any',
+    // Карточкой объекта: фотография и кнопки вместо голого текста.
+    sendAsCard: Boolean(propertyId) && body.sendAsCard === true,
     buttonText,
     buttonUrl,
     image: parseOptionalImage(body, existing.image),
