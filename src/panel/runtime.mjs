@@ -131,8 +131,16 @@ function sessionExpired() {
   if (sessionEnded || !appStarted) return;
   sessionEnded = true;
   clearInterval(refreshTimer);
+  // Открытое окно — модальное, оно закрывает собой экран входа. Закрываем его
+  // сами: иначе войти можно только закрыв окно вручную, а оно ещё и переспросит
+  // про несохранённые изменения, которые сохранить всё равно уже некуда.
+  var openWindows = Array.prototype.slice.call(document.querySelectorAll("dialog[open]"));
+  openWindows.forEach(function (dialog) {
+    if (dialog.closeClean) dialog.closeClean();
+    else dialog.close();
+  });
   var message = "Вход в панель перестал действовать. Введите пароль ещё раз.";
-  if (isDirty()) message += " Несохранённые изменения придётся внести заново.";
+  if (isDirty() || openWindows.length) message += " Несохранённые изменения придётся внести заново.";
   clearDirty();
   hideRefreshHint();
   el("app").classList.add("hidden");

@@ -109,7 +109,7 @@ function fakeDocument() {
       if (!bySelector.has(key)) bySelector.set(key, fakeElement());
       return bySelector.get(key);
     },
-    querySelectorAll: () => [],
+    querySelectorAll: (selector) => (String(selector) === 'dialog[open]' ? Array.from(openDialogs) : []),
     createElement: (tag) => (String(tag).toLowerCase() === 'dialog' ? makeDialog() : fakeElement(tag)),
     createDocumentFragment: () => fakeElement('fragment'),
     createTextNode: () => fakeElement('text'),
@@ -678,4 +678,27 @@ test('после отправки ответа страница не прыга�
   const jumpedUp = sandbox.__scrolls.slice(before).filter((call) => call[0] && call[0].top === 0);
   assert.deepEqual(jumpedUp, [], 'наверх страницу не выдёргивало');
   assert.equal(sandbox.selectedInquiry, 'inq-olga', 'остались в той же беседе');
+});
+
+test('истёкший вход закрывает открытое окно, иначе войти нельзя', async () => {
+  // Карточка объекта или рассылка — модальное окно: оно остаётся поверх экрана
+  // входа, и пароль ввести некуда, пока его не закроешь руками.
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const document = sandbox.document;
+
+  const dialog = sandbox.openDialog({ title: 'Карточка объекта', body: '<input id="cardTitle">', protectChanges: true });
+  assert.equal(dialog.open, true, 'окно открыто');
+  assert.ok(document.querySelector('dialog[open]'), 'панель видит открытое окно');
+
+  const working = sandbox.fetch;
+  sandbox.fetch = async (url, options) => (String(url).includes('/api/state')
+    ? { ok: false, status: 401, json: async () => ({ error: 'Требуется вход' }), text: async () => '', headers: { get: () => '' } }
+    : working(url, options));
+  await assert.rejects(() => sandbox.api('/api/state'), (error) => error.status === 401);
+
+  assert.equal(dialog.open, false, 'окно закрыто — экран входа доступен');
+  assert.equal(document.querySelector('dialog[open]'), null, 'открытых окон не осталось');
+  assert.equal(document.getElementById('loginScreen').classList.contains('hidden'), false, 'показан экран входа');
+  assert.match(document.getElementById('loginError').textContent, /Несохранённые изменения придётся внести заново/, 'сказано про потерянное набранное');
 });
