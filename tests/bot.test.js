@@ -19,6 +19,9 @@ process.env.BOT_MEDIA_DIRECTORY = mediaDirectory;
 process.env.NO_AUTO_OPEN = '1';
 
 const bot = require('../bot.js');
+// Текущая версия формата: берём из кода, иначе каждое её повышение ломало бы
+// половину проверок ниже.
+const DATA_VERSION = bot.DATA_VERSION;
 
 const PNG_BYTES = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('test image payload')]);
 
@@ -47,15 +50,15 @@ test('data from an older version is copied to backups/ before the upgrade, once'
     const old = JSON.stringify({ version: 16, config: { reminderHours: 4 }, users: {} });
     fs.writeFileSync(dataFile, old);
     const loaded = bot.loadData();
-    assert.equal(loaded.version, 28);
+    assert.equal(loaded.version, DATA_VERSION);
     const copies = upgradeCopies();
     assert.equal(copies.length, 1);
-    assert.match(copies[0], /^pre-upgrade-v16-to-v28-\d{8}-\d{6}\.json$/);
+    assert.match(copies[0], new RegExp('^pre-upgrade-v16-to-v' + DATA_VERSION + '-\\d{8}-\\d{6}\\.json$'));
     assert.equal(fs.readFileSync(path.join(backups, copies[0]), 'utf8'), old, 'the file exactly as it was');
 
     bot.loadData();
     assert.equal(upgradeCopies().length, 1, 'not copied again on the next start');
-    fs.writeFileSync(dataFile, JSON.stringify({ ...JSON.parse(old), version: 28 }));
+    fs.writeFileSync(dataFile, JSON.stringify({ ...JSON.parse(old), version: DATA_VERSION }));
     bot.loadData();
     assert.equal(upgradeCopies().length, 1, 'current data needs no copy');
   } finally {
@@ -122,7 +125,7 @@ test('version 19 introduces comparison without overwriting administrator texts',
       en: { intro: 'My custom personal area' },
     } },
   });
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.match(saved.interfaceText.myArea.ru.intro, /сравниваемые объекты/);
   assert.match(saved.config.messages.ru.help, /избранное, сравнение/);
   assert.equal(saved.interfaceText.myArea.en.intro, 'My custom personal area');
@@ -137,7 +140,7 @@ test('version 20 introduces saved search without overwriting administrator texts
     config: { messages: { ru: { help: previousHelp }, en: { help: 'My own help' } } },
     interfaceText: { myArea: { ru: { intro: previousIntro }, en: { intro: 'My own personal area' } } },
   });
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.match(saved.interfaceText.myArea.ru.intro, /сохранённый поиск/);
   assert.match(saved.config.messages.ru.help, /сохранённый поиск/);
   assert.equal(saved.interfaceText.myArea.en.intro, 'My own personal area');
@@ -156,7 +159,7 @@ test('version 21 keeps only valid explanations for ranked selection results', ()
       ],
     } },
   });
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.deepEqual(saved.users.client.selectionMatchIds, ['villa-1', 'villa-2']);
   assert.deepEqual(saved.users.client.selectionMatchDetails, [
     { id: 'villa-1', tier: 'exact', score: 100, reasons: ['deal', 'budget'], warnings: [] },
@@ -175,7 +178,7 @@ test('version 22 keeps the selection result snapshot inside its inquiry', () => 
       replies: [], createdAt: '2026-09-24T06:00:00.000Z', updatedAt: '2026-09-24T06:00:00.000Z',
     }],
   });
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.deepEqual(saved.inquiries[0].matching, {
     generatedAt: '2026-09-24T06:00:00.000Z',
     results: [{ id: 'villa-1', tier: 'close', score: 80, reasons: ['deal', 'type'], warnings: ['priceMissing'] }],
@@ -196,7 +199,7 @@ test('version 23 keeps a safe snapshot of the similar-property mini-catalog', ()
       catalogContext: { mode: 'similar', page: 1, propertyId: 'house-3' },
     } },
   });
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.deepEqual(saved.users.client.similarPropertyIds, ['villa-2', 'house-3']);
   assert.deepEqual(saved.users.client.similarPropertyDetails, [
     { id: 'villa-2', score: 100, reasons: ['type', 'city'], warnings: ['priceMissing'] },
@@ -217,7 +220,7 @@ test('version 24 keeps a custom price from a natural-language saved search', () 
       },
     } },
   });
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.equal(saved.users.client.savedSearch.filter.minPrice, 300000);
   assert.equal(saved.users.client.savedSearch.filter.maxPrice, 525000);
 });
@@ -231,7 +234,7 @@ test('version 26 builds a readable conversation history without making old messa
       createdAt: '2026-09-20T10:00:00.000Z', updatedAt: '2026-09-20T11:00:00.000Z', clientMessageAt: '2026-09-20T10:00:00.000Z',
     }],
   });
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.deepEqual(saved.inquiries[0].messages.map((message) => [message.direction, message.text, message.telegramMessageId]), [
     ['in', 'Старая переписка', null],
     ['out', 'Ответ менеджера', 77],
@@ -250,7 +253,7 @@ test('version 27 keeps safe notification-center state', () => {
       },
     },
   });
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.equal(saved.adminNotificationStates['message:client:1'].snapshot.route.inquiryId, 'one');
   assert.equal(saved.adminNotificationStates['message:client:1'].handledAt, '2026-09-24T11:00:00.000Z');
 });
@@ -267,7 +270,7 @@ test('version 28 keeps messenger delivery, quote and retry metadata', () => {
     }],
   });
   const message = saved.inquiries[0].messages[0];
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.equal(message.kind, 'document');
   assert.equal(message.replyToTelegramMessageId, 77);
   assert.equal(message.replyToText, 'Нужны документы');
@@ -300,7 +303,7 @@ test('version 25 keeps the district in a saved search', () => {
       },
     } },
   });
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   assert.equal(saved.users.client.savedSearch.filter.district, 'Сьерра-Бланка');
 });
 
@@ -329,7 +332,7 @@ test('admin edits of Russian texts survive a restart', () => {
   assert.equal(saved.config.messages.ru.greeting, 'Моё приветствие');
   assert.equal(saved.config.messages.ru.help, 'Моя справка');
   assert.equal(saved.config.messages.ru.fallback, 'Мой ответ');
-  assert.equal(saved.version, 28);
+  assert.equal(saved.version, DATA_VERSION);
   for (const key of ['greeting', 'help', 'fallback']) assert.equal(key in saved.config, false);
 
   const reloaded = bot.normalizeLoadedData(JSON.parse(JSON.stringify(saved)));

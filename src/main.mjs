@@ -5,7 +5,7 @@
 
 import './config.mjs';
 import { hashPassword } from './util.mjs';
-import { PREVIOUS_HELP_DEFAULTS, normalizeLoadedData } from './data-format.mjs';
+import { DATA_VERSION, PREVIOUS_HELP_DEFAULTS, normalizeLoadedData } from './data-format.mjs';
 import { contentAddressImages, persistImage, referencedImageFiles } from './media.mjs';
 import { BOT_COMMAND_DESCRIPTIONS, CATALOG_FILTER_TEXT, COMMAND_TEXT, COMPARISON_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, MENU_LABELS, MY_AREA_TEXT, PRIVACY_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_ALERT_TEXT, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { getData, loadData, looksEmpty, onSaveFailure, pruneOldSnapshots, replaceData, restoreMissingMedia, runDailyBackup, runtime, saveDataNow } from './store.mjs';
@@ -80,6 +80,7 @@ const text = {
 };
 
 export {
+  DATA_VERSION,
   abruptStopNotice,
   announceError,
   announceStart,

@@ -5,7 +5,11 @@ import { cleanText, clone } from './util.mjs';
 import { INTERFACE_TEXT_DEFAULTS } from './texts.mjs';
 import { normalizedSimilarPropertyDetails } from './similar.mjs';
 
-const DATA_VERSION = 28;
+// Версия формата данных. Поднимается при каждом изменении набора полей: по ней
+// бот отказывается запускаться на файле, созданном более новой версией, и делает
+// копию перед обновлением формата. Отпечаток формата сверяет тест
+// data-version.test.js — он не даст изменить набор полей и забыть про версию.
+const DATA_VERSION = 29;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
