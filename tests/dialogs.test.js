@@ -177,7 +177,7 @@ test.describe('callback request form', () => {
     await chat.press('lead:call');
     const step = await chat.say(ru.cancel);
     assert.equal(step.last.text, ru.cancelled);
-    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.favorites }, { text: MENU.ru.promotions }], [{ text: MENU.ru.request }, { text: MENU.ru.contacts }], [{ text: MENU.ru.more }]] }));
+    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.contacts }], [{ text: MENU.ru.more }]] }));
     assert.equal(chat.user.pendingAction, null);
     assert.equal(chat.inquiries.length, 0);
   });
@@ -830,12 +830,35 @@ test.describe('property card', () => {
     assert.ok(!callbacks.some((value) => value.startsWith('property:viewing:')));
   });
 
-  test('the main menu has four short rows and still understands the old buttons', async () => {
+  test('the main menu is five buttons at most and still understands the old ones', async () => {
     const chat = createChat();
     const step = await chat.say('/menu');
-    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 2, 2, 1]);
-    assert.ok(step.last.buttons.includes(MENU.ru.request), '«Call me back» is on the main keyboard');
+    // Без акций — четыре кнопки: объекты, подбор, связаться, «Моё».
+    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 1, 1]);
+    assert.deepEqual(step.last.buttons, [MENU.ru.objects, MENU.ru.selection, MENU.ru.contacts, MENU.ru.more]);
+    assert.ok(!step.last.buttons.includes(MENU.ru.promotions), 'пустой раздел акций в меню не висит');
+    assert.ok(!step.last.buttons.includes(MENU.ru.favorites), 'избранное живёт в «Моё»');
+
+    // Прежние кнопки бот понимает: у старых клиентов они ещё на экране.
     const old = await chat.say('📞 Заказать звонок');
     assert.equal(old.last.text, LEAD.ru.chooseMethod);
+    const manager = await chat.say('💬 Менеджер');
+    assert.match(manager.last.text, /./, 'старая кнопка «Менеджер» открывает связь');
+  });
+
+  test('«Акции» появляются в меню с числом, когда акции есть', async () => {
+    resetData((data) => {
+      data.promotions.push({
+        id: 'promo-1', title: { ru: 'Скидка', en: 'Sale', es: 'Oferta' },
+        text: { ru: 'Условия', en: 'Terms', es: 'Condiciones' },
+        enabled: true, startAt: '', endAt: '', images: [], imagesByLanguage: { ru: [], en: [], es: [] },
+      });
+    });
+    const chat = createChat();
+    const step = await chat.say('/menu');
+    assert.ok(step.last.buttons.includes(MENU.ru.promotions + ' · 1'), 'на кнопке видно, сколько акций');
+    // И кнопка с числом открывает раздел.
+    const opened = await chat.say(MENU.ru.promotions + ' · 1');
+    assert.match(opened.last.text, /Скидка/);
   });
 });

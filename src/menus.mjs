@@ -5,7 +5,7 @@ import { imageExists } from './media.mjs';
 import { BOT_COMMAND_DESCRIPTIONS, COMPARISON_TEXT, PRIVACY_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
-import { catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, normalizedSavedSearch, sendUiMessage } from './catalog.mjs';
+import { catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, localizedExact, normalizedSavedSearch, promotionIsActive, sendUiMessage } from './catalog.mjs';
 import { tunnelInstalled } from './remote.mjs';
 import { inquiryChats } from './inquiries.mjs';
 import { ADMIN_COMMAND_DESCRIPTIONS } from './admin-commands.mjs';
@@ -14,18 +14,30 @@ function languageMessages(language) {
   return data.config.messages[language] || data.config.messages.ru;
 }
 
-// Four short rows. "Call me back" is on the main keyboard: for an agency it
-// is the main action. The language is chosen automatically and can be
-// changed in "My space".
+// Сколько акций видит клиент прямо сейчас: пустой раздел в меню — это
+// обещание, которого бот не выполняет.
+function activePromotionCount(language) {
+  return data.promotions.filter((record) => {
+    return promotionIsActive(record) && (localizedExact(record.title, language) || localizedExact(record.text, language));
+  }).length;
+}
+
+// Пять кнопок вместо семи: объекты, подбор, связаться, акции (только когда
+// они есть) и «Моё». «Позвоните мне» и «Менеджер» вели в одно и то же место —
+// теперь это одна кнопка «Связаться». «Избранное» переехало в «Моё»: им
+// пользуются реже, чем каталогом, а место в меню дорогое.
 function menuKeyboard(language) {
   const labels = MENU_LABELS[language] || MENU_LABELS.ru;
+  const promotions = activePromotionCount(language);
+  const rows = [
+    [{ text: labels.objects }, { text: labels.selection }],
+    promotions
+      ? [{ text: labels.contacts }, { text: labels.promotions + ' · ' + promotions }]
+      : [{ text: labels.contacts }],
+    [{ text: labels.more }],
+  ];
   return {
-    keyboard: [
-      [{ text: labels.objects }, { text: labels.selection }],
-      [{ text: labels.favorites }, { text: labels.promotions }],
-      [{ text: labels.request }, { text: labels.contacts }],
-      [{ text: labels.more }],
-    ],
+    keyboard: rows,
     resize_keyboard: true,
     is_persistent: true,
     input_field_placeholder: labels.placeholder,
@@ -36,8 +48,10 @@ function menuItemForText(text, language) {
   const labels = MENU_LABELS[language] || MENU_LABELS.ru;
   const legacy = LEGACY_MENU_LABELS[language] || LEGACY_MENU_LABELS.ru;
   const previous = PREVIOUS_MENU_LABELS[language] || PREVIOUS_MENU_LABELS.ru;
+  // У «Акций» на кнопке стоит число — отрезаем его перед сравнением.
+  const value = String(text || '').replace(/\s+·\s+\d+$/, '');
   return ['objects', 'selection', 'contacts', 'promotions', 'favorites', 'request', 'about', 'help', 'more'].find((key) => {
-    return labels[key] === text || legacy[key] === text || previous[key] === text;
+    return labels[key] === value || legacy[key] === value || previous[key] === value;
   }) || '';
 }
 

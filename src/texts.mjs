@@ -9,9 +9,9 @@ const LANGUAGE_SELECTED = {
   es: 'Listo — has seleccionado español',
 };
 const MENU_LABELS = {
-  ru: { objects: '🏘 Объекты', selection: '✨ Подбор', promotions: '🔥 Акции', favorites: '❤️ Избранное', contacts: '💬 Менеджер', request: '📞 Позвоните мне', about: 'ℹ️ О компании', help: '❓ Помощь', more: '👤 Моё', language: '🌐 Сменить язык', placeholder: 'Выберите раздел' },
-  en: { objects: '🏘 Properties', selection: '✨ Find for me', promotions: '🔥 Offers', favorites: '❤️ Favorites', contacts: '💬 Agent', request: '📞 Call me back', about: 'ℹ️ About', help: '❓ Help', more: '👤 My space', language: '🌐 Change language', placeholder: 'Choose a menu item' },
-  es: { objects: '🏘 Inmuebles', selection: '✨ Búsqueda', promotions: '🔥 Promociones', favorites: '❤️ Favoritos', contacts: '💬 Asesor', request: '📞 Llámame', about: 'ℹ️ La empresa', help: '❓ Ayuda', more: '👤 Mi espacio', language: '🌐 Cambiar idioma', placeholder: 'Elige una opción' },
+  ru: { objects: '🏘 Объекты', selection: '✨ Подбор', promotions: '🔥 Акции', favorites: '❤️ Избранное', contacts: '💬 Связаться', request: '📞 Позвоните мне', about: 'ℹ️ О компании', help: '❓ Помощь', more: '👤 Моё', language: '🌐 Сменить язык', placeholder: 'Выберите раздел' },
+  en: { objects: '🏘 Properties', selection: '✨ Find for me', promotions: '🔥 Offers', favorites: '❤️ Favorites', contacts: '💬 Contact us', request: '📞 Call me back', about: 'ℹ️ About', help: '❓ Help', more: '👤 My space', language: '🌐 Change language', placeholder: 'Choose a menu item' },
+  es: { objects: '🏘 Inmuebles', selection: '✨ Búsqueda', promotions: '🔥 Promociones', favorites: '❤️ Favoritos', contacts: '💬 Contactar', request: '📞 Llámame', about: 'ℹ️ La empresa', help: '❓ Ayuda', more: '👤 Mi espacio', language: '🌐 Cambiar idioma', placeholder: 'Elige una opción' },
 };
 // Labels from earlier keyboards: clients may still tap those messages, so
 // both the long labels from before version 17 and "More" from version 17 work.

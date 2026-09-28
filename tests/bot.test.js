@@ -102,7 +102,7 @@ test('version 17 gives the short menu labels and help to texts still at the old 
   });
   assert.deepEqual(
     ['objects', 'selection', 'contacts', 'request'].map((key) => saved.interfaceText.menuLabels.ru[key]),
-    ['🏘 Объекты', '✨ Подбор', '💬 Менеджер', '📞 Позвоните мне'],
+    ['🏘 Объекты', '✨ Подбор', '💬 Связаться', '📞 Позвоните мне'],
   );
   assert.equal(saved.interfaceText.menuLabels.en.objects, '🏡 Homes', 'a label the administrator changed is kept');
   assert.equal(saved.interfaceText.menuLabels.en.request, '📞 Call me back');
@@ -324,8 +324,8 @@ test('the Spanish and English wording matches how agencies actually speak', () =
 
   assert.equal(bot.text.propertyActions.en.contactManager, 'Contact an agent');
   assert.equal(bot.text.propertyActions.es.contactManager, 'Contactar con un asesor');
-  assert.equal(bot.text.menuLabels.en.contacts, '💬 Agent');
-  assert.equal(bot.text.menuLabels.es.contacts, '💬 Asesor');
+  assert.equal(bot.text.menuLabels.en.contacts, '💬 Contact us');
+  assert.equal(bot.text.menuLabels.es.contacts, '💬 Contactar');
   assert.equal(bot.text.propertyActions.en.cardFavoriteRemove, 'Saved ✓', 'кнопка показывает состояние, а не действие «не сохранять»');
   assert.match(bot.text.selection.es.askBudget, /¿Cuál es tu presupuesto\?/);
 
