@@ -463,6 +463,12 @@ async function handleClientsApi(req, res, url) {
     }
     if (!text && !attachment) return json(res, 400, { error: 'Введите сообщение или добавьте файл' });
     if (attachment && text.length > 800) return json(res, 400, { error: 'С вложением отправьте подпись до 800 знаков' });
+    // Кнопка-ссылка: раньше она была только в карточке клиента, из-за чего
+    // менеджер писал одно и то же сообщение дважды в разных местах.
+    const buttonText = cleanText(body.buttonText, 80);
+    const buttonUrl = cleanText(body.buttonUrl, 500);
+    if (buttonUrl && !validHttpUrl(buttonUrl)) return json(res, 400, { error: 'Ссылка кнопки должна начинаться с http:// или https://' });
+    if ((buttonText && !buttonUrl) || (buttonUrl && !buttonText)) return json(res, 400, { error: 'Для кнопки нужны и название, и ссылка' });
     const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
     if (!user || !user.chatId) return json(res, 400, { error: 'У пользователя нет доступного чата' });
     const requestedReplyTo = Number(body.replyToMessageId);
@@ -483,7 +489,10 @@ async function handleClientsApi(req, res, url) {
       const replyParameters = Number.isFinite(targetMessageId)
         ? { message_id: targetMessageId, allow_sending_without_reply: true }
         : null;
-      const keyboard = menuKeyboard(language);
+      // С кнопкой-ссылкой уходит inline-клавиатура, без неё — обычное меню.
+      const keyboard = buttonText && buttonUrl
+        ? { inline_keyboard: [[{ text: buttonText, url: buttonUrl }]] }
+        : menuKeyboard(language);
       const outgoingText = header + (text ? '\n\n' + text : '');
       let sentMessage;
       if (attachmentKind === 'photo') {
@@ -503,7 +512,7 @@ async function handleClientsApi(req, res, url) {
       const createdAt = new Date().toISOString();
       inquiry.replies.push({
         id: crypto.randomUUID(),
-        text: text || attachment.name,
+        text: [text || (attachment ? attachment.name : ''), buttonText ? '🔗 ' + buttonText : ''].filter(Boolean).join('\n'),
         source: 'panel',
         by: cleanText(data.config.adminName, 60) || 'Администратор',
         createdAt,

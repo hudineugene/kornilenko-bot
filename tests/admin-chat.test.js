@@ -242,6 +242,41 @@ test('a direct message from the client card is stored in the unified conversatio
   }
 });
 
+test('the one reply form can attach a link button', async () => {
+  const client = createChat({ firstName: 'Марина' });
+  await client.say('Пришлите ссылку на объект');
+  const inquiry = client.inquiries[0];
+  const data = bot.getData();
+  const password = bot.hashPassword('correct-password');
+  data.config.passwordSalt = password.salt;
+  data.config.passwordHash = password.hash;
+  data.config.adminName = 'Олег';
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = 'http://127.0.0.1:' + bot.server.address().port;
+    const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
+    const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+
+    const wrong = await realFetch(base + '/api/inquiries/' + inquiry.id + '/reply', {
+      method: 'POST', headers,
+      body: JSON.stringify({ text: 'Вот объект', buttonText: 'Смотреть', clientRequestId: 'link-button-0001' }),
+    });
+    assert.equal(wrong.status, 400, 'кнопка без ссылки не уходит');
+
+    const before = telegram.calls.length;
+    const response = await realFetch(base + '/api/inquiries/' + inquiry.id + '/reply', {
+      method: 'POST', headers,
+      body: JSON.stringify({ text: 'Вот объект', buttonText: 'Смотреть', buttonUrl: 'https://example.com/villa', clientRequestId: 'link-button-0002' }),
+    });
+    assert.equal(response.status, 200);
+    const sent = sentTo(telegram.calls.slice(before), client.id)[0];
+    assert.deepEqual(sent.body.reply_markup.inline_keyboard, [[{ text: 'Смотреть', url: 'https://example.com/villa' }]]);
+    assert.match(inquiry.replies.at(-1).text, /🔗 Смотреть/, 'в истории видно, что была кнопка');
+  } finally {
+    await new Promise((resolve) => bot.server.close(resolve));
+  }
+});
+
 test('an answer leaves the inquiry open and moves the funnel by itself', async () => {
   const client = createChat({ firstName: 'Павел' });
   await client.say('Сколько стоит содержание виллы?');

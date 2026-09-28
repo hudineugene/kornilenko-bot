@@ -92,7 +92,7 @@ test('панель блокирует кнопку на время запрос�
   assert.match(PANEL_HTML, /function guardDoubleClicks\(\)/, 'защита от двойного нажатия есть');
   assert.match(PANEL_HTML, /guardDoubleClicks\(\);/, 'и она включена при запуске панели');
   assert.match(PANEL_HTML, /pendingChanges \+= 1/, 'считаются только запросы, которые что-то меняют');
-  assert.match(PANEL_HTML, /clientRequestId: messageRequestId/, 'личное сообщение шлёт идентификатор отправки');
+  assert.match(PANEL_HTML, /clientRequestId: requestId\(\)/, 'сообщение клиенту шлёт идентификатор отправки');
   // Блокировка ставится не в момент нажатия: иначе форма входа не отправилась бы.
   const guard = PANEL_HTML.match(/function guardDoubleClicks\(\) \{([\s\S]*?)\n\}/);
   assert.ok(guard && /setTimeout\(/.test(guard[1]), 'кнопка блокируется сразу после нажатия, а не во время');

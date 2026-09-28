@@ -719,6 +719,7 @@ function renderInquiryCard(host) {
       '</div><div class="reply-quote hidden" id="replyQuote"><div><span>Ответ на сообщение клиента</span><b id="replyQuoteText"></b></div><button class="reply-quote-remove" id="clearReplyQuote" type="button" aria-label="Убрать цитату">×</button></div>' +
       '<textarea id="replyText" maxlength="3800" placeholder="Напишите сообщение клиенту…"></textarea>' +
       '<div class="reply-attachments"><input class="hidden" id="replyFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,application/pdf,text/plain"><label class="btn secondary small" for="replyFile">📎 Добавить файл</label><span class="reply-file-name muted" id="replyFileName">Фотография до 5 МБ или документ до 10 МБ</span><button class="btn ghost small hidden" id="clearReplyFile" type="button">Убрать</button></div>' +
+      '<details class="conversation-details"><summary><span><b>Кнопка-ссылка</b><small>клиент увидит её под сообщением</small></span><i>⌄</i></summary><div class="conversation-details-body"><div class="grid cols-2"><div class="field"><label for="replyButtonText">Текст кнопки</label><input id="replyButtonText" placeholder="Посмотреть объект"></div><div class="field"><label for="replyButtonUrl">Ссылка</label><input id="replyButtonUrl" placeholder="https://…"></div></div></div></details>' +
       '<div class="reply-delivery hidden" id="replyDelivery" aria-live="polite"><span id="replyDeliveryText"></span><button class="btn ghost small hidden" id="retryReply" type="button">Повторить отправку</button></div>' +
       '<div class="reply-actions"><button class="btn" id="sendReply" type="button">Отправить сообщение</button><span class="small muted">После ответа заявка станет «Отвечено». Закрыть её можно справа.</span></div></div>' +
       '</div>' +
@@ -830,7 +831,12 @@ function renderInquiryCard(host) {
     if (!text && !replyAttachment) return toast("Введите сообщение или добавьте файл", true);
     if (replyAttachment && text.length > 800) return toast("С вложением подпись должна быть не длиннее 800 знаков", true);
     var button = host.querySelector("#sendReply");
-    var payload = { text: text, clientRequestId: requestId() };
+    var payload = {
+      text: text,
+      clientRequestId: requestId(),
+      buttonText: host.querySelector("#replyButtonText").value,
+      buttonUrl: host.querySelector("#replyButtonUrl").value,
+    };
     if (replyTarget) payload.replyToMessageId = replyTarget.telegramMessageId;
     if (replyAttachment && replyAttachment.kind === "image") { payload.imageDataUrl = replyAttachment.dataUrl; payload.imageName = replyAttachment.name; }
     if (replyAttachment && replyAttachment.kind === "document") { payload.documentDataUrl = replyAttachment.dataUrl; payload.documentName = replyAttachment.name; }
@@ -1162,22 +1168,17 @@ function openClient(id) {
       '<div class="client-facts"><div><span>Источник</span><b>' + esc(user.source || "без метки") + '</b></div><div><span>Первый контакт</span><b>' + dateTime(user.firstSeenAt) + '</b></div><div><span>Последняя активность</span><b>' + dateTime(user.lastSeenAt) + '</b></div>' + (latest ? '<div><span>Последний этап</span><b>' + esc(clientStageLabel(latest)) + '</b></div>' : "") + '</div>' +
       '<div class="client-edit stack"><div class="grid cols-2"><div class="field"><label for="clientContactName">Имя для связи</label><input id="clientContactName" data-client-edit value="' + esc(user.contactName || userName(user)) + '"></div><div class="field"><label for="clientLanguage">Язык</label><select id="clientLanguage" data-client-edit><option value="">Не выбран</option>' + [["ru", "Русский"], ["en", "English"], ["es", "Español"]].map(function (language) { return '<option value="' + language[0] + '"' + (user.preferredLanguage === language[0] ? " selected" : "") + '>' + language[1] + "</option>"; }).join("") + '</select></div></div><div class="field"><label for="clientPhone">Телефон</label><input id="clientPhone" data-client-edit value="' + esc(user.phone || "") + '" placeholder="+34 …"></div><div class="field"><label for="clientContactTime">Когда удобно связаться</label><input id="clientContactTime" data-client-edit value="' + esc(user.preferredContactTime || "") + '"></div><div class="field"><label for="clientTags">Теги через запятую</label><input id="clientTags" data-client-edit value="' + esc((user.tags || []).join(", ")) + '"></div><div class="field"><label for="clientNote">Общая заметка</label><textarea id="clientNote" data-client-edit>' + esc(user.note || "") + '</textarea></div><label class="check"><input type="checkbox" id="clientBlocked" data-client-edit' + (user.blocked ? " checked" : "") + '> не писать этому клиенту</label></div></aside>' +
       '<main class="client-profile-main"><div class="grid cols-4">' + kpiCard("Сообщений", num(user.messages)) + kpiCard("Заявок", num(inquiries.length)) + kpiCard("Избранное", num((user.favorites || []).length)) + kpiCard("Просмотрено", num((user.recentlyViewed || []).length)) + '</div>' +
-      '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Личное сообщение от имени бота</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><textarea id="clientMessageText" placeholder="Введите сообщение клиенту…"' + (user.blocked || !user.chatId ? " disabled" : "") + '></textarea><details class="conversation-details"><summary><span><b>Дополнительно</b><small>изображение и кнопка-ссылка</small></span><i>⌄</i></summary><div class="conversation-details-body stack"><div class="image-upload-row"><label class="btn secondary small">＋ Изображение<input id="clientMessageImage" class="file-hidden" type="file" accept="image/jpeg,image/png"></label><span class="small muted" id="clientMessageImageName">Не выбрано</span></div><div class="grid cols-2"><div class="field"><label for="clientButtonText">Текст кнопки</label><input id="clientButtonText" placeholder="Посмотреть объект"></div><div class="field"><label for="clientButtonUrl">Ссылка</label><input id="clientButtonUrl" placeholder="https://…"></div></div></div></details><div class="row"><span class="small muted grow">Сообщение сохранится в общей переписке.</span><button class="btn" id="sendClientMessage" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Отправить в Telegram</button></div></div></section>' +
+      '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит в общую переписку</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть переписку →</button></div></section>' +
       '<div class="grid cols-2 client-interest-grid"><section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section><section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="empty"><b>Активных заявок нет</b></div>') + '</div></section></div>' +
       '<section class="card"><header><h3>Объекты и интересы</h3><div class="actions"><span class="small faint">избранное · сравнение · история · подбор</span></div></header>' + clientPropertiesHtml(user) + '</section>' +
       '<section class="card"><header><h3>История заявок</h3></header>' + (inquiries.length ? '<div class="client-inquiries">' + inquiries.slice(0, 20).map(function (item) { return '<button class="client-inquiry" data-client-inquiry="' + esc(item.id) + '" type="button"><span><b>' + esc(inquiryTypeName(item)) + '</b><small>' + esc(String(item.text || "").replace(/\s+/g, " ").slice(0, 100)) + '</small></span><span class="chip ' + (awaitsReply(item) ? "bad" : item.status === "closed" ? "" : "ok") + '">' + (awaitsReply(item) ? "ждёт ответа" : item.status === "closed" ? "закрыто" : "в работе") + '</span><time>' + dateTime(item.updatedAt || item.createdAt) + '</time><i>→</i></button>'; }).join("") + '</div>' : '<div class="empty"><b>Заявок ещё нет</b></div>') + '</section></main></div>',
       footer: '<button class="btn danger" id="eraseClient" type="button">Удалить данные</button><button class="btn ghost" id="exportClient" type="button">Выгрузить данные</button><div class="grow"></div><button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="saveClient" type="button">Сохранить</button>',
     ready: function (dialog) {
-      var profileChanged = false, messageChanged = false, messageImage = null;
+      var profileChanged = false;
       dialog.querySelectorAll("[data-client-edit]").forEach(function (field) { field.addEventListener("change", function () { profileChanged = true; }); field.addEventListener("input", function () { profileChanged = true; }); });
-      ["#clientMessageText", "#clientButtonText", "#clientButtonUrl"].forEach(function (selector) {
-        var field = dialog.querySelector(selector);
-        if (field) field.addEventListener("input", function () { messageChanged = true; });
-      });
       async function confirmNavigation(title, action) {
-        if (!profileChanged && !messageChanged) return true;
-        var detail = profileChanged && messageChanged ? "Изменения профиля и черновик сообщения будут потеряны." : profileChanged ? "Изменения в карточке клиента будут потеряны." : "Черновик сообщения будет потерян.";
-        return confirmDialog(title, detail, action, true);
+        if (!profileChanged) return true;
+        return confirmDialog(title, "Изменения в карточке клиента будут потеряны.", action, true);
       }
       function profilePayload() {
         return { contactName: dialog.querySelector("#clientContactName").value, phone: dialog.querySelector("#clientPhone").value, preferredContactTime: dialog.querySelector("#clientContactTime").value, preferredLanguage: dialog.querySelector("#clientLanguage").value, note: dialog.querySelector("#clientNote").value, tags: dialog.querySelector("#clientTags").value.split(",").map(function (tag) { return tag.trim(); }).filter(Boolean), blocked: dialog.querySelector("#clientBlocked").checked };
@@ -1194,35 +1195,6 @@ function openClient(id) {
           await reload();
         } catch (error) { fail(error); }
       };
-      var imageInput = dialog.querySelector("#clientMessageImage");
-      imageInput.onchange = function () {
-        var file = imageInput.files && imageInput.files[0];
-        if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function () { messageImage = { dataUrl: reader.result, name: file.name }; messageChanged = true; dialog.querySelector("#clientMessageImageName").textContent = file.name; };
-        reader.readAsDataURL(file);
-      };
-      // Один идентификатор на одно сообщение: если нажать дважды или повторить
-      // отправку после обрыва, клиент получит сообщение один раз.
-      var messageRequestId = "";
-      dialog.querySelector("#sendClientMessage").onclick = async function () {
-        var text = dialog.querySelector("#clientMessageText").value.trim();
-        if (!text && !messageImage) return toast("Введите сообщение или добавьте изображение", true);
-        if (!messageRequestId) {
-          messageRequestId = window.crypto && window.crypto.randomUUID
-            ? window.crypto.randomUUID()
-            : "message-" + Date.now() + "-" + Math.random().toString(36).slice(2);
-        }
-        try {
-          if (profileChanged) await saveProfile();
-          var result = await send("/api/users/" + encodeURIComponent(user.id) + "/message", "POST", { text: text, buttonText: dialog.querySelector("#clientButtonText").value, buttonUrl: dialog.querySelector("#clientButtonUrl").value, imageDataUrl: messageImage && messageImage.dataUrl, imageName: messageImage && messageImage.name, clientRequestId: messageRequestId });
-          dialog.closeClean();
-          toast(result.duplicate ? "Сообщение уже было отправлено" : "Сообщение отправлено");
-          await reload(false);
-          selectConversation(result.inquiryId || (active && active.id) || "");
-          await go("inquiries", "inbox");
-        } catch (error) { fail(error); }
-      };
       async function openConversation(inquiryId) {
         if (!(await confirmNavigation("Перейти без сохранения?", "Перейти"))) return;
         dialog.closeClean();
@@ -1232,6 +1204,8 @@ function openClient(id) {
       dialog.querySelectorAll("[data-client-inquiry]").forEach(function (button) { button.onclick = function () { openConversation(button.dataset.clientInquiry); }; });
       var openTask = dialog.querySelector("#clientOpenTask");
       if (openTask && active) openTask.onclick = function () { openConversation(active.id); };
+      var writeButton = dialog.querySelector("#clientWrite");
+      if (writeButton) writeButton.onclick = function () { openConversation((active || latest || {}).id || ""); };
       dialog.querySelectorAll("[data-client-object]").forEach(function (button) {
         button.onclick = async function () {
           if (!(await confirmNavigation("Открыть объект без сохранения?", "Открыть"))) return;

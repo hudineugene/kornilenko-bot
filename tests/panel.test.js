@@ -186,9 +186,10 @@ test('карточка клиента объединяет профиль, ин�
   assert.match(PANEL_HTML, /id="clientContactName"/);
   assert.match(PANEL_HTML, /id="clientPhone"/);
   assert.match(PANEL_HTML, /id="clientContactTime"/);
-  assert.match(PANEL_HTML, /\/message", "POST"/);
-  assert.match(PANEL_HTML, /result\.inquiryId/);
-  assert.match(PANEL_HTML, /Черновик сообщения будет потерян/);
+  // Писать клиенту можно в одном месте — на экране переписки.
+  assert.match(PANEL_HTML, /id="clientWrite"/);
+  assert.match(PANEL_HTML, /Открыть переписку/);
+  assert.ok(!/id="clientMessageText"/.test(PANEL_HTML), 'второй формы отправки в карточке больше нет');
 });
 
 test('аналитика объекта связывает показы, обращения и заинтересованных клиентов', async () => {
