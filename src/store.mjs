@@ -476,6 +476,50 @@ function snapshotBeforeRestore(now = new Date()) {
   return target;
 }
 
+// Разовые снимки — это те же персональные данные клиентов: телефоны, переписка,
+// заявки. RGPD не разрешает держать их дольше, чем нужно, а нужны они, только
+// пока ими можно воспользоваться: копия перед обновлением формата — чтобы
+// вернуться на прежнюю версию бота, копия перед восстановлением — чтобы
+// отменить неудачное восстановление, повреждённый файл — чтобы разобраться, что
+// случилось. Через три месяца это просто архив чужих данных, и бот его убирает.
+// Своих файлов владельца (копии exe, копии, сделанные руками) это не касается —
+// только те, что бот создаёт сам.
+const ONE_OFF_BACKUP_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+const ONE_OFF_BACKUP_PREFIXES = ['pre-upgrade-', 'pre-media-', 'pre-restore-'];
+
+function removeIfOlder(file, olderThan) {
+  try {
+    if (fs.statSync(file).mtimeMs > olderThan) return false;
+    fs.rmSync(file, { force: true });
+    return true;
+  } catch {
+    // Не удалось убрать — попробуем в следующий раз, работе это не мешает.
+    return false;
+  }
+}
+
+function pruneOldSnapshots(now = new Date()) {
+  const olderThan = now.getTime() - ONE_OFF_BACKUP_MAX_AGE_MS;
+  let removed = 0;
+  const places = [
+    { directory: BACKUP_DIRECTORY, keep: (name) => name.endsWith('.json') && ONE_OFF_BACKUP_PREFIXES.some((prefix) => name.startsWith(prefix)) },
+    { directory: path.dirname(DATA_FILE), keep: (name) => name.startsWith(path.basename(DATA_FILE) + '.corrupt-') },
+  ];
+  for (const place of places) {
+    let names = [];
+    try {
+      names = fs.readdirSync(place.directory);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (!place.keep(name)) continue;
+      if (removeIfOlder(path.join(place.directory, name), olderThan)) removed += 1;
+    }
+  }
+  return removed;
+}
+
 // Brings back photos that are referenced by the data but missing from
 // bot-media, using the copies made by the daily backup.
 function restoreMissingMedia(root) {
@@ -536,6 +580,14 @@ function runDailyBackupSafely() {
     recordError('Ежедневная резервная копия', error);
     console.error('Не удалось создать ежедневную резервную копию:', error.message);
   }
+  // Заодно убираем разовые снимки, которым больше трёх месяцев: раньше они
+  // лежали в backups рядом с ботом бессрочно.
+  try {
+    const removed = pruneOldSnapshots();
+    if (removed) console.log('Убраны разовые копии данных старше трёх месяцев:', removed);
+  } catch (error) {
+    recordError('Ежедневная резервная копия', error);
+  }
 }
 
 try {
@@ -595,6 +647,7 @@ function replaceData(next) {
 
 export {
   loadedDataVersion,
+  pruneOldSnapshots,
   looksEmpty,
   snapshotBeforeRestore,
   verifyPasswordAsync,

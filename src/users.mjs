@@ -206,8 +206,9 @@ function userDataExport(user) {
 }
 
 // Right to erasure: removes the user's card, history, favourites, inquiries
-// and every reference to them. Snapshots in backups/ keep the data until they
-// are rotated out.
+// and every reference to them. Copies in backups/ still hold the data for a
+// while: daily snapshots for two weeks, one-off ones (before an upgrade or a
+// restore) for three months — see pruneOldSnapshots in store.mjs.
 function eraseUserData(user) {
   const traces = userTraces(user);
   const id = traces.id;
