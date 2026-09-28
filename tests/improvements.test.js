@@ -386,7 +386,7 @@ test.describe('search in client messages', () => {
     const chat = createChat();
     telegram.calls = [];
     await chat.say('ref 1024');
-    assert.match(shownCard(), /^<i>🏠 Объект · 1 \/ 1<\/i>\n\n<b>Квартира у пляжа<\/b>/);
+    assert.match(shownCard(), /^<i>🏠 Объект<\/i>\n\n<b>Квартира у пляжа<\/b>/);
     assert.equal(chat.inquiries.length, 0);
     telegram.calls = [];
     await chat.say('REF-4096');
@@ -831,7 +831,7 @@ test.describe('catalog filter', () => {
     const recentMedia = typeof recentCard.body.media === 'string' ? JSON.parse(recentCard.body.media) : recentCard.body.media;
     const recentCaption = recentCard.body.caption || (recentMedia && recentMedia.caption) || '';
     assert.ok(recentCaption.includes('<b>Второй просмотренный</b>'));
-    assert.ok(recentCaption.startsWith('<i>' + bot.text.myArea.ru.recentHeading + ' · 1 / 2</i>'));
+    assert.ok(recentCaption.startsWith('<i>' + bot.text.myArea.ru.recentHeading + '</i>'));
     assert.ok(callbacksOf(recentCard.body.reply_markup).includes('nav:my'));
     assert.deepEqual(bot.catalogRecords(chat.user, 'recent').map((record) => record.id), ['recent-two', 'recent-one'], 'filters and hidden properties do not affect the history');
 

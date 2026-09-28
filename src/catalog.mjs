@@ -245,7 +245,11 @@ function locationText(parts, address) {
   return parts.filter((part) => part && !(address && lower.includes(part.toLowerCase()))).concat(address ? [address] : []).join(', ');
 }
 
-function propertySpecRows(record, language) {
+// compact — для карточки в каталоге: значок и число одной строкой. Подписи
+// («Спальни: 2») занимали три строки из шести, а значки понятны без слов.
+// Полная карточка («Подробнее») по-прежнему с подписями.
+function propertySpecRows(record, language, options = {}) {
+  const compact = Boolean(options.compact);
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const metre = language === 'ru' ? 'м' : 'm';
   const facts = [];
@@ -254,18 +258,33 @@ function propertySpecRows(record, language) {
   const area = numericText(record.area, language);
   const plotArea = numericText(record.plotArea, language);
   const distanceSea = numericText(record.distanceSea, language);
-  if (bedrooms) facts.push('🛏 ' + shortenedText(copy.bedroomsLabel, 22) + ': ' + bedrooms);
-  if (bathrooms) facts.push('🚿 ' + shortenedText(copy.bathroomsLabel, 22) + ': ' + bathrooms);
-  if (area) facts.push('📐 ' + shortenedText(copy.areaLabel, 22) + ': ' + area + ' ' + metre + '²');
-  if (plotArea) facts.push('🌿 ' + shortenedText(copy.plotAreaLabel, 22) + ': ' + plotArea + ' ' + metre + '²');
+  const fact = (icon, label, value) => (compact ? icon + ' ' + value : icon + ' ' + shortenedText(label, 22) + ': ' + value);
+  if (bedrooms) facts.push(fact('🛏', copy.bedroomsLabel, bedrooms));
+  if (bathrooms) facts.push(fact('🚿', copy.bathroomsLabel, bathrooms));
+  if (area) facts.push(fact('📐', copy.areaLabel, area + ' ' + metre + '²'));
+  if (plotArea) facts.push(fact('🌿', copy.plotAreaLabel, plotArea + ' ' + metre + '²'));
   if (record.floor || record.floors) {
     const floorValue = [cleanText(record.floor, 20), cleanText(record.floors, 20)].filter(Boolean).join('/');
-    facts.push('🏢 ' + shortenedText(copy.floor, 22) + ': ' + floorValue);
+    facts.push(fact('🏢', copy.floor, floorValue));
   }
-  if (distanceSea) facts.push('🌊 ' + shortenedText(copy.distanceSeaLabel, 22) + ': ' + distanceSea + ' ' + metre);
+  if (distanceSea) facts.push(fact('🌊', copy.distanceSeaLabel, distanceSea + ' ' + metre));
+  if (compact) return facts.length ? [facts.join(' · ')] : [];
   const rows = [];
   for (let index = 0; index < facts.length; index += 2) rows.push(facts.slice(index, index + 2).join('   ·   '));
   return rows;
+}
+
+// Цена за метр — то, чем покупатели сравнивают объекты между собой. Считаем
+// только для продажи и только когда есть и цена, и площадь.
+function pricePerSquareMetre(record, language) {
+  if (record.dealType === 'rent') return '';
+  const price = Number(record.priceValue);
+  const area = Number(record.area);
+  if (!Number.isFinite(price) || !Number.isFinite(area) || price <= 0 || area <= 0) return '';
+  const metre = language === 'ru' ? 'м' : 'm';
+  const perMetre = Math.round(price / area);
+  const symbol = record.currency === 'USD' ? '$' : record.currency === 'GBP' ? '£' : '€';
+  return numericText(perMetre, language) + ' ' + symbol + '/' + metre + '²';
 }
 
 function objectCaption(record, language, options = {}) {
@@ -287,15 +306,16 @@ function objectCaption(record, language, options = {}) {
   const badgeNames = record.badges instanceof Array
     ? record.badges.map((badge) => (PROPERTY_BADGE_LABELS[language] || PROPERTY_BADGE_LABELS.ru)[badge]).filter(Boolean)
     : [];
-  const status = record.status === 'reserved'
-    ? '🟡 ' + copy.reserved
-    : '🟢 ' + copy.available;
+  // «Доступен» не пишем: это состояние по умолчанию, а строка съедала место.
+  // Важно обратное — что объект уже забронирован.
+  const status = record.status === 'reserved' ? '🟡 ' + copy.reserved : '';
   const header = [title, [status, type, deal].filter(Boolean).join(' · ')];
   if (badgeNames.length) header.push('✦ ' + badgeNames.join(' · '));
   const commercial = [];
-  if (price) commercial.push('💰 ' + price);
+  const perMetre = pricePerSquareMetre(record, language);
+  if (price) commercial.push('💰 ' + price + (perMetre ? ' · ' + perMetre : ''));
   if (location) commercial.push('📍 ' + location);
-  const specs = propertySpecRows(record, language);
+  const specs = propertySpecRows(record, language, { compact: !full });
   if (!full) {
     const teaser = descriptionTeaser(description);
     const sections = [header.filter(Boolean), commercial, specs, teaser ? [teaser] : []].filter((section) => section.length);
@@ -326,15 +346,16 @@ function escapeTelegramHtml(value) {
 function objectCaptionHtml(record, language, options = {}) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const headings = new Set([copy.specificationsTitle, copy.descriptionTitle]);
-  let firstContent = true;
+  let contentLines = 0;
   return objectCaption(record, language, options).split('\n').map((line) => {
     const escaped = escapeTelegramHtml(line);
     if (!line) return '';
-    if (firstContent) {
-      firstContent = false;
-      return '<b>' + escaped + '</b>';
-    }
-    if (line.startsWith('🟢 ') || line.startsWith('🟡 ') || line.startsWith('✦ ') || line.startsWith(copy.updated + ':')) return '<i>' + escaped + '</i>';
+    contentLines += 1;
+    if (contentLines === 1) return '<b>' + escaped + '</b>';
+    // Вторая строка — «тип · сделка» (и «Забронирован», если он есть). Раньше
+    // она узнавалась по значку состояния, но «Доступен» мы больше не пишем.
+    if (contentLines === 2 && !line.startsWith('💰 ') && !line.startsWith('📍 ')) return '<i>' + escaped + '</i>';
+    if (line.startsWith('🟡 ') || line.startsWith('✦ ') || line.startsWith(copy.updated + ':')) return '<i>' + escaped + '</i>';
     if (line.startsWith('💰 ') || headings.has(line)) return '<b>' + escaped + '</b>';
     return escaped;
   }).join('\n');
@@ -761,9 +782,10 @@ function similarPropertyHtml(user, record, language, mode) {
 }
 
 function propertyCardCaption(user, record, language, catalog) {
-  const position = catalog && catalog.totalPages > 0 ? ' · ' + (catalog.page + 1) + ' / ' + catalog.totalPages : '';
+  // Номер объекта в списке не повторяем: он и так на кнопке между стрелками.
   const heading = cleanText(catalog && catalog.heading, 160);
-  const context = heading ? '<i>' + escapeTelegramHtml(heading + position) + '</i>' : '';
+  const position = '';
+  const context = heading ? '<i>' + escapeTelegramHtml(heading) + '</i>' : '';
   const recommendation = selectionMatchHtml(user, record, language, catalog && catalog.mode)
     || similarPropertyHtml(user, record, language, catalog && catalog.mode);
   // Photo captions are limited by Telegram. The recommendation keeps enough

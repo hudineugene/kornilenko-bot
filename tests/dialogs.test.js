@@ -366,7 +366,7 @@ test.describe('selection form', () => {
     assert.deepEqual(chat.user.selectionMatchDetails.map((item) => [item.id, item.tier]), [['villa-fit-03', 'exact'], ['house-fit-05', 'exact'], ['villa-price-07', 'close']]);
     assert.deepEqual(chat.inquiries[0].matching.results, chat.user.selectionMatchDetails, 'the inquiry keeps the result snapshot for the manager');
     const card = step.calls.find((call) => call.method === 'sendPhoto');
-    assert.ok(card.body.caption.startsWith('<i>' + ru.matchesHeading + ' · 1 / 3</i>\n\n<b>' + ru.tierExact + '</b>\n'));
+    assert.ok(card.body.caption.startsWith('<i>' + ru.matchesHeading + '</i>\n\n<b>' + ru.tierExact + '</b>\n'));
     assert.match(card.body.caption, /Почему: формат сделки · тип объекта · нужный район · в рамках бюджета · нужное число спален/);
     assert.match(card.body.caption, /<b>Вилла с садом<\/b>/);
     assert.equal(card.body.parse_mode, 'HTML');
@@ -605,7 +605,7 @@ test.describe('property card', () => {
 
     const first = await chat.press('property:similar:' + source.id);
     const firstCard = first.calls.find((call) => call.method === 'sendPhoto');
-    assert.ok(firstCard.body.caption.startsWith('<i>' + PROPERTY.ru.similarHeading + ' · 1 / 2</i>'));
+    assert.ok(firstCard.body.caption.startsWith('<i>' + PROPERTY.ru.similarHeading + '</i>'), 'номер объекта в заголовке не повторяем: он на кнопке');
     assert.match(firstCard.body.caption, /Почему подходит: тот же тип · тот же город · тот же район · близкая цена/);
     assert.ok(callbacksOf(firstCard.body.reply_markup).includes('catalog:similar:1'));
     assert.ok(callbacksOf(firstCard.body.reply_markup).includes('property:return:' + source.id));
@@ -629,9 +629,10 @@ test.describe('property card', () => {
     const caption = card.body.caption;
     assert.match(caption, /💰 850\s000 €/, 'the currency is a symbol');
     assert.match(caption, /📍 Марбелья, Сьерра-Бланка\n/, 'city and district only');
-    assert.match(caption, /🛏 Спальни: 4\s+·\s+🚿 Санузлы: 1/, 'characteristics have readable labels and no more than two values per row');
-    assert.match(caption, /📐 Площадь: 80 м²/, 'units are kept next to the labelled value');
-    assert.match(caption, /<i>🟢 Доступен · Вилла · Продажа<\/i>/, 'status line has a consistent visual hierarchy');
+    assert.match(caption, /🛏 4 · 🚿 1 · 📐 80 м²/, 'характеристики одной строкой значками');
+    assert.match(caption, /💰 850\s000 € · 10\s625 €\/м²/, 'у продажи видна цена за метр');
+    assert.match(caption, /<i>Вилла · Продажа<\/i>/, 'доступность не пишем — она и так по умолчанию');
+    assert.ok(!caption.includes('🟢'), 'зелёного «Доступен» на карточке нет');
     assert.ok(!caption.includes('Calle Sol'), 'the address is in Details');
     assert.ok(!caption.includes('VILLA-MARBELLA-01'), 'the reference is in Details');
     assert.ok(caption.endsWith('Светлая вилла с видом на море и большим садом.'), 'only the first paragraph');
@@ -666,9 +667,7 @@ test.describe('property card', () => {
       chat.user.catalogFilter = { deal: 'sale' };
       const step = await chat.say(MENU[language].objects);
       const card = step.calls.find((call) => call.method === 'sendPhoto');
-      assert.ok(card.body.caption.includes('🛏 ' + PROPERTY[language].bedroomsLabel + ':'));
-      assert.ok(card.body.caption.includes('🚿 ' + PROPERTY[language].bathroomsLabel + ':'));
-      assert.ok(card.body.caption.includes('📐 ' + PROPERTY[language].areaLabel + ':'));
+      assert.match(card.body.caption, /🛏 \d+ · 🚿 \d+ · 📐 \d+/, language + ': характеристики значками одной строкой');
       const rows = card.body.reply_markup.inline_keyboard;
       const rowFor = (callback) => rows.find((row) => row.some((button) => button.callback_data === callback));
       const details = rowFor('property:details:villa-marbella-01');
@@ -749,10 +748,16 @@ test.describe('property card', () => {
       const caption = bot.objectCaptionHtml(record, language);
       const actions = PROPERTY[language];
       assert.ok(caption.indexOf('💰 ') < caption.indexOf('🛏 '), language + ': commercial block precedes characteristics');
-      assert.ok(caption.indexOf('🛏 ' + actions.bedroomsLabel + ':') < caption.indexOf('📐 ' + actions.areaLabel + ':'), language + ': characteristics keep one order');
-      assert.match(caption, new RegExp('🌊 ' + actions.distanceSeaLabel + ': 750 ' + (language === 'ru' ? 'м' : 'm')));
+      assert.ok(caption.indexOf('🛏 ') < caption.indexOf('📐 '), language + ': characteristics keep one order');
+      assert.match(caption, new RegExp('🌊 750 ' + (language === 'ru' ? 'м' : 'm')), language + ': на карточке значок и число');
       const factRows = caption.split('\n').filter((line) => /^(🛏|🚿|📐|🌿|🏢|🌊)/u.test(line));
-      assert.ok(factRows.every((line) => (line.match(/   ·   /g) || []).length <= 1), language + ': at most two facts per row');
+      assert.equal(factRows.length, 1, language + ': характеристики занимают одну строку, а не три');
+
+      // В «Подробнее» подписи остаются: там есть место и нужна точность.
+      const full = bot.objectCaptionHtml(record, language, { full: true });
+      assert.match(full, new RegExp('🌊 ' + actions.distanceSeaLabel + ': 750 ' + (language === 'ru' ? 'м' : 'm')));
+      const fullRows = full.split('\n').filter((line) => /^(🛏|🚿|📐|🌿|🏢|🌊)/u.test(line));
+      assert.ok(fullRows.every((line) => (line.match(/   ·   /g) || []).length <= 1), language + ': at most two facts per row');
     }
   });
 

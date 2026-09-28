@@ -76,7 +76,7 @@ test('properties are added from the card and compared by consistent criteria', a
   const openedCard = opened.calls.find((call) => ['editMessageMedia', 'sendPhoto'].includes(call.method));
   const media = typeof openedCard.body.media === 'string' ? JSON.parse(openedCard.body.media) : openedCard.body.media;
   const caption = openedCard.body.caption || (media && media.caption) || '';
-  assert.ok(caption.startsWith('<i>' + COMPARE.ru.title + ' · 2 / 2</i>'));
+  assert.ok(caption.startsWith('<i>' + COMPARE.ru.title + '</i>'));
   assert.ok(caption.includes('<b>Квартира в центре</b>'));
   assert.ok(callbacksOf(openedCard.body.reply_markup).includes('compare:view'));
 });
