@@ -128,10 +128,15 @@ function trimInquiries() {
 // превратился в поток предупреждений.
 function reportInquiryOverflow(openRemoved, now = new Date()) {
   const today = localDayKey(now);
-  recordError('Предел обращений', new Error('Список обращений упёрся в предел ' + MAX_INQUIRIES
-    + ': удалено самых старых обращений в работе — ' + openRemoved));
+  // И запись в журнал — раз в сутки, вместе с сообщением. Журнал хранит сто
+  // последних записей: обращение за обращением они вытесняли оттуда настоящие
+  // сбои, в том числе «Сохранение данных» — единственный след того, что бот не
+  // может писать на диск.
   if (data.lastInquiryOverflowFor === today) return;
   data.lastInquiryOverflowFor = today;
+  recordError('Предел обращений', new Error('Список обращений упёрся в предел ' + MAX_INQUIRIES
+    + ': удаляются самые старые обращения в работе (в этот раз — ' + openRemoved
+    + '). Дальше за сегодня бот об этом не напоминает.'));
   scheduleSave();
   void sendStatusNotice([
     '⚠️ Обращений стало больше ' + MAX_INQUIRIES,

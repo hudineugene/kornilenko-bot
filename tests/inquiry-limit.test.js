@@ -157,6 +157,40 @@ test('если закрытых не хватило — владелец узн�
   assert.equal(telegram.calls.filter((call) => call.method === 'sendMessage').length, 0);
 });
 
+test('поток обращений не вытесняет из журнала настоящие сбои', async () => {
+  // Журнал ошибок хранит 100 последних записей. Раньше каждое обращение сверх
+  // предела добавляло свою запись: за сотню обращений из журнала исчезало всё
+  // остальное, включая «Сохранение данных» — единственный след того, что бот не
+  // может писать на диск.
+  const { trimInquiries } = await import('../src/inquiries.mjs');
+  const { recordError } = await import('../src/analytics.mjs');
+  const data = fill({ open: MAX + 1, closed: 0 });
+  recordError('Сохранение данных', new Error('Файл не сохранён: файл занят'));
+
+  for (let index = 0; index < 150; index += 1) {
+    data.inquiries.push({
+      id: 'extra-' + index, userId: '9' + index, chatId: '9' + index, language: 'ru', type: 'general',
+      text: 'Ещё одно', status: 'new', replies: [], messages: [],
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), clientMessageAt: new Date().toISOString(),
+    });
+    trimInquiries();
+  }
+
+  const overflow = data.errors.filter((entry) => entry.area === 'Предел обращений');
+  assert.equal(overflow.length, 1, 'о переполнении сказано один раз за сутки, а не 150');
+  assert.ok(data.errors.some((entry) => entry.area === 'Сохранение данных'), 'запись о сбое записи на диск на месте');
+  assert.equal(data.inquiries.length, MAX, 'предел соблюдён');
+});
+
+test('после удачного сохранения метка повторной записи снимается', async () => {
+  const store = await import('../src/store.mjs');
+  store.runtime.nextSaveRetryAt = new Date().toISOString();
+  store.runtime.lastSaveError = 'файл занят';
+  store.saveDataNow();
+  assert.equal(store.runtime.nextSaveRetryAt, null, 'повтор больше не назначен');
+  assert.equal(store.runtime.lastSaveError, '', 'и сбой снят');
+});
+
 test('при загрузке данных живые обращения тоже в приоритете', () => {
   const at = (index) => new Date(Date.now() - index * 60000).toISOString();
   const raw = [];
