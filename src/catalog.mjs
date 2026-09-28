@@ -1024,6 +1024,74 @@ async function sendPropertyCard(chatId, user, token, record, catalog = null) {
   return true;
 }
 
+// Показ одной фотографии объекта прямо в карточке. Сообщение то же самое —
+// меняются картинка, подпись и кнопки, поэтому чат не растёт.
+async function showPropertyPhoto(chatId, user, token, message, record, index) {
+  const messageId = Number(message && message.message_id);
+  if (!Number.isFinite(messageId) || !Array.isArray(message.photo) || !message.photo.length) return false;
+  const language = user.preferredLanguage || 'ru';
+  const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
+  const images = recordImages(record, language);
+  if (!images.length) return false;
+  const total = images.length;
+  const current = ((Number(index) || 0) % total + total) % total;
+  const image = images[current];
+  const title = localizedExact(record.title, language) || record.reference || '';
+  const caption = [
+    title ? '<b>' + escapeTelegramHtml(title) + '</b>' : '',
+    '<i>' + escapeTelegramHtml(action.photos + ' ' + (current + 1) + ' / ' + total) + '</i>',
+  ].filter(Boolean).join('\n');
+
+  const rows = [];
+  if (total > 1) {
+    rows.push([
+      { text: '◀️', callback_data: 'property:photo:' + ((current - 1 + total) % total) + ':' + record.id },
+      { text: (current + 1) + ' / ' + total, callback_data: 'property:photo:' + current + ':' + record.id },
+      { text: '▶️', callback_data: 'property:photo:' + ((current + 1) % total) + ':' + record.id },
+    ]);
+  }
+  const actions = [];
+  if (record.status === 'active') actions.push({ text: mobileButtonText('📅', action.viewing), callback_data: 'property:viewing:' + record.id });
+  actions.push({ text: mobileButtonText('💬', action.contact), callback_data: 'property:manager:' + record.id });
+  rows.push(actions);
+  rows.push([{ text: '↩️ ' + navigation.backToCard, callback_data: 'property:card:' + record.id }]);
+
+  try {
+    const fileId = knownFileId(image);
+    let result = null;
+    if (fileId) {
+      try {
+        result = await telegramRequest(token, 'editMessageMedia', {
+          chat_id: chatId,
+          message_id: messageId,
+          media: { type: 'photo', media: fileId, caption, parse_mode: 'HTML' },
+          reply_markup: { inline_keyboard: rows },
+        });
+      } catch {
+        // Файл на стороне Telegram устарел — отправим байтами.
+        rememberFileId(image, '');
+      }
+    }
+    if (!result) {
+      const bytes = imageBytes(image);
+      result = await telegramMultipartRequest(token, 'editMessageMedia', {
+        chat_id: String(chatId),
+        message_id: String(messageId),
+        media: { type: 'photo', media: 'attach://photo', caption, parse_mode: 'HTML' },
+        reply_markup: { inline_keyboard: rows },
+        photo: new Blob([bytes], { type: image.mimeType }),
+      });
+      if (result && Array.isArray(result.photo) && result.photo.length) {
+        rememberFileId(image, result.photo[result.photo.length - 1].file_id);
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function editPropertyCard(chatId, user, token, message, record, catalog) {
   const messageId = Number(message && message.message_id);
   if (!Number.isFinite(messageId)) return false;
@@ -1437,6 +1505,7 @@ function promotionButtons(record, language, page, totalPages) {
 }
 
 export {
+  showPropertyPhoto,
   CATALOG_FILTER_BEDROOMS,
   CATALOG_FILTER_MIN_RECORDS,
   CATALOG_FILTER_PRICES,

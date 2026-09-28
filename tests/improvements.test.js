@@ -858,8 +858,18 @@ test.describe('catalog filter', () => {
     const chat = createChat();
     chat.user.catalogFilter = { deal: 'sale', type: '', bedrooms: 0, city: 'Марбелья', district: 'Золотая Миля', maxPrice: 0, sort: 'asc' };
     await chat.say(MENU.ru.objects);
-    const gallery = await chat.press('property:gallery:gallery-home-01');
-    assert.ok(callbacksOf(gallery.last.markup).includes('property:return:gallery-home-01'));
+    // Фотографии листаются в самой карточке: отдельного альбома и сообщения
+    // «Что вы хотите сделать дальше?» больше нет.
+    const gallery = await chat.press('property:gallery:gallery-home-01', { card: true });
+    const edited = gallery.calls.filter((call) => call.method === 'editMessageMedia');
+    assert.equal(edited.length, 1, 'карточка изменилась на месте, а не прислала альбом');
+    assert.equal(gallery.calls.some((call) => call.method === 'sendMediaGroup'), false, 'альбома больше нет');
+    const photoButtons = (edited[0].body.reply_markup.inline_keyboard || []).flat().map((button) => button.callback_data);
+    assert.ok(photoButtons.some((data) => data === 'property:photo:1:gallery-home-01'), 'есть переход к следующей фотографии');
+    assert.ok(photoButtons.includes('property:card:gallery-home-01'), 'и возврат к карточке');
+
+    await chat.press('property:photo:1:gallery-home-01', { card: true });
+    await chat.press('property:card:gallery-home-01', { card: true });
     await chat.press('property:return:gallery-home-01');
     assert.equal(chat.user.catalogContext.propertyId, 'gallery-home-01');
 
@@ -1138,4 +1148,47 @@ test.describe('lead source', () => {
     const digest = await bot.runDailyDigest(new Date(2026, 8, 18, 10, 0));
     assert.match(digest, /Новых пользователей: 3 \(instagram — 2, без метки — 1\)/);
   });
+});
+
+test('фотографии листаются в карточке, а чат не растёт', async () => {
+  // Раньше «Все фотографии» присылали альбом из отдельных сообщений и следом
+  // вопрос «Что вы хотите сделать дальше?» с третьим набором кнопок. Клиент
+  // терял карточку объекта из виду, а чат зарастал.
+  resetData((data) => {
+    const home = property('flip-01', 'Дом с тремя фото', 'active');
+    home.imagesByLanguage.ru.push({ ...home.imagesByLanguage.ru[0], id: 'flip-01-b' });
+    home.imagesByLanguage.ru.push({ ...home.imagesByLanguage.ru[0], id: 'flip-01-c' });
+    data.objects.push(home);
+  });
+  const chat = createChat();
+  await chat.say(bot.text.menuLabels.ru.objects);
+
+  // Фотография уходит вложением, поэтому поле media приходит строкой.
+  const mediaOf = (call) => (typeof call.body.media === 'string' ? JSON.parse(call.body.media) : call.body.media);
+  const opened = await chat.press('property:gallery:flip-01', { card: true });
+  const firstEdit = opened.calls.filter((call) => call.method === 'editMessageMedia');
+  assert.equal(firstEdit.length, 1, 'открылась первая фотография прямо в карточке');
+  assert.match(mediaOf(firstEdit[0]).caption, /Фото 1 \/ 3/, 'видно, какая это фотография из скольких');
+  assert.equal(opened.calls.some((call) => call.method === 'sendPhoto' || call.method === 'sendMediaGroup'), false, 'новых сообщений в чате не появилось');
+
+  const next = await chat.press('property:photo:1:flip-01', { card: true });
+  const secondEdit = next.calls.filter((call) => call.method === 'editMessageMedia');
+  assert.equal(secondEdit.length, 1, 'следующая фотография тоже меняется на месте');
+  assert.match(mediaOf(secondEdit[0]).caption, /Фото 2 \/ 3/);
+  const buttons = secondEdit[0].body.reply_markup.inline_keyboard.flat().map((button) => button.callback_data);
+  assert.ok(buttons.includes('property:photo:0:flip-01'), 'есть шаг назад');
+  assert.ok(buttons.includes('property:photo:2:flip-01'), 'и шаг вперёд');
+  assert.ok(buttons.includes('property:viewing:flip-01'), 'записаться на просмотр можно прямо из фотографий');
+  assert.ok(buttons.includes('property:card:flip-01'), 'и вернуться к карточке');
+
+  // Последняя фотография ведёт на первую: листать можно по кругу.
+  const wrapped = await chat.press('property:photo:3:flip-01', { card: true });
+  assert.match(mediaOf(wrapped.calls.filter((call) => call.method === 'editMessageMedia')[0]).caption, /Фото 1 \/ 3/);
+
+  const back = await chat.press('property:card:flip-01', { card: true });
+  const restored = back.calls.filter((call) => call.method === 'editMessageMedia');
+  assert.equal(restored.length, 1, 'карточка возвращается тем же сообщением');
+  const cardButtons = restored[0].body.reply_markup.inline_keyboard.flat().map((button) => button.callback_data);
+  assert.ok(cardButtons.includes('property:gallery:flip-01'), 'на карточке снова кнопка «Фото»');
+  assert.ok(cardButtons.includes('property:details:flip-01'), 'и «Подробнее»');
 });

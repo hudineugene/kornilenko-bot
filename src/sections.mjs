@@ -7,13 +7,13 @@ import { COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LA
 import { data, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
-import { sendMessage, sendPhotoAlbum, sendPhotoMessage, telegramRequest } from './telegram.mjs';
+import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs';
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
-import { CATALOG_MODES, COMPARISON_LIMIT, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, contentButtons, deleteCatalogMessages, localizedExact, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
 import { similarPropertyRanking } from './similar.mjs';
 
@@ -375,7 +375,9 @@ async function sendSimilarProperty(chatId, user, record, token) {
 async function handlePropertyCallback(query, token) {
   const parts = String(query.data || '').split(':');
   const actionName = parts[1];
-  const propertyId = parts.slice(2).join(':');
+  // У листания фотографий номер стоит перед объектом: property:photo:3:<id>.
+  const photoIndex = actionName === 'photo' ? Number(parts[2]) : NaN;
+  const propertyId = actionName === 'photo' ? parts.slice(3).join(':') : parts.slice(2).join(':');
   const record = data.objects.find((item) => item.id === propertyId && ['active', 'reserved'].includes(item.status));
   const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
   const user = normalizeUser(query.from, chatId, false);
@@ -405,14 +407,20 @@ async function handlePropertyCallback(query, token) {
   if (actionName === 'card') {
     await acknowledgeCallback(query, token);
     if (query.message && query.message.message_id) {
-      try {
-        await telegramRequest(token, 'editMessageReplyMarkup', {
-          chat_id: chatId,
-          message_id: query.message.message_id,
-          reply_markup: contentButtons(record, language, user, 'property', catalogContextFromMessage(query.message, language)),
-        });
-      } catch {
-        await sendPropertyCard(chatId, user, token, record, { heading: (MENU_LABELS[language] || MENU_LABELS.ru).objects, page: 0, totalPages: 1, mode: 'all' });
+      // Возврат из просмотра фотографий: вернуть нужно и первую картинку, и
+      // подпись, и кнопки карточки, а не только кнопки.
+      const context = catalogContextFromMessage(query.message, language);
+      const restored = await editPropertyCard(chatId, user, token, query.message, record, context);
+      if (!restored) {
+        try {
+          await telegramRequest(token, 'editMessageReplyMarkup', {
+            chat_id: chatId,
+            message_id: query.message.message_id,
+            reply_markup: contentButtons(record, language, user, 'property', context),
+          });
+        } catch {
+          await sendPropertyCard(chatId, user, token, record, { heading: (MENU_LABELS[language] || MENU_LABELS.ru).objects, page: 0, totalPages: 1, mode: 'all' });
+        }
       }
     }
     return;
@@ -588,33 +596,28 @@ async function handlePropertyCallback(query, token) {
     await acknowledgeCallback(query, token, notice);
     return;
   }
-  if (actionName === 'gallery') {
+  if (actionName === 'gallery' || actionName === 'photo') {
     const images = recordImages(record, language);
     if (!images.length) {
       await acknowledgeCallback(query, token, text.photosUnavailable);
       return;
     }
-    void notifyAdministratorAction(user, 'Открыл фотографии объекта', localizedExact(record.title, language) || record.reference || record.id);
-    recordPropertyEvent(record.id, 'galleries');
-    await acknowledgeCallback(query, token, text.gallery);
-    const albumTitle = localizedExact(record.title, language) || record.reference || '';
-    await clearGalleryMessages(chatId, user, token);
-    const albumMessages = await sendPhotoAlbum(chatId, images, token, albumTitle);
-    user.galleryMessageIds = albumMessages.map((message) => Number(message && message.message_id)).filter(Number.isFinite).slice(0, 20);
-    scheduleSave();
-    const interaction = INTERACTION_TEXT[language] || INTERACTION_TEXT.ru;
-    const nextRows = [
-      [{ text: '📋 ' + text.details, callback_data: 'property:details:' + record.id }],
-      [{ text: '💬 ' + text.contact, callback_data: 'property:manager:' + record.id }],
-    ];
-    const context = user.catalogContext && typeof user.catalogContext === 'object' ? user.catalogContext : { mode: 'all', page: 0 };
-    const contextRecords = catalogRecords(user, context.mode);
-    const currentIndex = contextRecords.findIndex((item) => item.id === record.id);
-    if (currentIndex >= 0 && contextRecords.length > 1) {
-      nextRows.push([{ text: text.nextProperty, callback_data: 'property:next:' + record.id }]);
+    if (actionName === 'gallery') {
+      void notifyAdministratorAction(user, 'Открыл фотографии объекта', localizedExact(record.title, language) || record.reference || record.id);
+      recordPropertyEvent(record.id, 'galleries');
     }
-    nextRows.push([{ text: '⬅️ ' + interaction.hideGallery, callback_data: 'property:return:' + record.id }]);
-    await sendUiMessage(chatId, user, text.nextPrompt, token, { reply_markup: { inline_keyboard: nextRows } });
+    await acknowledgeCallback(query, token);
+    // Фотографии листаются прямо в карточке. Раньше бот присылал альбом из
+    // восьми отдельных сообщений и следом вопрос «Что вы хотите сделать
+    // дальше?» с третьим набором кнопок — чат зарастал, а вернуться к объекту
+    // было некуда.
+    const index = Number.isFinite(photoIndex) ? photoIndex : 0;
+    const shown = await showPropertyPhoto(chatId, user, token, query.message, record, index);
+    if (!shown) {
+      // Сообщение не редактируется (например, слишком старое) — показываем
+      // карточку заново, с неё фотографии откроются обычным путём.
+      await sendPropertyCard(chatId, user, token, record, catalogContextFromMessage(query.message, language));
+    }
     return;
   }
   if (actionName === 'interest') {

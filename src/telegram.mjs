@@ -232,68 +232,6 @@ async function sendDocumentMessage(chatId, image, caption, token, replyMarkup, o
   return result;
 }
 
-async function sendPhotoAlbum(chatId, images, token, caption = '') {
-  const album = (Array.isArray(images) ? images : [])
-    .filter(imageExists)
-    .slice(0, 10);
-  if (!album.length) return [];
-  if (album.length === 1) {
-    const message = await sendPhotoMessage(chatId, album[0], cleanText(caption, 1000), token, null);
-    return message ? [message] : [];
-  }
-
-  const firstCaption = cleanText(caption, 1000);
-  let result;
-  if (album.every((image) => knownFileId(image))) {
-    try {
-      result = await telegramRequest(token, 'sendMediaGroup', {
-        chat_id: chatId,
-        media: album.map((image, index) => ({
-          type: 'photo',
-          media: knownFileId(image),
-          ...(index === 0 && firstCaption ? { caption: firstCaption } : {}),
-        })),
-      });
-    } catch (error) {
-      if (!staleFileIdError(error)) throw error;
-      for (const image of album) rememberFileId(image, '');
-    }
-  }
-
-  if (!result) {
-    const fields = {
-      chat_id: String(chatId),
-      media: album.map((image, index) => ({
-        type: 'photo',
-        media: 'attach://photo' + index,
-        ...(index === 0 && firstCaption ? { caption: firstCaption } : {}),
-      })),
-    };
-    album.forEach((image, index) => {
-      const bytes = imageBytes(image);
-      fields['photo' + index] = new Blob([bytes], { type: image.mimeType });
-    });
-    result = await telegramMultipartRequest(token, 'sendMediaGroup', fields);
-    if (Array.isArray(result)) {
-      result.forEach((message, index) => {
-        if (message && Array.isArray(message.photo) && message.photo.length && album[index]) {
-          rememberFileId(album[index], message.photo[message.photo.length - 1].file_id);
-        }
-      });
-    }
-  }
-
-  const messages = Array.isArray(result) ? result : [];
-  const messageIds = messages.map((message) => Number(message && message.message_id)).filter(Number.isFinite);
-  data.stats.messagesSent += messages.length;
-  for (let index = 0; index < messages.length; index += 1) recordDaily('sent');
-  recordActivity(userByChatId(chatId), 'out', firstCaption || '[Альбом: ' + messages.length + ' фото]', 'album', {
-    messageId: messageIds[0],
-    messageIds,
-  });
-  scheduleSave();
-  return messages;
-}
 
 function splitTelegramText(text, limit = TELEGRAM_MESSAGE_LIMIT) {
   const chunks = [];
@@ -374,7 +312,6 @@ export {
   rememberFileId,
   sendMessage,
   sendDocumentMessage,
-  sendPhotoAlbum,
   sendPhotoMessage,
   splitTelegramText,
   telegramCall,

@@ -104,11 +104,16 @@ function createChat({ language = 'ru', firstName = 'Анна' } = {}) {
       messageId += 1;
       return deliver({ message: { message_id: messageId, date: now(), from, chat, contact: { phone_number: phone, user_id: userId, first_name: firstName } } }, userId);
     },
-    press(data) {
+    // options.card = true — кнопка нажата под карточкой объекта, то есть под
+    // сообщением с фотографией: именно такие сообщения бот меняет на месте.
+    press(data, options = {}) {
       messageId += 1;
       // The same button pressed twice within 1.4 s counts as a double click.
       if (this.user) this.user.lastCallback = null;
-      return deliver({ callback_query: { id: 'cb' + updateId, from, data, message: { message_id: 5000 + messageId, date: now(), chat, text: '' } } }, userId);
+      const message = options.card
+        ? { message_id: 5000 + messageId, date: now(), chat, caption: options.caption || 'карточка объекта', photo: [{ file_id: 'photo-card' }] }
+        : { message_id: 5000 + messageId, date: now(), chat, text: '' };
+      return deliver({ callback_query: { id: 'cb' + updateId, from, data, message } }, userId);
     },
   };
 }
