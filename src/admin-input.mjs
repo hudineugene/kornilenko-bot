@@ -178,6 +178,7 @@ function parseContentRecord(body, kind, existing = {}) {
     parseContentImages(body, currentImagesByLanguage[language], language),
   ])) : { ru: [], en: [], es: [] };
   const mapUrl = kind === 'objects' ? cleanText(body.mapUrl, 500) : '';
+  const videoUrl = kind === 'objects' ? cleanText(body.videoUrl, 500) : '';
   const common = {
     ...existing,
     id: existing.id || crypto.randomUUID(),
@@ -189,6 +190,7 @@ function parseContentRecord(body, kind, existing = {}) {
   };
   if (common.url && !validHttpUrl(common.url)) throw new Error('Ссылка должна начинаться с http:// или https://');
   if (mapUrl && !validHttpUrl(mapUrl)) throw new Error('Ссылка на карту должна начинаться с http:// или https://');
+  if (videoUrl && !validHttpUrl(videoUrl)) throw new Error('Ссылка на видео или 3D-тур должна начинаться с http:// или https://');
   if (kind === 'objects') {
     delete common.images;
     delete common.image;
@@ -215,6 +217,7 @@ function parseContentRecord(body, kind, existing = {}) {
       distanceSea: optionalNumber(body.distanceSea, 'расстояние до моря', 100000),
       condition: ['new', 'renovated', 'needs_renovation', 'under_construction', ''].includes(body.condition) ? body.condition : '',
       mapUrl,
+      videoUrl,
       badges: Array.isArray(body.badges) ? body.badges.filter((item) => ['new', 'recommended', 'exclusive', 'price_reduced'].includes(item)) : [],
       status: ['active', 'hidden', 'reserved', 'sold'].includes(body.status) ? body.status : 'active',
     };

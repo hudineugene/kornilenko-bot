@@ -114,6 +114,23 @@ test('клиенту недозаполненный объект всё равн
   assert.deepEqual(shown, ['ready'], 'в каталоге остаётся только готовая карточка');
 });
 
+test('видео-тур сохраняется и появляется кнопкой на карточке', async () => {
+  const record = objectById('ready');
+  const response = await patch('ready', cardPayload(record, { videoUrl: 'https://youtu.be/tour123' }));
+  assert.equal(response.status, 200, await response.text());
+  assert.equal(objectById('ready').videoUrl, 'https://youtu.be/tour123');
+
+  // Кнопка «Видео-тур» ведёт на эту ссылку.
+  const markup = bot.contentButtons(objectById('ready'), 'ru', { id: 'x', favorites: [] }, 'property', null);
+  const video = markup.inline_keyboard.flat().find((button) => button.url === 'https://youtu.be/tour123');
+  assert.ok(video, 'кнопка есть');
+  assert.match(video.text, /Видео-тур/);
+
+  // Чужая ссылка не проходит.
+  const bad = await patch('ready', cardPayload(objectById('ready'), { videoUrl: 'ftp://example.com/tour' }));
+  assert.equal(bad.status, 400, 'ссылка должна начинаться с http:// или https://');
+});
+
 test('объект публикуется в канал одним запросом, ссылка помнит источник', async () => {
   const data = bot.getData();
   data.bot = { id: 1, username: 'kornilenko_bot', firstName: 'Bot' };

@@ -402,6 +402,7 @@ function openRecordEditor(kind, id) {
           translatedField("address", "Адрес", record && record.address) +
           '<div class="grid cols-2"><div class="field"><label>Ссылка на объект</label><input id="fUrl" value="' + esc(record && record.url || "") + '"></div>' +
           '<div class="field"><label>Ссылка на карту</label><input id="fMap" value="' + esc(record && record.mapUrl || "") + '"></div></div>' +
+          '<div class="field"><label for="fVideo">Видео или 3D-тур</label><input id="fVideo" value="' + esc(record && record.videoUrl || "") + '" placeholder="https://youtu.be/… или Matterport"><div class="hint">Клиент увидит на карточке кнопку «🎥 Видео-тур». Для покупателей из другой страны это замена поездке.</div></div>' +
           '<div class="hint">Полный адрес показывается клиенту только после нажатия «Подробнее».</div>' +
         "</div></details>"
       : '<details class="editor-section" open><summary><b>Показ акции</b><span>срок действия и ссылка</span></summary><div class="editor-section-body stack">' +
@@ -686,6 +687,7 @@ function openRecordEditor(kind, id) {
             condition: dialog.querySelector("#fCondition").value,
             reference: dialog.querySelector("#fReference").value,
             mapUrl: dialog.querySelector("#fMap").value,
+            videoUrl: dialog.querySelector("#fVideo").value,
             city: collectTranslated(dialog, "city"),
             district: collectTranslated(dialog, "district"),
             address: collectTranslated(dialog, "address"),

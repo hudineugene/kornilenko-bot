@@ -164,6 +164,10 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
   if (kind !== 'property' && url) {
     rows.push([{ text: '🌐 ' + action.viewWebsite, url }]);
   }
+  // Видео-тур — на самой карточке: для покупателя из другой страны это
+  // единственный способ «сходить» на просмотр сегодня.
+  const video = kind === 'property' ? validHttpUrl(record.videoUrl) : '';
+  if (video) rows.push([{ text: mobileButtonText('🎥', action.videoTour), url: video }]);
   if (kind === 'property' && catalog && catalog.mode === 'all' && catalog.filter && catalog.filter.available) {
     const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
     const filterCount = catalog.filter.summary ? catalogFilterCriteriaCount(user && user.catalogFilter) : 0;
