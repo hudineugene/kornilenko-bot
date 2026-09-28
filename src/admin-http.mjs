@@ -14,7 +14,7 @@ import { data, runtime, verifyPassword, verifyPasswordAsync } from './store.mjs'
 import { publicRuntime } from './menus.mjs';
 import { propertyPublicationReadiness, recordImages } from './catalog.mjs';
 import { isContainerBackup, readBackupContainer } from './backup-file.mjs';
-import { adminNotifications } from './admin-notifications.mjs';
+import { adminNotifications, waitingConversationCount } from './admin-notifications.mjs';
 
 const SESSIONS_FILE = path.join(path.dirname(DATA_FILE), 'bot-sessions.json');
 const SESSION_PERSIST_STEP_MS = 10 * 60 * 1000;
@@ -787,6 +787,8 @@ function safeState(session) {
     replyTemplates: data.replyTemplates || [],
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
     unreadConversationCount: unreadUsers.size,
+    // Одно определение «ждут ответа» для всех экранов панели.
+    waitingConversationCount: waitingConversationCount(),
     broadcastOptOutCount: Object.values(data.users).filter((user) => user.broadcastsOptOut && !user.blocked && user.chatId).length,
     // Рассылка уходит только согласившимся: панель показывает, сколько их.
     newsConsentCount: Object.values(data.users).filter((user) => user.newsConsentAt && !user.broadcastsOptOut && !user.blocked && user.chatId).length,

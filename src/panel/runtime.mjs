@@ -475,16 +475,25 @@ async function refresh() {
   renderView({ keepScroll: true, auto: true });
 }
 
+// Сколько клиентов ждут ответа. Число приходит от бота и одинаково на всех
+// экранах: на значке в меню, в карточке «Ждут ответа» на Обзоре и во вкладке
+// «Ждут ответа» в «Переписке». Раньше каждый экран считал по-своему — по
+// заявкам, по диалогам или по непрочитанным — и три числа не сходились.
+function waitingClients() {
+  var count = Number(state && state.waitingConversationCount);
+  if (Number.isFinite(count)) return count;
+  var clients = {};
+  (state && state.inquiries || []).forEach(function (item) {
+    if (awaitsReply(item)) clients[String(item.userId)] = true;
+  });
+  return Object.keys(clients).length;
+}
+
 function navItems() {
-  // Счётчик у «Переписки» — это непрочитанные беседы. Ноль непрочитанных тоже
-  // ответ: раньше при нуле подставлялось число «ждут ответа», и на значке
-  // висело одно, а в списке «Непрочитанные» — совсем другое.
-  var unread = Number(state && state.unreadConversationCount);
-  var waiting = Number.isFinite(unread) ? unread : (state && state.inquiries || []).filter(awaitsReply).length;
   return [
     { id: "overview", icon: "◉", title: "Обзор" },
     { id: "notifications", icon: "🔔", title: "Центр уведомлений", hidden: true },
-    { id: "inquiries", icon: "✉", title: "Переписка", count: waiting, tabs: [["inbox", "Центр сообщений"], ["tasks", "Задачи"], ["pipeline", "Воронка"], ["viewings", "Просмотры"], ["clients", "База клиентов"]] },
+    { id: "inquiries", icon: "✉", title: "Переписка", count: waitingClients(), tabs: [["inbox", "Центр сообщений"], ["tasks", "Задачи"], ["pipeline", "Воронка"], ["viewings", "Просмотры"], ["clients", "База клиентов"]] },
     { id: "catalog", icon: "⌂", title: "Каталог", tabs: [["objects", "Объекты"], ["offers", "Акции"], ["feed", "Загрузка с сайта"]] },
     { id: "texts", icon: "✎", title: "Тексты бота", tabs: [["welcome", "Приветствие"], ["sections", "Разделы"], ["contacts", "Контакты"], ["rules", "Автоответы"], ["interface", "Интерфейс"]] },
     { id: "reach", icon: "➤", title: "Рассылки и каналы", tabs: [["campaigns", "Рассылки"], ["group", "Группы и каналы"], ["style", "Оформление постов"]] },

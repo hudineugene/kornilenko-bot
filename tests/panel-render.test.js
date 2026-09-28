@@ -477,7 +477,7 @@ test.describe('автообновление панели раз в 45 секун
 
     const before = waitingBadge(sandbox);
     // Клиент написал: в новом состоянии одна беседа ждёт ответа.
-    state.unreadConversationCount = before + 3;
+    state.waitingConversationCount = before + 3;
 
     await tick(sandbox);
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -496,7 +496,7 @@ test.describe('автообновление панели раз в 45 секун
     assert.equal(dialog.open, true);
 
     const before = waitingBadge(sandbox);
-    state.unreadConversationCount = before + 1;
+    state.waitingConversationCount = before + 1;
 
     await tick(sandbox);
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -945,27 +945,45 @@ test('когда дата разобрана, она и подставляетс
   dialog.closeClean();
 });
 
-test('счётчик у «Переписки» — это непрочитанные, даже когда их ноль', async () => {
-  // Раньше при нуле непрочитанных подставлялось число «ждут ответа»: на значке
-  // висело одно, а во вкладке «Непрочитанные» — другое.
+test('счётчик у «Переписки» — это клиенты, которые ждут ответа, и он один на всю панель', async () => {
+  // Раньше на одном экране было три разных числа: карточка «Ждут ответа»
+  // считала заявки, вкладка «Ждут ответа» — диалоги, значок в меню —
+  // непрочитанные. Теперь число считает бот, а панель его только показывает.
   const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
   resetData((data) => {
     data.config.active = true;
-    data.users['760001'] = { id: '760001', chatId: 760001, firstName: 'Зоя', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(5) };
-    // Клиент ждёт ответа, но беседу менеджер уже прочитал.
-    data.inquiries.push({
-      id: 'inq-read', userId: '760001', chatId: '760001', language: 'ru', type: 'general',
-      text: 'Вопрос по вилле', status: 'new', pipelineStage: 'new', replies: [], messages: [],
-      readAt: minutesAgo(1), createdAt: minutesAgo(30), updatedAt: minutesAgo(5), clientMessageAt: minutesAgo(5),
-    });
+    // Один клиент с двумя заявками: ждёт ответа он один, а не «две заявки».
+    data.users['780001'] = { id: '780001', chatId: 780001, firstName: 'Зоя', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(5) };
+    data.users['780002'] = { id: '780002', chatId: 780002, firstName: 'Лев', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(9) };
+    for (const [id, userId] of [['w-1', '780001'], ['w-2', '780001'], ['w-3', '780002']]) {
+      data.inquiries.push({
+        id, userId, chatId: userId, language: 'ru', type: 'general', text: 'Вопрос',
+        status: 'new', pipelineStage: 'new', replies: [], messages: [], readAt: minutesAgo(1),
+        createdAt: minutesAgo(30), updatedAt: minutesAgo(5), clientMessageAt: minutesAgo(5),
+      });
+    }
   });
   const { sandbox, state } = await panelSandbox();
-  assert.equal(state.unreadConversationCount, 0, 'непрочитанных нет');
-  const badge = sandbox.navItems().find((item) => item.id === 'inquiries').count;
-  assert.equal(badge, 0, 'на значке ноль, а не число «ждут ответа»');
+  assert.equal(state.waitingConversationCount, 2, 'бот насчитал двух клиентов, а не три заявки');
 
-  state.unreadConversationCount = 2;
-  assert.equal(sandbox.navItems().find((item) => item.id === 'inquiries').count, 2, 'а появились непрочитанные — показывает их');
+  const badge = sandbox.navItems().find((item) => item.id === 'inquiries').count;
+  assert.equal(badge, 2, 'на значке в меню то же число');
+
+  const host = fakeElement('main');
+  await sandbox.VIEWS.overview.render(host, '');
+  assert.match(String(host.innerHTML), /Ждут ответа<\/span><span class="value">2</, 'и в карточке на Обзоре');
+
+  const list = fakeElement('main');
+  sandbox.inquiryFilter.status = 'waiting';
+  await sandbox.VIEWS.inquiries.render(list, 'inbox');
+  assert.match(String(list.innerHTML), /Ждут ответа · 2/, 'и во вкладке «Переписки»');
+});
+
+test('когда все отвечены, ноль везде', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, state } = await panelSandbox();
+  assert.equal(state.waitingConversationCount, 0);
+  assert.equal(sandbox.navItems().find((item) => item.id === 'inquiries').count, 0, 'значок пустой');
 });
 
 test('сбой загрузки переписки виден как сбой, а не как пустая беседа', async () => {

@@ -3,6 +3,8 @@
 
 import { cleanText, localDayKey } from './util.mjs';
 import { data, runtime, saveDataNow } from './store.mjs';
+import { propertyReadyForLanguage } from './catalog.mjs';
+import { awaitingReply } from './inquiries.mjs';
 
 const MAX_NOTIFICATION_STATES = 1000;
 
@@ -101,6 +103,44 @@ function currentAdminNotifications() {
     });
   }
 
+  // Каталог, которого клиент не видит: объект «активен», но без обязательных
+  // полей карточка не попадает в выдачу ни на одном языке. Это главная
+  // клиентская беда, и раньше о ней знал только Обзор — считая у себя в
+  // браузере, поэтому в центр уведомлений и на телефон она не попадала.
+  const active = data.objects.filter((record) => record.status === 'active');
+  const invisible = active.filter((record) => !['ru', 'en', 'es'].some((language) => propertyReadyForLanguage(record, language)));
+  if (!active.length) {
+    items.push({
+      id: 'catalog:empty', kind: 'catalog', severity: 'warn', title: 'В каталоге нет активных объектов',
+      text: data.objects.length ? 'Все объекты скрыты — клиент видит пустой каталог.' : 'Добавьте первый объект, иначе боту нечего показывать.',
+      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('catalog', 'objects'),
+    });
+  } else if (invisible.length >= active.length) {
+    items.push({
+      id: 'catalog:invisible:all:' + active.length, kind: 'catalog', severity: 'bad', title: 'Клиенты не видят ни одного объекта',
+      text: 'В карточках не хватает обязательных полей, поэтому каталог у клиента пустой.',
+      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('catalog', 'objects'),
+    });
+  } else if (invisible.length) {
+    items.push({
+      id: 'catalog:invisible:' + invisible.length + ':' + active.length, kind: 'catalog', severity: 'warn',
+      title: invisible.length + ' из ' + active.length + ' объектов не показываются клиентам',
+      text: 'В карточках не хватает обязательных полей — клиент их не найдёт.',
+      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('catalog', 'objects'),
+    });
+  }
+
+  const joinRequests = (Array.isArray(data.groups) ? data.groups : [])
+    .reduce((total, group) => total + ((Array.isArray(group.joinRequests) ? group.joinRequests : []).length), 0);
+  if (joinRequests) {
+    items.push({
+      id: 'group:requests:' + joinRequests, kind: 'group', severity: 'warn',
+      title: joinRequests + ' заявок на вступление в группу',
+      text: 'Люди ждут одобрения — пока их не пустили, они не видят постов.',
+      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('reach', 'group'),
+    });
+  }
+
   if (!data.config.active) {
     items.push({ id: 'system:bot-disabled', kind: 'system', severity: 'bad', title: 'Бот выключен', text: 'Клиенты не получают автоматические ответы.', createdAt: data.stats.startedAt || data.stats.lastUpdateAt || '', route: route('settings', 'connection') });
   } else if (!data.config.adminNotificationVerifiedAt) {
@@ -123,6 +163,17 @@ function currentAdminNotifications() {
     });
   }
   return items;
+}
+
+// Сколько клиентов ждут ответа. Считается здесь, чтобы у панели не было своего
+// мнения: раньше Обзор считал заявки, «Переписка» — диалоги, а значок в меню
+// показывал непрочитанные, и три числа на одном экране не сходились.
+function waitingConversationCount() {
+  const waiting = new Set();
+  for (const inquiry of data.inquiries) {
+    if (awaitingReply(inquiry)) waiting.add(String(inquiry.userId));
+  }
+  return waiting.size;
 }
 
 function notificationSnapshot(item) {
@@ -187,4 +238,4 @@ function readAllAdminNotifications() {
   saveDataNow();
 }
 
-export { adminNotifications, currentAdminNotifications, readAllAdminNotifications, updateAdminNotification };
+export { adminNotifications, currentAdminNotifications, readAllAdminNotifications, updateAdminNotification, waitingConversationCount };

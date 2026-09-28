@@ -151,7 +151,6 @@ test('рабочий список собирает контакты менедж
   assert.match(PANEL_HTML, /Без следующего шага/);
   assert.match(PANEL_HTML, /data-task-plan/);
   assert.match(PANEL_HTML, /data-task-done/);
-  assert.match(PANEL_HTML, /Откройте рабочий список менеджера/);
 });
 
 test('карточка клиента объединяет профиль, интересы и личную переписку', async () => {

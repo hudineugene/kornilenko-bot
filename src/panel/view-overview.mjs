@@ -41,39 +41,14 @@ function kpiCard(label, value, note, noteKind) {
     (note ? '<span class="delta ' + (noteKind || "") + '">' + note + "</span>" : "") + "</div>";
 }
 
-// Что требует внимания: только то, с чем администратор может что-то сделать.
+// Что требует внимания — один список на всю панель: его собирает бот
+// (admin-notifications.mjs), тот же список показывают колокольчик и Центр
+// уведомлений. Раньше Обзор считал своё в браузере, и на одном экране
+// оказывались разные числа и разные поводы.
 function attentionItems() {
-  var items = [];
-  var waiting = (state.inquiries || []).filter(awaitsReply);
-  if (waiting.length) items.push({ what: counted(waiting.length, "обращение ждёт", "обращения ждут", "обращений ждут") + " ответа", why: "Самое давнее — " + ago(waiting[waiting.length - 1].clientMessageAt || waiting[waiting.length - 1].createdAt), go: ["inquiries", "inbox"], kind: "bad" });
-  var dueContacts = (state.inquiries || []).filter(function (item) { return item.status !== "closed" && item.followUpDate && item.followUpDate <= pipelineToday(); });
-  if (dueContacts.length) items.push({ what: counted(dueContacts.length, "контакт запланирован", "контакта запланированы", "контактов запланированы") + " на сегодня или раньше", why: "Откройте рабочий список менеджера", go: ["inquiries", "tasks"], kind: "bad" });
-  var unconfirmed = unconfirmedViewings();
-  if (unconfirmed.length) items.push({ what: counted(unconfirmed.length, "просмотр", "просмотра", "просмотров") + " без подтверждения", why: "Клиент ждёт дату и время", go: ["inquiries", "viewings"], kind: "warn" });
-  if (!state.config.active) items.push({ what: "Бот выключен", why: "Клиенты не получают ответов", go: ["settings", "connection"], kind: "bad" });
-  if (state.config.active && !state.config.adminNotificationVerifiedAt) items.push({ what: "Админ-чат не проверен", why: "Уведомления о заявках могут не приходить", go: ["settings", "connection"], kind: "warn" });
-  var hidden = (state.objects || []).filter(function (record) { return record.status !== "active"; }).length;
-  var activeRecords = (state.objects || []).filter(function (record) { return record.status === "active"; });
-  var active = activeRecords.length;
-  if (!active) items.push({ what: "В каталоге нет активных объектов", why: hidden ? counted(hidden, "объект скрыт", "объекта скрыто", "объектов скрыто") : "Добавьте первый объект", go: ["catalog", "objects"], kind: "warn" });
-  // Активный объект ещё не значит видимый: без обязательных полей карточка
-  // не попадает в каталог, и клиент видит пустоту.
-  if (active) {
-    var invisible = activeRecords.filter(function (record) {
-      var issues = record.publicationIssues || {};
-      return ["ru", "en", "es"].every(function (language) { return (issues[language] || []).length > 0; });
-    });
-    if (invisible.length >= active) {
-      items.push({ what: "Клиенты не видят ни одного объекта", why: "В карточках не хватает обязательных полей — каталог у клиента пустой", go: ["catalog", "objects"], kind: "bad" });
-    } else if (invisible.length) {
-      items.push({ what: counted(invisible.length, "объект не показывается", "объекта не показываются", "объектов не показываются") + " клиентам", why: "В карточках не хватает обязательных полей", go: ["catalog", "objects"], kind: "warn" });
-    }
-  }
-  var errors = (state.errors || []).length;
-  if (errors) items.push({ what: counted(errors, "ошибка", "ошибки", "ошибок") + " в журнале", why: "Последняя — " + ago(state.errors[0] && (state.errors[0].createdAt || state.errors[0].at)), go: ["settings", "data"], kind: "warn" });
-  var requests = (state.groups || []).reduce(function (total, group) { return total + ((group.joinRequests || []).length); }, 0);
-  if (requests) items.push({ what: counted(requests, "заявка", "заявки", "заявок") + " на вступление в группу", why: "Ждут одобрения", go: ["reach", "group"], kind: "warn" });
-  return items;
+  return (state.notifications || [])
+    .filter(function (item) { return item.active && !item.handledAt; })
+    .slice(0, 8);
 }
 
 function sparkline(days, field, color) {
@@ -91,15 +66,16 @@ VIEWS.overview = {
   render: function (host) {
     var today = startOfToday(), week = startOfWeek();
     var todayKey = dayKeyOf(new Date());
-    var waiting = (state.inquiries || []).filter(awaitsReply).length;
+    // Одно число на всю панель: сколько клиентов ждут ответа. Считает бот.
+    var waiting = waitingClients();
     var weekDays = lastDays(14);
     var attention = attentionItems();
     var recent = (state.inquiries || []).slice(0, 6);
     host.innerHTML =
       '<div class="grid cols-4" style="margin-bottom:12px">' +
         kpiCard("Клиенты", num(state.userCount), "+" + usersInRange(week) + " за 7 дней") +
-        kpiCard("Обращения за 7 дней", num(inquiriesInRange(week).length), inquiriesInRange(today).length + " сегодня") +
-        kpiCard("Ждут ответа", num(waiting), waiting ? "нужен ответ" : "все отвечены", waiting ? "down" : "up") +
+        kpiCard("Заявки за 7 дней", num(inquiriesInRange(week).length), inquiriesInRange(today).length + " сегодня") +
+        kpiCard("Ждут ответа", num(waiting), waiting ? "клиентов ждут ответа" : "все отвечены", waiting ? "down" : "up") +
         kpiCard("Просмотры", num(viewingList().length), unconfirmedViewings().length + " без подтверждения") +
       "</div>" +
       '<div class="split">' +
@@ -120,10 +96,11 @@ VIEWS.overview = {
           "</div>" +
         "</div>" +
         '<div class="stack">' +
-          '<div class="card"><header><h3>Требует внимания</h3><div class="actions"><button class="btn ghost small" type="button" data-go="notifications">Центр уведомлений</button></div></header>' +
+          '<div class="card"><header><h3>Требует внимания</h3><div class="actions"><button class="btn ghost small" type="button" data-go="notifications">Все события</button></div></header>' +
             (attention.length ? attention.map(function (item) {
-              return '<div class="attention" data-go="' + item.go[0] + '" data-tab="' + (item.go[1] || "") + '">' +
-                '<span class="chip ' + item.kind + '">!</span><span class="grow"><span class="what">' + esc(item.what) + '</span><br><span class="why">' + esc(item.why) + "</span></span>→</div>";
+              var target = item.route || {};
+              return '<div class="attention" data-go="' + esc(target.view || "notifications") + '" data-tab="' + esc(target.tab || "") + '" data-inquiry-open="' + esc(target.inquiryId || "") + '">' +
+                '<span class="chip ' + (item.severity === "bad" ? "bad" : "warn") + '">!</span><span class="grow"><span class="what">' + esc(item.title) + '</span><br><span class="why">' + esc(item.text) + "</span></span>→</div>";
             }).join("") : '<div class="empty"><b>Всё в порядке</b>Ничего не ждёт вашего действия</div>') +
           "</div>" +
           '<div class="card"><header><h3>Состояние бота</h3></header><div class="card-body stack">' +
@@ -142,7 +119,11 @@ VIEWS.overview = {
       "</div>";
 
     host.querySelectorAll("[data-go]").forEach(function (node) {
-      node.onclick = function () { go(node.dataset.go, node.dataset.tab || ""); };
+      node.onclick = function () {
+        // У события может быть конкретная беседа — открываем сразу её.
+        if (node.dataset.inquiryOpen) return openInquiry(node.dataset.inquiryOpen);
+        go(node.dataset.go, node.dataset.tab || "");
+      };
     });
     host.querySelectorAll("[data-inquiry]").forEach(function (node) {
       node.onclick = function () { openInquiry(node.dataset.inquiry); };
