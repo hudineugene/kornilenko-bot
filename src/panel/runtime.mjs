@@ -385,7 +385,9 @@ async function saveDirty() {
 }
 
 // --- Состояние и навигация ---------------------------------------------------
-async function reload(render) {
+// options пробрасываются в renderView: после действия внутри беседы (ответ,
+// смена статуса) страница не должна прыгать наверх.
+async function reload(render, options) {
   state = await api("/api/state");
   csrf = state.csrf;
   stateVersion = state.stateVersion || "";
@@ -393,7 +395,7 @@ async function reload(render) {
   renderNav();
   renderBotState();
   renderNotificationBell();
-  if (render !== false) renderView();
+  if (render !== false) renderView(options);
 }
 
 // Пользователь печатает или уже что-то ввёл на этом экране: перерисовка стёрла

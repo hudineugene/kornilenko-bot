@@ -399,10 +399,18 @@ function openTemplates() {
 function renderInquiryList(host) {
   var allGroups = conversationGroups();
   var rows = allGroups.filter(conversationMatches);
-  // Выбор «сам собой»: список пуст или прежняя беседа не попала в фильтр.
-  // Такая беседа показывается, но прочитанной не считается.
+  var selectedGroup = selectedInquiry ? allGroups.find(function (group) {
+    return group.inquiries.some(function (item) { return item.id === selectedInquiry; });
+  }) : null;
+  // Открытая беседа остаётся в списке, даже если перестала подходить под фильтр.
+  // Иначе после ответа она исчезала прямо из-под курсора: при фильтре «Ждут
+  // ответа» отвеченная беседа выпадала из списка, и вместо неё открывался
+  // другой клиент.
+  if (selectedGroup && rows.indexOf(selectedGroup) < 0) rows = [selectedGroup].concat(rows);
+  // Выбор «сам собой» — только когда выбирать нечего: беседу удалили или её
+  // ещё не открывали. Такая беседа показывается, но прочитанной не считается.
   if (!rows.length) selectConversation("");
-  else if (!rows.some(function (group) { return group.inquiries.some(function (item) { return item.id === selectedInquiry; }); })) {
+  else if (!selectedGroup) {
     selectedInquiry = rows[0].active.id;
     conversationOpenedByUser = false;
   }
@@ -648,6 +656,7 @@ function renderInquiryCard(host) {
   }
   // Открыл человек — значит прочитал. Перерисовка того же экрана (обновление по
   // таймеру, смена фильтра) больше ничего не помечает.
+  var openedByHuman = conversationOpenedByUser;
   if (conversationOpenedByUser) {
     conversationOpenedByUser = false;
     markConversationRead(item.userId);
@@ -679,6 +688,18 @@ function renderInquiryCard(host) {
       '<details class="conversation-details"><summary><span><b>Карточка клиента</b><small>общие теги и заметка для всей истории общения</small></span><i>⌄</i></summary><div class="conversation-details-body stack"><div class="field"><label>Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div><div class="field"><label>Общая заметка о клиенте</label><textarea id="clientNoteInq" placeholder="Предпочтения, договорённости и важные детали">' + esc(user.note || "") + "</textarea></div></div></details>" +
       '<div class="conversation-save"><button class="btn secondary" id="saveInq" type="button">Сохранить изменения</button><button class="btn ghost small" id="deleteInq" type="button">Удалить это обращение</button></div>' +
     "</div></div>";
+
+  // Переписку открываем на последнем сообщении: читают всегда конец разговора,
+  // а начало было видно месяц назад. Раньше беседа открывалась на самом старом
+  // сообщении, и до нового приходилось листать.
+  var thread = host.querySelector(".conversation-thread");
+  if (thread && typeof thread.scrollHeight === "number") thread.scrollTop = thread.scrollHeight;
+  // На узком экране список и беседа идут друг под другом: выбрал беседу —
+  // покажи её, иначе менеджер остаётся смотреть на список и не понимает, что
+  // что-то открылось.
+  if (openedByHuman && window.innerWidth <= 860 && host.scrollIntoView) {
+    host.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
 
   var activeInquiry = host.querySelector("#activeInquiry");
   if (activeInquiry) activeInquiry.onchange = function () { selectConversation(activeInquiry.value); renderInquiryList(el("viewBody")); };
@@ -763,7 +784,8 @@ function renderInquiryCard(host) {
       replyDelivery.classList.add("ok");
       replyDeliveryText.textContent = result.duplicate ? "✓ Сообщение уже было доставлено" : "✓ Доставлено в Telegram";
       toast(result.duplicate ? "Сообщение уже было доставлено" : "Ответ доставлен");
-      await reload();
+      // Остаёмся в той же беседе и на том же месте страницы.
+      await reload(true, { keepScroll: true });
     } catch (error) {
       replyDelivery.classList.add("bad");
       replyDeliveryText.textContent = "Не отправлено: " + (error.message || "неизвестная ошибка");
@@ -787,7 +809,7 @@ function renderInquiryCard(host) {
     button.onclick = async function () {
       try {
         await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", { status: button.dataset.status });
-        await reload();
+        await reload(true, { keepScroll: true });
       } catch (error) { fail(error); }
     };
   });
@@ -805,7 +827,7 @@ function renderInquiryCard(host) {
         tags: host.querySelector("#clientTagsInq").value.split(",").map(function (tag) { return tag.trim(); }).filter(Boolean),
       });
       toast("Сохранено");
-      await reload();
+      await reload(true, { keepScroll: true });
     } catch (error) { fail(error); }
   };
   host.querySelector("#deleteInq").onclick = async function () {

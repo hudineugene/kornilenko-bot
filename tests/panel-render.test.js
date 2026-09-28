@@ -580,3 +580,102 @@ test('ответ менеджера в превью подписан «Вы»', 
   const previews = String(host.innerHTML).match(/class="conversation-preview">([^<]*)</g) || [];
   assert.ok(previews.some((line) => line.includes('Вы: Около 120 евро')), 'видно, что последнее слово за менеджером: ' + previews.join(' | '));
 });
+
+// Две беседы, обе ждут ответа: главный рабочий экран менеджера.
+function twoWaitingConversations() {
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.users['720001'] = { id: '720001', chatId: 720001, firstName: 'Ольга', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(4) };
+    data.users['720002'] = { id: '720002', chatId: 720002, firstName: 'Николай', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(9) };
+    data.inquiries.push({
+      id: 'inq-olga', userId: '720001', chatId: '720001', language: 'ru', type: 'general',
+      text: 'Когда можно посмотреть?', status: 'new', pipelineStage: 'new', replies: [],
+      messages: [
+        { id: 'o-1', direction: 'in', kind: 'text', text: 'Когда можно посмотреть?', createdAt: minutesAgo(40) },
+        { id: 'o-2', direction: 'out', kind: 'text', text: 'Уточню у собственника', createdAt: minutesAgo(20) },
+        { id: 'o-3', direction: 'in', kind: 'text', text: 'Жду, спасибо', createdAt: minutesAgo(4) },
+      ],
+      createdAt: minutesAgo(40), updatedAt: minutesAgo(4), clientMessageAt: minutesAgo(4),
+    });
+    data.inquiries.push({
+      id: 'inq-nikolay', userId: '720002', chatId: '720002', language: 'ru', type: 'general',
+      text: 'Есть ли рассрочка?', status: 'new', pipelineStage: 'new', replies: [], messages: [
+        { id: 'n-1', direction: 'in', kind: 'text', text: 'Есть ли рассрочка?', createdAt: minutesAgo(9) },
+      ],
+      createdAt: minutesAgo(9), updatedAt: minutesAgo(9), clientMessageAt: minutesAgo(9),
+    });
+  });
+}
+
+test('отвеченная беседа остаётся открытой, а не подменяется другим клиентом', async () => {
+  // При фильтре «Ждут ответа» отвеченная беседа выпадала из списка, и панель
+  // тут же открывала первого из оставшихся: менеджер отвечал одному клиенту, а
+  // смотрел уже на другого.
+  twoWaitingConversations();
+  const { sandbox, state } = await panelSandbox();
+  sandbox.inquiryFilter.status = 'waiting';
+  sandbox.selectConversation('inq-olga');
+
+  const host = fakeElement('main');
+  await sandbox.VIEWS.inquiries.render(host, '');
+  assert.equal(sandbox.selectedInquiry, 'inq-olga', 'беседа выбрана');
+  assert.match(String(host.innerHTML), /Ольга/);
+
+  // Ответили: клиент больше не ждёт, беседа под фильтр не подходит.
+  const answered = state.inquiries.find((item) => item.id === 'inq-olga');
+  answered.status = 'in_progress';
+  answered.replies = [{ id: 'r-1', text: 'Договорились на субботу', createdAt: new Date().toISOString(), source: 'panel' }];
+
+  const after = fakeElement('main');
+  await sandbox.VIEWS.inquiries.render(after, '');
+  assert.equal(sandbox.selectedInquiry, 'inq-olga', 'осталась та же беседа, другой клиент не подменил её');
+  assert.match(String(after.innerHTML), /Ольга/, 'и она по-прежнему видна в списке');
+});
+
+test('переписка открывается на последнем сообщении', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  sandbox.selectConversation('inq-olga');
+
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  await sandbox.VIEWS.inquiries.render(host, '');
+  const thread = card.querySelector('.conversation-thread');
+  assert.equal(thread.scrollTop, thread.scrollHeight, 'переписка прокручена к последнему сообщению');
+});
+
+test('на телефоне после выбора беседы экран сдвигается к ней', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  sandbox.innerWidth = 375;
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  const shown = [];
+  card.scrollIntoView = function (options) { shown.push(options || {}); };
+
+  // Открыл человек.
+  sandbox.selectConversation('inq-olga');
+  await sandbox.VIEWS.inquiries.render(host, '');
+  assert.equal(shown.length, 1, 'беседу показали, а не оставили менеджера смотреть на список');
+
+  // Обновление по таймеру ту же беседу заново не выдёргивает.
+  await sandbox.VIEWS.inquiries.render(host, '');
+  assert.equal(shown.length, 1, 'при перерисовке экран не дёргается');
+  sandbox.innerWidth = 1280;
+});
+
+test('после отправки ответа страница не прыгает наверх', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  sandbox.selectConversation('inq-olga');
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  await sandbox.VIEWS.inquiries.render(host, '');
+
+  const before = sandbox.__scrolls.length;
+  await card.querySelector('#sendReply').onclick();
+  const jumpedUp = sandbox.__scrolls.slice(before).filter((call) => call[0] && call[0].top === 0);
+  assert.deepEqual(jumpedUp, [], 'наверх страницу не выдёргивало');
+  assert.equal(sandbox.selectedInquiry, 'inq-olga', 'остались в той же беседе');
+});
