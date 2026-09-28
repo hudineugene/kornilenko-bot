@@ -301,6 +301,18 @@ test('редкие действия убраны под «⋯»', async () => {
   assert.match(PANEL_HTML, /id="inquiryExtras"/);
 });
 
+test('«Скрыть» в списке дел шлёт действие, которое бот принимает', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  // Кнопка «Скрыть» на экране «Сегодня» отправляла «handled» — такого действия
+  // у бота нет, и вместо скрытия дела появлялась красная ошибка.
+  assert.match(PANEL_HTML, /changeNotification\(item, "handle", button\)/);
+  assert.ok(!/changeNotification\(item, "handled"/.test(PANEL_HTML), 'несуществующего действия больше нет');
+  // Все действия из панели должны быть среди тех, что принимает бот.
+  const used = Array.from(PANEL_HTML.matchAll(/changeNotification\([^,]+, "([a-z]+)"/g)).map((match) => match[1]);
+  const allowed = ['read', 'unread', 'handle', 'reopen'];
+  for (const action of used) assert.ok(allowed.includes(action), 'неизвестное действие: ' + action);
+});
+
 test('состояние заявки — одно на всю панель', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /function inquiryState\(inquiry\)/);

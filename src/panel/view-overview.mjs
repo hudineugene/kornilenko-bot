@@ -165,7 +165,9 @@ VIEWS.today = {
     host.querySelectorAll("[data-deed-hide]").forEach(function (button) {
       button.onclick = function () {
         var item = (state.notifications || []).find(function (entry) { return entry.id === button.dataset.deedHide; });
-        if (item) changeNotification(item, "handled", button);
+        // Сервер знает действие «handle»: «handled» он отвергал, и «Скрыть»
+        // показывало ошибку вместо того, чтобы убрать дело из списка.
+        if (item) changeNotification(item, "handle", button);
       };
     });
     // Быстрые действия открывают редактор, а не список: «Добавить объект»
