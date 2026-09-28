@@ -76,6 +76,29 @@ test('редакторы предупреждают перед закрытие�
   assert.match(PANEL_HTML, /dialog\.closeClean\(\)/);
 });
 
+test('«Приветствие и меню» — на одной вкладке и с живым предпросмотром', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  // Приветствие, подсказка, помощь и подписи кнопок — в одной форме.
+  assert.match(PANEL_HTML, /Подсказка под приветствием/);
+  assert.match(PANEL_HTML, /field-label">Кнопки меню/);
+  assert.match(PANEL_HTML, /\["objects", "Каталог"\]/);
+  assert.match(PANEL_HTML, /\["placeholder", "Подсказка в поле ввода"\]/);
+  assert.match(PANEL_HTML, /data-menu="/);
+  assert.match(PANEL_HTML, /data-hint="text"/);
+
+  // Предпросмотр обновляется при вводе и показывает картинку, текст и кнопки.
+  assert.match(PANEL_HTML, /function renderWelcomePreview\(\)/);
+  assert.match(PANEL_HTML, /host\.addEventListener\("input", renderWelcomePreview\)/);
+  assert.match(PANEL_HTML, /id="welcomePreview"/);
+  assert.match(PANEL_HTML, /tg-buttons/);
+
+  // Ключ подстановки объяснён словами, а не как есть.
+  assert.match(PANEL_HTML, /\{first_name\} подставит имя клиента/);
+  assert.match(PANEL_HTML, /\["welcome", "Приветствие и меню"\]/);
+  // Подписи кнопок сохраняются тем же нажатием.
+  assert.match(PANEL_HTML, /payload\.menuLabels\[language\[0\]\]\[field\[0\]\] = input\.value/);
+});
+
 test('«Публикации» — две кнопки, общая очередь и общая история', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /function renderPublications\(host\)/);

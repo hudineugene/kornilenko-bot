@@ -5,20 +5,47 @@ const TEXTS_JS = String.raw`
 var interfaceGroupOpen = "";
 
 // --- Приветствие --------------------------------------------------------------
-function renderWelcome(host) {
+async function renderWelcome(host) {
+  // Подписи кнопок приезжают отдельным запросом: рисуем экран, когда они уже
+  // есть, иначе поля окажутся пустыми и сохранение сотрёт подписи.
+  host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загружаю тексты…</p></div></div>';
+  try {
+    await loadInterfaceText();
+  } catch (error) {
+    host.innerHTML = '<div class="card"><div class="card-body"><div class="chip bad">' + esc(error.message) + "</div></div></div>";
+    return;
+  }
   var messages = state.config.messages || {};
   var images = state.welcomeImages || {};
-  host.innerHTML = '<div class="split"><div class="card"><header><h3>Сообщения бота</h3></header><div class="card-body stack" id="welcomeForm">' +
+  var labels = interfaceTexts().menuLabels || {};
+  var hints = interfaceTexts().menuHints || {};
+  var MENU_FIELDS = [
+    ["objects", "Каталог"],
+    ["selection", "Подбор"],
+    ["contacts", "Связаться"],
+    ["promotions", "Акции"],
+    ["more", "Личный раздел"],
+    ["placeholder", "Подсказка в поле ввода"],
+  ];
+  host.innerHTML = '<div class="split"><div class="card"><header><h3>Приветствие и меню</h3></header><div class="card-body stack" id="welcomeForm">' +
       languageTabs() +
       '<div class="field"><label>Приветствие (/start)</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-tr="greeting" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-sm">' + esc((messages[language[0]] || {}).greeting || "") + "</textarea>";
-      }).join("") + '<div class="hint">Можно использовать {first_name}, {last_name}, {username}</div></div>' +
+      }).join("") + '<div class="hint">{first_name} подставит имя клиента, {last_name} — фамилию, {username} — ник в Telegram.</div></div>' +
+      '<div class="field"><label>Подсказка под приветствием</label>' + LANGUAGES.map(function (language) {
+        return '<textarea data-hint="text" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((hints[language[0]] || {}).text || "") + "</textarea>";
+      }).join("") + '<div class="hint">Строку о том, сколько объектов в каталоге, бот добавляет сам.</div></div>' +
       '<div class="field"><label>Помощь (/help)</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-tr="help" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-lg">' + esc((messages[language[0]] || {}).help || "") + "</textarea>";
       }).join("") + "</div>" +
       '<div class="field"><label>Если бот не понял сообщение</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-tr="fallback" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((messages[language[0]] || {}).fallback || "") + "</textarea>";
       }).join("") + "</div>" +
+      '<div class="field"><span class="field-label">Кнопки меню</span><div class="grid cols-2">' + MENU_FIELDS.map(function (field) {
+        return '<div class="field"><label>' + esc(field[1]) + "</label>" + LANGUAGES.map(function (language) {
+          return '<input data-menu="' + field[0] + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc((labels[language[0]] || {})[field[0]] || "") + '">';
+        }).join("") + "</div>";
+      }).join("") + '</div><div class="hint">«Акции» показываются клиенту только когда есть действующие.</div></div>' +
       '<div class="field"><span class="field-label">Картинка приветствия</span>' + LANGUAGES.map(function (language) {
         var image = images[language[0]] || {};
         return '<div data-langpane="' + language[0] + '" class="' + (language[0] === "ru" ? "" : "hidden") + '">' +
@@ -27,24 +54,74 @@ function renderWelcome(host) {
           (image.exists ? '<button class="btn ghost small" type="button" data-drop="' + language[0] + '">Удалить</button>' : "") + "</div></div>";
       }).join("") + "</div>" +
     "</div></div>" +
-    '<div class="card"><header><h3>Как это выглядит у клиента</h3></header><div class="card-body">' +
-      '<div class="msg" id="welcomePreview">' + esc((messages.ru || {}).greeting || "") + "</div>" +
-      '<div class="hint gap-top">Кнопки меню настраиваются во вкладке «Интерфейс» → «Кнопки главного меню».</div>' +
-    "</div></div></div>";
+    '<aside class="editor-preview-panel"><div class="editor-preview-head"><b>Как это выглядит у клиента</b><span id="welcomePreviewLanguage">Русский</span></div>' +
+      '<div class="tg-preview" id="welcomePreview"></div>' +
+      '<div class="tg-note gap-top">Имя показано как пример — бот подставит имя каждого клиента. Строку о каталоге бот считает сам.</div>' +
+    "</aside></div>";
 
   bindLanguageTabs(host);
   var pendingImages = {};
+  var exampleNames = { ru: "Анна", en: "Anna", es: "Ana" };
+  var exampleCatalog = {
+    ru: "Сейчас в каталоге: 12 объектов — Бенидорм, Альтеа, Кальпе",
+    en: "In the catalogue right now: 12 properties — Benidorm, Altea, Calpe",
+    es: "Ahora en el catálogo: 12 inmuebles — Benidorm, Altea, Calpe",
+  };
+  // Предпросмотр перерисовывается на каждый ввод: владелец видит ровно то,
+  // что придёт клиенту, — картинку, текст и клавиатуру меню.
+  function languageValue(selector, language) {
+    var input = host.querySelector(selector + '[data-lang="' + language + '"]');
+    return input ? String(input.value || "") : "";
+  }
+  function renderWelcomePreview() {
+    var language = host.dataset.activeLanguage || "ru";
+    var languageName = (LANGUAGES.find(function (item) { return item[0] === language; }) || ["", language])[1];
+    host.querySelector("#welcomePreviewLanguage").textContent = languageName;
+    var greeting = languageValue('[data-tr="greeting"]', language)
+      .replace(/\{first_name\}/g, exampleNames[language] || "Anna")
+      .replace(/\{last_name\}/g, "")
+      .replace(/\{username\}/g, "anna");
+    var hint = languageValue('[data-hint="text"]', language);
+    var pending = pendingImages[language];
+    var stored = (images[language] || {});
+    var imageUrl = pending && pending.dataUrl
+      ? pending.dataUrl
+      : pending && pending.remove ? "" : stored.exists ? "/api/images/" + language + "/welcome?rev=" + encodeURIComponent(stored.updatedAt || "") : "";
+    var text = [greeting, exampleCatalog[language] || exampleCatalog.ru, hint].filter(Boolean).join("\n\n");
+    var buttons = MENU_FIELDS.filter(function (field) { return field[0] !== "placeholder"; })
+      .map(function (field) { return languageValue('[data-menu="' + field[0] + '"]', language); })
+      .filter(Boolean);
+    host.querySelector("#welcomePreview").innerHTML =
+      '<div class="tg-bubble">' + (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="">' : "") +
+        '<div class="tg-text">' + linkedPreview(text) + "</div></div>" +
+      (buttons.length ? '<div class="tg-buttons">' + buttons.map(function (label) { return '<div class="tg-button">' + esc(label) + "</div>"; }).join("") + "</div>" : "") +
+      '<div class="tg-note">В поле ввода: ' + esc(languageValue('[data-menu="placeholder"]', language) || "—") + "</div>";
+  }
+  host.addEventListener("input", renderWelcomePreview);
+  host.addEventListener("langchange", renderWelcomePreview);
+  host.querySelectorAll(".tabs button").forEach(function (button) {
+    button.addEventListener("click", function () { setTimeout(renderWelcomePreview, 0); });
+  });
   host.querySelectorAll("[data-welcome]").forEach(function (input) {
     input.onchange = function () {
       var file = input.files && input.files[0];
       if (!file) return;
       var reader = new FileReader();
-      reader.onload = function () { pendingImages[input.dataset.welcome] = { dataUrl: reader.result, name: file.name }; watcher.mark(); };
+      reader.onload = function () {
+        pendingImages[input.dataset.welcome] = { dataUrl: reader.result, name: file.name };
+        watcher.mark();
+        renderWelcomePreview();
+      };
       reader.readAsDataURL(file);
     };
   });
   host.querySelectorAll("[data-drop]").forEach(function (button) {
-    button.onclick = function () { pendingImages[button.dataset.drop] = { remove: true }; button.disabled = true; watcher.mark(); };
+    button.onclick = function () {
+      pendingImages[button.dataset.drop] = { remove: true };
+      button.disabled = true;
+      watcher.mark();
+      renderWelcomePreview();
+    };
   });
   var watcher = watchForm(host, async function () {
     await send("/api/welcome", "PUT", {
@@ -52,7 +129,25 @@ function renderWelcome(host) {
       menu: state.config.menu,
       images: pendingImages,
     });
+    // Подписи кнопок и подсказка живут в текстах интерфейса — сохраняем их
+    // тем же нажатием, чтобы владелец не искал вторую кнопку.
+    var payload = JSON.parse(JSON.stringify(interfaceTexts()));
+    LANGUAGES.forEach(function (language) {
+      payload.menuLabels = payload.menuLabels || {};
+      payload.menuLabels[language[0]] = payload.menuLabels[language[0]] || {};
+      MENU_FIELDS.forEach(function (field) {
+        var input = host.querySelector('[data-menu="' + field[0] + '"][data-lang="' + language[0] + '"]');
+        if (input) payload.menuLabels[language[0]][field[0]] = input.value;
+      });
+      payload.menuHints = payload.menuHints || {};
+      payload.menuHints[language[0]] = payload.menuHints[language[0]] || {};
+      var hint = host.querySelector('[data-hint="text"][data-lang="' + language[0] + '"]');
+      if (hint) payload.menuHints[language[0]].text = hint.value;
+    });
+    await send("/api/interface-text", "PUT", { interfaceText: payload });
+    await loadInterfaceText(true);
   }, "Тексты приветствия изменены");
+  renderWelcomePreview();
 }
 
 function buildMessages(host) {
