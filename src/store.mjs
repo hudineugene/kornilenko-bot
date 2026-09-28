@@ -17,10 +17,6 @@ function fileStamp(value = new Date()) {
   return value.toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
 }
 
-function readDataFile(filePath) {
-  return normalizeLoadedData(JSON.parse(fs.readFileSync(filePath, 'utf8')));
-}
-
 const BACKUP_DIRECTORY = path.join(path.dirname(DATA_FILE), 'backups');
 const DAILY_BACKUP_DIRECTORY = path.join(BACKUP_DIRECTORY, 'daily');
 const MEDIA_BACKUP_DIRECTORY = path.join(BACKUP_DIRECTORY, 'media');
@@ -96,15 +92,43 @@ function backupBeforeUpgrade(raw) {
 }
 
 // Первая копия, которую удалось прочитать: .bak, потом снимки в backups/.
+//
+// Копию, сделанную более новой версией бота, не берём: эта программа привела бы
+// её к своему формату и молча потеряла всё, чего не знает. Для самого файла
+// данных такая проверка есть, а копии её обходили — и откат на старый bot.exe с
+// повреждённым файлом данных тихо съедал всё новое. Если подходящей копии нет,
+// а такие «из будущего» есть, возвращаем { tooNew }: запускаться нельзя.
 function recoverFromCopy() {
+  let tooNew = 0;
   for (const candidate of recoveryCandidates()) {
+    let raw = null;
     try {
-      return { data: readDataFile(candidate), name: path.basename(candidate) };
+      raw = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+    } catch {
+      continue;
+    }
+    if ((Number(raw && raw.version) || 0) > DATA_VERSION) {
+      tooNew += 1;
+      continue;
+    }
+    try {
+      return { data: normalizeLoadedData(raw), name: path.basename(candidate) };
     } catch {
       continue;
     }
   }
-  return null;
+  return tooNew ? { tooNew } : null;
+}
+
+// Рядом только копии из более новой версии: молчать нельзя — пустой запуск
+// затёр бы их первым же сохранением.
+function refuseNewerCopies(count) {
+  refuseToStart([
+    'Рядом с ботом только копии данных, сделанные более новой версией программы (копий: ' + count + ').',
+    'Эта версия понимает формат ' + DATA_VERSION + ' и, поставив такую копию, потеряла бы',
+    'всё, чего не знает. Запуск остановлен.',
+    'Поставьте свежую версию bot.exe — она прочитает эти копии.',
+  ]);
 }
 
 // Запись в журнале ошибок: владелец увидит её в панели и поймёт, почему
@@ -129,6 +153,7 @@ function loadData() {
     // листа» нельзя — первое же сохранение записало бы пустые данные, а через
     // час пустой файл затёр бы .bak, и всё было бы потеряно окончательно.
     const recovered = recoverFromCopy();
+    if (recovered && recovered.tooNew) refuseNewerCopies(recovered.tooNew);
     if (!recovered) return clone(defaultData);
     console.error('Файл данных не найден. Данные восстановлены из копии:', recovered.name);
     noteRecovery(recovered.data, 'Файл данных не найден рядом с ботом. Данные восстановлены из копии ' + recovered.name + ' — последние изменения могли потеряться. Проверьте, не перемещали ли папку бота.');
@@ -153,6 +178,7 @@ function loadData() {
     // смысл подниматься из копии.
     console.error('Файл данных повреждён:', error.message);
     const recovered = recoverFromCopy();
+    if (recovered && recovered.tooNew) refuseNewerCopies(recovered.tooNew);
     if (recovered) {
       const corruptCopy = DATA_FILE + '.corrupt-' + fileStamp();
       fs.copyFileSync(DATA_FILE, corruptCopy);
@@ -667,7 +693,6 @@ export {
   lastDataBackupAt,
   lastReferencedImages,
   loadData,
-  readDataFile,
   recoveryCandidates,
   replaceData,
   restoreMissingMedia,
