@@ -9,7 +9,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 32;
+const DATA_VERSION = 33;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -660,6 +660,9 @@ function normalizeManagers(value, adminChatId = '') {
   return managers;
 }
 
+// Варианты срока ответа для панели: минуты, которые можно обещать честно.
+const REPLY_MINUTES_CHOICES = [0, 5, 10, 15, 30, 60, 120, 240];
+
 function normalizeWorkingHours(value) {
   const source = value && typeof value === 'object' ? value : {};
   const days = Array.isArray(source.days)
@@ -668,11 +671,14 @@ function normalizeWorkingHours(value) {
   const from = CLOCK_TIME_PATTERN.test(String(source.from || '')) ? String(source.from) : DEFAULT_WORKING_HOURS.from;
   const to = CLOCK_TIME_PATTERN.test(String(source.to || '')) ? String(source.to) : DEFAULT_WORKING_HOURS.to;
   const note = source.note && typeof source.note === 'object' ? source.note : {};
+  // Сколько обычно ждать ответа. 0 — ничего не обещаем.
+  const replyMinutes = REPLY_MINUTES_CHOICES.includes(Number(source.replyMinutes)) ? Number(source.replyMinutes) : 0;
   return {
     enabled: source.enabled === true && days.length > 0 && from < to,
     days,
     from,
     to,
+    replyMinutes,
     note: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText(note[language], 500) || DEFAULT_WORKING_HOURS.note[language]])),
   };
 }
@@ -1107,6 +1113,7 @@ export {
   normalizeViewing,
   normalizeTelegramBackup,
   normalizeViewingSlots,
+  REPLY_MINUTES_CHOICES,
   normalizeWorkingHours,
   pruneOrphanPropertyAnalytics,
 };

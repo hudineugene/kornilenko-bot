@@ -36,6 +36,39 @@ test('the next opening is said in the client\'s language', () => {
   assert.equal(bot.offHoursNote('ru', FRIDAY_EVENING), '', 'nothing while office hours are off');
 });
 
+test('the promised reply time is said in the client\'s language and only in office hours', () => {
+  setHours({ ...WEEKDAYS, replyMinutes: 15 });
+  assert.equal(bot.replyPromise('ru', MONDAY_LUNCH), 'Обычно отвечаем за 15 минут.');
+  assert.equal(bot.replyPromise('en', MONDAY_LUNCH), 'We usually reply within 15 minutes.');
+  assert.equal(bot.replyPromise('es', MONDAY_LUNCH), 'Solemos responder en 15 minutos.');
+  assert.equal(bot.replyPromise('ru', FRIDAY_EVENING), '', 'вне рабочего времени обещать нечего');
+
+  setHours({ ...WEEKDAYS, replyMinutes: 60 });
+  assert.equal(bot.replyPromise('ru', MONDAY_LUNCH), 'Обычно отвечаем в течение часа.');
+  setHours({ ...WEEKDAYS, replyMinutes: 120 });
+  assert.equal(bot.replyPromise('ru', MONDAY_LUNCH), 'Обычно отвечаем в течение 2 часов.');
+  setHours({ ...WEEKDAYS, replyMinutes: 0 });
+  assert.equal(bot.replyPromise('ru', MONDAY_LUNCH), '', 'по умолчанию ничего не обещаем');
+
+  // Без рабочих часов обещание действует всегда.
+  bot.getData().config.workingHours = { enabled: false, replyMinutes: 30 };
+  assert.equal(bot.replyPromise('ru', FRIDAY_EVENING), 'Обычно отвечаем за 30 минут.');
+});
+
+test('the client sees the promise after a request and on the contact screen', async () => {
+  const today = new Date().getDay();
+  setHours({ days: [today], from: '00:00', to: '23:59', replyMinutes: 15 });
+  const chat = createChat();
+  await chat.press('contact:lead');
+  await chat.press('lead:call');
+  await chat.say('+34 600 000 000');
+  const sent = await chat.say(bot.text.lead.ru.timeOptions[2]);
+  assert.ok(sent.last.text.endsWith('⏱ Обычно отвечаем за 15 минут.'), sent.last.text);
+
+  const contacts = await chat.say(bot.text.menuLabels.ru.contacts);
+  assert.match(contacts.last.text, /⏱ Обычно отвечаем за 15 минут\./);
+});
+
 test('a client writing outside office hours is told when to expect an answer', async () => {
   const tomorrow = (new Date().getDay() + 1) % 7;
   setHours({ days: [tomorrow], from: '09:00', to: '19:00' });

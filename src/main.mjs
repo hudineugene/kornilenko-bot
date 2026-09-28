@@ -27,7 +27,7 @@ import { subscriptionPanel } from './subscriptions.mjs';
 import { savedSearchMatches, savedSearchResults, savedSearchText } from './saved-search.mjs';
 import { normalizedSimilarPropertyDetails, similarPropertyRanking } from './similar.mjs';
 import { catalogRequest, naturalCatalogFilter, parseBedrooms, parseMaxPrice, parseMinPrice, parsePriceRange } from './search.mjs';
-import { offHoursNote } from './hours.mjs';
+import { offHoursNote, replyPromise } from './hours.mjs';
 import { monthlyPayment, purchaseEstimate } from './calculator.mjs';
 import { decryptBackup, encryptBackup, runTelegramBackup, setBackupPassword } from './offsite.mjs';
 import { applyImport, parseXml, planImport, planSummary, propertyTypeOf, publicAddress, readFeed, runDailyFeedImport } from './feed-import.mjs';
@@ -125,6 +125,7 @@ export {
   naturalCatalogFilter,
   normalizeUser,
   offHoursNote,
+  replyPromise,
   objectCaption,
   objectCaptionHtml,
   parseContentRecord,

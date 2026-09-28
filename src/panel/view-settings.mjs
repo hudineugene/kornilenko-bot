@@ -204,6 +204,10 @@ function renderWork(host) {
       '<div class="field"><span class="field-label">Рабочие дни</span><div class="row wrap">' + WEEKDAYS.map(function (day) {
         return '<label class="check"><input type="checkbox" data-day="' + day[0] + '"' + ((hours.days || []).indexOf(day[0]) >= 0 ? " checked" : "") + "> " + day[1] + "</label>";
       }).join("") + "</div></div>" +
+      '<div class="field"><label for="replyMinutes">Обычно отвечаем за</label><select id="replyMinutes">' +
+        [[0, "не обещать срок"], [5, "5 минут"], [10, "10 минут"], [15, "15 минут"], [30, "30 минут"], [60, "час"], [120, "2 часа"], [240, "4 часа"]].map(function (option) {
+          return '<option value="' + option[0] + '"' + (Number(hours.replyMinutes || 0) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
+        }).join("") + '</select><div class="hint">Эту строку клиент видит на экране связи и после заявки. В нерабочее время вместо неё идёт текст ниже. Обещайте только то, что выдерживаете.</div></div>' +
       '<div class="field"><span class="field-label">Текст для клиента</span>' + languageTabs() + LANGUAGES.map(function (language) {
         return '<textarea data-tr="hoursNote" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((hours.note || {})[language[0]] || "") + "</textarea>";
       }).join("") + '<div class="hint">{next} подставит ближайшее рабочее время. Заполните текст на всех языках.</div></div>' +
@@ -253,6 +257,7 @@ function renderWork(host) {
         from: host.querySelector("#hoursFrom").value,
         to: host.querySelector("#hoursTo").value,
         days: Array.from(host.querySelectorAll("[data-day]")).filter(function (box) { return box.checked; }).map(function (box) { return Number(box.dataset.day); }),
+        replyMinutes: host.querySelector("#replyMinutes").value,
         note: collectTranslated(host, "hoursNote"),
       });
       toast("Сохранено"); await reload();

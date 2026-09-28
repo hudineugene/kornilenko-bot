@@ -3,7 +3,7 @@
 
 import crypto from 'node:crypto';
 import { cleanText, delay, hashPassword } from './util.mjs';
-import { CLOCK_TIME_PATTERN, REMINDER_HOUR_OPTIONS, RETENTION_MONTH_OPTIONS, MAX_MANAGERS, TIME_ZONES, normalizeCalculator, normalizeManagers, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
+import { CLOCK_TIME_PATTERN, REMINDER_HOUR_OPTIONS, REPLY_MINUTES_CHOICES, RETENTION_MONTH_OPTIONS, MAX_MANAGERS, TIME_ZONES, normalizeCalculator, normalizeManagers, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { applyConfiguredTimeZone, data, saveDataNow, verifyPassword } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { forgetTelegramFileIds, sendMessage, telegramRequest } from './telegram.mjs';
@@ -401,7 +401,17 @@ function refreshStaffCommands(previousChatIds = []) {
     for (const language of ['ru', 'en', 'es']) {
       if (cleanText(note[language], 500) && !String(note[language]).includes('{next}')) return json(res, 400, { error: 'В тексте для клиента оставьте {next} — туда бот подставит, когда ответит менеджер' });
     }
-    data.config.workingHours = normalizeWorkingHours({ enabled: body.enabled === true, days, from: body.from, to: body.to, note });
+    if (body.replyMinutes != null && !REPLY_MINUTES_CHOICES.includes(Number(body.replyMinutes))) {
+      return json(res, 400, { error: 'Срок ответа выберите из списка' });
+    }
+    data.config.workingHours = normalizeWorkingHours({
+      enabled: body.enabled === true,
+      days,
+      from: body.from,
+      to: body.to,
+      replyMinutes: body.replyMinutes,
+      note,
+    });
     if (body.timeZone != null) data.config.timeZone = normalizeTimeZone(body.timeZone);
     applyConfiguredTimeZone();
     saveDataNow();

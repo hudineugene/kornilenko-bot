@@ -11,7 +11,7 @@ import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { knownLeadPhone, startLeadEdit, startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs';
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
-import { withOffHoursNote } from './hours.mjs';
+import { replyPromise, withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
 import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
@@ -68,6 +68,9 @@ async function sendContacts(chatId, user, token) {
   if (phones.length) lines.push(copy.tapPhone);
   for (const phone of phones) lines.push('☎️ ' + cleanText(phone, 80));
   if (email) lines.push('✉️ ' + email);
+  // Сколько ждать ответа — видно сразу, а не только после отправки заявки.
+  const promise = replyPromise(language);
+  if (promise) lines.push('⏱ ' + promise);
   const text = lines.filter(Boolean).join('\n\n');
   const entities = [];
   for (const phone of phones) {

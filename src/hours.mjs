@@ -58,9 +58,40 @@ function offHoursNote(language, now = new Date()) {
   return String(hours.note[lang] || hours.note.ru).replaceAll('{next}', openingPhrase(opening, lang, now));
 }
 
+// Русские окончания: 1 минуту, 2 минуты, 5 минут.
+function plural(count, one, few, many) {
+  const tens = count % 100;
+  if (tens >= 11 && tens <= 14) return many;
+  const ones = count % 10;
+  if (ones === 1) return one;
+  if (ones >= 2 && ones <= 4) return few;
+  return many;
+}
+
+// «Обычно отвечаем за 15 минут» — клиенту важно знать, ждать ему минуту или
+// до завтра. Вне рабочего времени вместо обещания идёт приписка о часах.
+function replyPromise(language, now = new Date()) {
+  const hours = workingHours();
+  const minutes = Number(hours.replyMinutes) || 0;
+  if (!minutes) return '';
+  if (hours.enabled && !isWorkingTime(now, hours)) return '';
+  const lang = ['ru', 'en', 'es'].includes(language) ? language : 'ru';
+  if (minutes < 60) {
+    if (lang === 'en') return 'We usually reply within ' + minutes + ' minutes.';
+    if (lang === 'es') return 'Solemos responder en ' + minutes + ' minutos.';
+    return 'Обычно отвечаем за ' + minutes + ' ' + plural(minutes, 'минуту', 'минуты', 'минут') + '.';
+  }
+  const inHours = Math.round(minutes / 60);
+  if (lang === 'en') return 'We usually reply within ' + (inHours === 1 ? 'an hour' : inHours + ' hours') + '.';
+  if (lang === 'es') return 'Solemos responder en ' + (inHours === 1 ? 'una hora' : inHours + ' horas') + '.';
+  return 'Обычно отвечаем в течение ' + (inHours === 1 ? 'часа' : inHours + ' ' + plural(inHours, 'часа', 'часов', 'часов')) + '.';
+}
+
 function withOffHoursNote(text, language, now = new Date()) {
   const note = offHoursNote(language, now);
-  return text && note ? text + '\n\n🌙 ' + note : text;
+  if (text && note) return text + '\n\n🌙 ' + note;
+  const promise = replyPromise(language, now);
+  return text && promise ? text + '\n\n⏱ ' + promise : text;
 }
 
 // When admin reminders may be sent: office hours if set, otherwise daytime.
@@ -83,6 +114,7 @@ export {
   isWorkingTime,
   nextOpening,
   offHoursNote,
+  replyPromise,
   openingPhrase,
   withOffHoursNote,
   workingHours,
