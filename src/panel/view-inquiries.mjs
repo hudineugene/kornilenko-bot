@@ -448,7 +448,7 @@ function renderInquiryList(host) {
     conversationOpenedByUser = true;
   }
   pageAction("✎ Шаблоны ответов", openTemplates, "secondary");
-  pageAction("🧹 Очистить", openCleanup, "ghost");
+  pageAction("⋯", openInquiryExtras, "ghost");
   var counts = {
     unread: allGroups.filter(function (group) { return group.unread; }).length,
     waiting: allGroups.filter(function (group) { return group.waiting; }).length,
@@ -482,7 +482,6 @@ function renderInquiryList(host) {
         '<select id="inqType">' + [["", "Все заявки"], ["general", "Обычные сообщения"], ["lead", "Заявки на звонок"], ["viewing", "Просмотры"], ["selection", "Подбор недвижимости"], ["question", "Вопросы по объекту"], ["interest", "Интерес к объекту"]].map(function (option) {
           return '<option value="' + option[0] + '"' + (inquiryFilter.type === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + '</select>' +
-        '<button class="btn secondary small" id="exportInq" type="button">⬇ Выгрузить в Excel</button>' +
       '</div>' +
       '<div class="tabs messenger-filters" id="inqStatus">' +
         '<button type="button" data-status="unread" class="' + (inquiryFilter.status === "unread" ? "active" : "") + '">Непрочитанные' + (counts.unread ? " · " + counts.unread : "") + "</button>" +
@@ -512,7 +511,6 @@ function renderInquiryList(host) {
       searchConversations(host, inquiryFilter.search);
     }, 250);
   };
-  host.querySelector("#exportInq").onclick = exportInquiries;
   host.querySelectorAll(".conversation-item[data-id]").forEach(function (row) {
     row.onclick = function () { selectConversation(row.dataset.id); renderInquiryList(host); };
   });
@@ -552,6 +550,25 @@ function cleanupMatches(item, scope) {
   if (item.status === "closed") return true;
   if (scope === "closed") return false;
   return item.status !== "in_progress" && !awaitsReply(item) && (item.replies || []).length > 0;
+}
+
+// «⋯»: то, что делают раз в месяц, — выгрузка и очистка. Рядом с обычными
+// кнопками им не место: одно нажатие мимо стоило бы заявок.
+function openInquiryExtras() {
+  openDialog({
+    title: "Ещё действия",
+    body: '<div class="stack">' +
+      '<button class="btn secondary" id="extraExport" type="button">⬇ Выгрузить заявки в Excel</button>' +
+      '<span class="small muted">Файл со всеми заявками и контактами — для отчёта или переноса.</span>' +
+      '<button class="btn ghost" id="extraCleanup" type="button">🧹 Очистить заявки</button>' +
+      '<span class="small muted">Удаляет старые заявки из панели без возможности восстановления.</span>' +
+      "</div>",
+    footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
+    ready: function (dialog) {
+      dialog.querySelector("#extraExport").onclick = function () { dialog.closeClean(); exportInquiries(); };
+      dialog.querySelector("#extraCleanup").onclick = function () { dialog.closeClean(); openCleanup(); };
+    },
+  });
 }
 
 function openCleanup() {
@@ -742,7 +759,7 @@ function renderInquiryCard(host) {
         '<div class="field"><label for="inqNote">Заметка по этой заявке</label><textarea id="inqNote" placeholder="Что важно сделать по заявке">' + esc(item.note || "") + "</textarea></div>" +
         '<div class="field"><label for="clientTagsInq">Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div>' +
         '<div class="field"><label for="clientNoteInq">Общая заметка о клиенте</label><textarea id="clientNoteInq" placeholder="Предпочтения, договорённости и важные детали">' + esc(user.note || "") + "</textarea></div>" +
-        '<div class="conversation-save"><button class="btn" id="saveInq" type="button">Сохранить</button><button class="btn ghost small" id="openClientCard" type="button">Карточка клиента 360°</button><button class="btn ghost small" id="deleteInq" type="button">Удалить заявку</button></div>' +
+        '<div class="conversation-save"><button class="btn" id="saveInq" type="button">Сохранить</button><button class="btn ghost small" id="openClientCard" type="button">Карточка клиента 360°</button><button class="btn ghost small" id="inquiryExtras" type="button">⋯ Ещё</button></div>' +
       '</div></aside>' +
     "</div></div>";
 
@@ -890,14 +907,25 @@ function renderInquiryCard(host) {
       await reload(true, { keepScroll: true });
     } catch (error) { fail(error); }
   };
-  host.querySelector("#deleteInq").onclick = async function () {
-    if (!(await confirmDialog("Удалить заявку?", "Она исчезнет из панели. Переписка в Telegram останется.", "Удалить", true))) return;
-    try {
-      await api("/api/inquiries/" + encodeURIComponent(item.id), { method: "DELETE" });
-      selectConversation("");
-      toast("Удалено");
-      await reload();
-    } catch (error) { fail(error); }
+  host.querySelector("#inquiryExtras").onclick = function () {
+    openDialog({
+      title: "Ещё действия по заявке",
+      body: '<div class="stack"><button class="btn danger" id="extraDelete" type="button">Удалить заявку</button>' +
+        '<span class="small muted">Заявка исчезнет из панели. Переписка в Telegram останется.</span></div>',
+      footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
+      ready: function (dialog) {
+        dialog.querySelector("#extraDelete").onclick = async function () {
+          if (!(await confirmDialog("Удалить заявку?", "Она исчезнет из панели. Переписка в Telegram останется.", "Удалить", true))) return;
+          try {
+            await api("/api/inquiries/" + encodeURIComponent(item.id), { method: "DELETE" });
+            dialog.closeClean();
+            selectConversation("");
+            toast("Удалено");
+            await reload();
+          } catch (error) { fail(error); }
+        };
+      },
+    });
   };
   var scheduleButton = host.querySelector("#scheduleViewing");
   if (scheduleButton) scheduleButton.onclick = function () { openViewingSchedule(item); };

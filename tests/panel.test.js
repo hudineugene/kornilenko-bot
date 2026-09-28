@@ -147,6 +147,19 @@ test('мессенджер отправляет файлы, цитирует с�
   assert.match(PANEL_HTML, /черновик сохранён/i);
 });
 
+test('редкие действия убраны под «⋯»', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /function openInquiryExtras\(\)/);
+  assert.match(PANEL_HTML, /pageAction\("⋯", openInquiryExtras/, 'на экране одна кнопка «⋯» вместо «Очистить»');
+  assert.match(PANEL_HTML, /id="extraExport"/);
+  assert.match(PANEL_HTML, /id="extraCleanup"/);
+  assert.match(PANEL_HTML, /id="extraDelete"/, 'удаление заявки — тоже под «⋯»');
+  // Рядом с поиском и с кнопкой «Сохранить» их больше нет.
+  assert.ok(!/id="exportInq"/.test(PANEL_HTML), 'выгрузка ушла из строки фильтров');
+  assert.ok(!/id="deleteInq"/.test(PANEL_HTML), 'удаление ушло из ряда с «Сохранить»');
+  assert.match(PANEL_HTML, /id="inquiryExtras"/);
+});
+
 test('состояние заявки — одно на всю панель', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /function inquiryState\(inquiry\)/);
