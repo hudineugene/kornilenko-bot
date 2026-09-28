@@ -109,6 +109,34 @@ test('«ждут ответа» считается по клиентам, а н�
   assert.equal(waitingConversationCount(), 1);
 });
 
+test('дело «клиент написал» остаётся, пока клиенту не ответили', () => {
+  const data = bot.getData();
+  data.objects = [property('good-6', 'Квартира', 'active')];
+  waitingClient('880010', ['q-10']);
+  const messages = () => attention().filter((item) => item.kind === 'message');
+  assert.equal(messages().length, 1, 'клиент написал — есть дело');
+
+  // Менеджер открыл диалог и прочитал, но не ответил: дело остаётся.
+  const inquiry = data.inquiries.find((item) => item.id === 'q-10');
+  inquiry.readAt = new Date().toISOString();
+  assert.equal(messages().length, 1, 'прочитано — не значит «ответили»');
+  assert.equal(bot.waitingConversationCount ? bot.waitingConversationCount() : waitingConversationCount(), 1, 'и «ждут ответа» то же');
+
+  // Ответил — дело уходит само.
+  inquiry.status = 'in_progress';
+  inquiry.replies = [{ id: 'r-10', text: 'Здравствуйте', source: 'panel', createdAt: new Date().toISOString() }];
+  assert.equal(messages().length, 0, 'ответили — дела нет');
+});
+
+test('дело «клиент написал» уходит и при закрытии заявки', () => {
+  const data = bot.getData();
+  data.objects = [property('good-7', 'Квартира', 'active')];
+  waitingClient('880011', ['q-11']);
+  assert.equal(attention().filter((item) => item.kind === 'message').length, 1);
+  data.inquiries.find((item) => item.id === 'q-11').status = 'closed';
+  assert.equal(attention().filter((item) => item.kind === 'message').length, 0, 'закрытая заявка не ждёт ответа');
+});
+
 test('состояние отдаёт то же число, что и список дел', async () => {
   const { safeState } = await import('../src/admin-http.mjs');
   bot.getData().objects = [property('good-5', 'Квартира', 'active')];

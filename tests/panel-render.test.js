@@ -533,22 +533,22 @@ test('беседа помечается прочитанной только ко
   sandbox.currentView = 'clients';
   sandbox.currentTab = 'inbox';
 
-  // Обновление по таймеру: экран мог быть и не на виду — ничего не помечаем.
+  // Обновление по таймеру и вход в раздел диалог сами не открывают и ничего не
+  // помечают: раньше вход открывал первую беседу и тут же «читал» её.
   requests.length = 0;
   sandbox.renderView({ keepScroll: true, auto: true });
-  assert.deepEqual(readRequests(), [], 'обновление экрана само по себе беседу не помечает');
+  sandbox.renderView();
+  assert.equal(sandbox.selectedInquiry, '', 'первый диалог сам не открывается');
+  assert.deepEqual(readRequests(), [], 'ничего не помечено прочитанным');
   assert.equal(sandbox.state.inquiries[0].readAt, '', 'обращение осталось непрочитанным');
 
-  sandbox.renderView({ keepScroll: true, auto: true });
-  assert.deepEqual(readRequests(), [], 'и следующее обновление тоже');
-
-  // Человек вошёл в раздел: панель открыла беседу, человек её видит.
+  // Человек выбрал диалог — вот теперь он прочитан, и один раз.
+  sandbox.selectConversation('inq-unread');
   sandbox.renderView();
-  assert.equal(readRequests().length, 1, 'открытая беседа помечается прочитанной');
+  assert.equal(readRequests().length, 1, 'выбранный человеком диалог помечается прочитанным');
   assert.equal(readRequests()[0].method, 'POST');
   assert.ok(sandbox.state.inquiries[0].readAt, 'отметка проставлена и в панели');
 
-  // И только один раз: следующая перерисовка не шлёт запрос заново.
   await sandbox.VIEWS.clients.render(fakeElement('main'), 'inbox');
   assert.equal(readRequests().length, 1, 'повторных запросов нет');
 });
@@ -972,9 +972,10 @@ test('поиск по диалогам тоже не оставляет экра
   assert.equal(sandbox.inquiryFilter.search, 'паркинг', 'а поиск остался как набрали');
 });
 
-test('беседа, открытая панелью во время обновления, читается когда человек вернулся', async () => {
-  // Раньше такая беседа оставалась непрочитанной, пока не щёлкнешь по ней ещё
-  // раз — по уже открытой: счётчик непрочитанных не сходился.
+test('панель не открывает беседу сама даже во время обновления', async () => {
+  // Раньше обновление по таймеру открывало первую беседу, и она оставалась
+  // непрочитанной, пока не щёлкнешь по ней ещё раз: счётчик не сходился.
+  // Теперь беседу выбирает только человек — и счётчику нечему расходиться.
   resetData((data) => {
     data.config.active = true;
     data.users['740001'] = { id: '740001', chatId: 740001, firstName: 'Вера', preferredLanguage: 'ru', activity: [], lastSeenAt: new Date().toISOString() };
@@ -990,18 +991,11 @@ test('беседа, открытая панелью во время обновл
   sandbox.currentTab = 'inbox';
   requests.length = 0;
 
-  // Обновление по таймеру: панель сама открыла первую беседу.
   sandbox.renderView({ keepScroll: true, auto: true });
-  assert.equal(sandbox.selectedInquiry, 'inq-auto', 'беседа открыта панелью');
-  assert.deepEqual(readRequests(), [], 'но прочитанной не считается: на экран могли не смотреть');
-
-  // Человек вернулся к экрану.
   sandbox.renderView();
-  assert.equal(readRequests().length, 1, 'теперь беседа прочитана');
-  assert.ok(sandbox.state.inquiries[0].readAt, 'отметка есть и в панели');
-
   sandbox.renderView();
-  assert.equal(readRequests().length, 1, 'и только один раз');
+  assert.equal(sandbox.selectedInquiry, '', 'беседа не выбрана без человека');
+  assert.deepEqual(readRequests(), [], 'и прочитанной не считается');
 });
 
 test('возвращение во вкладку обновляет данные сразу', async () => {

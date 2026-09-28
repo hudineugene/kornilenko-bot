@@ -40,8 +40,12 @@ function currentAdminNotifications() {
   const today = localDayKey();
   const unreadByUser = new Map();
 
+  // Дело «клиент написал» держится, пока клиент ждёт ответа, а не пока
+  // сообщение не прочитано. Раньше оно исчезало, как только менеджер открыл
+  // диалог: прочитал, но не ответил — и дело пропало из списка, а клиент так и
+  // остался без ответа.
   for (const inquiry of data.inquiries) {
-    if (!unreadInquiry(inquiry)) continue;
+    if (!awaitingReply(inquiry)) continue;
     const userId = String(inquiry.userId || '');
     const previous = unreadByUser.get(userId);
     if (!previous || incomingMoment(inquiry) > incomingMoment(previous)) unreadByUser.set(userId, inquiry);

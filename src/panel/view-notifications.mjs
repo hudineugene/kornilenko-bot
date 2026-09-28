@@ -34,11 +34,12 @@ function notificationRows() {
   });
 }
 
-async function changeNotification(item, action, button) {
+async function changeNotification(item, action, button, undo) {
   if (button) button.disabled = true;
   try {
     await send("/api/admin-notifications/" + encodeURIComponent(item.id), "PATCH", { action: action });
     await reload();
+    if (undo) toast(action === "handle" ? "Дело скрыто" : "Готово", false, undo);
   } catch (error) { if (button) button.disabled = false; fail(error); }
 }
 

@@ -362,7 +362,8 @@ test('«Скрыть» в списке дел шлёт действие, кот�
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   // Кнопка «Скрыть» на экране «Сегодня» отправляла «handled» — такого действия
   // у бота нет, и вместо скрытия дела появлялась красная ошибка.
-  assert.match(PANEL_HTML, /changeNotification\(item, "handle", button\)/);
+  assert.match(PANEL_HTML, /changeNotification\(item, "handle", button, \{ label: "Вернуть"/, '«Скрыть» отправляет «handle» и предлагает «Вернуть»');
+  assert.match(PANEL_HTML, /changeNotification\(item, "reopen"\)/, '«Вернуть» отправляет «reopen»');
   assert.ok(!/changeNotification\(item, "handled"/.test(PANEL_HTML), 'несуществующего действия больше нет');
   // Все действия из панели должны быть среди тех, что принимает бот.
   const used = Array.from(PANEL_HTML.matchAll(/changeNotification\([^,]+, "([a-z]+)"/g)).map((match) => match[1]);

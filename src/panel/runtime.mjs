@@ -238,13 +238,27 @@ function loadInterfaceText(force) {
   return interfaceTextLoading;
 }
 
-function toast(text, bad) {
+// action — необязательная кнопка в самом уведомлении: {label, run}. Так после
+// «Скрыть» остаётся возможность вернуть дело, пока уведомление на экране.
+function toast(text, bad, action) {
   var box = el("toast");
   box.textContent = text;
   box.classList.toggle("bad", Boolean(bad));
   box.classList.remove("hidden");
+  if (action && action.label) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action";
+    button.textContent = action.label;
+    button.onclick = function () {
+      box.classList.add("hidden");
+      if (action.run) action.run();
+    };
+    box.appendChild(document.createTextNode(" "));
+    box.appendChild(button);
+  }
   clearTimeout(box._timer);
-  box._timer = setTimeout(function () { box.classList.add("hidden"); }, 3600);
+  box._timer = setTimeout(function () { box.classList.add("hidden"); }, action ? 8000 : 3600);
 }
 function fail(error) { toast(error && error.message ? error.message : "Не получилось", true); }
 

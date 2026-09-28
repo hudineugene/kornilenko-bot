@@ -167,7 +167,8 @@ VIEWS.today = {
         var item = (state.notifications || []).find(function (entry) { return entry.id === button.dataset.deedHide; });
         // Сервер знает действие «handle»: «handled» он отвергал, и «Скрыть»
         // показывало ошибку вместо того, чтобы убрать дело из списка.
-        if (item) changeNotification(item, "handle", button);
+        // Скрытое дело можно вернуть тут же, из уведомления.
+        if (item) changeNotification(item, "handle", button, { label: "Вернуть", run: function () { changeNotification(item, "reopen"); } });
       };
     });
     // Быстрые действия открывают редактор, а не список: «Добавить объект»

@@ -487,6 +487,7 @@ code{padding:0px 4px;border-radius:5px;background:var(--surface-soft);border:1px
 @media (max-width:860px){.save-alert{left:10px;right:10px;top:8px}}
 .toast{position:fixed;right:18px;bottom:18px;z-index:60;padding:10px 14px;border-radius:9px;background:var(--text);color:var(--surface);box-shadow:var(--shadow-lg);max-width:380px}
 .toast.bad{background:var(--bad)}
+.toast-action{margin-left:8px;padding:2px 10px;border:1px solid rgba(255,255,255,.55);border-radius:6px;background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer}
 dialog{border:0;border-radius:12px;padding:0;background:var(--surface);box-shadow:var(--shadow-lg);max-width:min(720px,calc(100vw - 32px));width:100%}
 dialog::backdrop{background:rgba(16,24,40,.45)}
 .dialog-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line-soft)}
