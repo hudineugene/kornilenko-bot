@@ -8,7 +8,17 @@ import { leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from 
 import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, isLanguageChangeText, languageFromText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
-import { adminChatFor, createInquiry, handleAdministratorReply, handleInquiryStatusCallback, handleMessageReaction, inquiryWasMerged, messageSummary, notifyAdministratorAction } from './inquiries.mjs';
+import {
+  adminChatFor,
+  createInquiry,
+  handleAdministratorReply,
+  handleInquiryStatusCallback,
+  handleMessageReaction,
+  inquiryWasMerged,
+  messageSummary,
+  notifyAdministratorAction,
+  serviceMessage,
+} from './inquiries.mjs';
 import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard } from './catalog.mjs';
 import { catalogRequest } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
@@ -190,6 +200,11 @@ async function handleUpdate(update, token) {
   }
   const message = update.message;
   if (!message || !message.from || !message.chat) return;
+  // Клиент закрепил сообщение или включил таймер автоудаления: Telegram
+  // присылает это как сообщение в чате, и раньше бот заводил обращение
+  // «Нетекстовое сообщение» — менеджер получал уведомление о том, чего клиент
+  // не писал.
+  if (serviceMessage(message)) return;
   if (await handleAdministratorReply(message, token)) return;
   if (await handleAdminChatMessage(message, token)) return;
   // The admin's own chat with the bot: menu, forms and auto-replies still work
