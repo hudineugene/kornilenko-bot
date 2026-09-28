@@ -76,6 +76,26 @@ test('редакторы предупреждают перед закрытие�
   assert.match(PANEL_HTML, /dialog\.closeClean\(\)/);
 });
 
+test('подписи бота названы по-человечески, а не ключами', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /function interfaceFieldLabel\(group, key, value\)/);
+  assert.match(PANEL_HTML, /Карточка объекта → кнопка «В избранное»/);
+  assert.match(PANEL_HTML, /Заявка на звонок → вопрос о телефоне/);
+  assert.match(PANEL_HTML, /Кнопка меню «Каталог»/);
+  // Для неназванных полей подписью служит сам текст клиента, ключ — подсказкой.
+  assert.match(PANEL_HTML, /esc\(interfaceFieldLabel\(group\[0\], key, value\)\)/);
+  assert.match(PANEL_HTML, /title="' \+ esc\(key\) \+ '"/);
+  assert.ok(!/<label>' \+ esc\(key\) \+ "<\/label>"/.test(PANEL_HTML), 'ключ больше не подпись поля');
+
+  // Подстановки объяснены словами.
+  assert.match(PANEL_HTML, /function interfacePlaceholderHint\(value\)/);
+  assert.match(PANEL_HTML, /\{first_name\} — имя клиента/);
+  assert.match(PANEL_HTML, /\{next\} — ближайшее рабочее время/);
+
+  // Экран живёт в «Обслуживании».
+  assert.match(PANEL_HTML, /Все подписи бота/);
+});
+
 test('автоответы и шаблоны ответов живут на одной вкладке', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /\["rules", "Автоответы и шаблоны"\]/);

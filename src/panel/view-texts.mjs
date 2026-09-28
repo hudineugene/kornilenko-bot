@@ -385,6 +385,64 @@ var INTERFACE_GROUPS = [
   ["languageSelected", "После выбора языка"],
 ];
 
+// Понятное название поля вместо внутреннего ключа. Для самых ходовых подписей
+// оно записано словами; для остальных берём сам текст, который видит клиент, —
+// по нему владелец и ищет. Ключ остаётся подсказкой при наведении: он нужен
+// только для поддержки.
+var INTERFACE_FIELD_NAMES = {
+  menuLabels: {
+    objects: "Кнопка меню «Каталог»", selection: "Кнопка меню «Подбор»", promotions: "Кнопка меню «Акции»",
+    favorites: "Кнопка «Избранное»", contacts: "Кнопка меню «Связаться»", request: "Кнопка «Заказать звонок»",
+    about: "Кнопка «О компании»", help: "Кнопка «Помощь»", more: "Кнопка меню «Моё»",
+    language: "Кнопка «Сменить язык»", placeholder: "Подсказка в поле ввода",
+  },
+  propertyActions: {
+    details: "Карточка объекта → кнопка «Подробнее»", contact: "Карточка объекта → кнопка «Связаться»",
+    photos: "Карточка объекта → кнопка «Фото»", viewing: "Карточка объекта → кнопка «Записаться на просмотр»",
+    cardFavorite: "Карточка объекта → кнопка «В избранное»", cardFavoriteRemove: "Карточка объекта → кнопка «Уже в избранном»",
+    similar: "Карточка объекта → кнопка «Похожие»", question: "Карточка объекта → кнопка «Задать вопрос»",
+    share: "Карточка объекта → кнопка «Поделиться»", openMap: "Карточка объекта → кнопка «Открыть карту»",
+    viewWebsite: "Карточка объекта → кнопка «Посмотреть на сайте»", availability: "Карточка объекта → кнопка «Уточнить доступность»",
+    interest: "Карточка объекта → кнопка «Заказать звонок»", received: "Ответ клиенту после заявки по объекту",
+    priceOnRequest: "Карточка объекта → «Цена по запросу»", reserved: "Карточка объекта → метка «Забронирован»",
+  },
+  callbackForm: {
+    askPhone: "Заявка на звонок → вопрос о телефоне", askTime: "Заявка на звонок → вопрос об удобном времени",
+    askName: "Заявка на звонок → вопрос об имени", phoneButton: "Заявка на звонок → кнопка «Отправить мой номер»",
+    success: "Заявка на звонок → подтверждение клиенту", chooseMethod: "Заявка на звонок → вопрос о способе связи",
+    methodCall: "Способ связи → «Позвоните мне»", methodWhatsapp: "Способ связи → «Напишите в WhatsApp»",
+    methodTelegram: "Способ связи → «Напишите в Telegram»",
+  },
+  viewingForm: {
+    askDate: "Запись на просмотр → вопрос о дате", askTime: "Запись на просмотр → вопрос о времени",
+    success: "Запись на просмотр → подтверждение клиенту", slotBooked: "Запись на просмотр → подтверждение при выборе свободного времени",
+    sharePhoneForViewing: "Запись на просмотр → кнопка «Оставить номер»",
+  },
+};
+
+function interfaceFieldLabel(group, key, value) {
+  var named = INTERFACE_FIELD_NAMES[group] && INTERFACE_FIELD_NAMES[group][key];
+  if (named) return named;
+  var text = Array.isArray(value) ? value.join(", ") : String(value || "");
+  var short = text.replace(/\s+/g, " ").trim();
+  if (!short) return "Пустая подпись";
+  return short.length <= 60 ? "«" + short + "»" : "«" + short.slice(0, 60) + "…»";
+}
+
+// {first_name} и соседей объясняем словами: владелец не обязан знать, что это
+// подстановка.
+function interfacePlaceholderHint(value) {
+  var text = Array.isArray(value) ? value.join(" ") : String(value || "");
+  var names = [];
+  if (text.indexOf("{first_name}") >= 0) names.push("{first_name} — имя клиента");
+  if (text.indexOf("{last_name}") >= 0) names.push("{last_name} — фамилия клиента");
+  if (text.indexOf("{username}") >= 0) names.push("{username} — ник в Telegram");
+  if (text.indexOf("{next}") >= 0) names.push("{next} — ближайшее рабочее время");
+  if (text.indexOf("{count}") >= 0) names.push("{count} — число");
+  if (text.indexOf("{city}") >= 0) names.push("{city} — город");
+  return names.length ? '<div class="hint">' + esc(names.join(" · ")) + "</div>" : "";
+}
+
 async function renderInterface(host) {
   host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загружаю тексты…</p></div></div>';
   var texts;
@@ -404,17 +462,17 @@ async function renderInterface(host) {
         '<div class="card-body grid cols-2">' + keys.map(function (key) {
           var value = (texts[group[0]].ru || {})[key];
           if (Array.isArray(value)) {
-            return '<div class="field" data-text="' + esc(key) + '"><label>' + esc(key) + ' <span class="faint small">список</span></label>' + LANGUAGES.map(function (language) {
+            return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(group[0], key, value)) + ' <span class="faint small">список</span></label>' + LANGUAGES.map(function (language) {
               return '<textarea data-group="' + group[0] + '" data-key="' + esc(key) + '" data-list="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc(((texts[group[0]][language[0]] || {})[key] || []).join("\n")) + "</textarea>";
             }).join("") + "</div>";
           }
           var long = String(value || "").length > 80;
-          return '<div class="field" data-text="' + esc(key) + '"><label>' + esc(key) + "</label>" + LANGUAGES.map(function (language) {
+          return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(group[0], key, value)) + "</label>" + LANGUAGES.map(function (language) {
             var text = (texts[group[0]][language[0]] || {})[key] || "";
             return long
               ? '<textarea data-group="' + group[0] + '" data-key="' + esc(key) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc(text) + "</textarea>"
               : '<input data-group="' + group[0] + '" data-key="' + esc(key) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc(text) + '">';
-          }).join("") + "</div>";
+          }).join("") + interfacePlaceholderHint(value) + "</div>";
         }).join("") + "</div></details>";
     }).join("") + "</div>";
 
