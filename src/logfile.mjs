@@ -13,9 +13,14 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { APP_DIRECTORY } from './config.mjs';
+import { DATA_FILE } from './config.mjs';
 
-const LOG_FILE = process.env.BOT_LOG_FILE || path.join(APP_DIRECTORY, 'logs', 'bot.log');
+// Журнал лежит рядом с файлом данных, как и файлы картинок: у настоящего бота
+// это папка программы, у песочницы и тестов — их собственная папка. Раньше он
+// всегда лежал рядом с программой, и песочница писала в живой журнал: там
+// накопились сотни ложных «Telegram отклонил токен» от выдуманного токена, а
+// такую тревогу легко принять за настоящую.
+const LOG_FILE = process.env.BOT_LOG_FILE || path.join(path.dirname(DATA_FILE), 'logs', 'bot.log');
 const LOG_MAX_BYTES = 5 * 1024 * 1024;
 
 let handle = null;

@@ -11,6 +11,7 @@ const box = path.resolve(process.argv[2] || path.join(project, '.sandbox'));
 process.env.BOT_NO_START = '1';
 process.env.BOT_DATA_FILE = path.join(box, 'bot-data.json');
 process.env.BOT_MEDIA_DIRECTORY = path.join(box, 'bot-media');
+process.env.BOT_LOG_FILE = path.join(box, 'logs', 'bot.log');
 process.env.NO_AUTO_OPEN = '1';
 const bot = require(path.join(project, 'bot.js'));
 
