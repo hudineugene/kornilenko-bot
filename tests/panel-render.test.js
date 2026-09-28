@@ -749,3 +749,30 @@ test('истёкший вход закрывает открытое окно, и
   assert.equal(document.getElementById('loginScreen').classList.contains('hidden'), false, 'показан экран входа');
   assert.match(document.getElementById('loginError').textContent, /Несохранённые изменения придётся внести заново/, 'сказано про потерянное набранное');
 });
+
+test('после смены токена полоса сохранения не висит', async () => {
+  // Поле токена живёт внутри той же формы, что и остальные настройки, поэтому
+  // ввод помечал форму изменённой. Своя кнопка «Сменить токен» сохраняла всё
+  // сама, но отметку не снимала: полоса сохранения оставалась, уход со страницы
+  // спрашивал подтверждение, а автообновление считало экран занятым.
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.settings.render(host, 'connection');
+
+  // Ввели новый токен и пароль — форма считается изменённой.
+  sandbox.watchForm(host, async () => {}, 'Настройки подключения изменены').mark();
+  assert.equal(sandbox.isDirty(), true, 'форма изменена');
+  assert.equal(sandbox.document.getElementById('savebar').classList.contains('hidden'), false, 'полоса сохранения видна');
+
+  requests.length = 0;
+  const button = host.querySelector('#saveToken');
+  await button.onclick.call(button);
+
+  const saved = requests.find((request) => request.url.includes('/api/settings') && request.method === 'PUT');
+  assert.ok(saved, 'токен отправлен на сервер');
+  assert.ok(saved.body.token, 'вместе с новым токеном');
+  assert.equal(sandbox.isDirty(), false, 'форма больше не считается изменённой');
+  assert.equal(sandbox.document.getElementById('savebar').classList.contains('hidden'), true, 'полоса сохранения убрана');
+  assert.equal(await sandbox.confirmPageLeave(), true, 'уход со страницы больше ничего не спрашивает');
+});
