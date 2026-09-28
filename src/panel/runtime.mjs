@@ -60,13 +60,15 @@ const PANEL_SHELL = String.raw`
 `;
 
 const PANEL_RUNTIME_JS = String.raw`
-var state = null, csrf = "", currentView = "overview", currentTab = "", dirtyForm = null, refreshTimer = 0, loginChallenge = "";
+var state = null, csrf = "", currentView = "today", currentTab = "", dirtyForm = null, refreshTimer = 0, loginChallenge = "";
 var currentRouteHash = "", allowNextRoute = false, routePromptOpen = false;
 // stateVersion — отпечаток данных с сервера: если он не изменился, экран не
 // перерисовываем. pageTouched — пользователь что-то ввёл на текущем экране,
 // значит перерисовка стёрла бы его черновик. pendingRefresh — данные обновились,
 // но экран оставлен как есть, и это видно по полоске.
 var stateVersion = "", pageTouched = false, pendingRefresh = false;
+// Какой экран открыт в «Обслуживании» (данные, доступ, выгрузка, подписи).
+var serviceScreen = "data";
 // Экран рисуется сам (обновление по таймеру) или по действию человека. Разделам
 // это важно: при входе в «Переписку» открытую беседу человек видит и читает, а
 // при обновлении по таймеру экран мог быть и не на виду.
@@ -491,15 +493,40 @@ function waitingClients() {
 
 function navItems() {
   return [
-    { id: "overview", icon: "◉", title: "Обзор" },
-    { id: "notifications", icon: "🔔", title: "Центр уведомлений", hidden: true },
-    { id: "inquiries", icon: "✉", title: "Переписка", count: waitingClients(), tabs: [["inbox", "Центр сообщений"], ["tasks", "Задачи"], ["pipeline", "Воронка"], ["viewings", "Просмотры"], ["clients", "База клиентов"]] },
-    { id: "catalog", icon: "⌂", title: "Каталог", tabs: [["objects", "Объекты"], ["offers", "Акции"], ["feed", "Загрузка с сайта"]] },
-    { id: "texts", icon: "✎", title: "Тексты бота", tabs: [["welcome", "Приветствие"], ["sections", "Разделы"], ["contacts", "Контакты"], ["rules", "Автоответы"], ["interface", "Интерфейс"]] },
-    { id: "reach", icon: "➤", title: "Рассылки и каналы", tabs: [["campaigns", "Рассылки"], ["group", "Группы и каналы"], ["style", "Оформление постов"]] },
-    { id: "stats", icon: "▦", title: "Статистика" },
-    { id: "settings", icon: "⚙", title: "Настройки", tabs: [["connection", "Подключение"], ["work", "Работа с клиентами"], ["data", "Данные"], ["access", "Доступ"]] },
+    { id: "today", icon: "◉", title: "Сегодня", count: waitingClients() },
+    { id: "notifications", icon: "🔔", title: "Все события", hidden: true },
+    { id: "clients", icon: "✉", title: "Клиенты", tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
+    { id: "viewings", icon: "📅", title: "Просмотры" },
+    { id: "objects", icon: "⌂", title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
+    { id: "posts", icon: "➤", title: "Публикации", tabs: [["broadcast", "Рассылка клиентам"], ["channel", "Пост в канал"], ["style", "Оформление"]] },
+    { id: "texts", icon: "✎", title: "Тексты бота", tabs: [["welcome", "Приветствие"], ["sections", "Разделы"], ["contacts", "Контакты"], ["rules", "Автоответы"]] },
+    { id: "settings", icon: "⚙", title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["reports", "Отчёты"], ["service", "Обслуживание"]] },
   ];
+}
+
+// Старые адреса панели и ссылки из уведомлений ведут на прежние разделы.
+// Переводим их в новые, чтобы ни одна закладка и ни одна кнопка не сломались.
+var LEGACY_ROUTES = {
+  "overview": ["today", ""],
+  "stats": ["settings", "reports"],
+  "inquiries": { "": ["clients", "inbox"], "inbox": ["clients", "inbox"], "tasks": ["clients", "tasks"], "pipeline": ["clients", "pipeline"], "viewings": ["viewings", ""], "clients": ["clients", "base"] },
+  "catalog": { "": ["objects", "list"], "objects": ["objects", "list"], "offers": ["objects", "offers"], "feed": ["settings", "service"] },
+  "reach": { "": ["posts", "broadcast"], "campaigns": ["posts", "broadcast"], "group": ["posts", "channel"], "style": ["posts", "style"] },
+  "settings": { "connection": ["settings", "team"], "work": ["settings", "company"], "data": ["settings", "service"], "access": ["settings", "service"] },
+  "texts": { "interface": ["settings", "service"] },
+};
+
+// Какой экран «Обслуживания» открыть, если пришли по старому адресу.
+var LEGACY_SERVICE = { "catalog/feed": "feed", "settings/data": "data", "settings/access": "access", "texts/interface": "interface" };
+
+function normalizeRoute(view, tab) {
+  var key = String(view || "") + "/" + String(tab || "");
+  if (LEGACY_SERVICE[key]) serviceScreen = LEGACY_SERVICE[key];
+  var rule = LEGACY_ROUTES[view];
+  if (!rule) return [view, tab || ""];
+  if (Array.isArray(rule)) return rule.slice();
+  var moved = rule[String(tab || "")];
+  return moved ? moved.slice() : [view, tab || ""];
 }
 
 function awaitsReply(inquiry) {
@@ -513,19 +540,14 @@ function awaitsReply(inquiry) {
 }
 
 function renderNav() {
+  // Нажатие на раздел открывает раздел. Подвкладки живут полосой на самой
+  // странице: раньше они были выведены дважды — и в меню, и на странице, — а
+  // нажатие на раздел только раскрывало список.
   el("nav").innerHTML = navItems().filter(function (item) { return !item.hidden; }).map(function (item) {
     var active = item.id === currentView;
-    if (!item.tabs) {
-      return '<button class="nav-item' + (active ? " active" : "") + '" data-view="' + item.id + '" type="button">' +
-        '<span class="ico">' + item.icon + '</span><span>' + esc(item.title) + '</span>' +
-        (item.count ? '<span class="count">' + num(item.count) + '</span>' : '') + '</button>';
-    }
-    return '<details class="nav-menu' + (active ? " active" : "") + '"><summary class="nav-item">' +
+    return '<button class="nav-item' + (active ? " active" : "") + '" data-view="' + item.id + '" type="button">' +
       '<span class="ico">' + item.icon + '</span><span>' + esc(item.title) + '</span>' +
-      (item.count ? '<span class="count">' + num(item.count) + '</span>' : '') + '<span class="chevron">⌄</span></summary>' +
-      '<div class="nav-dropdown"><div class="nav-caption">' + esc(item.title) + '</div>' + item.tabs.map(function (tab) {
-        return '<button class="nav-subitem' + (active && currentTab === tab[0] ? " active" : "") + '" data-view="' + item.id + '" data-tab="' + tab[0] + '" type="button">' + esc(tab[1]) + '</button>';
-      }).join("") + '</div></details>';
+      (item.count ? '<span class="count">' + num(item.count) + '</span>' : '') + '</button>';
   }).join("");
   el("nav").querySelectorAll("[data-view]").forEach(function (button) {
     button.onclick = function () {
@@ -578,7 +600,8 @@ function renderBotState() {
 }
 
 async function go(view, tab) {
-  var target = "#/" + view + (tab ? "/" + tab : "");
+  var route = normalizeRoute(view, tab);
+  var target = "#/" + route[0] + (route[1] ? "/" + route[1] : "");
   if (location.hash === target) return true;
   if (!(await confirmPageLeave())) return false;
   clearDirty();
@@ -589,10 +612,15 @@ async function go(view, tab) {
 
 function applyRoute() {
   var parts = (location.hash || "").replace(/^#\//, "").split("/");
-  var view = VIEWS[parts[0]] ? parts[0] : "overview";
+  var route = normalizeRoute(parts[0], parts[1]);
+  var view = VIEWS[route[0]] ? route[0] : "today";
   currentView = view;
-  currentTab = parts[1] || "";
-  currentRouteHash = location.hash || "#/overview";
+  currentTab = route[1] || "";
+  currentRouteHash = "#/" + view + (currentTab ? "/" + currentTab : "");
+  if (location.hash && location.hash !== currentRouteHash) {
+    allowNextRoute = true;
+    history.replaceState(null, "", currentRouteHash);
+  }
   renderNav();
   renderNotificationBell();
   renderView();
@@ -611,7 +639,7 @@ async function handleHashChange() {
   if (routePromptOpen) return;
   routePromptOpen = true;
   var requestedHash = location.hash;
-  history.replaceState(null, "", currentRouteHash || "#/overview");
+  history.replaceState(null, "", currentRouteHash || "#/today");
   var discard = await confirmPageLeave();
   routePromptOpen = false;
   if (!discard) return;

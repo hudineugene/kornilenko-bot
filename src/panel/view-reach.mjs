@@ -938,10 +938,10 @@ function renderPostStyle(host) {
   draw();
 }
 
-VIEWS.reach = {
+VIEWS.posts = {
   subtitle: function () { return "Сообщения клиентам, группы и каналы бота"; },
   render: function (host, tab) {
-    if (tab === "group") return renderGroups(host);
+    if (tab === "channel") return renderGroups(host);
     if (tab === "style") return renderPostStyle(host);
     renderCampaigns(host);
   },

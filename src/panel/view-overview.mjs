@@ -61,8 +61,8 @@ function sparkline(days, field, color) {
   }).join("") + "</div>";
 }
 
-VIEWS.overview = {
-  subtitle: function () { return "Что происходит с ботом прямо сейчас"; },
+VIEWS.today = {
+  subtitle: function () { return "Что нужно сделать прямо сейчас"; },
   render: function (host) {
     var today = startOfToday(), week = startOfWeek();
     var todayKey = dayKeyOf(new Date());
@@ -208,7 +208,8 @@ function bindSourceLink(host) {
   };
 }
 
-VIEWS.stats = {
+// «Отчёты» живут в настройках: это не ежедневная работа.
+VIEWS.reports = {
   subtitle: function () { return "Аудитория, обращения, объекты и рассылки"; },
   render: function (host) {
     var days = lastDays(30);

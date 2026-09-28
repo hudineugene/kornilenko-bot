@@ -624,11 +624,10 @@ function renderFeed(host) {
   };
 }
 
-VIEWS.catalog = {
+VIEWS.objects = {
   subtitle: function () { return "Объекты и акции, которые видит клиент"; },
   render: function (host, tab) {
     if (tab === "offers") return renderOffers(host);
-    if (tab === "feed") return renderFeed(host);
     renderObjects(host);
   },
 };

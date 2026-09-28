@@ -294,7 +294,7 @@ test('смена токена бота действительно отправл
   resetData((data) => { data.config.active = true; });
   const { sandbox, requests } = await panelSandbox();
   const host = fakeElement('main');
-  await sandbox.VIEWS.settings.render(host, '');
+  await sandbox.renderConnection(host);
 
   const button = host.querySelector('#saveToken');
   assert.equal(typeof button.onclick, 'function', 'на экране есть кнопка смены токена');
@@ -313,7 +313,7 @@ test('без токена или пароля запрос не уходит', a
   resetData((data) => { data.config.active = true; });
   const { sandbox, requests } = await panelSandbox();
   const host = fakeElement('main');
-  await sandbox.VIEWS.settings.render(host, '');
+  await sandbox.renderConnection(host);
   const button = host.querySelector('#saveToken');
 
   host.querySelector('#setToken').value = '';
@@ -344,7 +344,7 @@ test.describe('восстановление копии из панели', () =>
     resetData((data) => { data.config.active = true; });
     const { sandbox, requests } = await panelSandbox();
     const host = fakeElement('main');
-    await sandbox.VIEWS.settings.render(host, 'data');
+    await sandbox.renderData(host);
     const input = host.querySelector('#restoreFile');
     assert.equal(typeof input.onchange, 'function', 'выбор файла подключён');
 
@@ -368,7 +368,7 @@ test.describe('восстановление копии из панели', () =>
     // экране и он не остаётся в истории браузера.
     sandbox.askPassword = async (title) => (/копии/i.test(title) ? 'пароль-копии' : 'пароль-панели');
     const host = fakeElement('main');
-    await sandbox.VIEWS.settings.render(host, 'data');
+    await sandbox.renderData(host);
 
     requests.length = 0;
     await pickFile(sandbox, host, 'bot-backup.kbk', Buffer.from('KBK1зашифровано'));
@@ -385,7 +385,7 @@ test.describe('восстановление копии из панели', () =>
     const { sandbox, requests } = await panelSandbox();
     sandbox.askPassword = async (title) => (/копии/i.test(title) ? '' : 'пароль-панели');
     const host = fakeElement('main');
-    await sandbox.VIEWS.settings.render(host, 'data');
+    await sandbox.renderData(host);
 
     requests.length = 0;
     await pickFile(sandbox, host, 'bot-backup.kbk', Buffer.from('KBK1зашифровано'));
@@ -440,7 +440,7 @@ test.describe('автообновление панели раз в 45 секун
   });
 
   test('введённый текст не стирается обновлением, а о новых данных сообщается', async () => {
-    const { sandbox, page } = await screen('inquiries');
+    const { sandbox, page } = await screen('clients');
     sandbox.stateVersion = 'старая-версия';
     sandbox.pageTouched = true;
 
@@ -451,7 +451,7 @@ test.describe('автообновление панели раз в 45 секун
   });
 
   test('когда данные изменились и никто не печатает, экран обновляется без прыжка наверх', async () => {
-    const { sandbox, page } = await screen('overview');
+    const { sandbox, page } = await screen('today');
     sandbox.stateVersion = 'старая-версия';
     sandbox.pageTouched = false;
 
@@ -463,7 +463,7 @@ test.describe('автообновление панели раз в 45 секун
 
   // Сколько диалогов ждут ответа — это число в меню слева и в колокольчике.
   function waitingBadge(sandbox) {
-    return sandbox.navItems().find(function (item) { return item.id === 'inquiries'; }).count;
+    return sandbox.navItems().find(function (item) { return item.id === 'today'; }).count;
   }
 
   test('несохранённая форма не отменяет обновление счётчиков', async () => {
@@ -490,7 +490,7 @@ test.describe('автообновление панели раз в 45 секун
   });
 
   test('открытое окно тоже не отменяет обновление счётчиков', async () => {
-    const { sandbox, page, state, requests } = await screen('catalog');
+    const { sandbox, page, state, requests } = await screen('objects');
     sandbox.stateVersion = 'старая-версия';
     const dialog = sandbox.openDialog({ title: 'Карточка объекта', body: '<input id="cardTitle">', protectChanges: true });
     assert.equal(dialog.open, true);
@@ -509,7 +509,7 @@ test.describe('автообновление панели раз в 45 секун
   });
 
   test('переход между разделами прокручивает наверх, как и раньше', async () => {
-    const { sandbox } = await screen('overview');
+    const { sandbox } = await screen('today');
     sandbox.__scrolls.length = 0;
     sandbox.renderView();
     assert.equal(sandbox.__scrolls.length, 1, 'при обычной отрисовке страница прокручивается наверх');
@@ -528,7 +528,7 @@ test('беседа помечается прочитанной только ко
   });
   const { sandbox, requests } = await panelSandbox();
   const readRequests = () => requests.filter((request) => /\/api\/conversations\/.+\/read/.test(request.url));
-  sandbox.currentView = 'inquiries';
+  sandbox.currentView = 'clients';
   sandbox.currentTab = 'inbox';
 
   // Обновление по таймеру: экран мог быть и не на виду — ничего не помечаем.
@@ -547,7 +547,7 @@ test('беседа помечается прочитанной только ко
   assert.ok(sandbox.state.inquiries[0].readAt, 'отметка проставлена и в панели');
 
   // И только один раз: следующая перерисовка не шлёт запрос заново.
-  await sandbox.VIEWS.inquiries.render(fakeElement('main'), 'inbox');
+  await sandbox.VIEWS.clients.render(fakeElement('main'), 'inbox');
   assert.equal(readRequests().length, 1, 'повторных запросов нет');
 });
 
@@ -612,7 +612,7 @@ test('в списке диалогов видно последнее сообщ�
   const host = fakeElement('main');
   // Смотрим все беседы, а не только ждущие ответа.
   sandbox.inquiryFilter.status = '';
-  await sandbox.VIEWS.inquiries.render(host, '');
+  await sandbox.VIEWS.clients.render(host, '');
   const previews = String(host.innerHTML).match(/class="conversation-preview">([^<]*)</g) || [];
   assert.ok(previews.length, 'в списке есть беседы');
   assert.ok(previews.some((line) => line.includes('когда можно посмотреть')), 'показано последнее сообщение, нашлось: ' + previews.join(' | '));
@@ -638,7 +638,7 @@ test('ответ менеджера в превью подписан «Вы»', 
   const { sandbox } = await panelSandbox();
   const host = fakeElement('main');
   sandbox.inquiryFilter.status = '';
-  await sandbox.VIEWS.inquiries.render(host, '');
+  await sandbox.VIEWS.clients.render(host, '');
   const previews = String(host.innerHTML).match(/class="conversation-preview">([^<]*)</g) || [];
   assert.ok(previews.some((line) => line.includes('Вы: Около 120 евро')), 'видно, что последнее слово за менеджером: ' + previews.join(' | '));
 });
@@ -680,7 +680,7 @@ test('отвеченная беседа остаётся открытой, а н
   sandbox.selectConversation('inq-olga');
 
   const host = fakeElement('main');
-  await sandbox.VIEWS.inquiries.render(host, '');
+  await sandbox.VIEWS.clients.render(host, '');
   assert.equal(sandbox.selectedInquiry, 'inq-olga', 'беседа выбрана');
   assert.match(String(host.innerHTML), /Ольга/);
 
@@ -690,7 +690,7 @@ test('отвеченная беседа остаётся открытой, а н
   answered.replies = [{ id: 'r-1', text: 'Договорились на субботу', createdAt: new Date().toISOString(), source: 'panel' }];
 
   const after = fakeElement('main');
-  await sandbox.VIEWS.inquiries.render(after, '');
+  await sandbox.VIEWS.clients.render(after, '');
   assert.equal(sandbox.selectedInquiry, 'inq-olga', 'осталась та же беседа, другой клиент не подменил её');
   assert.match(String(after.innerHTML), /Ольга/, 'и она по-прежнему видна в списке');
 });
@@ -702,7 +702,7 @@ test('переписка открывается на последнем сооб
 
   const host = fakeElement('main');
   const card = host.querySelector('#inquiryCard');
-  await sandbox.VIEWS.inquiries.render(host, '');
+  await sandbox.VIEWS.clients.render(host, '');
   const thread = card.querySelector('.conversation-thread');
   assert.equal(thread.scrollTop, thread.scrollHeight, 'переписка прокручена к последнему сообщению');
 });
@@ -718,11 +718,11 @@ test('на телефоне после выбора беседы экран сд
 
   // Открыл человек.
   sandbox.selectConversation('inq-olga');
-  await sandbox.VIEWS.inquiries.render(host, '');
+  await sandbox.VIEWS.clients.render(host, '');
   assert.equal(shown.length, 1, 'беседу показали, а не оставили менеджера смотреть на список');
 
   // Обновление по таймеру ту же беседу заново не выдёргивает.
-  await sandbox.VIEWS.inquiries.render(host, '');
+  await sandbox.VIEWS.clients.render(host, '');
   assert.equal(shown.length, 1, 'при перерисовке экран не дёргается');
   sandbox.innerWidth = 1280;
 });
@@ -733,7 +733,7 @@ test('после отправки ответа страница не прыга�
   sandbox.selectConversation('inq-olga');
   const host = fakeElement('main');
   const card = host.querySelector('#inquiryCard');
-  await sandbox.VIEWS.inquiries.render(host, '');
+  await sandbox.VIEWS.clients.render(host, '');
 
   const before = sandbox.__scrolls.length;
   await card.querySelector('#sendReply').onclick();
@@ -773,7 +773,7 @@ test('после смены токена полоса сохранения не 
   resetData((data) => { data.config.active = true; });
   const { sandbox, requests } = await panelSandbox();
   const host = fakeElement('main');
-  await sandbox.VIEWS.settings.render(host, 'connection');
+  await sandbox.renderConnection(host);
 
   // Ввели новый токен и пароль — форма считается изменённой.
   sandbox.watchForm(host, async () => {}, 'Настройки подключения изменены').mark();
@@ -807,7 +807,7 @@ test('фильтр в «Переписке» не замораживает эк�
     });
   });
   const { sandbox } = await panelSandbox();
-  sandbox.currentView = 'inquiries';
+  sandbox.currentView = 'clients';
   sandbox.currentTab = 'inbox';
   sandbox.renderView();
 
@@ -830,7 +830,7 @@ test('фильтр в «Переписке» не замораживает эк�
 test('поиск по диалогам тоже не оставляет экран занятым', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();
-  sandbox.currentView = 'inquiries';
+  sandbox.currentView = 'clients';
   sandbox.currentTab = 'inbox';
   sandbox.renderView();
 
@@ -858,7 +858,7 @@ test('беседа, открытая панелью во время обновл
   });
   const { sandbox, requests } = await panelSandbox();
   const readRequests = () => requests.filter((request) => /\/api\/conversations\/.+\/read/.test(request.url));
-  sandbox.currentView = 'inquiries';
+  sandbox.currentView = 'clients';
   sandbox.currentTab = 'inbox';
   requests.length = 0;
 
@@ -966,16 +966,16 @@ test('счётчик у «Переписки» — это клиенты, кот
   const { sandbox, state } = await panelSandbox();
   assert.equal(state.waitingConversationCount, 2, 'бот насчитал двух клиентов, а не три заявки');
 
-  const badge = sandbox.navItems().find((item) => item.id === 'inquiries').count;
+  const badge = sandbox.navItems().find((item) => item.id === 'today').count;
   assert.equal(badge, 2, 'на значке в меню то же число');
 
   const host = fakeElement('main');
-  await sandbox.VIEWS.overview.render(host, '');
+  await sandbox.VIEWS.today.render(host, '');
   assert.match(String(host.innerHTML), /Ждут ответа<\/span><span class="value">2</, 'и в карточке на Обзоре');
 
   const list = fakeElement('main');
   sandbox.inquiryFilter.status = 'waiting';
-  await sandbox.VIEWS.inquiries.render(list, 'inbox');
+  await sandbox.VIEWS.clients.render(list, 'inbox');
   assert.match(String(list.innerHTML), /Ждут ответа · 2/, 'и во вкладке «Переписки»');
 });
 
@@ -983,7 +983,7 @@ test('когда все отвечены, ноль везде', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, state } = await panelSandbox();
   assert.equal(state.waitingConversationCount, 0);
-  assert.equal(sandbox.navItems().find((item) => item.id === 'inquiries').count, 0, 'значок пустой');
+  assert.equal(sandbox.navItems().find((item) => item.id === 'today').count, 0, 'значок пустой');
 });
 
 test('сбой загрузки переписки виден как сбой, а не как пустая беседа', async () => {
@@ -1006,7 +1006,7 @@ test('сбой загрузки переписки виден как сбой, �
 
   sandbox.selectConversation('inq-broken');
   const host = fakeElement('main');
-  await sandbox.VIEWS.inquiries.render(host, 'inbox');
+  await sandbox.VIEWS.clients.render(host, 'inbox');
   await new Promise((resolve) => setTimeout(resolve, 30));
   const card = host.querySelector('#inquiryCard');
   const html = String(card.innerHTML);

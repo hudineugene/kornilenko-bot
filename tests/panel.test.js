@@ -21,7 +21,7 @@ test('в разметке панели есть каркас и все разд�
     assert.ok(PANEL_HTML.includes('id="' + id + '"'), 'нет элемента ' + id);
   }
   const script = PANEL_HTML.slice(PANEL_HTML.indexOf('<script'));
-  for (const view of ['overview', 'notifications', 'inquiries', 'catalog', 'texts', 'reach', 'stats', 'settings']) {
+  for (const view of ['today', 'notifications', 'clients', 'viewings', 'objects', 'texts', 'posts', 'reports', 'settings']) {
     assert.ok(script.includes('VIEWS.' + view + ' ='), 'нет раздела ' + view);
   }
 });
@@ -34,14 +34,29 @@ test('страница не тянет ничего со стороны', async 
   assert.deepEqual(external, [], 'панель должна работать без интернета');
 });
 
-test('меню закреплено сверху и показывает подразделы', async () => {
+test('меню закреплено сверху, нажатие открывает раздел, подвкладки — на странице', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /class="app-head"/);
   assert.match(PANEL_HTML, /class="head-nav"/);
-  assert.match(PANEL_HTML, /class="nav-dropdown/);
   assert.doesNotMatch(PANEL_HTML, /<aside class="side"/);
+  // Раньше подвкладки были выведены дважды: выпадающим списком в меню и полосой
+  // на странице, а нажатие на раздел только раскрывало список.
+  assert.doesNotMatch(PANEL_HTML, /class="nav-dropdown/, 'выпадающего списка в меню больше нет');
+  assert.doesNotMatch(PANEL_HTML, /nav-subitem/, 'подпунктов в меню нет');
+  assert.match(PANEL_HTML, /class="nav-item' \+ \(active \? " active" : ""\) \+ '" data-view="/, 'раздел — обычная кнопка');
   assert.match(PANEL_HTML, /Надёжный запуск/);
   assert.match(PANEL_HTML, /\/api\/autostart/);
+});
+
+test('старые адреса панели и ссылки из уведомлений продолжают работать', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  // Уведомления бота ссылаются на прежние разделы (inquiries/inbox и другие),
+  // и у владельца могут быть закладки: адреса переводятся, а не ломаются.
+  assert.match(PANEL_HTML, /var LEGACY_ROUTES = \{/);
+  assert.match(PANEL_HTML, /"inquiries": \{ "": \["clients", "inbox"\]/);
+  assert.match(PANEL_HTML, /"catalog": \{ "": \["objects", "list"\]/);
+  assert.match(PANEL_HTML, /"stats": \["settings", "reports"\]/);
+  assert.match(PANEL_HTML, /function normalizeRoute\(view, tab\)/);
 });
 
 test('внутренняя навигация защищает несохранённые изменения', async () => {
@@ -105,8 +120,8 @@ test('в заявке на подбор менеджер видит резуль
 test('центр переписки объединяет диалоги и показывает вложения, реакции и ответственного', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /function conversationGroups\(\)/);
-  assert.match(PANEL_HTML, /title: "Переписка"/);
-  assert.match(PANEL_HTML, /Центр сообщений/);
+  assert.match(PANEL_HTML, /title: "Клиенты"/);
+  assert.match(PANEL_HTML, /\["inbox", "Диалоги"\]/);
   assert.match(PANEL_HTML, /Непрочитанные/);
   assert.match(PANEL_HTML, /class="messenger-shell"/);
   assert.match(PANEL_HTML, /Один клиент — одна переписка/);
@@ -145,7 +160,7 @@ test('воронка отделяет этап продажи от статус�
 
 test('рабочий список собирает контакты менеджера и быстрые действия', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
-  assert.match(PANEL_HTML, /\["tasks", "Задачи"\]/);
+  assert.match(PANEL_HTML, /\["tasks", "Следующие шаги"\]/);
   assert.match(PANEL_HTML, /function renderTasks\(host\)/);
   assert.match(PANEL_HTML, /К выполнению/);
   assert.match(PANEL_HTML, /Без следующего шага/);

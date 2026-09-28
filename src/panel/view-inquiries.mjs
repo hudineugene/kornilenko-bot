@@ -1230,15 +1230,19 @@ function openClient(id) {
   });
 }
 
-VIEWS.inquiries = {
-  subtitle: function () { return "Все диалоги, ответы и сопровождение клиентов в одном месте"; },
+VIEWS.clients = {
+  subtitle: function () { return "Диалоги, следующие шаги и вся история общения"; },
   render: function (host, tab) {
     if (tab === "tasks") return renderTasks(host);
     if (tab === "pipeline") return renderPipeline(host);
-    if (tab === "viewings") return renderViewings(host);
-    if (tab === "clients") return renderClients(host);
+    if (tab === "base") return renderClients(host);
     renderInquiryList(host);
   },
+};
+
+VIEWS.viewings = {
+  subtitle: function () { return "Показы объектов: подтверждение, календарь и история"; },
+  render: function (host) { renderViewings(host); },
 };
 `;
 

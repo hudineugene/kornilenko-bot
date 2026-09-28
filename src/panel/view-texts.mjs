@@ -324,7 +324,7 @@ VIEWS.texts = {
     if (tab === "sections") return renderSections(host);
     if (tab === "contacts") return renderContacts(host);
     if (tab === "rules") return renderRules(host);
-    if (tab === "interface") return renderInterface(host);
+
     renderWelcome(host);
   },
 };

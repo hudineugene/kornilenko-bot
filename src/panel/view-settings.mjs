@@ -497,13 +497,40 @@ function renderAccess(host) {
   };
 }
 
+// «Обслуживание» — всё, что нужно редко и требует осторожности: копии данных,
+// доступ из интернета, загрузка с сайта, подписи интерфейса. Раньше это лежало
+// вперемешку с ежедневной работой, и менеджер натыкался на токен BotFather и
+// «опасную зону» между рабочим временем и напоминаниями.
+var SERVICE_SCREENS = [
+  ["data", "Данные и копии", "Резервные копии, восстановление, самопроверка, файлы, журнал ошибок"],
+  ["access", "Доступ", "Пароль панели и доступ к панели из интернета"],
+  ["feed", "Загрузка с сайта", "Обновление каталога из XML-выгрузки"],
+  ["interface", "Все подписи бота", "Тексты кнопок и служебных сообщений на трёх языках"],
+];
+
+function renderService(host) {
+  var current = SERVICE_SCREENS.some(function (item) { return item[0] === serviceScreen; }) ? serviceScreen : "data";
+  host.innerHTML = '<div class="service-nav">' + SERVICE_SCREENS.map(function (item) {
+    return '<button class="service-card' + (item[0] === current ? " active" : "") + '" data-service="' + item[0] + '" type="button">' +
+      '<b>' + esc(item[1]) + '</b><span>' + esc(item[2]) + '</span></button>';
+  }).join("") + '</div><div id="serviceBody"></div>';
+  host.querySelectorAll("[data-service]").forEach(function (button) {
+    button.onclick = function () { serviceScreen = button.dataset.service; renderService(host); };
+  });
+  var body = host.querySelector("#serviceBody");
+  if (current === "access") return renderAccess(body);
+  if (current === "feed") return renderFeed(body);
+  if (current === "interface") return renderInterface(body);
+  renderData(body);
+}
+
 VIEWS.settings = {
-  subtitle: function () { return "Подключение, работа с клиентами, данные и доступ"; },
+  subtitle: function () { return "Компания, команда, отчёты и обслуживание"; },
   render: function (host, tab) {
-    if (tab === "work") return renderWork(host);
-    if (tab === "data") return renderData(host);
-    if (tab === "access") return renderAccess(host);
-    renderConnection(host);
+    if (tab === "team") return renderConnection(host);
+    if (tab === "reports") return VIEWS.reports.render(host);
+    if (tab === "service") return renderService(host);
+    renderWork(host);
   },
 };
 `;
