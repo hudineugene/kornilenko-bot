@@ -376,6 +376,25 @@ async function readJson(req, maximumBytes = MAX_BODY_BYTES) {
   }
 }
 
+// Фотографии из контейнера ждут здесь, пока копию не проверят. Поле скрытое:
+// в самих данных его быть не должно.
+const BACKUP_MEDIA = Symbol('backupMedia');
+
+// Записывает фотографии копии на диск. Вызывается только после проверки.
+function writeBackupMedia(backup) {
+  const media = backup && backup[BACKUP_MEDIA];
+  if (!Array.isArray(media)) return 0;
+  let written = 0;
+  for (const file of media) {
+    const name = storedImageFile({ storageFile: file.name });
+    if (!name) continue;
+    writeMediaFile(name, file.bytes);
+    written += 1;
+  }
+  delete backup[BACKUP_MEDIA];
+  return written;
+}
+
 // A panel backup (.json.gz / .json) or the encrypted weekly copy from
 // Telegram (.kbk), whose password comes in a header as base64 of UTF-8.
 async function readBackup(req) {
@@ -388,13 +407,16 @@ async function readBackup(req) {
   }
   // Новый формат копии: данные и фотографии лежат в одном контейнере, каждая
   // фотография — отдельной записью. Разбирается по одной, без огромных строк.
+  // Фотографии на диск пока не пишем: сначала файл должен пройти проверку —
+  // иначе чужой «копией» можно было засыпать папку картинками, даже когда
+  // восстановление потом отклоняется.
   if (isContainerBackup(bytes)) {
     const { payload, media } = readBackupContainer(bytes);
-    for (const file of media) {
-      const name = storedImageFile({ storageFile: file.name });
-      if (name) writeMediaFile(name, file.bytes);
+    const backup = payload && payload.backup && typeof payload.backup === 'object' ? payload.backup : payload;
+    if (backup && typeof backup === 'object') {
+      Object.defineProperty(backup, BACKUP_MEDIA, { value: media, enumerable: false, configurable: true });
     }
-    return payload && payload.backup && typeof payload.backup === 'object' ? payload.backup : payload;
+    return backup;
   }
   let decoded = bytes;
   if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
@@ -789,6 +811,7 @@ export {
   parseUploadedDocument,
   publicRecord,
   readBackup,
+  writeBackupMedia,
   readBody,
   readJson,
   requestIsRemote,

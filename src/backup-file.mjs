@@ -21,6 +21,7 @@
 // Старые копии (.json.gz, .json и зашифрованные .kbk) читаются как раньше.
 
 import zlib from 'node:zlib';
+import { MAX_BACKUP_OUTPUT_BYTES } from './config.mjs';
 import { cleanText } from './util.mjs';
 
 const BACKUP_MAGIC = Buffer.from('KORNILENKO-BACKUP-2\n', 'utf8');
@@ -76,7 +77,9 @@ function readBackupContainer(bytes) {
     offset += size;
     if (header.kind === 'data') {
       try {
-        payload = JSON.parse(zlib.gunzipSync(content).toString('utf8'));
+        // С пределом: маленький файл может разворачиваться в гигабайты, и без
+        // ограничения такая «копия» съедала бы всю память.
+        payload = JSON.parse(zlib.gunzipSync(content, { maxOutputLength: MAX_BACKUP_OUTPUT_BYTES }).toString('utf8'));
       } catch {
         throw new Error('Не удалось прочитать данные из резервной копии');
       }

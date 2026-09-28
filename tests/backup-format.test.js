@@ -149,3 +149,41 @@ test('испорченный контейнер отклоняется с пон
   assert.throws(() => readBackupContainer(Buffer.concat([BACKUP_MAGIC, Buffer.from('мусор')])), /повреж|не файл|нет данных/i);
   assert.throws(() => readBackupContainer(Buffer.from('совсем не копия')), /не файл резервной копии/i);
 });
+
+test('фотографии из чужого файла не попадают на диск, пока копия не проверена', async () => {
+  const { backupChunks } = await import('../src/backup-file.mjs');
+  const marker = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('чужая картинка')]);
+  // Файл-обманка: фотографии есть, а данных, которые пройдут проверку, нет.
+  const evil = Buffer.concat([...backupChunks({ version: 28, config: {} }, [{ name: 'intruder.png', read: () => marker }])]);
+  const before = fs.readdirSync(mediaDirectory);
+  // Прошлая проверка восстанавливала копию, а это закрывает все сессии: входим
+  // заново.
+  const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: PASSWORD }) });
+  const fresh = { cookie: login.headers.get('set-cookie').split(';')[0], csrf: (await login.json()).csrf };
+
+  const response = await realFetch(base + '/api/restore', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/octet-stream',
+      cookie: fresh.cookie,
+      'x-csrf-token': fresh.csrf,
+      'x-current-password': Buffer.from(PASSWORD).toString('base64'),
+    },
+    body: evil,
+  });
+  assert.equal(response.status, 400, 'копия отклонена');
+  assert.deepEqual(fs.readdirSync(mediaDirectory), before, 'в папке фотографий ничего не прибавилось');
+});
+
+test('раздутая копия не съедает память', async () => {
+  const zlib = require('node:zlib');
+  const { BACKUP_MAGIC, readBackupContainer } = await import('../src/backup-file.mjs');
+  const { MAX_BACKUP_OUTPUT_BYTES } = await import('../src/config.mjs');
+  // Небольшой файл, который разворачивается в гигабайты.
+  const huge = zlib.gzipSync(Buffer.alloc(MAX_BACKUP_OUTPUT_BYTES + 1024, 0x20));
+  const header = Buffer.from(JSON.stringify({ kind: 'data', size: huge.length }), 'utf8');
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(header.length, 0);
+  const bomb = Buffer.concat([BACKUP_MAGIC, length, header, huge]);
+  assert.throws(() => readBackupContainer(bomb), /не удалось прочитать данные|повреж/i);
+});

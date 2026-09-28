@@ -118,3 +118,23 @@ test('ответ на вход из интернета одинаков и дл�
   // И по времени: раньше верный пароль выдавал себя задержкой на отправку кода.
   assert.ok(Math.abs(wrong.spent - right.spent) < 400, 'время ответа близко: ' + wrong.spent + ' и ' + right.spent + ' мс');
 });
+
+test('доступ из интернета включается только настоящим «да»', () => {
+  // Объект вместо булева значения считался истиной: подготовленная песочница
+  // с { enabled: false } поднимала бы настоящий туннель наружу.
+  const fromObject = bot.normalizeLoadedData({ version: 14, config: { remoteAccess: { enabled: false } } });
+  assert.equal(fromObject.config.remoteAccess, false);
+  const fromString = bot.normalizeLoadedData({ version: 14, config: { remoteAccess: 'yes' } });
+  assert.equal(fromString.config.remoteAccess, false);
+  const real = bot.normalizeLoadedData({ version: 14, config: { remoteAccess: true } });
+  assert.equal(real.config.remoteAccess, true);
+});
+
+test('песочница не готовит данные с включённым туннелем', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'sandbox.js'), 'utf8');
+  assert.match(source, /data\.config\.remoteAccess = false;/, 'доступ выключен по-настоящему');
+  assert.match(source, /data\.config\.tunnelToken = '';/, 'и токен туннеля убран');
+  assert.doesNotMatch(source, /remoteAccess = \{ enabled: false \}/);
+});

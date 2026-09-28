@@ -22,7 +22,11 @@ data.config.botToken = '12345:FAKEFAKEFAKEFAKEFAKEFAKE';
 const salt = crypto.randomBytes(16).toString('hex');
 data.config.passwordSalt = salt;
 data.config.passwordHash = crypto.scryptSync(PASSWORD, salt, 64).toString('hex');
-data.config.remoteAccess = { enabled: false };
+// Именно false, а не { enabled: false }: объект считается истиной, и
+// песочница поднимала бы настоящий туннель наружу.
+data.config.remoteAccess = false;
+data.config.tunnelToken = '';
+data.config.tunnelHostname = '';
 if (data.config.telegramBackup) data.config.telegramBackup.key = '';
 data.users = {};
 data.inquiries = [];

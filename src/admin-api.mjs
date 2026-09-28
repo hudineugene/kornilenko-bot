@@ -19,9 +19,9 @@ import { configureBotCommands } from './menus.mjs';
 import { validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { restartPolling } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
-import { BOT_TOKEN_PATTERN, DOWNLOAD_TICKET_MS, MAX_UNAUTHENTICATED_BODY_BYTES, clientAddress, headerPassword, issueDownloadTicket, passwordAccepted, useDownloadTicket, createSession, isLocalRequest, json, ownPageRequest, loginAttempts, parseUploadedImage, readBackup, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
+import { BOT_TOKEN_PATTERN, DOWNLOAD_TICKET_MS, MAX_UNAUTHENTICATED_BODY_BYTES, clientAddress, headerPassword, issueDownloadTicket, passwordAccepted, useDownloadTicket, createSession, isLocalRequest, json, ownPageRequest, loginAttempts, parseUploadedImage, readBackup, writeBackupMedia, readJson, requestIsRemote, requireAuth, safeState, securityHeaders, sessions } from './admin-http.mjs';
 import { REMOTE_LOGIN_ANSWER_MS, REMOTE_LOGIN_CODE_ATTEMPTS, decoyRemoteLogin, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
-import { attemptKey, forgetLoginAttempts, loginAllowed, rememberFailedLogin, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
+import { attemptKey, forgetLoginAttempts, loginAllowed, rememberFailedLogin, validateBackupStructure, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { handleGroupApi } from './group-api.mjs';
 import { autostartStatus, setAutostart } from './autostart.mjs';
 import { readAllAdminNotifications, updateAdminNotification } from './admin-notifications.mjs';
@@ -319,7 +319,14 @@ async function handleApi(req, res, url) {
       // иначе снимки, которые лежат рядом в backups/media, потерялись бы сразу.
       // Потом отбрасываем то, чего нет нигде, проверяем файл целиком и только
       // перед самой заменой складываем рядом снимок прежних данных.
-      const restoredPhotos = restoreMissingMedia(backup);
+      // Порядок важен. Сначала убеждаемся, что это вообще наша копия и версия
+      // подходящая — это проверяется по самим данным, ничего не трогая на
+      // диске. Потом кладём фотографии из копии и возвращаем недостающие из
+      // папки backups/media. Потом отбрасываем то, чего нет нигде, и только
+      // после этого проверяем файл целиком, включая изображения.
+      validateBackupStructure(backup);
+      const fromFile = writeBackupMedia(backup);
+      const restoredPhotos = restoreMissingMedia(backup) + fromFile;
       const missingPhotos = dropMissingImages(backup);
       validateBackupPayload(backup);
       const restored = normalizeLoadedData(backup);

@@ -67,7 +67,10 @@ function validateStoredImage(image, label) {
   if (!isJpeg && !isPng) throw new Error('Некорректный формат изображения: ' + label);
 }
 
-function validateBackupPayload(backup) {
+// Проверка делится надвое. Сначала — что это вообще наша копия и подходящая
+// версия: это можно сделать, ничего не трогая на диске. И только потом, когда
+// фотографии из копии уже лежат на месте, проверяются сами изображения.
+function validateBackupStructure(backup) {
   if (!backup || typeof backup !== 'object' || Array.isArray(backup)) throw new Error('Некорректная структура файла');
   // Копия из более новой версии: восстановить её — значит потерять всё, чего
   // эта программа ещё не знает.
@@ -85,6 +88,10 @@ function validateBackupPayload(backup) {
   for (const key of ['rules', 'objects', 'promotions', 'broadcasts', 'inquiries', 'errors']) {
     if (backup[key] != null && !Array.isArray(backup[key])) throw new Error('Некорректный раздел: ' + key);
   }
+}
+
+function validateBackupPayload(backup) {
+  validateBackupStructure(backup);
   for (const language of ['ru', 'en', 'es']) validateStoredImage(backup.welcomeImages && backup.welcomeImages[language], 'приветствие ' + language);
   for (const key of ['objects', 'promotions', 'broadcasts']) {
     for (const record of backup[key] || []) {
@@ -290,6 +297,7 @@ function parseBroadcast(body, existing = {}, options = {}) {
 }
 
 export {
+  validateBackupStructure,
   LOGIN_LIMIT_PER_ADDRESS,
   expandIpv6,
   forgetLoginAttempts,

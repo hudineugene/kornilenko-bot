@@ -1046,6 +1046,10 @@ function normalizeLoadedData(parsed) {
     normalized.config.telegramBackup = normalizeTelegramBackup(normalized.config.telegramBackup);
     normalized.config.adminName = cleanText(normalized.config.adminName, 60);
     // Messages about the bot itself (started, stopped, connection): on unless switched off.
+    // Доступ из интернета — только настоящее «да». Любое другое значение
+    // (например, объект из старых данных или из подготовленной песочницы)
+    // считалось бы истиной, и бот поднял бы туннель наружу.
+    normalized.config.remoteAccess = normalized.config.remoteAccess === true;
     normalized.config.statusNotices = normalized.config.statusNotices !== false;
     normalized.config.managers = normalizeManagers(normalized.config.managers, normalized.config.adminChatId);
     pruneOrphanPropertyAnalytics(normalized);
