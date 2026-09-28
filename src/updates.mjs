@@ -20,7 +20,7 @@ import {
   recordBotAnswer,
   serviceMessage,
 } from './inquiries.mjs';
-import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, handleSelectionWizardCallback, openPendingStartPayload, propertyIdFromStartPayload, sendSelectionWizard, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
+import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, handleCatalogListCallback, handleSelectionWizardCallback, openPendingStartPayload, propertyIdFromStartPayload, sendSelectionWizard, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
 import { catalogRequest } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
@@ -184,6 +184,7 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('nav:')) await handleNavigationCallback(update.callback_query, token);
       else if (callbackData.startsWith('selection:')) await handleSelectionCallback(update.callback_query, token);
       else if (callbackData.startsWith('sel:')) await handleSelectionWizardCallback(update.callback_query, token);
+      else if (callbackData.startsWith('clist:')) await handleCatalogListCallback(update.callback_query, token);
       else if (callbackData.startsWith('alerts:')) await handleAlertsCallback(update.callback_query, token);
       else if (callbackData.startsWith('cfilter:')) await handleCatalogFilterCallback(update.callback_query, token);
       else if (callbackData.startsWith('myreq:')) await handleMyRequestsCallback(update.callback_query, token);

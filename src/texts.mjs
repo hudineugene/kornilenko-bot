@@ -973,6 +973,10 @@ const VIEWING_NOTICE_TEXT = {
 const CATALOG_FILTER_TEXT = {
   ru: {
     button: '🔎 Фильтр',
+    listMode: '☰ Списком',
+    cardMode: '🖼 Карточками',
+    listTitle: 'Объекты списком',
+    listHint: 'Нажмите номер, чтобы открыть карточку.',
     title: '🔎 Подберите объекты по параметрам. Отмеченное ✓ уже выбрано.',
     anyDeal: 'Продажа и аренда',
     anyType: 'Все типы',
@@ -1013,6 +1017,10 @@ const CATALOG_FILTER_TEXT = {
   },
   en: {
     button: '🔎 Filter',
+    listMode: '☰ As a list',
+    cardMode: '🖼 As cards',
+    listTitle: 'Properties as a list',
+    listHint: 'Tap a number to open the card.',
     title: '🔎 Narrow down the properties. Options marked ✓ are selected.',
     anyDeal: 'Sale and rent',
     anyType: 'All types',
@@ -1053,6 +1061,10 @@ const CATALOG_FILTER_TEXT = {
   },
   es: {
     button: '🔎 Filtro',
+    listMode: '☰ En lista',
+    cardMode: '🖼 En fichas',
+    listTitle: 'Inmuebles en lista',
+    listHint: 'Pulsa un número para abrir la ficha.',
     title: '🔎 Filtra los inmuebles. Las opciones con ✓ están seleccionadas.',
     anyDeal: 'Venta y alquiler',
     anyType: 'Todos los tipos',

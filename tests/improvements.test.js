@@ -548,6 +548,56 @@ test.describe('search in client messages', () => {
   });
 });
 
+test.describe('каталог списком', () => {
+  const FILTER = bot.text.catalogFilter.ru;
+
+  test.beforeEach(() => resetData((data) => {
+    const city = (ru) => ({ ru, en: ru, es: ru });
+    for (let index = 1; index <= 12; index += 1) {
+      data.objects.push(property('list-' + index, 'Объект ' + index, 'active', {
+        dealType: 'sale', propertyType: 'apartment', priceValue: 200000 + index * 10000,
+        bedrooms: (index % 3) + 1, city: city(index % 2 ? 'Бенидорм' : 'Альтеа'),
+      }));
+    }
+  }));
+
+  test('десяток объектов показывается одним сообщением со строками и номерами', async () => {
+    const chat = createChat();
+    await chat.say(MENU.ru.objects);
+    // На карточке есть переход в список, потому что объектов больше восьми.
+    const card = (await chat.press('catalog:all:0')).calls.find((call) => ['sendPhoto', 'editMessageMedia'].includes(call.method));
+    assert.ok(callbacksOf(card.body.reply_markup).some((value) => value.startsWith('clist:')), 'кнопка «Списком» на карточке');
+
+    const list = await chat.press('clist:all:0');
+    const body = list.calls.filter((call) => ['sendMessage', 'editMessageText'].includes(call.method)).pop().body;
+    assert.match(body.text, new RegExp(FILTER.listTitle + ' · 12'), 'видно, сколько всего объектов');
+    const lines = body.text.split('\n').filter((line) => /^\d+\. /.test(line));
+    assert.equal(lines.length, 8, 'восемь строк на странице');
+    assert.match(lines[0].replace(/[   ]/g, ' '), /^1\. Квартира · Бенидорм · 210 000 € · 2 сп\.$/, 'строка коротко описывает объект');
+
+    const callbacks = callbacksOf(body.reply_markup);
+    assert.ok(callbacks.includes('catalog:all:0'), 'номер открывает карточку');
+    assert.ok(callbacks.includes('clist:all:1'), 'есть вторая страница списка');
+
+    // Номер открывает карточку этого объекта.
+    const opened = await chat.press('catalog:all:2');
+    const openedCard = opened.calls.find((call) => ['sendPhoto', 'editMessageMedia'].includes(call.method));
+    assert.ok(openedCard, 'карточка показана');
+  });
+
+  test('вторая страница списка меняет то же сообщение', async () => {
+    const chat = createChat();
+    await chat.say(MENU.ru.objects);
+    await chat.press('clist:all:0');
+    const next = await chat.press('clist:all:1');
+    assert.ok(next.calls.some((call) => call.method === 'editMessageText'), 'список меняется на месте');
+    const body = next.calls.filter((call) => call.method === 'editMessageText').pop().body;
+    const lines = body.text.split('\n').filter((line) => /^\d+\. /.test(line));
+    assert.equal(lines.length, 4, 'на второй странице остаток');
+    assert.match(lines[0], /^9\. /, 'нумерация продолжается');
+  });
+});
+
 test.describe('мастер подбора', () => {
   const SELECTION = bot.text.selection.ru;
 

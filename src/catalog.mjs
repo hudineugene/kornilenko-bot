@@ -171,6 +171,11 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     if (catalog.filter.summary) filterRow.push({ text: mobileButtonText('💬', copy.sendToManager), callback_data: 'cfilter:manager' });
     rows.push(filterRow);
   }
+  // Когда объектов много, листать карточки по одной долго — предлагаем список.
+  if (kind === 'property' && catalog && catalog.totalPages > CATALOG_LIST_PAGE_SIZE) {
+    const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
+    rows.push([{ text: copy.listMode, callback_data: 'clist:' + catalog.mode + ':' + Math.floor(catalog.page / CATALOG_LIST_PAGE_SIZE) }]);
+  }
   if (kind === 'property' && catalog && catalog.mode === 'recent') {
     rows.push([{ text: (MENU_LABELS[language] || MENU_LABELS.ru).more, callback_data: 'nav:my' }]);
   }
@@ -961,6 +966,87 @@ async function sendUiMessage(chatId, user, text, token, options = {}) {
   return message;
 }
 
+// --- Список объектов --------------------------------------------------------
+// Одно сообщение на восемь строк: тип, город, цена, спальни. Когда объектов
+// десятки, листать карточки по одной — самый долгий способ их посмотреть.
+const CATALOG_LIST_PAGE_SIZE = 8;
+
+function catalogListLine(record, language, number) {
+  const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  const type = (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[record.propertyType] || '';
+  const city = localizedExact(record.city, language, 80);
+  const price = objectPriceText(record, language);
+  const bedrooms = Number(record.bedrooms) > 0 ? record.bedrooms + ' ' + (language === 'ru' ? 'сп.' : language === 'es' ? 'dorm.' : 'bd') : '';
+  const parts = [type, city, price, bedrooms].filter(Boolean);
+  return String(number) + '. ' + parts.join(' · ');
+}
+
+function catalogListPanel(user, records, page, mode) {
+  const language = user.preferredLanguage || 'ru';
+  const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
+  const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
+  const pages = Math.max(1, Math.ceil(records.length / CATALOG_LIST_PAGE_SIZE));
+  const safePage = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const shown = records.slice(safePage * CATALOG_LIST_PAGE_SIZE, (safePage + 1) * CATALOG_LIST_PAGE_SIZE);
+  const lines = shown.map((record, index) => catalogListLine(record, language, safePage * CATALOG_LIST_PAGE_SIZE + index + 1));
+  const rows = [];
+  // Номера — по четыре в ряд: так восемь объектов занимают две строки кнопок.
+  for (let index = 0; index < shown.length; index += 4) {
+    rows.push(shown.slice(index, index + 4).map((record, position) => ({
+      text: String(safePage * CATALOG_LIST_PAGE_SIZE + index + position + 1),
+      callback_data: 'catalog:' + mode + ':' + records.indexOf(record),
+    })));
+  }
+  if (pages > 1) {
+    rows.push([
+      { text: '⬅️', callback_data: 'clist:' + mode + ':' + ((safePage - 1 + pages) % pages) },
+      { text: String(safePage + 1) + ' / ' + String(pages), callback_data: 'catalog:none:0' },
+      { text: '➡️', callback_data: 'clist:' + mode + ':' + ((safePage + 1) % pages) },
+    ]);
+  }
+  rows.push([{ text: copy.cardMode, callback_data: 'catalog:' + mode + ':' + (safePage * CATALOG_LIST_PAGE_SIZE) }]);
+  if (mode === 'all') rows.push([{ text: copy.button, callback_data: 'cfilter:open' }]);
+  rows.push([{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]);
+  return {
+    text: [copy.listTitle + ' · ' + records.length, lines.join('\n'), copy.listHint].filter(Boolean).join('\n\n'),
+    markup: { inline_keyboard: rows },
+  };
+}
+
+async function sendCatalogList(chatId, user, token, page = 0, mode = 'all') {
+  const records = catalogRecords(user, mode);
+  if (!records.length) return sendCatalogPage(chatId, user, token, 0, mode);
+  await clearCatalogMessages(chatId, user, token);
+  const panel = catalogListPanel(user, records, page, mode);
+  await sendUiMessage(chatId, user, panel.text, token, { reply_markup: panel.markup });
+  return true;
+}
+
+async function handleCatalogListCallback(query, token) {
+  const [, mode, page] = String(query.data || '').split(':');
+  const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
+  const user = normalizeUser(query.from, chatId, false);
+  await acknowledgeCallback(query, token);
+  const records = catalogRecords(user, CATALOG_MODES.includes(mode) ? mode : 'all');
+  if (!records.length) return sendCatalogPage(chatId, user, token, 0, mode);
+  const panel = catalogListPanel(user, records, Number(page) || 0, CATALOG_MODES.includes(mode) ? mode : 'all');
+  if (query.message && query.message.message_id) {
+    try {
+      await telegramRequest(token, 'editMessageText', {
+        chat_id: chatId,
+        message_id: query.message.message_id,
+        text: panel.text,
+        reply_markup: panel.markup,
+      });
+      return true;
+    } catch {
+      // Сообщение уже не изменить — покажем список заново.
+    }
+  }
+  await sendUiMessage(chatId, user, panel.text, token, { reply_markup: panel.markup });
+  return true;
+}
+
 async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
   const language = user.preferredLanguage || 'ru';
   await clearUiMessages(chatId, user, token);
@@ -1746,6 +1832,8 @@ export {
   catalogSearchActive,
   catalogSearchFilter,
   catalogFilterPanel,
+  handleCatalogListCallback,
+  sendCatalogList,
   handleSelectionWizardCallback,
   sendSelectionWizard,
   catalogFilterState,
