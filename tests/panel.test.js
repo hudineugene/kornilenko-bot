@@ -76,6 +76,19 @@ test('редакторы предупреждают перед закрытие�
   assert.match(PANEL_HTML, /dialog\.closeClean\(\)/);
 });
 
+test('автоответы и шаблоны ответов живут на одной вкладке', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /\["rules", "Автоответы и шаблоны"\]/);
+  assert.match(PANEL_HTML, /function templatesCardHtml\(\)/);
+  assert.match(PANEL_HTML, /function bindTemplatesCard\(host, redraw\)/);
+  // Карточка шаблонов рисуется прямо на вкладке автоответов.
+  assert.match(PANEL_HTML, /templatesCardHtml\(\) \+ "<\/div>"/);
+  assert.match(PANEL_HTML, /bindTemplatesCard\(host, function \(\) \{ renderRules\(host\); \}\)/);
+  // Отдельного окна с шаблонами больше нет — кнопка ведёт на вкладку.
+  assert.ok(!/function openTemplates\(\)/.test(PANEL_HTML), 'второго редактора шаблонов нет');
+  assert.match(PANEL_HTML, /pageAction\("✎ Шаблоны ответов", function \(\) \{ go\("texts", "rules"\); \}/);
+});
+
 test('«Контакты и о компании» собраны в одном месте', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   // «О компании» и сообщение нерабочего времени — на вкладке контактов.

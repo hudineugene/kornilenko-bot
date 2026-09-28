@@ -367,61 +367,66 @@ function renderTasks(host) {
   });
 }
 
-function openTemplates() {
+// Шаблоны ответов — карточка на вкладке «Автоответы и шаблоны»: рядом с
+// автоответами, потому что это одно и то же по смыслу.
+function templatesCardHtml() {
   var templates = state.replyTemplates || [];
-  openDialog({
-    title: "Шаблоны ответов",
-    protectChanges: true,
-    body: '<div class="stack" id="templateList">' + (templates.length ? templates.map(function (template) {
-      return '<div class="card"><div class="card-body stack" data-template="' + esc(template.id) + '">' +
+  return '<div class="card"><header><h3>Шаблоны ответов</h3><div class="actions"><button class="btn secondary small" id="addTemplate" type="button">＋ Шаблон</button></div></header>' +
+    '<div class="card-body stack" id="templateList">' + (templates.length ? templates.map(function (template) {
+      return '<div class="card flat"><div class="card-body stack" data-template="' + esc(template.id) + '">' +
         '<input data-field="title" value="' + esc(template.title) + '" placeholder="Название шаблона">' +
         LANGUAGES.map(function (language) {
           return '<textarea data-field="' + language[0] + '" placeholder="' + language[1] + '">' + esc((template.text || {})[language[0]] || "") + "</textarea>";
         }).join("") +
         '<div class="row"><button class="btn secondary small" data-save="1" type="button">Сохранить</button><button class="btn ghost small" data-drop="1" type="button">Удалить</button></div>' +
       "</div></div>";
-    }).join("") : '<div class="empty"><b>Шаблонов нет</b>Готовый текст можно вставить в ответ одним кликом</div>') + "</div>",
-    footer: '<button class="btn secondary" id="addTemplate" type="button">＋ Шаблон</button><div class="grow"></div><button class="btn" data-close="1" type="button">Готово</button>',
-    ready: function (dialog) {
-      function bind() {
-        dialog.querySelectorAll("[data-template]").forEach(function (card) {
-          var id = card.dataset.template;
-          var payload = function () {
-            var text = {};
-            LANGUAGES.forEach(function (language) { text[language[0]] = card.querySelector('[data-field="' + language[0] + '"]').value; });
-            return { title: card.querySelector('[data-field="title"]').value, text: text };
-          };
-          card.querySelector("[data-save]").onclick = async function () {
-            try {
-              if (id === "new") await send("/api/reply-templates", "POST", payload());
-              else await send("/api/reply-templates/" + encodeURIComponent(id), "PUT", payload());
-              toast("Сохранено");
-              await reload(false);
-              dialog.closeClean();
-              openTemplates();
-            } catch (error) { fail(error); }
-          };
-          card.querySelector("[data-drop]").onclick = async function () {
-            if (id === "new") return card.closest(".card").remove();
-            if (!(await confirmDialog("Удалить шаблон?", "Шаблон исчезнет из списка.", "Удалить", true))) return;
-            try { await api("/api/reply-templates/" + encodeURIComponent(id), { method: "DELETE" }); await reload(false); dialog.closeClean(); openTemplates(); } catch (error) { fail(error); }
-          };
-        });
-      }
-      bind();
-      dialog.querySelector("#addTemplate").onclick = function () {
-        var list = dialog.querySelector("#templateList");
-        var card = document.createElement("div");
-        card.className = "card";
-        card.innerHTML = '<div class="card-body stack" data-template="new"><input data-field="title" placeholder="Название шаблона">' +
-          LANGUAGES.map(function (language) { return '<textarea data-field="' + language[0] + '" placeholder="' + language[1] + '"></textarea>'; }).join("") +
-          '<div class="row"><button class="btn secondary small" data-save="1" type="button">Сохранить</button><button class="btn ghost small" data-drop="1" type="button">Удалить</button></div></div>';
-        list.appendChild(card);
-        bind();
-      };
-    },
-  });
+    }).join("") : '<div class="empty"><b>Шаблонов нет</b>Готовый текст менеджер вставляет в ответ одним нажатием</div>') + "</div></div>";
 }
+
+function bindTemplatesCard(host, redraw) {
+  function bind() {
+    host.querySelectorAll("[data-template]").forEach(function (card) {
+      var id = card.dataset.template;
+      var payload = function () {
+        var text = {};
+        LANGUAGES.forEach(function (language) { text[language[0]] = card.querySelector('[data-field="' + language[0] + '"]').value; });
+        return { title: card.querySelector('[data-field="title"]').value, text: text };
+      };
+      card.querySelector("[data-save]").onclick = async function () {
+        try {
+          if (id === "new") await send("/api/reply-templates", "POST", payload());
+          else await send("/api/reply-templates/" + encodeURIComponent(id), "PUT", payload());
+          toast("Сохранено");
+          await reload(false);
+          redraw();
+        } catch (error) { fail(error); }
+      };
+      card.querySelector("[data-drop]").onclick = async function () {
+        if (id === "new") return card.closest(".card").remove();
+        if (!(await confirmDialog("Удалить шаблон?", "Шаблон исчезнет из списка.", "Удалить", true))) return;
+        try {
+          await api("/api/reply-templates/" + encodeURIComponent(id), { method: "DELETE" });
+          await reload(false);
+          redraw();
+        } catch (error) { fail(error); }
+      };
+    });
+  }
+  bind();
+  host.querySelector("#addTemplate").onclick = function () {
+    var list = host.querySelector("#templateList");
+    var empty = list.querySelector(".empty");
+    if (empty) empty.remove();
+    var card = document.createElement("div");
+    card.className = "card flat";
+    card.innerHTML = '<div class="card-body stack" data-template="new"><input data-field="title" placeholder="Название шаблона">' +
+      LANGUAGES.map(function (language) { return '<textarea data-field="' + language[0] + '" placeholder="' + language[1] + '"></textarea>'; }).join("") +
+      '<div class="row"><button class="btn secondary small" data-save="1" type="button">Сохранить</button><button class="btn ghost small" data-drop="1" type="button">Удалить</button></div></div>';
+    list.appendChild(card);
+    bind();
+  };
+}
+
 
 function renderInquiryList(host) {
   screenSettled();
@@ -452,7 +457,7 @@ function renderInquiryList(host) {
     selectionWasAuto = false;
     conversationOpenedByUser = true;
   }
-  pageAction("✎ Шаблоны ответов", openTemplates, "secondary");
+  pageAction("✎ Шаблоны ответов", function () { go("texts", "rules"); }, "secondary");
   pageAction("⋯", openInquiryExtras, "ghost");
   var counts = {
     unread: allGroups.filter(function (group) { return group.unread; }).length,

@@ -272,7 +272,7 @@ var RULE_TYPES = [["contains", "содержит"], ["exact", "точное со
 function renderRules(host) {
   var rules = (state.rules || []).slice().sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); });
   pageAction("＋ Автоответ", function () { openRuleEditor(null); });
-  host.innerHTML = '<div class="split"><div class="card"><div class="table-wrap"><table><thead><tr><th>Если сообщение</th><th>Ответ</th><th>Язык</th><th></th></tr></thead><tbody>' +
+  host.innerHTML = '<div class="split"><div class="stack"><div class="card"><div class="table-wrap"><table><thead><tr><th>Если сообщение</th><th>Ответ</th><th>Язык</th><th></th></tr></thead><tbody>' +
     (rules.length ? rules.map(function (rule) {
       return '<tr data-id="' + esc(rule.id) + '"><td class="clickable" data-edit="1"><b>' + esc(rule.trigger) + '</b><br><span class="small faint">' + esc((RULE_TYPES.find(function (type) { return type[0] === rule.type; }) || ["", ""])[1]) + "</span></td>" +
         "<td>" + esc(String(rule.answer).slice(0, 80)) + "</td><td>" + esc(rule.language === "all" ? "все" : rule.language.toUpperCase()) + "</td>" +
@@ -282,11 +282,15 @@ function renderRules(host) {
         '<button class="btn ghost small" data-delete="1">✕</button></td></tr>';
     }).join("") : '<tr><td colspan="4"><div class="empty"><b>Автоответов нет</b>Бот передаёт такие сообщения менеджеру</div></td></tr>') +
     "</tbody></table></div></div>" +
+    // Шаблоны ответов — здесь же: это тоже заготовленный текст, только его
+    // вставляет менеджер, а не отправляет бот.
+    templatesCardHtml() + "</div>" +
     '<div class="card"><header><h3>Проверить сообщение</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="ruleTestText">Сообщение клиента</label><input id="ruleTestText" placeholder="Например: сколько стоит"></div>' +
       '<div class="field"><label for="ruleTestLang">Язык</label><select id="ruleTestLang"><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option></select></div>' +
       '<button class="btn secondary" id="ruleTest" type="button">Проверить</button><div id="ruleTestResult" class="small muted"></div>' +
     "</div></div></div>";
+  bindTemplatesCard(host, function () { renderRules(host); });
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     var id = row.dataset.id;
     row.querySelector("[data-edit]").onclick = function () { openRuleEditor(id); };

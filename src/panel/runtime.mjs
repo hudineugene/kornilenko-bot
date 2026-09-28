@@ -502,7 +502,7 @@ function navItems() {
     { id: "viewings", icon: "📅", title: "Просмотры" },
     { id: "objects", icon: "⌂", title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
     { id: "posts", icon: "➤", title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Каналы и группы"]] },
-    { id: "texts", icon: "✎", title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["sections", "Пустые разделы"], ["rules", "Автоответы"]] },
+    { id: "texts", icon: "✎", title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["sections", "Пустые разделы"], ["rules", "Автоответы и шаблоны"]] },
     { id: "settings", icon: "⚙", title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["reports", "Отчёты"], ["service", "Обслуживание"]] },
   ];
 }

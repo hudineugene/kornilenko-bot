@@ -273,7 +273,6 @@ test('каждый экран панели рисуется без ошибок'
     ['редактор акции', () => sandbox.openRecordEditor('promotions', promotion.id)],
     ['обращение', () => sandbox.openInquiry(inquiry.id)],
     ['карточка клиента', () => sandbox.openClient(inquiry.userId)],
-    ['шаблоны ответов', () => sandbox.openTemplates()],
     ['очистка обращений', () => sandbox.openCleanup()],
     ['напоминание по задаче', () => sandbox.openTaskSchedule(inquiry)],
     ['рассылка', () => sandbox.openCampaignEditor(null)],
