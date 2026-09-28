@@ -120,30 +120,23 @@ async function sendMoreMenu(chatId, user, token) {
   const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
   const favorites = catalogRecords(user, 'favorites').length;
   const comparison = catalogRecords(user, 'comparison').length;
-  const savedSearch = normalizedSavedSearch(user.savedSearch);
-  const savedCopy = SAVED_SEARCH_TEXT[language] || SAVED_SEARCH_TEXT.ru;
-  const savedState = savedSearch
-    ? ' · ' + (savedSearch.enabled && user.propertyAlerts !== false ? savedCopy.onShort : savedCopy.pausedShort)
-    : '';
-  const recent = catalogRecords(user, 'recent').length;
   const requests = data.inquiries.filter((inquiry) => inquiry.userId === String(user.id)).length;
   const count = (value) => ' · ' + Math.min(999, Number(value) || 0);
   await clearGalleryMessages(chatId, user, token);
   await clearCatalogMessages(chatId, user, token);
   await sendUiMessage(chatId, user, copy.title + '\n\n' + copy.intro, token, {
     reply_markup: {
+      // Шесть строк вместо одиннадцати: избранное, сравнение, заявки,
+      // подписки (туда же ушёл сохранённый поиск), мои данные и служебный ряд.
+      // «Недавно просмотренные» убраны — клиент и так помнит, что смотрел, а
+      // список занимал строку в каждом заходе.
       inline_keyboard: [
         [{ text: labels.favorites + count(favorites), callback_data: 'catalog:favorites:0' }],
         [{ text: (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).menuButton + count(comparison), callback_data: 'compare:view' }],
-        [{ text: savedCopy.menuButton + savedState, callback_data: 'saved:view' }],
-        [{ text: copy.recent + count(recent), callback_data: 'catalog:recent:0' }],
         [{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton + count(requests), callback_data: 'myreq:list' }],
         [{ text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).menuButton, callback_data: 'subs:menu' }],
         [{ text: (PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).menuButton, callback_data: 'privacy:open' }],
-        // «О компании» живёт на экране «Связаться» — там, где клиент решает,
-        // довериться ли фирме. Здесь остаются только его собственные дела.
-        [{ text: labels.help, callback_data: 'nav:help' }],
-        [{ text: labels.language, callback_data: 'nav:language' }],
+        [{ text: labels.help, callback_data: 'nav:help' }, { text: labels.language, callback_data: 'nav:language' }],
         [{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }],
       ],
     },

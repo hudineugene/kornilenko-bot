@@ -914,14 +914,15 @@ test.describe('catalog filter', () => {
     chat.user.catalogFilter = { deal: 'rent', type: '', bedrooms: 0, city: '', maxPrice: 0, sort: '' };
     const personal = await chat.say(MENU.ru.more);
     assert.equal(personal.last.text, bot.text.myArea.ru.title + '\n\n' + bot.text.myArea.ru.intro);
+    // Шесть строк: избранное, сравнение, заявки, подписки, мои данные и
+    // служебный ряд. Сохранённый поиск живёт в «Подписках», список
+    // просмотренных больше не занимает строку.
     assert.deepEqual(callbacksOf(personal.last.markup), [
-      'catalog:favorites:0', 'compare:view', 'saved:view', 'catalog:recent:0', 'myreq:list', 'subs:menu',
-      // «О компании» переехало на экран «Связаться» — здесь только свои дела.
+      'catalog:favorites:0', 'compare:view', 'myreq:list', 'subs:menu',
       'privacy:open', 'nav:help', 'nav:language', 'nav:menu',
     ]);
     assert.ok(personal.last.buttons.includes(MENU.ru.favorites + ' · 1'));
     assert.ok(personal.last.buttons.includes(bot.text.comparison.ru.menuButton + ' · 0'));
-    assert.ok(personal.last.buttons.includes(bot.text.myArea.ru.recent + ' · 2'), 'a draft is not counted');
     assert.ok(personal.last.buttons.some((label) => label.endsWith(' · 0')), 'the request counter is visible even when empty');
 
     const recent = await chat.press('catalog:recent:0');

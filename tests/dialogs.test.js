@@ -846,6 +846,25 @@ test.describe('property card', () => {
     assert.match(manager.last.text, /./, 'старая кнопка «Менеджер» открывает связь');
   });
 
+  test('«Моё» — шесть строк вместо одиннадцати', async () => {
+    const chat = createChat();
+    const personal = await chat.say(MENU.ru.more);
+    const rows = personal.last.markup.inline_keyboard;
+    assert.ok(rows.length <= 7, 'строк не больше семи вместе с возвратом в меню, было одиннадцать');
+    const callbacks = callbacksOf(personal.last.markup);
+    assert.ok(!callbacks.includes('catalog:recent:0'), 'недавно просмотренные больше не занимают строку');
+    assert.ok(!callbacks.includes('saved:view'), 'сохранённый поиск переехал в «Подписки»');
+    assert.ok(callbacks.includes('subs:menu'));
+
+    // Сам сохранённый поиск никуда не делся — он внутри «Подписок».
+    const subscriptions = await chat.press('subs:menu');
+    assert.ok(callbacksOf(subscriptions.last.markup).includes('saved:view'), 'и открывается оттуда');
+
+    // Раздел просмотренных остаётся доступным по прямой ссылке.
+    const recent = await chat.press('catalog:recent:0');
+    assert.ok(recent.calls.length > 0, 'история просмотров открывается');
+  });
+
   test('«О компании» лежит на видном месте, а не в личных настройках', async () => {
     const chat = createChat();
     const contacts = await chat.say(MENU.ru.contacts);

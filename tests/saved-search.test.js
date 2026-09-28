@@ -47,9 +47,12 @@ test('the current catalog filter becomes a clear saved search in My space', asyn
   assert.match(saved.last.text, /Продажа, Вилла/);
   assert.match(saved.last.text, /Сейчас подходит объектов: 1/);
 
+  // Сохранённый поиск — в «Подписках»: там же, где решают, что присылать.
   const personal = await chat.say(MENU.ru.more);
-  assert.ok(personal.last.buttons.includes(SEARCH.ru.menuButton + ' · ' + SEARCH.ru.onShort));
-  assert.ok(callbacksOf(personal.last.markup).includes('saved:view'));
+  assert.ok(callbacksOf(personal.last.markup).includes('subs:menu'));
+  const subscriptions = await chat.press('subs:menu');
+  assert.ok(subscriptions.last.buttons.includes(SEARCH.ru.menuButton + ' · ' + SEARCH.ru.onShort));
+  assert.ok(callbacksOf(subscriptions.last.markup).includes('saved:view'));
 
   await chat.press('saved:results');
   assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['saved-villa-fit']);

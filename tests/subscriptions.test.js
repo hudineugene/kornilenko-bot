@@ -24,13 +24,14 @@ test('"My space" opens the settings, and each item turns on and off', async () =
 
   let step = await chat.press('subs:menu');
   assert.match(step.last.text, /^🔔 Какие сообщения присылать\?/);
-  assert.deepEqual(step.last.buttons, ['✅ Новости и акции', '✅ Объекты: снижение цены и новые по вашему запросу', '⬅️ 👤 Моё']);
-  assert.deepEqual(callbacksOf(step.last.markup), ['subs:news:off', 'subs:alerts:off', 'nav:my']);
+  // Сохранённый поиск теперь здесь же: это тоже «что мне присылать».
+  assert.deepEqual(step.last.buttons, ['✅ Новости и акции', '✅ Объекты: снижение цены и новые по вашему запросу', '🔔 Сохранённый поиск', '⬅️ 👤 Моё']);
+  assert.deepEqual(callbacksOf(step.last.markup), ['subs:news:off', 'subs:alerts:off', 'saved:view', 'nav:my']);
 
   step = await chat.press('subs:news:off');
   assert.equal(chat.user.broadcastsOptOut, true);
   let edit = step.calls.find((call) => call.method === 'editMessageText');
-  assert.deepEqual(callbacksOf(edit.body.reply_markup), ['subs:news:on', 'subs:alerts:off', 'nav:my']);
+  assert.deepEqual(callbacksOf(edit.body.reply_markup), ['subs:news:on', 'subs:alerts:off', 'saved:view', 'nav:my']);
   assert.equal(edit.body.reply_markup.inline_keyboard[0][0].text, '⬜ Новости и акции');
 
   step = await chat.press('subs:alerts:off');
@@ -40,7 +41,7 @@ test('"My space" opens the settings, and each item turns on and off', async () =
   step = await chat.press('subs:news:on');
   assert.equal(chat.user.broadcastsOptOut, false);
   edit = step.calls.find((call) => call.method === 'editMessageText');
-  assert.deepEqual(callbacksOf(edit.body.reply_markup), ['subs:news:off', 'subs:alerts:off', 'nav:my']);
+  assert.deepEqual(callbacksOf(edit.body.reply_markup), ['subs:news:off', 'subs:alerts:off', 'saved:view', 'nav:my']);
   assert.ok(adminMessages().some((message) => message.text.startsWith('👀 Отписался от рассылок')));
 });
 

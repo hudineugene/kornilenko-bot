@@ -1,26 +1,37 @@
 // «Уведомления»: клиент сам выбирает, получать ли рассылки и уведомления об
 // объектах, и может отписаться от рассылки одной кнопкой под ней.
 
-import { MENU_LABELS, SUBSCRIPTION_TEXT } from './texts.mjs';
+import { MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { scheduleSave } from './store.mjs';
 import { normalizeUser } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
 import { notifyAdministratorAction } from './inquiries.mjs';
-import { sendUiMessage } from './catalog.mjs';
+import { normalizedSavedSearch, sendUiMessage } from './catalog.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 
 function subscriptionPanel(user) {
   const language = user.preferredLanguage || 'ru';
   const copy = SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru;
+  const savedCopy = SAVED_SEARCH_TEXT[language] || SAVED_SEARCH_TEXT.ru;
   const newsOn = Boolean(user.newsConsentAt) && !user.broadcastsOptOut;
   const alertsOn = user.propertyAlerts !== false;
+  const savedSearch = normalizedSavedSearch(user.savedSearch);
+  const rows = [
+    [{ text: (newsOn ? '✅ ' : '⬜ ') + copy.news, callback_data: 'subs:news:' + (newsOn ? 'off' : 'on') }],
+    [{ text: (alertsOn ? '✅ ' : '⬜ ') + copy.alerts, callback_data: 'subs:alerts:' + (alertsOn ? 'off' : 'on') }],
+  ];
+  // Сохранённый поиск — это тоже «что мне присылать», поэтому он здесь, а не
+  // отдельной строкой в «Моё».
+  rows.push([{
+    text: savedCopy.menuButton + (savedSearch
+      ? ' · ' + (savedSearch.enabled && alertsOn ? savedCopy.onShort : savedCopy.pausedShort)
+      : ''),
+    callback_data: 'saved:view',
+  }]);
+  rows.push([{ text: '⬅️ ' + (MENU_LABELS[language] || MENU_LABELS.ru).more, callback_data: 'nav:my' }]);
   return {
     text: copy.title + (newsOn ? '' : '\n\n' + copy.newsConsent),
-    markup: { inline_keyboard: [
-      [{ text: (newsOn ? '✅ ' : '⬜ ') + copy.news, callback_data: 'subs:news:' + (newsOn ? 'off' : 'on') }],
-      [{ text: (alertsOn ? '✅ ' : '⬜ ') + copy.alerts, callback_data: 'subs:alerts:' + (alertsOn ? 'off' : 'on') }],
-      [{ text: '⬅️ ' + (MENU_LABELS[language] || MENU_LABELS.ru).more, callback_data: 'nav:my' }],
-    ] },
+    markup: { inline_keyboard: rows },
   };
 }
 
