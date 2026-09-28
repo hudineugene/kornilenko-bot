@@ -2,7 +2,7 @@
 
 import crypto from 'node:crypto';
 import { cleanText, clone } from './util.mjs';
-import { pruneOrphanPropertyAnalytics } from './data-format.mjs';
+import { normalizeGuidePages, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { imageExists } from './media.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordImages } from './catalog.mjs';
@@ -225,6 +225,17 @@ async function handleContentApi(req, res, url) {
     data.welcomeImages[welcomeImageMatch[1]] = null;
     saveDataNow();
     return json(res, 200, { ok: true });
+  }
+
+  // Гид «Как купить в Испании»: набор страниц задан ботом, владелец правит
+  // заголовки и тексты на трёх языках.
+  if (url.pathname === '/api/guide' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    data.guidePages = normalizeGuidePages(Array.isArray(body.pages) ? body.pages : []);
+    saveDataNow();
+    return json(res, 200, { ok: true, pages: data.guidePages });
   }
 
   return false;

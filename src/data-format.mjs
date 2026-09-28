@@ -9,7 +9,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 37;
+const DATA_VERSION = 38;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -31,6 +31,57 @@ function normalizePipelineStage(value, inquiry = {}) {
   if (inquiry.status === 'in_progress') return 'contact';
   return 'new';
 }
+
+// «Как купить в Испании»: пять коротких экранов для покупателя из другой
+// страны. Тексты правятся в панели, как «О компании», — здесь только то, с
+// чего владелец начнёт.
+const DEFAULT_GUIDE_PAGES = [
+  {
+    id: 'nie',
+    title: { ru: '1. NIE — номер иностранца', en: '1. NIE — foreigner number', es: '1. NIE — número de extranjero' },
+    text: {
+      ru: 'NIE — личный номер иностранца в Испании. Без него нельзя купить недвижимость, открыть счёт и подписать договоры. Оформляется в полиции или в консульстве, обычно за 1–3 недели. Мы помогаем записаться и собрать документы.',
+      en: 'The NIE is a personal number for foreigners in Spain. Without it you cannot buy property, open a bank account or sign contracts. It is issued by the police or a consulate, usually within 1–3 weeks. We help you book the appointment and prepare the papers.',
+      es: 'El NIE es el número personal de extranjero en España. Sin él no se puede comprar vivienda, abrir cuenta ni firmar contratos. Se tramita en la policía o en el consulado, normalmente en 1–3 semanas. Te ayudamos con la cita y los documentos.',
+    },
+  },
+  {
+    id: 'deal',
+    title: { ru: '2. Этапы сделки', en: '2. Stages of a purchase', es: '2. Etapas de la compra' },
+    text: {
+      ru: 'Обычный порядок: выбор объекта → резерв (обычно 3 000–6 000 €) → проверка документов юристом → договор купли-продажи с задатком 10% → подписание у нотариуса и полный расчёт → регистрация. От резерва до нотариуса чаще всего проходит 4–8 недель.',
+      en: 'The usual order: choose a property → reservation (usually €3,000–6,000) → legal checks → private contract with a 10% deposit → signing at the notary and full payment → registration. From reservation to notary it usually takes 4–8 weeks.',
+      es: 'El orden habitual: elegir el inmueble → reserva (normalmente 3.000–6.000 €) → comprobación legal → contrato de arras con el 10% → firma ante notario y pago total → inscripción. De la reserva al notario suelen pasar 4–8 semanas.',
+    },
+  },
+  {
+    id: 'costs',
+    title: { ru: '3. Сколько стоит сделка', en: '3. What the purchase costs', es: '3. Cuánto cuesta la compra' },
+    text: {
+      ru: 'Сверх цены объекта закладывайте 10–14%: налог (ITP на вторичное жильё или IVA на новостройку), нотариус, регистрация, оформление. Точную сумму по конкретному объекту бот считает в калькуляторе на карточке.',
+      en: 'On top of the price, allow 10–14%: tax (ITP for resale or IVA for new builds), notary, registration and paperwork. The bot calculates the exact amount for a given property in the calculator on its card.',
+      es: 'Además del precio, cuenta con un 10–14%: impuesto (ITP en segunda mano o IVA en obra nueva), notaría, registro y gestión. El importe exacto de cada inmueble lo calcula el bot en la ficha.',
+    },
+  },
+  {
+    id: 'mortgage',
+    title: { ru: '4. Ипотека для нерезидентов', en: '4. Mortgage for non-residents', es: '4. Hipoteca para no residentes' },
+    text: {
+      ru: 'Испанские банки дают нерезидентам обычно до 60–70% стоимости, срок — до 20–25 лет. Нужны справка о доходах, выписки по счетам и NIE. Решение банка занимает 2–4 недели, поэтому начинать стоит вместе с поиском объекта.',
+      en: 'Spanish banks usually lend non-residents up to 60–70% of the price for 20–25 years. You will need proof of income, bank statements and a NIE. A decision takes 2–4 weeks, so it is worth starting alongside the property search.',
+      es: 'Los bancos españoles suelen financiar a no residentes hasta el 60–70% del precio, a 20–25 años. Hacen falta justificantes de ingresos, extractos y el NIE. La respuesta tarda 2–4 semanas, así que conviene empezar junto con la búsqueda.',
+    },
+  },
+  {
+    id: 'rent',
+    title: { ru: '5. Аренда и содержание', en: '5. Renting out and upkeep', es: '5. Alquiler y mantenimiento' },
+    text: {
+      ru: 'Купленное жильё можно сдавать: для посуточной аренды нужна туристическая лицензия, для долгосрочной — обычный договор. Содержание — комунидад, налог на недвижимость (IBI), свет и вода. Мы подскажем, что подходит именно вашему объекту.',
+      en: 'You can let the property out: short stays need a tourist licence, long lets use an ordinary contract. Running costs are the community fee, property tax (IBI), electricity and water. We will tell you what suits your property.',
+      es: 'La vivienda se puede alquilar: para estancias cortas hace falta licencia turística, para larga duración basta un contrato normal. Los gastos son comunidad, IBI, luz y agua. Te diremos qué encaja con tu inmueble.',
+    },
+  },
+];
 
 const defaultData = {
   version: DATA_VERSION,
@@ -117,6 +168,7 @@ const defaultData = {
     text: { ru: '', en: '', es: '' },
   },
   interfaceText: {},
+  guidePages: clone(DEFAULT_GUIDE_PAGES),
   groups: [],
   groupPosts: [],
   stats: {
@@ -710,6 +762,26 @@ function normalizeWorkingHours(value) {
 // A viewing request: what the client asked for (date may be unknown, for
 // "at the weekend" or a free-text answer), what the manager confirmed and
 // what the bot already sent about it.
+// Страницы гида «Как купить в Испании»: заголовок и текст на трёх языках.
+// Набор страниц задан ботом, владелец правит тексты — как в «О компании».
+function normalizeGuidePages(value) {
+  const saved = Array.isArray(value) ? value : [];
+  return DEFAULT_GUIDE_PAGES.map((page) => {
+    const stored = saved.find((item) => item && item.id === page.id) || {};
+    return {
+      id: page.id,
+      title: Object.fromEntries(['ru', 'en', 'es'].map((language) => [
+        language,
+        cleanText((stored.title || {})[language], 120) || page.title[language],
+      ])),
+      text: Object.fromEntries(['ru', 'en', 'es'].map((language) => [
+        language,
+        cleanText((stored.text || {})[language], 3000) || page.text[language],
+      ])),
+    };
+  });
+}
+
 function normalizeViewing(value) {
   if (!value || typeof value !== 'object') return null;
   const day = (text) => (DAY_KEY_PATTERN.test(String(text || '')) ? String(text) : '');
@@ -1078,6 +1150,7 @@ function normalizeLoadedData(parsed) {
     normalized.lastViewingAgendaFor = cleanText(parsed.lastViewingAgendaFor, 10);
     normalized.lastWeeklyReportFor = cleanText(parsed.lastWeeklyReportFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
+    normalized.guidePages = normalizeGuidePages(parsed.guidePages);
     normalized.config.publishing = normalizePublishing(normalized.config.publishing);
     normalized.groups = normalizeGroups(parsed.groups);
     normalized.groupPosts = normalizeGroupPosts(parsed.groupPosts);
@@ -1146,6 +1219,7 @@ export {
   normalizeTelegramBackup,
   normalizeViewingSlots,
   REPLY_MINUTES_CHOICES,
+  normalizeGuidePages,
   normalizeWorkingHours,
   pruneOrphanPropertyAnalytics,
 };

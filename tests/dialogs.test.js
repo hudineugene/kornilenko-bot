@@ -797,6 +797,43 @@ test.describe('property card', () => {
     assert.ok(recent.calls.length > 0, 'история просмотров открывается');
   });
 
+  test('гид «Как купить в Испании» листается одним сообщением', async () => {
+    const chat = createChat();
+    const contacts = await chat.say(MENU.ru.contacts);
+    assert.ok(callbacksOf(contacts.last.markup).includes('guide:0'), 'гид открывается с экрана связи');
+
+    const first = await chat.press('guide:0');
+    assert.match(first.last.text, /NIE/, 'первый экран — про NIE');
+    const callbacks = callbacksOf(first.last.markup);
+    assert.ok(callbacks.includes('guide:page:1'), 'есть следующий экран');
+    assert.ok(callbacks.includes('contact:lead'), 'бесплатная консультация на каждом экране');
+    assert.ok(!callbacks.includes('guide:page:-1'), 'назад с первого экрана некуда');
+
+    // Листается тем же сообщением.
+    const second = await chat.press('guide:page:1');
+    assert.ok(second.calls.some((call) => call.method === 'editMessageText'), 'экран меняется на месте');
+    const secondText = second.calls.filter((call) => call.method === 'editMessageText').pop().body.text;
+    assert.match(secondText, /Этапы сделки/);
+
+    // Последний экран — пятый.
+    const last = await chat.press('guide:page:4');
+    const lastCallbacks = callbacksOf(last.calls.filter((call) => call.method === 'editMessageText').pop().body.reply_markup);
+    assert.ok(!lastCallbacks.includes('guide:page:5'), 'дальше пятого не листается');
+  });
+
+  test('тексты гида правит владелец, как «О компании»', async () => {
+    const data = bot.getData();
+    data.guidePages = bot.normalizeGuidePages([{ id: 'nie', title: { ru: 'Свой заголовок' }, text: { ru: 'Свой текст про NIE.' } }]);
+    const chat = createChat();
+    const page = await chat.press('guide:0');
+    assert.match(page.last.text, /Свой заголовок/);
+    assert.match(page.last.text, /Свой текст про NIE\./);
+    // Ненаписанное остаётся заводским: пустых экранов клиент не увидит.
+    const second = await chat.press('guide:page:1');
+    const text = second.calls.filter((call) => call.method === 'editMessageText').pop().body.text;
+    assert.match(text, /Этапы сделки/);
+  });
+
   test('«О компании» лежит на видном месте, а не в личных настройках', async () => {
     const chat = createChat();
     const contacts = await chat.say(MENU.ru.contacts);

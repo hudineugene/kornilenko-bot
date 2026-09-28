@@ -1836,6 +1836,7 @@ export {
   catalogSearchActive,
   catalogSearchFilter,
   catalogFilterPanel,
+  escapeTelegramHtml,
   handleCatalogListCallback,
   sendCatalogList,
   handleSelectionWizardCallback,

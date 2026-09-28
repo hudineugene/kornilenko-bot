@@ -218,6 +218,19 @@ function renderContacts(host) {
       '<div class="field"><label>О компании</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-about="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-lg">' + esc(((state.config.menu || {})[language[0]] || {}).about || "") + "</textarea>";
       }).join("") + '<div class="hint">Открывается кнопкой «ℹ️ О компании» на этом же экране у клиента.</div></div>' +
+      '<div class="field"><span class="field-label">Как купить в Испании</span>' +
+        '<div class="hint">Пять коротких экранов для покупателя из другой страны. Клиент открывает их кнопкой «🇪🇸 Как купить в Испании» на этом же экране.</div>' +
+        (state.guidePages || []).map(function (page, index) {
+          return '<details class="editor-section" data-guide="' + esc(page.id) + '"' + (index === 0 ? " open" : "") + '>' +
+            '<summary><b>' + esc(page.title.ru) + "</b></summary>" +
+            '<div class="editor-section-body stack">' +
+            '<div class="field"><label>Заголовок</label>' + LANGUAGES.map(function (language) {
+              return '<input data-guide-title="' + esc(page.id) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc(page.title[language[0]] || "") + '">';
+            }).join("") + "</div>" +
+            '<div class="field"><label>Текст</label>' + LANGUAGES.map(function (language) {
+              return '<textarea data-guide-text="' + esc(page.id) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc(page.text[language[0]] || "") + "</textarea>";
+            }).join("") + "</div></div></details>";
+        }).join("") + "</div>" +
       '<div class="field"><label>Сообщение в нерабочее время</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-hours="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((hours.note || {})[language[0]] || "") + "</textarea>";
       }).join("") + '<div class="hint">{next} подставит ближайшее рабочее время. Сами часы работы — в «Настройках».</div></div>' +
@@ -255,6 +268,19 @@ function renderContacts(host) {
       var field = host.querySelector('[data-hours="1"][data-lang="' + language[0] + '"]');
       if (field) note[language[0]] = field.value;
     });
+    // Страницы гида сохраняются тем же нажатием.
+    const guide = (state.guidePages || []).map(function (page) {
+      const title = {};
+      const text = {};
+      LANGUAGES.forEach(function (language) {
+        const titleInput = host.querySelector('[data-guide-title="' + page.id + '"][data-lang="' + language[0] + '"]');
+        const textInput = host.querySelector('[data-guide-text="' + page.id + '"][data-lang="' + language[0] + '"]');
+        if (titleInput) title[language[0]] = titleInput.value;
+        if (textInput) text[language[0]] = textInput.value;
+      });
+      return { id: page.id, title: title, text: text };
+    });
+    if (guide.length) await send("/api/guide", "PUT", { pages: guide });
     await send("/api/working-hours", "PUT", {
       enabled: hours.enabled === true,
       timeZone: state.config.timeZone,

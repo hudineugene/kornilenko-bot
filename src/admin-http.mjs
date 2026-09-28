@@ -760,6 +760,7 @@ function safeState(session) {
     objects: data.objects.map((record) => publicRecord(record, 'objects')),
     promotions: data.promotions.map((record) => publicRecord(record, 'promotions')),
     contacts: data.contacts,
+    guidePages: data.guidePages || [],
     errors: data.errors,
     notifications,
     notificationUnreadCount: notifications.filter((item) => item.active && !item.readAt && !item.handledAt).length,

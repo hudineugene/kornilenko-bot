@@ -22,7 +22,7 @@ import {
 } from './inquiries.mjs';
 import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, handleCatalogListCallback, handleSelectionWizardCallback, openPendingStartPayload, propertyIdFromStartPayload, sendSelectionWizard, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
 import { catalogRequest } from './search.mjs';
-import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
+import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleGuideCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
 import { handleAlertsCallback } from './alerts.mjs';
 import { handleViewingConfirmCallback, handleViewingFeedbackCallback } from './viewings.mjs';
@@ -181,6 +181,7 @@ async function handleUpdate(update, token) {
         await handleLeadMethodCallback(update.callback_query, token, callbackUser);
       }
       else if (callbackData.startsWith('about:')) await handleAboutCallback(update.callback_query, token);
+      else if (callbackData.startsWith('guide:')) await handleGuideCallback(update.callback_query, token);
       else if (callbackData.startsWith('nav:')) await handleNavigationCallback(update.callback_query, token);
       else if (callbackData.startsWith('selection:')) await handleSelectionCallback(update.callback_query, token);
       else if (callbackData.startsWith('sel:')) await handleSelectionWizardCallback(update.callback_query, token);
