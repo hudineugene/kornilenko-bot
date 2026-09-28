@@ -60,12 +60,29 @@ async function sendLeadReview(user, pending, token, language) {
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
   pending.step = 'confirm';
   pending.editing = '';
+  pending.reviewed = true;
   scheduleSave();
   await sendMessage(user.chatId, leadReviewText(copy, {
     name: cleanText(pending.data && pending.data.name, 120),
     phone: cleanText(pending.data && pending.data.phone, 80),
     preferredTime: cleanText(pending.data && pending.data.preferredTime, 160),
   }, language), token, { reply_markup: leadFormKeyboard(language, 'confirm', user) });
+}
+
+// Имя клиента: то, что он называл сам, иначе имя из Telegram. Отдельный шаг
+// «Как к вам обращаться?» из-за этого не нужен — он стоил заявке одного
+// лишнего сообщения.
+function leadContactName(user) {
+  const saved = cleanText(user && user.contactName, 120);
+  if (saved.length >= 2) return saved;
+  const telegram = cleanText([user && user.firstName, user && user.lastName].filter(Boolean).join(' '), 120);
+  if (telegram.length >= 2) return telegram;
+  return cleanText(user && user.username, 120);
+}
+
+// Телефон, который бот уже знает: по нему заявку можно оформить без вопросов.
+function knownLeadPhone(user) {
+  return validLeadPhone(user && user.phone);
 }
 
 function validLeadPhone(value) {
@@ -234,18 +251,84 @@ function isStaleFormControl(text) {
   return false;
 }
 
+// Заявка уходит менеджеру и запоминает контакты клиента: в следующий раз
+// звонок можно будет заказать одним нажатием.
+async function submitLead(user, pending, token, language, message, extraRows = []) {
+  const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
+  const lead = {
+    name: cleanText(pending.data && pending.data.name, 120),
+    phone: cleanText(pending.data && pending.data.phone, 80),
+    preferredTime: cleanText(pending.data && pending.data.preferredTime, 160),
+  };
+  const propertyId = cleanText(pending.propertyId, 100);
+  user.contactName = lead.name;
+  user.phone = lead.phone;
+  user.preferredContactTime = lead.preferredTime;
+  user.pendingAction = null;
+  createInquiry(user, [
+    'Имя: ' + lead.name,
+    'Телефон: ' + lead.phone,
+    'Удобное время: ' + lead.preferredTime,
+  ].join('\n'), { type: 'lead', propertyId, lead, sourceMessage: message });
+  saveDataNow();
+  const property = propertyId ? data.objects.find((item) => item.id === propertyId) : null;
+  const propertyTitle = property ? localizedExact(property.title, language) : '';
+  const success = pending.instant
+    ? copy.instantSuccess.replace('{phone}', lead.phone)
+    : copy.success;
+  await sendMessage(user.chatId, withOffHoursNote([success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), language), token, {
+    reply_markup: extraRows.length ? { inline_keyboard: extraRows } : menuKeyboard(language),
+  });
+}
+
 async function startLeadForm(user, token, context = {}) {
   const language = user.preferredLanguage || 'ru';
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
+  const phone = knownLeadPhone(user);
+  const name = leadContactName(user);
+  // Телефон уже известен — спрашивать нечего: заявка уходит сразу, а поправить
+  // номер или время можно кнопкой под подтверждением.
+  if (phone) {
+    const pending = {
+      type: 'lead',
+      step: 'confirm',
+      instant: true,
+      propertyId: cleanText(context.propertyId, 100),
+      data: { name, phone, preferredTime: cleanText(user.preferredContactTime, 160) },
+      createdAt: new Date().toISOString(),
+    };
+    user.pendingAction = pending;
+    await submitLead(user, pending, token, language, null, [[{ text: copy.changeDetails, callback_data: 'contact:leadedit' }]]);
+    return;
+  }
   user.pendingAction = {
     type: 'lead',
-    step: 'name',
+    step: 'phone',
     propertyId: cleanText(context.propertyId, 100),
-    data: {},
+    data: { name },
     createdAt: new Date().toISOString(),
   };
   scheduleSave();
-  await sendMessage(user.chatId, copy.askName, token, { reply_markup: leadFormKeyboard(language, 'name', user) });
+  await sendMessage(user.chatId, phonePrompt(copy, language), token, { reply_markup: leadFormKeyboard(language, 'phone', user) });
+}
+
+// Правка после мгновенной заявки: показываем то, что бот знает, и даём
+// изменить номер или время.
+async function startLeadEdit(user, token) {
+  const language = user.preferredLanguage || 'ru';
+  const pending = {
+    type: 'lead',
+    step: 'confirm',
+    propertyId: '',
+    data: {
+      name: leadContactName(user),
+      phone: knownLeadPhone(user),
+      preferredTime: cleanText(user.preferredContactTime, 160),
+    },
+    createdAt: new Date().toISOString(),
+  };
+  user.pendingAction = pending;
+  await sendLeadReview(user, pending, token, language);
 }
 
 async function handleLeadFormMessage(message, user, token) {
@@ -324,20 +407,7 @@ async function handleLeadFormMessage(message, user, token) {
       await sendMessage(user.chatId, leadReviewText(copy, lead, language), token, { reply_markup: leadFormKeyboard(language, 'confirm', user) });
       return true;
     }
-    const propertyId = cleanText(pending.propertyId, 100);
-    user.contactName = lead.name;
-    user.phone = lead.phone;
-    user.preferredContactTime = lead.preferredTime;
-    user.pendingAction = null;
-    createInquiry(user, [
-      'Имя: ' + lead.name,
-      'Телефон: ' + lead.phone,
-      'Удобное время: ' + lead.preferredTime,
-    ].join('\n'), { type: 'lead', propertyId, lead, sourceMessage: message });
-    saveDataNow();
-    const property = propertyId ? data.objects.find((item) => item.id === propertyId) : null;
-    const propertyTitle = property ? localizedExact(property.title, language) : '';
-    await sendMessage(user.chatId, withOffHoursNote([copy.success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
+    await submitLead(user, pending, token, language, message);
     return true;
   }
   // "Today" / "tomorrow" are resolved at the moment of the answer: the form
@@ -348,7 +418,13 @@ async function handleLeadFormMessage(message, user, token) {
     return true;
   }
   pending.data.preferredTime = preferredTime;
-  await sendLeadReview(user, pending, token, language);
+  // Экран проверки нужен только тем, кто сам нажал «Изменить»: остальным он
+  // добавлял лишнее нажатие в конце.
+  if (pending.editing || pending.reviewed) {
+    await sendLeadReview(user, pending, token, language);
+    return true;
+  }
+  await submitLead(user, pending, token, language, message);
   return true;
 }
 
@@ -1065,6 +1141,8 @@ export {
   sendSelectionReview,
   sendViewingReview,
   showPendingActionStep,
+  knownLeadPhone,
+  startLeadEdit,
   startLeadForm,
   startSelectionForm,
   startViewingForm,

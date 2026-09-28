@@ -23,10 +23,8 @@ test.describe('confirming a message reached the manager', () => {
     const chat = createChat();
     const ru = LEAD.ru;
     await chat.press('contact:lead');
-    await chat.say('Анна Петрова');
     await chat.say('+34 600 111 222');
-    await chat.say(ru.timeOptions[0]);
-    const submitted = await chat.say(ru.confirm);
+    const submitted = await chat.say(ru.timeOptions[0]);
     assert.equal(submitted.last.text, ru.success);
 
     const asked = await chat.say('А есть что-то с видом на море?');

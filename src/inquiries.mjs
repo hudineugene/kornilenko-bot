@@ -48,6 +48,13 @@ function messageFile(message, kind) {
   return message[kind] && typeof message[kind] === 'object' ? message[kind] : null;
 }
 
+// Пустое значение — это «неизвестно», а не ноль: иначе заявка без исходного
+// сообщения ломалась на попытке прочитать его номер.
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  return Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
 function inquiryTimelineMessage(message, direction = 'in', options = {}) {
   const kind = options.kind || messageKind(message);
   const file = messageFile(message, kind);
@@ -61,12 +68,8 @@ function inquiryTimelineMessage(message, direction = 'in', options = {}) {
     fileId: cleanText(options.fileId != null ? options.fileId : file && file.file_id, 512),
     fileName: cleanText(options.fileName != null ? options.fileName : file && file.file_name, 200),
     mimeType: cleanText(options.mimeType != null ? options.mimeType : file && file.mime_type, 120),
-    telegramMessageId: Number.isFinite(Number(options.telegramMessageId != null ? options.telegramMessageId : message && message.message_id))
-      ? Number(options.telegramMessageId != null ? options.telegramMessageId : message.message_id)
-      : null,
-    replyToTelegramMessageId: Number.isFinite(Number(options.replyToTelegramMessageId != null ? options.replyToTelegramMessageId : replied && replied.message_id))
-      ? Number(options.replyToTelegramMessageId != null ? options.replyToTelegramMessageId : replied.message_id)
-      : null,
+    telegramMessageId: numberOrNull(options.telegramMessageId != null ? options.telegramMessageId : message && message.message_id),
+    replyToTelegramMessageId: numberOrNull(options.replyToTelegramMessageId != null ? options.replyToTelegramMessageId : replied && replied.message_id),
     replyToText: cleanText(options.replyToText != null ? options.replyToText : replied && messageSummary(replied), 300),
     deliveryStatus: direction === 'out' ? (options.deliveryStatus === 'failed' ? 'failed' : 'delivered') : '',
     clientRequestId: cleanText(options.clientRequestId, 100),
@@ -173,7 +176,7 @@ function mergeIntoLatestInquiry(user, text, type, context) {
   if (!context.searchLead) latest.searchLead = false;
   latest.updatedAt = new Date().toISOString();
   latest.clientMessageAt = latest.updatedAt;
-  if (context.sourceMessage && Number.isFinite(Number(context.sourceMessage.message_id))) latest.sourceMessageId = Number(context.sourceMessage.message_id);
+  if (context.sourceMessage && numberOrNull(context.sourceMessage.message_id) !== null) latest.sourceMessageId = Number(context.sourceMessage.message_id);
   appendInquiryMessage(latest, inquiryTimelineMessage(context.sourceMessage, 'in', { text, source: 'telegram', createdAt: latest.updatedAt }));
   if (latest.status === 'closed') latest.status = 'new';
   return latest;
@@ -236,7 +239,7 @@ function createInquiry(user, text, context = {}) {
     text: cleanText(text, 4000),
     type: ['question', 'interest', 'selection', 'viewing', 'lead', 'general'].includes(context.type) ? context.type : 'general',
     propertyId: cleanText(context.propertyId, 100),
-    sourceMessageId: Number.isFinite(Number(context.sourceMessage && context.sourceMessage.message_id)) ? Number(context.sourceMessage.message_id) : null,
+    sourceMessageId: context.sourceMessage ? numberOrNull(context.sourceMessage.message_id) : null,
     lead: context.lead && typeof context.lead === 'object' ? {
       name: cleanText(context.lead.name, 120),
       phone: cleanText(context.lead.phone, 80),

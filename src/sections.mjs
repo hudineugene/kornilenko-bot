@@ -3,13 +3,13 @@
 import { cleanText, fillTemplate } from './util.mjs';
 import { defaultData } from './data-format.mjs';
 import { imageExists } from './media.mjs';
-import { COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LANGUAGE_SELECTED, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
+import { COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LEAD_FORM_TEXT, LANGUAGE_SELECTED, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
-import { startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs';
+import { knownLeadPhone, startLeadEdit, startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs';
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
@@ -100,14 +100,24 @@ async function sendContacts(chatId, user, token) {
   });
 }
 
+// Всплывающая подсказка на кнопке заказа звонка: клиент сразу видит, на какой
+// номер ему перезвонят, и не гадает, ушла ли заявка.
+function leadCallbackToast(user, language) {
+  const phone = knownLeadPhone(user);
+  if (!phone) return '';
+  const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
+  return cleanText(copy.callbackToast.replace('{phone}', phone), 190);
+}
+
 async function handleContactCallback(query, token) {
   const action = String(query.data || '').split(':')[1] || '';
   const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
   const user = normalizeUser(query.from, chatId, false);
   const language = user.preferredLanguage || 'ru';
   const copy = MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru;
-  if (action !== 'cancel') await acknowledgeCallback(query, token);
+  if (action !== 'cancel') await acknowledgeCallback(query, token, action === 'lead' ? leadCallbackToast(user, language) : '');
   if (action === 'lead') return startLeadForm(user, token);
+  if (action === 'leadedit') return startLeadEdit(user, token);
   if (action === 'question') {
     user.pendingAction = { type: 'manager_question', createdAt: new Date().toISOString() };
     scheduleSave();
@@ -657,7 +667,9 @@ async function handlePropertyCallback(query, token) {
   if (actionName === 'interest') {
     recordPropertyEvent(record.id, 'interests');
     void notifyAdministratorAction(user, 'Начал заявку по объекту', localizedExact(record.title, language) || record.reference || record.id);
-    await acknowledgeCallback(query, token);
+    // Телефон уже известен — клиент видит «Перезвоним на …» прямо на кнопке,
+    // и заявка уходит без единого вопроса.
+    await acknowledgeCallback(query, token, leadCallbackToast(user, language));
     await startLeadForm(user, token, { propertyId: record.id });
     return;
   }

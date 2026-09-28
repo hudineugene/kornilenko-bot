@@ -22,14 +22,11 @@ test.after(cleanup);
 test.describe('callback request form', () => {
   const ru = LEAD.ru;
 
-  test('the full path creates a lead and remembers the contact details', async () => {
+  test('the whole path is two answers and remembers the contact details', async () => {
     const chat = createChat();
     let step = await chat.press('contact:lead');
-    assert.equal(step.last.text, ru.askName);
-    assert.deepEqual(step.last.buttons, [ru.cancel]);
-
-    step = await chat.say('Анна Петрова');
-    assert.ok(step.last.text.startsWith(ru.askPhone), 'вопрос о телефоне на месте');
+    // Имя бот берёт из Telegram, поэтому первый вопрос — сразу телефон.
+    assert.ok(step.last.text.startsWith(ru.askPhone), 'вопрос о телефоне сразу');
     assert.match(step.last.text, /\/privacy/, 'и приписка, где посмотреть, что бот хранит');
     const phoneButton = step.last.markup.keyboard.flat().find((button) => button.request_contact);
     assert.equal(phoneButton.text, ru.phoneButton);
@@ -39,32 +36,42 @@ test.describe('callback request form', () => {
     assert.deepEqual(step.last.buttons, [...ru.timeOptions, ru.cancel]);
 
     step = await chat.say(ru.timeOptions[0]);
-    assert.match(step.last.text, new RegExp('^' + ru.review));
-    assert.match(step.last.text, /Имя: Анна Петрова/);
-    assert.match(step.last.text, /Телефон: \+34 600 123 456/);
-    assert.ok(step.last.text.includes('Удобное время: ' + ru.timeOptions[0] + ' (' + calendarDate(new Date()) + ')'));
-    assert.deepEqual(step.last.buttons, [ru.confirm, ru.editName, ru.editPhone, ru.editTime, ru.cancel]);
-
-    step = await chat.say(ru.confirm);
-    assert.equal(step.last.text, ru.success);
+    assert.equal(step.last.text, ru.success, 'заявка уходит без отдельного экрана проверки');
     assert.equal(chat.user.pendingAction, null);
-    assert.equal(chat.user.contactName, 'Анна Петрова');
+    assert.equal(chat.user.contactName, 'Анна');
     assert.equal(chat.user.phone, '+34 600 123 456');
     const [inquiry] = chat.inquiries;
     assert.equal(inquiry.type, 'lead');
-    assert.deepEqual(inquiry.lead, { name: 'Анна Петрова', phone: '+34 600 123 456', preferredTime: ru.timeOptions[0] + ' (' + calendarDate(new Date()) + ')' });
+    assert.deepEqual(inquiry.lead, { name: 'Анна', phone: '+34 600 123 456', preferredTime: ru.timeOptions[0] + ' (' + calendarDate(new Date()) + ')' });
     assert.ok(adminNotifications().some((text) => text.includes('заявка на звонок') && text.includes('+34 600 123 456')));
+  });
+
+  test('a known phone turns the request into a single tap', async () => {
+    const chat = createChat();
+    chat.user.phone = '+34 600 123 456';
+    chat.user.contactName = 'Анна Петрова';
+    chat.user.preferredContactTime = 'Утром';
+
+    const step = await chat.press('contact:lead');
+    assert.deepEqual(step.popups, [ru.callbackToast.replace('{phone}', '+34 600 123 456')], 'клиент сразу видит, куда перезвонят');
+    assert.equal(step.last.text, ru.instantSuccess.replace('{phone}', '+34 600 123 456'));
+    assert.equal(chat.user.pendingAction, null, 'ничего не спрашиваем');
+    assert.equal(chat.inquiries.length, 1);
+    assert.deepEqual(chat.inquiries[0].lead, { name: 'Анна Петрова', phone: '+34 600 123 456', preferredTime: 'Утром' });
+
+    // Под подтверждением — кнопка правки: она открывает экран проверки.
+    const edit = step.last.markup.inline_keyboard.flat().find((button) => button.callback_data === 'contact:leadedit');
+    assert.equal(edit.text, ru.changeDetails);
+    const review = await chat.press('contact:leadedit');
+    assert.match(review.last.text, new RegExp('^' + ru.review));
+    assert.match(review.last.text, /Телефон: \+34 600 123 456/);
+    assert.deepEqual(review.last.buttons, [ru.confirm, ru.editName, ru.editPhone, ru.editTime, ru.cancel]);
   });
 
   test('invalid answers are asked again without moving on', async () => {
     const chat = createChat();
     await chat.press('contact:lead');
-    let step = await chat.say('А');
-    assert.equal(step.last.text, ru.invalidName);
-    assert.equal(chat.user.pendingAction.step, 'name');
-
-    await chat.say('Анна');
-    step = await chat.say('12-34');
+    let step = await chat.say('12-34');
     assert.equal(step.last.text, ru.invalidPhone);
     assert.equal(chat.user.pendingAction.step, 'phone');
 
@@ -73,12 +80,12 @@ test.describe('callback request form', () => {
     assert.equal(step.last.text, ru.invalidTime);
     assert.equal(chat.user.pendingAction.step, 'time');
     assert.equal(chat.inquiries.length, 0);
+
   });
 
   test('the "share my number" button fills the phone from the Telegram contact', async () => {
     const chat = createChat();
     await chat.press('contact:lead');
-    await chat.say('Анна');
     const step = await chat.shareContact('34600999888');
     assert.equal(step.last.text, ru.askTime);
     assert.equal(chat.user.pendingAction.data.phone, '34600999888');
@@ -87,9 +94,9 @@ test.describe('callback request form', () => {
   test('editing one field from the review returns to the review and keeps the rest', async () => {
     const chat = createChat();
     await chat.press('contact:lead');
-    await chat.say('Анна');
     await chat.say('+34 600 000 111');
     await chat.say('После обеда');
+    await chat.press('contact:leadedit');
     let step = await chat.say(ru.editPhone);
     assert.ok(step.last.text.startsWith(ru.askPhone), 'вопрос о телефоне на месте');
     assert.match(step.last.text, /\/privacy/, 'и приписка, где посмотреть, что бот хранит');
@@ -103,25 +110,27 @@ test.describe('callback request form', () => {
   test('a second request offers the saved name and phone', async () => {
     const chat = createChat();
     await chat.press('contact:lead');
-    await chat.say('Анна');
     await chat.say('+34 600 000 111');
     await chat.say('Утром');
-    await chat.say(ru.confirm);
 
-    let step = await chat.press('contact:lead');
+    // Вторая заявка уходит сразу, а в правке уже подставлены прежние ответы.
+    await chat.press('contact:lead');
+    await chat.press('contact:leadedit');
+    let step = await chat.say(ru.editName);
     const savedName = ru.savedName + ': Анна';
     assert.ok(step.last.buttons.includes(savedName));
-    step = await chat.say(savedName);
+    await chat.say(savedName);
+    step = await chat.say(ru.editPhone);
     const savedPhone = ru.savedPhone + ': +34 600 000 111';
     assert.ok(step.last.buttons.includes(savedPhone));
     await chat.say(savedPhone);
-    assert.deepEqual(chat.user.pendingAction.data, { name: 'Анна', phone: '+34 600 000 111' });
+    assert.equal(chat.user.pendingAction.data.name, 'Анна');
+    assert.equal(chat.user.pendingAction.data.phone, '+34 600 000 111');
   });
 
   test('cancelling closes the form without creating an inquiry', async () => {
     const chat = createChat();
     await chat.press('contact:lead');
-    await chat.say('Анна');
     const step = await chat.say(ru.cancel);
     assert.equal(step.last.text, ru.cancelled);
     assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.favorites }, { text: MENU.ru.promotions }], [{ text: MENU.ru.request }, { text: MENU.ru.contacts }], [{ text: MENU.ru.more }]] }));
@@ -132,26 +141,24 @@ test.describe('callback request form', () => {
   test('"today" means the day of the answer, not the day the form was opened', async () => {
     const chat = createChat();
     await chat.press('contact:lead');
-    await chat.say('Анна');
     await chat.say('+34 600 000 111');
     // The form was opened yesterday evening and is answered now.
     chat.user.pendingAction.createdAt = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
-    const step = await chat.say(ru.timeOptions[0]);
-    assert.ok(step.last.text.includes('(' + calendarDate(new Date()) + ')'), step.last.text);
+    await chat.say(ru.timeOptions[0]);
+    const [inquiry] = chat.inquiries;
+    assert.ok(inquiry.lead.preferredTime.includes('(' + calendarDate(new Date()) + ')'), inquiry.lead.preferredTime);
   });
 
   test('the form is localized for English speakers', async () => {
     const chat = createChat({ language: 'en', firstName: 'John' });
     const en = LEAD.en;
     let step = await chat.press('contact:lead');
-    assert.equal(step.last.text, en.askName);
-    await chat.say('John Smith');
+    assert.ok(step.last.text.startsWith(en.askPhone));
     await chat.say('+44 7700 900123');
     step = await chat.say(en.timeOptions[2]);
-    assert.match(step.last.text, new RegExp(en.reviewLabels[0] + ': John Smith'));
-    step = await chat.say(en.confirm);
     assert.equal(step.last.text, en.success);
     assert.equal(chat.inquiries[0].language, 'en');
+    assert.equal(chat.inquiries[0].lead.name, 'John', 'имя берётся из Telegram');
   });
 });
 
@@ -493,7 +500,6 @@ test.describe('interrupted forms', () => {
   test('a form older than a day expires and can be started again', async () => {
     const chat = createChat();
     await chat.press('contact:lead');
-    await chat.say('Анна');
     chat.user.pendingAction.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
     let step = await chat.say('+34 600 000 111');
     assert.equal(step.last.text, INTERACTION.ru.expired);
@@ -501,8 +507,8 @@ test.describe('interrupted forms', () => {
     assert.equal(chat.user.pendingAction, null);
     assert.equal(chat.inquiries.length, 0, 'the old answers are not sent');
     step = await chat.say(INTERACTION.ru.resume);
-    assert.equal(step.last.text, LEAD.ru.askName);
-    assert.deepEqual(chat.user.pendingAction.data, {});
+    assert.ok(step.last.text.startsWith(LEAD.ru.askPhone));
+    assert.equal(chat.user.pendingAction.step, 'phone');
   });
 
   test('pressing a form button after the form is finished does nothing harmful', async () => {
@@ -777,6 +783,6 @@ test.describe('property card', () => {
     assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 2, 2, 1]);
     assert.ok(step.last.buttons.includes(MENU.ru.request), '«Call me back» is on the main keyboard');
     const old = await chat.say('📞 Заказать звонок');
-    assert.equal(old.last.text, LEAD.ru.askName);
+    assert.ok(old.last.text.startsWith(LEAD.ru.askPhone));
   });
 });
