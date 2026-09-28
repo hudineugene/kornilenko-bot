@@ -76,6 +76,26 @@ test('редакторы предупреждают перед закрытие�
   assert.match(PANEL_HTML, /dialog\.closeClean\(\)/);
 });
 
+test('«Публикации» — две кнопки, общая очередь и общая история', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /function renderPublications\(host\)/);
+  assert.match(PANEL_HTML, /pageAction\("✉ Рассылка клиентам"/);
+  assert.match(PANEL_HTML, /pageAction\("➤ Пост в канал", openChannelComposer/);
+  // Очередь и история — общие для рассылок и постов.
+  assert.match(PANEL_HTML, /function publicationRows\(\)/);
+  assert.match(PANEL_HTML, /<h3>Очередь<\/h3>/);
+  assert.match(PANEL_HTML, /<h3>История<\/h3>/);
+  assert.match(PANEL_HTML, /Клиентам · /);
+  assert.match(PANEL_HTML, /"Канал · "/);
+
+  // Оформление — кнопкой из формы поста, отдельной вкладки больше нет.
+  assert.match(PANEL_HTML, /id="openPostStyle"/);
+  assert.match(PANEL_HTML, /function openPostStyleDialog\(\)/);
+  assert.match(PANEL_HTML, /\["broadcast", "Очередь и история"\], \["channel", "Каналы и группы"\]/);
+  assert.ok(!/\["style", "Оформление"\]/.test(PANEL_HTML), 'вкладка «Оформление» убрана');
+  assert.ok(!/во вкладке «Оформление постов»/.test(PANEL_HTML), 'подсказки больше не шлют во вкладку');
+});
+
 test('в списке объектов цифры подписаны, а редкие действия — под «⋯»', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   // Колонка «Эффективность»: видно, что за числа.

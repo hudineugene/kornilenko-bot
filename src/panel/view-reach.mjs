@@ -30,6 +30,123 @@ function campaignAudienceLabel(entry) {
 }
 
 // --- Рассылки --------------------------------------------------------------------
+// Одна страница на все публикации: две кнопки сверху, общая очередь и общая
+// история. Рассылка клиентам и пост в канал — разные вещи, но планируются и
+// смотрятся вместе.
+function publicationRows() {
+  var rows = [];
+  (state.broadcasts || []).forEach(function (entry) {
+    rows.push({
+      kind: "broadcast",
+      id: entry.id,
+      where: "Клиентам · " + campaignAudienceLabel(entry),
+      text: String(localized(entry.messages, "ru")).slice(0, 70),
+      at: entry.status === "scheduled" ? entry.scheduledAt : entry.startedAt || entry.updatedAt || entry.createdAt,
+      queued: entry.status === "draft" || entry.status === "scheduled",
+      status: entry.status,
+      sent: entry.sent,
+      responses: entry.responses,
+      unsubscribes: entry.unsubscribes,
+      entry: entry,
+    });
+  });
+  (state.groupPosts || []).forEach(function (post) {
+    var group = (state.groups || []).find(function (item) { return String(item.id) === String(post.groupId); });
+    rows.push({
+      kind: "post",
+      id: post.id,
+      where: (group && group.type !== "channel" ? "Группа · " : "Канал · ") + (group ? group.title || group.id : post.groupId),
+      text: String(post.text || "").slice(0, 70),
+      at: post.sendAt || post.sentAt || post.createdAt,
+      queued: post.status === "scheduled",
+      status: post.status,
+      entry: post,
+    });
+  });
+  return rows.sort(function (a, b) { return (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0); });
+}
+
+function publicationStatusChip(row) {
+  if (row.kind === "broadcast") return campaignStatusChip(row.entry);
+  var words = { scheduled: "запланирован", sent: "опубликован", cancelled: "отменён", failed: "не ушёл" };
+  return '<span class="chip ' + (row.status === "failed" ? "bad" : row.status === "sent" ? "ok" : "") + '">' + (words[row.status] || row.status) + "</span>";
+}
+
+function renderPublications(host) {
+  var rows = publicationRows();
+  var queue = rows.filter(function (row) { return row.queued; });
+  var history = rows.filter(function (row) { return !row.queued; });
+  pageAction("✉ Рассылка клиентам", function () { openCampaignEditor(null); });
+  pageAction("➤ Пост в канал", openChannelComposer, "secondary");
+  host.innerHTML =
+    '<div class="card gap-bottom"><header><h3>Очередь</h3><div class="actions"><span class="small faint">черновики и запланированное</span></div></header><div class="table-wrap"><table><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th></th></tr></thead><tbody>' +
+    (queue.length ? queue.map(function (row) {
+      return '<tr data-kind="' + row.kind + '" data-id="' + esc(row.id) + '">' +
+        '<td class="nowrap">' + (row.status === "draft" ? "черновик" : dateTime(row.at)) + "</td>" +
+        "<td>" + esc(row.where) + "</td>" +
+        '<td class="clickable" data-open="1">' + esc(row.text || "без текста") + "</td>" +
+        '<td class="right"><button class="btn ghost small" data-drop="1" title="Убрать из очереди">✕</button></td></tr>';
+    }).join("") : '<tr><td colspan="4"><div class="empty"><b>Очередь пуста</b>Запланированные рассылки и посты появятся здесь</div></td></tr>') +
+    "</tbody></table></div></div>" +
+    '<div class="card"><header><h3>История</h3><div class="actions"><span class="small faint">отправлено · отклики · отписки</span></div></header><div class="table-wrap"><table><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
+    (history.length ? history.map(function (row) {
+      return "<tr><td class=\"nowrap\">" + dateShort(row.at) + "</td><td class=\"small\">" + esc(row.where) + "</td><td>" + esc(row.text || "без текста") + "</td>" +
+        '<td class="right">' + (row.kind === "broadcast" ? num(row.sent) : "—") + "</td>" +
+        '<td class="right">' + (row.kind === "broadcast" ? num(row.responses) : "—") + "</td>" +
+        '<td class="right">' + (row.kind === "broadcast" ? num(row.unsubscribes) : "—") + "</td>" +
+        "<td>" + publicationStatusChip(row) + "</td></tr>";
+    }).join("") : '<tr><td colspan="7"><div class="empty"><b>Публикаций ещё не было</b>Здесь появятся отправленные рассылки и посты</div></td></tr>') +
+    "</tbody></table></div>";
+
+  host.querySelectorAll("tr[data-id]").forEach(function (row) {
+    var id = row.dataset.id;
+    var kind = row.dataset.kind;
+    var open = row.querySelector("[data-open]");
+    if (open) open.onclick = function () {
+      if (kind === "broadcast") return openCampaignEditor(id);
+      go("posts", "channel");
+    };
+    row.querySelector("[data-drop]").onclick = async function () {
+      var isBroadcast = kind === "broadcast";
+      if (!(await confirmDialog(
+        isBroadcast ? "Удалить рассылку?" : "Отменить публикацию?",
+        isBroadcast ? "Черновик будет удалён." : "Пост не уйдёт в канал, текст пропадёт.",
+        isBroadcast ? "Удалить" : "Отменить публикацию",
+        true
+      ))) return;
+      try {
+        await api((isBroadcast ? "/api/broadcasts/" : "/api/group-posts/") + encodeURIComponent(id), { method: "DELETE" });
+        await reload();
+      } catch (error) { fail(error); }
+    };
+  });
+}
+
+// «Пост в канал» с общей страницы: если канал один — сразу к нему, если
+// несколько — спрашиваем, в какой.
+function openChannelComposer() {
+  var channels = (state.groups || []).filter(function (group) { return group.type === "channel"; });
+  if (!channels.length) return go("posts", "channel");
+  if (channels.length === 1) {
+    selectedGroup = channels[0].id;
+    return go("posts", "channel");
+  }
+  openDialog({
+    title: "В какой канал",
+    body: '<div class="stack"><div class="field"><label for="composerChannel">Канал</label><select id="composerChannel">' + channels.map(function (group) {
+      return '<option value="' + esc(group.id) + '">' + esc(group.title || group.id) + "</option>";
+    }).join("") + "</select></div></div>",
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="composerGo" type="button">Дальше</button>',
+    ready: function (dialog) {
+      dialog.querySelector("#composerGo").onclick = function () {
+        selectedGroup = dialog.querySelector("#composerChannel").value;
+        dialog.closeClean();
+        go("posts", "channel");
+      };
+    },
+  });
+}
+
 function renderCampaigns(host) {
   var drafts = (state.broadcasts || []).filter(function (entry) { return entry.status === "draft" || entry.status === "scheduled"; });
   var history = (state.broadcasts || []).filter(function (entry) { return entry.status !== "draft" && entry.status !== "scheduled"; });
@@ -289,7 +406,7 @@ function publishing() {
 function rubricPicker() {
   var rubrics = publishing().rubrics || [];
   if (!rubrics.length) {
-    return '<div class="hint">Плашки рубрик можно завести во вкладке «Оформление постов» — они добавляются к посту картинкой.</div>';
+    return '<div class="hint">Плашки рубрик заводятся по кнопке «Оформление постов» — они добавляются к посту картинкой.</div>';
   }
   return '<div class="field"><label for="groupRubric">Рубрика</label><select id="groupRubric"><option value="">без плашки</option>' +
     rubrics.map(function (rubric) {
@@ -329,13 +446,13 @@ function buttonsNote() {
   if (!list.length) return "";
   return '<div class="field"><span class="field-label">Кнопки под постом</span><div class="row wrap">' +
     list.map(function (button) { return '<span class="chip brand pad-sm">' + esc(button.text) + "</span>"; }).join("") +
-    '</div><div class="hint">Настраиваются во вкладке «Оформление постов».</div></div>';
+    '</div><div class="hint">Настраиваются по кнопке «Оформление постов».</div></div>';
 }
 
 function signatureNote() {
   var current = publishing();
   if (!current.signature || !current.signatureEnabled) {
-    return '<div class="hint">Постоянная подпись выключена или пуста — включить её можно во вкладке «Оформление постов».</div>';
+    return '<div class="hint">Постоянная подпись выключена или пуста — включить её можно по кнопке «Оформление постов».</div>';
   }
   var lines = String(current.signature).split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
   var shown = current.signatureWrap === "keep" || !current.signatureWrap
@@ -434,6 +551,8 @@ function renderGroupCard(host, group) {
         rubricPicker() +
         signatureNote() +
         buttonsNote() +
+        '<div class="row"><button class="btn ghost small" id="openPostStyle" type="button">✎ Оформление постов</button>' +
+        '<span class="small muted">Постоянная подпись, кнопки под постом и плашки рубрик.</span></div>' +
         '<div class="row wrap">' + (groupCan(group, "can_pin_messages") ? '<label class="check"><input type="checkbox" id="groupPin"> закрепить</label>' : "") +
         '<label class="check"><input type="checkbox" id="groupNotify" checked> со звуком</label>' +
         '<div class="grow"></div><button class="btn secondary" id="groupPreview" type="button">Себе для проверки</button>' +
@@ -600,6 +719,8 @@ function renderGroupCard(host, group) {
       sendAt: when ? zonedDateTimeToIso(when) : "",
     };
   }
+  var styleButton = host.querySelector("#openPostStyle");
+  if (styleButton) styleButton.onclick = openPostStyleDialog;
   host.querySelector("#groupPreview").onclick = async function () {
     try {
       await send(base + "/post", "POST", Object.assign(postPayload(), { preview: true, sendAt: "" }));
@@ -776,6 +897,21 @@ function checkPlateWidth(row, index, onPad) {
   else picture.onload = show;
 }
 
+// Оформление постов в окне: тот же экран, что был вкладкой, но открывается
+// из формы поста — там, где о нём вспоминают.
+function openPostStyleDialog() {
+  openDialog({
+    title: "Оформление постов",
+    drawer: true,
+    wide: true,
+    body: '<div id="postStyleHost"></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
+    ready: function (dialog) {
+      renderPostStyle(dialog.querySelector("#postStyleHost"));
+    },
+  });
+}
+
 function renderPostStyle(host) {
   var current = publishing();
   // Выбранная, но ещё не сохранённая картинка живёт в самой рубрике
@@ -947,11 +1083,11 @@ function renderPostStyle(host) {
 }
 
 VIEWS.posts = {
-  subtitle: function () { return "Сообщения клиентам, группы и каналы бота"; },
+  subtitle: function () { return "Рассылки клиентам и посты в каналах"; },
   render: function (host, tab) {
     if (tab === "channel") return renderGroups(host);
     if (tab === "style") return renderPostStyle(host);
-    renderCampaigns(host);
+    renderPublications(host);
   },
 };
 `;

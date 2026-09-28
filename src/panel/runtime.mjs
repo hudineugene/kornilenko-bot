@@ -501,7 +501,7 @@ function navItems() {
     { id: "clients", icon: "✉", title: "Клиенты", tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
     { id: "viewings", icon: "📅", title: "Просмотры" },
     { id: "objects", icon: "⌂", title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
-    { id: "posts", icon: "➤", title: "Публикации", tabs: [["broadcast", "Рассылка клиентам"], ["channel", "Пост в канал"], ["style", "Оформление"]] },
+    { id: "posts", icon: "➤", title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Каналы и группы"]] },
     { id: "texts", icon: "✎", title: "Тексты бота", tabs: [["welcome", "Приветствие"], ["sections", "Разделы"], ["contacts", "Контакты"], ["rules", "Автоответы"]] },
     { id: "settings", icon: "⚙", title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["reports", "Отчёты"], ["service", "Обслуживание"]] },
   ];
