@@ -30,11 +30,11 @@ function renderConnection(host) {
       '<div class="hint">Токен меняется отдельной кнопкой и только по текущему паролю панели. Остальные настройки этой страницы сохраняются кнопкой в полосе снизу.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Админ-чат в Telegram</h3></header><div class="card-body stack">' +
-      '<div class="field"><label for="setAdminChat">Chat ID администратора</label><input id="setAdminChat" value="' + esc(config.adminChatId || "") + '" placeholder="узнать: напишите боту /myid"></div>' +
+      '<div class="field"><label for="setAdminChat">Telegram-чат администратора</label><input id="setAdminChat" value="' + esc(config.adminChatId || "") + '" placeholder="узнать: напишите боту /myid"></div>' +
       '<div class="row wrap"><button class="btn secondary small" id="testAdmin" type="button">Отправить тест</button>' +
         (config.adminNotificationVerifiedAt ? '<span class="chip ok">проверен ' + dateShort(config.adminNotificationVerifiedAt) + "</span>" : '<span class="chip warn">не проверен</span>') + "</div>" +
       '<div class="field"><label for="setNotify">Что присылать в Telegram</label><select id="setNotify">' +
-        '<option value="inquiries"' + (config.notifyMode !== "all" ? " selected" : "") + ">Только обращения и заявки</option>" +
+        '<option value="inquiries"' + (config.notifyMode !== "all" ? " selected" : "") + ">Только заявки клиентов</option>" +
         '<option value="all"' + (config.notifyMode === "all" ? " selected" : "") + ">Все действия клиентов</option></select></div>" +
       '<label class="check"><input type="checkbox" id="setStatusNotices"' + (config.statusNotices !== false ? " checked" : "") + "> сообщать о запуске и остановке бота</label>" +
     "</div></div>" +
@@ -152,7 +152,7 @@ function renderConnection(host) {
     var list = host.querySelector("#managerList");
     list.innerHTML = managers.length ? managers.map(function (manager, index) {
       return '<div class="row" data-manager="' + index + '"><input class="grow" data-field="name" value="' + esc(manager.name || "") + '" placeholder="Имя">' +
-        '<input style="max-width:170px" data-field="chatId" value="' + esc(manager.chatId || "") + '" placeholder="Chat ID">' +
+        '<input style="max-width:170px" data-field="chatId" value="' + esc(manager.chatId || "") + '" placeholder="Telegram-чат">' +
         (manager.verifiedAt ? '<span class="chip ok">ок</span>' : manager.id ? '<button class="btn ghost small" data-test="' + esc(manager.id) + '" type="button">Тест</button>' : "") +
         '<button class="btn ghost small" data-drop="' + index + '" type="button">✕</button></div>';
     }).join("") : '<span class="muted small">Менеджеров нет — заявки приходят только администратору.</span>';
@@ -231,7 +231,7 @@ function renderWork(host) {
       "<button class=\"btn secondary small\" id=\"saveCalc\" type=\"button\">Сохранить</button>" +
     "</div></div>" +
     '<div class="card"><header><h3>Напоминания</h3></header><div class="card-body stack">' +
-      '<div class="field"><label for="remindHours">Напомнить об обращении без ответа</label><select id="remindHours">' +
+      '<div class="field"><label for="remindHours">Напомнить о заявке без ответа</label><select id="remindHours">' +
         [[0, "не напоминать"], [1, "через 1 час"], [2, "через 2 часа"], [4, "через 4 часа"], [8, "через 8 часов"], [24, "через сутки"]].map(function (option) {
           return '<option value="' + option[0] + '"' + (Number(state.config.reminderHours) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + "</select></div>" +
@@ -240,7 +240,7 @@ function renderWork(host) {
         [[0, "без срока"], [12, "12 месяцев"], [18, "18 месяцев"], [24, "24 месяца"], [36, "36 месяцев"], [48, "48 месяцев"]].map(function (option) {
           return '<option value="' + option[0] + '"' + (Number(state.config.retentionMonths) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + "</select></div>" +
-      '<div class="hint">Отсчёт от последнего обращения клиента. Раз в сутки бот удаляет данные тех, от кого давно ничего не было, и сообщает об этом. Не удаляются те, кто ждёт ответа, у кого впереди просмотр или стоит напоминание. Срок нужно указать в политике конфиденциальности.</div>' +
+      '<div class="hint">Отсчёт от последней заявки клиента. Раз в сутки бот удаляет данные тех, от кого давно ничего не было, и сообщает об этом. Не удаляются те, кто ждёт ответа, у кого впереди просмотр или стоит напоминание. Срок нужно указать в политике конфиденциальности.</div>' +
       '<button class="btn secondary small" id="saveReminders" type="button">Сохранить</button>' +
     "</div></div></div>";
 
@@ -310,10 +310,10 @@ function renderData(host) {
   var backup = state.config.telegramBackup || {};
   host.innerHTML = '<div class="grid cols-2">' +
     '<div class="card"><header><h3>Резервная копия</h3></header><div class="card-body stack">' +
-      '<p class="muted small">Копия содержит объекты, тексты, клиентов, обращения и фотографии. Храните её в надёжном месте.</p>' +
+      '<p class="muted small">Копия содержит объекты, тексты, клиентов, заявки и фотографии. Храните её в надёжном месте.</p>' +
       '<div class="row wrap"><button class="btn secondary" id="downloadBackup" type="button">⬇ Скачать копию</button>' +
       '<label class="btn ghost" style="cursor:pointer">⬆ Восстановить<input type="file" id="restoreFile" accept=".kbz,.json,.gz,.kbk,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
-      '<div class="hint">Подходит файл этой кнопки (.kbz — данные и фотографии), прежние копии (.json.gz и .json) и зашифрованная копия из Telegram (.kbk — понадобится её пароль). Ежедневная копия создаётся сама в папке backups рядом с ботом. Перед восстановлением прежние данные складываются туда же файлом pre-restore-…json.</div>' +
+      '<div class="hint">Подходит любая копия, сделанная ботом: скачанная этой кнопкой, из папки <b>backups</b> рядом с ботом или присланная в Telegram (для неё понадобится пароль копии). Ежедневная копия создаётся сама. Перед восстановлением прежние данные бот складывает в ту же папку — вернуться будет куда.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> присылать зашифрованную копию раз в неделю</label>" +
@@ -340,7 +340,7 @@ function renderData(host) {
       '<div class="small muted">Сообщений получено: ' + num((state.stats || {}).messagesReceived) + " · отправлено: " + num((state.stats || {}).messagesSent) + "</div>" +
       '<div class="row wrap"><button class="btn ghost small" id="resetStats" type="button">Обнулить счётчики</button>' +
       '<button class="btn ghost small" id="clearActivity" type="button">Очистить историю активности</button></div>' +
-      '<div class="hint">Обращения и клиенты при этом не удаляются.</div>' +
+      '<div class="hint">Заявки и клиенты при этом не удаляются.</div>' +
     "</div></div></div>";
 
   host.querySelector("#downloadBackup").onclick = async function () {
@@ -504,7 +504,7 @@ function renderAccess(host) {
 var SERVICE_SCREENS = [
   ["data", "Данные и копии", "Резервные копии, восстановление, самопроверка, файлы, журнал ошибок"],
   ["access", "Доступ", "Пароль панели и доступ к панели из интернета"],
-  ["feed", "Загрузка с сайта", "Обновление каталога из XML-выгрузки"],
+  ["feed", "Загрузка с сайта", "Обновление каталога по ссылке с вашего сайта"],
   ["interface", "Все подписи бота", "Тексты кнопок и служебных сообщений на трёх языках"],
 ];
 

@@ -99,7 +99,7 @@ function openCampaignEditor(id) {
         '<div class="recipient-summary"><span>👥</span><div><b id="campEstimate">Считаем получателей…</b><small id="campEstimateDetails">Проверяем выбранный сегмент</small></div></div>' +
       "</div></details>" +
       '<details class="editor-section" open><summary><b>Время отправки</b><span>сейчас или по расписанию</span></summary><div class="editor-section-body">' +
-        '<div class="field"><label for="campDate">Отправить позже</label><input id="campDate" type="datetime-local" value="' + esc(entry && entry.scheduledAt ? dateTimeLocalValue(entry.scheduledAt) : "") + '"><div class="hint">Оставьте поле пустым для отправки сейчас. Часовой пояс: ' + esc((state.config.timeZone || "Europe/Madrid") === "Europe/Madrid" ? "Испания — материк" : state.config.timeZone || "Europe/Madrid") + "</div></div>" +
+        '<div class="field"><label for="campDate">Отправить позже</label><input id="campDate" type="datetime-local" value="' + esc(entry && entry.scheduledAt ? dateTimeLocalValue(entry.scheduledAt) : "") + '"><div class="hint">Оставьте поле пустым для отправки сейчас. Часовой пояс: ' + esc(timeZoneName()) + "</div></div>" +
       "</div></details></div>" +
       '<aside class="editor-preview-panel"><div class="editor-preview-head"><b>Предпросмотр Telegram</b><span id="campaignPreviewLanguage">Русский</span></div><div class="tg-preview" id="campaignPreview"></div><div class="tg-note" style="margin-top:8px">Имя в предпросмотре показано как пример. Перед отправкой бот подставит имя каждого клиента.</div></aside></div>',
     footer: '<button class="btn secondary" id="campTest" type="button">Себе для проверки</button><div class="grow"></div>' +

@@ -82,6 +82,9 @@ function plural(value, one, few, many) { var n = Math.abs(Number(value || 0)) % 
 function counted(value, one, few, many) { return num(value) + " " + plural(value, one, few, many); }
 function money(value, currency) { return num(value) + " " + (currency === "USD" ? "$" : currency === "GBP" ? "£" : "€"); }
 function panelTimeZone() { return state && state.config && state.config.timeZone || "Europe/Madrid"; }
+// Часовой пояс человеческими словами: «Испания — материк», а не Europe/Madrid.
+var TIME_ZONE_NAMES = { "Europe/Madrid": "Испания — материк", "Atlantic/Canary": "Канарские острова", "Europe/Moscow": "Москва", "Europe/Kyiv": "Киев", "Europe/Lisbon": "Португалия", "Europe/London": "Лондон", "UTC": "UTC" };
+function timeZoneName() { var zone = panelTimeZone(); return TIME_ZONE_NAMES[zone] || zone; }
 function dateTime(value) { if (!value) return "—"; try { return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short", timeZone: panelTimeZone() }).format(new Date(value)); } catch (e) { return "—"; } }
 function dateShort(value) { if (!value) return "—"; try { return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", timeZone: panelTimeZone() }).format(new Date(value)); } catch (e) { return "—"; } }
 function zonedParts(value) {
@@ -439,7 +442,7 @@ async function reload(render, options) {
 }
 
 // Пользователь печатает, уже что-то ввёл на этом экране или открыл окно:
-// перерисовка стёрла бы черновик ответа, пост в канал или заметку по обращению.
+// перерисовка стёрла бы черновик ответа, пост в канал или заметку по заявке.
 // «Занят» — только про сам экран: счётчики и колокольчик обновляются всегда.
 function pageBusy() {
   if (pageTouched || isDirty()) return true;

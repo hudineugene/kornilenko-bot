@@ -129,7 +129,7 @@ test('центр переписки объединяет диалоги и по�
   assert.match(PANEL_HTML, /conversation-media/);
   assert.match(PANEL_HTML, /message\.reactions/);
   assert.match(PANEL_HTML, /Ответить в Telegram/);
-  assert.match(PANEL_HTML, /Сопровождение обращения/);
+  assert.match(PANEL_HTML, /Сопровождение заявки/);
   assert.match(PANEL_HTML, /Карточка клиента/);
   assert.match(PANEL_HTML, /id="inqAssignee"/);
   assert.match(PANEL_HTML, /Сохранить изменения/);
@@ -173,7 +173,7 @@ test('карточка клиента объединяет профиль, ин�
   assert.match(PANEL_HTML, /class="client-profile"/);
   assert.match(PANEL_HTML, /Написать клиенту/);
   assert.match(PANEL_HTML, /Объекты и интересы/);
-  assert.match(PANEL_HTML, /История обращений/);
+  assert.match(PANEL_HTML, /История заявок/);
   assert.match(PANEL_HTML, /id="clientContactName"/);
   assert.match(PANEL_HTML, /id="clientPhone"/);
   assert.match(PANEL_HTML, /id="clientContactTime"/);
@@ -288,4 +288,25 @@ test('столбики графика имеют высоту, иначе гра
   assert.ok(track, 'дорожка столбика описана в стилях');
   assert.match(track[1], /height:\s*100%/, 'дорожка занимает всю высоту графика');
   assert.match(PANEL_HTML, /<i style="height:' \+ Math\.round\(\(value \/ top\) \* 100\) \+ "%/, 'закрашенная часть считается в процентах от дорожки');
+});
+
+test('в подписях панели один словарь и нет технических слов', async () => {
+  // Одна и та же сущность называлась пятью словами: обращение, диалог, клиент,
+  // задача, воронка. Плюс в подписях попадались «Chat ID», «формат Kyero»,
+  // «Europe/Madrid» и расширения файлов — слова не из мира владельца.
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const screens = PANEL_HTML.slice(PANEL_HTML.indexOf('<script'));
+
+  assert.doesNotMatch(screens, /обращени[ейя]/i, 'вместо «обращения» — «заявка»');
+  assert.doesNotMatch(screens, /Chat ID/, '«Chat ID» — это Telegram-чат');
+  assert.doesNotMatch(screens, /формат Kyero|XML-выгрузк/, 'формат выгрузки владельцу знать незачем');
+  assert.doesNotMatch(screens, /JPG, PNG до|PDF, TXT/, 'расширения файлов из подписей убраны');
+  assert.doesNotMatch(screens, /Время панели: ' \+ esc\(panelTimeZone/, 'часовой пояс показывается словами');
+
+  assert.match(screens, /Текущая заявка/);
+  assert.match(screens, /Следующий шаг/);
+  assert.match(screens, /\["tasks", "Следующие шаги"\]/);
+  assert.match(screens, /Видели в каталоге/);
+  assert.match(screens, /Открыли карточку/);
+  assert.match(screens, /function timeZoneName\(\)/);
 });

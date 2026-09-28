@@ -1,5 +1,5 @@
 // Обзор: состояние бота, цифры за сегодня и неделю, что требует внимания,
-// последние обращения. И раздел «Статистика» — вся аналитика в одном месте.
+// последние заявки. И раздел «Статистика» — вся аналитика в одном месте.
 
 const OVERVIEW_JS = String.raw`
 function dayKeyOf(date) {
@@ -257,7 +257,7 @@ function recentReactions() {
 
 // «Отчёты» живут в настройках: это не ежедневная работа.
 VIEWS.reports = {
-  subtitle: function () { return "Аудитория, обращения, объекты и рассылки"; },
+  subtitle: function () { return "Аудитория, заявки, объекты и рассылки"; },
   render: function (host) {
     var days = lastDays(30);
     var inquiries = state.inquiries || [];
@@ -279,15 +279,15 @@ VIEWS.reports = {
       '<div class="grid cols-4" style="margin-bottom:12px">' +
         kpiCard("Всего клиентов", num(state.userCount), "+" + usersInRange(week) + " за 7 дней") +
         kpiCard("Сообщений за 30 дней", num(sumDays(days, "received"))) +
-        kpiCard("Обращений за 30 дней", num(sumDays(days, "inquiries"))) +
-        kpiCard("Конверсия в обращение", (state.userCount ? Math.round((inquiryUsers / state.userCount) * 100) : 0) + "%", "клиенты с обращением") +
+        kpiCard("Заявок за 30 дней", num(sumDays(days, "inquiries"))) +
+        kpiCard("Конверсия в заявку", (state.userCount ? Math.round((inquiryUsers / state.userCount) * 100) : 0) + "%", "клиенты, оставившие заявку") +
       "</div>" +
       '<div class="card" style="margin-bottom:12px"><header><h3>Активность за 30 дней</h3></header><div class="card-body">' +
         sparkline(days, "received", "var(--brand)") +
-        '<div class="legend"><span><i style="background:var(--brand)"></i>сообщения</span><span>обращений: ' + num(sumDays(days, "inquiries")) + " · новых клиентов: " + num(usersInRange(Date.now() - 30 * 864e5)) + "</span></div>" +
+        '<div class="legend"><span><i style="background:var(--brand)"></i>сообщения</span><span>заявок: ' + num(sumDays(days, "inquiries")) + " · новых клиентов: " + num(usersInRange(Date.now() - 30 * 864e5)) + "</span></div>" +
       "</div></div>" +
       '<div class="grid cols-2" style="margin-bottom:12px">' +
-        '<div class="card"><header><h3>Обращения по типам</h3></header>' + barList(typeRows, inquiries.length) + "</div>" +
+        '<div class="card"><header><h3>Заявки по типам</h3></header>' + barList(typeRows, inquiries.length) + "</div>" +
         '<div class="card"><header><h3>Откуда приходят клиенты</h3></header>' + barList(sources, state.userCount) + "</div>" +
       "</div>" +
       '<div class="grid cols-2" style="margin-bottom:12px">' +
@@ -308,8 +308,8 @@ VIEWS.reports = {
             '<span class="small faint">' + ago(event.item.createdAt) + "</span></div>";
         }).join("") + "</div>" : '<div class="empty">Клиенты ещё не ставили реакции на сообщения бота</div>') +
       "</div>" +
-      '<div class="card"><header><h3>Эффективность объектов</h3><div class="actions"><span class="small faint">показы · подробнее · обращения</span></div></header>' +
-        (properties.length ? '<div class="table-wrap"><table><thead><tr><th>Объект</th><th class="right">Показы</th><th class="right">Подробнее</th><th class="right">Обращения</th><th class="right">Интерес</th></tr></thead><tbody>' +
+      '<div class="card"><header><h3>Эффективность объектов</h3><div class="actions"><span class="small faint">видели в каталоге · открыли карточку · заявки</span></div></header>' +
+        (properties.length ? '<div class="table-wrap"><table><thead><tr><th>Объект</th><th class="right">Показы</th><th class="right">Подробнее</th><th class="right">Заявки</th><th class="right">Интерес</th></tr></thead><tbody>' +
           properties.map(function (row) {
             var rate = row.views ? Math.round((row.inquiries / row.views) * 100) : 0;
             return '<tr class="clickable" data-property-insights="' + esc(row.id) + '"><td><b>' + esc(row.title) + '</b><br><span class="small faint">открыть клиентов и действия</span></td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + '%</td></tr>';

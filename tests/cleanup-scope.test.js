@@ -119,5 +119,5 @@ test('панель считает так же, как бот, и говорит,
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /function cleanupMatches\(item, scope\)/, 'в панели те же правила');
   assert.doesNotMatch(PANEL_HTML, /item\.status !== "new" : /, 'старое правило «всё, что не новое» убрано');
-  assert.match(PANEL_HTML, /не трогают обращения в работе/, 'в диалоге сказано, что останется');
+  assert.match(PANEL_HTML, /не трогают заявки в работе/, 'в диалоге сказано, что останется');
 });

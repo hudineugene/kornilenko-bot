@@ -6,7 +6,7 @@ var notificationKind = "";
 
 var NOTIFICATION_KINDS = {
   message: { icon: "✉", label: "Сообщения" },
-  task: { icon: "⏱", label: "Задачи" },
+  task: { icon: "⏱", label: "Следующие шаги" },
   viewing: { icon: "⌂", label: "Просмотры" },
   broadcast: { icon: "➤", label: "Рассылки" },
   error: { icon: "!", label: "Ошибки" },
@@ -81,7 +81,7 @@ function renderNotifications(host) {
       '<button class="' + (notificationFilter === "handled" ? "active" : "") + '" data-notification-filter="handled" type="button">Обработанные</button>' +
       '<button class="' + (notificationFilter === "all" ? "active" : "") + '" data-notification-filter="all" type="button">Все</button></div>' +
       '<select id="notificationKind" aria-label="Тип уведомления"><option value="">Все типы</option>' + kinds.map(function (kind) { return '<option value="' + kind + '"' + (notificationKind === kind ? " selected" : "") + '>' + esc(NOTIFICATION_KINDS[kind].label) + '</option>'; }).join("") + '</select></div>' +
-    '<div class="notification-help"><span>Статус «обработано» убирает карточку из активной очереди, но не изменяет само обращение, просмотр или рассылку.</span></div>' +
+    '<div class="notification-help"><span>Статус «обработано» убирает карточку из активной очереди, но не изменяет саму заявку, просмотр или рассылку.</span></div>' +
     '<div class="notification-list">' + (rows.length ? rows.map(function (item) {
       var meta = notificationMeta(item);
       return '<article class="card notification-card ' + esc(item.severity) + (!item.readAt && item.active ? " unread" : "") + '">' +

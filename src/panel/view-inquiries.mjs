@@ -11,7 +11,7 @@ var selectedInquiry = "";
 var selectionWasAuto = false;
 // Беседу помечает прочитанной только человек, который её открыл. Панель сама
 // выбирает первую беседу в списке (и заново при каждой перерисовке) — раньше
-// из-за этого непрочитанные обращения «прочитывались» без участия владельца.
+// из-за этого непрочитанные заявки «прочитывались» без участия владельца.
 var conversationOpenedByUser = false;
 function selectConversation(id) {
   selectedInquiry = id;
@@ -25,7 +25,7 @@ var taskFilter = { scope: "action", search: "", assignee: "" };
 var viewingMode = "calendar";
 var viewingWeekOffset = 0;
 var PIPELINE_STAGES = [
-  ["new", "Новый", "Первичное обращение"],
+  ["new", "Новый", "Первая заявка"],
   ["contact", "Связались", "Контакт установлен"],
   ["selection", "Подбор", "Ищем варианты"],
   ["viewing", "Просмотр", "Объекты показываются"],
@@ -271,7 +271,7 @@ function taskStatusHtml(scope, item) {
 }
 function openTaskSchedule(item) {
   openDialog({
-    title: item.followUpDate ? "Перенести контакт" : "Запланировать контакт",
+    title: item.followUpDate ? "Перенести контакт" : "Запланировать следующий шаг",
     body: '<div class="stack"><p class="small muted">После сохранения менеджер получит напоминание в Telegram в рабочее время.</p><div class="grid cols-2"><div class="field"><label for="taskDate">Дата</label><input id="taskDate" type="date" min="' + pipelineToday() + '" value="' + esc(item.followUpDate || pipelineToday()) + '"></div><div class="field"><label for="taskTime">Время, необязательно</label><input id="taskTime" type="time" value="' + esc(item.followUpTime || "") + '"></div></div></div>',
     footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveTaskDate" type="button">Сохранить</button>',
     ready: function (dialog) {
@@ -331,7 +331,7 @@ function renderTasks(host) {
     '</div><div class="task-toolbar"><div class="tabs" id="taskScope">' +
       [["action", "К выполнению", counts.action], ["overdue", "Просроченные", counts.overdue], ["future", "Будущие", counts.future], ["none", "Без даты", counts.none], ["all", "Все", counts.all]].map(function (entry) { return '<button type="button" data-scope="' + entry[0] + '" class="' + (taskFilter.scope === entry[0] ? "active" : "") + '">' + entry[1] + " · " + entry[2] + "</button>"; }).join("") +
       '</div><div class="task-controls"><div class="search"><input id="taskSearch" placeholder="Найти клиента или задачу" value="' + esc(taskFilter.search) + '"></div><select id="taskAssignee"><option value="">Все менеджеры</option><option value="none"' + (taskFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (taskFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div></div>' +
-    '<div class="task-list">' + (rows.length ? rows.map(function (row) { return taskCardHtml(row, row.taskScope); }).join("") : '<div class="card empty"><b>Задач в этой группе нет</b>Можно перейти к другим задачам или открыть воронку</div>') + "</div>";
+    '<div class="task-list">' + (rows.length ? rows.map(function (row) { return taskCardHtml(row, row.taskScope); }).join("") : '<div class="card empty"><b>Дел в этой группе нет</b>Можно перейти к другим задачам или открыть воронку</div>') + "</div>";
   host.querySelectorAll("[data-scope]").forEach(function (button) { button.onclick = function () { taskFilter.scope = button.dataset.scope; renderTasks(host); }; });
   var search = host.querySelector("#taskSearch");
   search.oninput = function () { taskFilter.search = search.value.trim(); clearTimeout(search._timer); search._timer = setTimeout(function () { renderTasks(host); var next = host.querySelector("#taskSearch"); if (next) next.focus(); }, 250); };
@@ -341,7 +341,7 @@ function renderTasks(host) {
   host.querySelectorAll("[data-task-done]").forEach(function (button) {
     button.onclick = async function () {
       button.disabled = true;
-      try { await send("/api/inquiries/" + encodeURIComponent(button.dataset.taskDone), "PATCH", { followUpDate: "", followUpTime: "" }); toast("Задача выполнена"); await reload(); } catch (error) { button.disabled = false; fail(error); }
+      try { await send("/api/inquiries/" + encodeURIComponent(button.dataset.taskDone), "PATCH", { followUpDate: "", followUpTime: "" }); toast("Шаг выполнен"); await reload(); } catch (error) { button.disabled = false; fail(error); }
     };
   });
 }
@@ -456,14 +456,14 @@ function renderInquiryList(host) {
       '<span class="conversation-avatar">' + esc(initials(user.firstName)) + (group.unread ? '<i></i>' : '') + '</span>' +
       '<span class="conversation-item-body"><span class="conversation-item-top"><b>' + esc(userName(user)) + '</b><time>' + ago(item.clientMessageAt || item.updatedAt || item.createdAt) + '</time></span>' +
       '<span class="conversation-preview">' + esc(String(preview || "Вложение").replace(/\s+/g, " ").slice(0, 100)) + '</span>' +
-      '<span class="conversation-item-meta"><span>' + esc(inquiryTypeName(item)) + (group.inquiries.length > 1 ? " · " + group.inquiries.length + " обращения" : "") + '</span><span class="conversation-state ' + stateClass + '">' + stateText + '</span>' +
+      '<span class="conversation-item-meta"><span>' + esc(inquiryTypeName(item)) + (group.inquiries.length > 1 ? " · " + group.inquiries.length + " заявки" : "") + '</span><span class="conversation-state ' + stateClass + '">' + stateText + '</span>' +
       (group.unread ? '<span class="unread-count">' + group.unread + '</span>' : '') + '</span></span></button>';
   }).join("");
   host.innerHTML =
     '<div class="messenger-toolbar">' +
       '<div class="messenger-controls">' +
         '<div class="search"><input id="inqSearch" placeholder="Поиск по клиентам и сообщениям" value="' + esc(inquiryFilter.search) + '"></div>' +
-        '<select id="inqType">' + [["", "Все обращения"], ["general", "Обычные сообщения"], ["lead", "Заявки на звонок"], ["viewing", "Просмотры"], ["selection", "Подбор недвижимости"], ["question", "Вопросы по объекту"], ["interest", "Интерес к объекту"]].map(function (option) {
+        '<select id="inqType">' + [["", "Все заявки"], ["general", "Обычные сообщения"], ["lead", "Заявки на звонок"], ["viewing", "Просмотры"], ["selection", "Подбор недвижимости"], ["question", "Вопросы по объекту"], ["interest", "Интерес к объекту"]].map(function (option) {
           return '<option value="' + option[0] + '"' + (inquiryFilter.type === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + '</select>' +
         '<button class="btn secondary small" id="exportInq" type="button">⬇ Выгрузить в Excel</button>' +
@@ -505,7 +505,7 @@ function renderInquiryList(host) {
 
 // Поиск по переписке спрашиваем у бота и перерисовываем список, когда пришёл
 // ответ. Пока ответа нет, список показывает то, что нашлось по именам,
-// телефонам, темам обращений и последним сообщениям.
+// телефонам, темам заявок и последним сообщениям.
 function searchConversations(host, query) {
   if (!query || query.length < 2) {
     conversationSearch = { query: "", ids: {} };
@@ -530,7 +530,7 @@ function searchConversations(host, query) {
 
 // Уборка списка: закрытые, отвеченные или всё подряд, с отсечкой по возрасту.
 // Те же правила, что и у бота: закрытые, и «отвеченные» — только там, где
-// ответ отправлен, клиент не ждёт и обращение не в работе.
+// ответ отправлен, клиент не ждёт и заявка не в работе.
 function cleanupMatches(item, scope) {
   if (scope === "all") return true;
   if (item.status === "closed") return true;
@@ -543,15 +543,15 @@ function openCleanup() {
   var countFor = function (scope) { return all.filter(function (item) { return cleanupMatches(item, scope); }).length; };
   var closed = countFor("closed");
   openDialog({
-    title: "Очистить обращения",
+    title: "Очистить заявки",
     body: '<div class="stack">' +
-      '<p class="muted small">Обращения удаляются из панели без возможности восстановления. Клиенты и переписка в Telegram остаются.</p>' +
+      '<p class="muted small">Заявки удаляются из панели без возможности восстановления. Клиенты и переписка в Telegram остаются.</p>' +
       '<div class="field"><label for="cleanScope">Какие удалить</label><select id="cleanScope">' +
         '<option value="closed">Только закрытые (' + closed + ")</option>" +
         '<option value="answered">Закрытые и отвеченные (' + countFor("answered") + ")</option>" +
         '<option value="all">Все, включая ждущие ответа и дела в работе (' + all.length + ")</option>" +
       "</select></div>" +
-      '<div class="hint">«Закрытые и отвеченные» не трогают обращения в работе и те, где клиент ждёт ответа.</div>' +
+      '<div class="hint">«Закрытые и отвеченные» не трогают заявки в работе и те, где клиент ждёт ответа.</div>' +
       '<div class="field"><label for="cleanAge">Старше чем</label><select id="cleanAge">' +
         '<option value="0">любого возраста</option><option value="30">30 дней</option><option value="90" selected>90 дней</option><option value="180">180 дней</option><option value="365">года</option>' +
       "</select></div>" +
@@ -572,7 +572,7 @@ function openCleanup() {
       dialog.querySelector("#cleanScope").onchange = preview;
       dialog.querySelector("#cleanAge").onchange = preview;
       dialog.querySelector("#doClean").onclick = async function () {
-        if (!(await confirmDialog("Удалить обращения?", "Будет удалено: " + matching() + ". Отменить это нельзя.", "Удалить", true))) return;
+        if (!(await confirmDialog("Удалить заявки?", "Будет удалено: " + matching() + ". Отменить это нельзя.", "Удалить", true))) return;
         try {
           var result = await send("/api/inquiries/cleanup", "POST", { scope: dialog.querySelector("#cleanScope").value, olderThanDays: Number(dialog.querySelector("#cleanAge").value) });
           dialog.close();
@@ -592,7 +592,7 @@ async function exportInquiries() {
     var blob = await response.blob();
     var link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "Обращения.xlsx";
+    link.download = "Заявки.xlsx";
     link.click();
     URL.revokeObjectURL(link.href);
   } catch (error) { fail(error); }
@@ -687,7 +687,7 @@ function renderInquiryCard(host) {
   host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions">' + statusChip(item) + "</div></header>" +
     '<div class="card-body conversation-body">' +
       '<div class="conversation-context">' +
-        (related.length > 1 ? '<div class="field grow"><label>Текущее обращение</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + (entry.status === "closed" ? "закрыто" : awaitsReply(entry) ? "ждёт ответа" : "в работе") + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущее обращение</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
+        (related.length > 1 ? '<div class="field grow"><label>Текущая заявка</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + (entry.status === "closed" ? "закрыто" : awaitsReply(entry) ? "ждёт ответа" : "в работе") + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущая заявка</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
         (property ? '<button class="property-link" id="linkedProperty" type="button">🏠 ' + esc(localized(property.title, "ru") || property.reference || property.id) + '<span>Открыть →</span></button>' : item.propertyId ? '<div class="chip bad">Связанный объект удалён</div>' : "") +
       '</div>' +
       '<div class="conversation-thread">' + (timeline.length
@@ -700,19 +700,19 @@ function renderInquiryCard(host) {
         (state.replyTemplates && state.replyTemplates.length ? '<select id="replyTemplate"><option value="">Вставить шаблон ответа…</option>' + state.replyTemplates.map(function (template) { return '<option value="' + esc(template.id) + '">' + esc(template.title) + "</option>"; }).join("") + "</select>" : "") +
       '</div><div class="reply-quote hidden" id="replyQuote"><div><span>Ответ на сообщение клиента</span><b id="replyQuoteText"></b></div><button class="reply-quote-remove" id="clearReplyQuote" type="button" aria-label="Убрать цитату">×</button></div>' +
       '<textarea id="replyText" maxlength="3800" placeholder="Напишите сообщение клиенту…"></textarea>' +
-      '<div class="reply-attachments"><input class="hidden" id="replyFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,application/pdf,text/plain"><label class="btn secondary small" for="replyFile">📎 Добавить файл</label><span class="reply-file-name muted" id="replyFileName">JPG, PNG до 5 МБ; документы до 10 МБ</span><button class="btn ghost small hidden" id="clearReplyFile" type="button">Убрать</button></div>' +
+      '<div class="reply-attachments"><input class="hidden" id="replyFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,application/pdf,text/plain"><label class="btn secondary small" for="replyFile">📎 Добавить файл</label><span class="reply-file-name muted" id="replyFileName">Фотография до 5 МБ или документ до 10 МБ</span><button class="btn ghost small hidden" id="clearReplyFile" type="button">Убрать</button></div>' +
       '<div class="reply-delivery hidden" id="replyDelivery" aria-live="polite"><span id="replyDeliveryText"></span><button class="btn ghost small hidden" id="retryReply" type="button">Повторить отправку</button></div>' +
       '<div class="reply-actions"><button class="btn" id="sendReply" type="button">Отправить сообщение</button><label class="check"><input type="checkbox" id="keepOpen"> оставить диалог в работе</label></div></div>' +
-      '<details class="conversation-details" open><summary><span><b>Сопровождение обращения</b><small>статус, ответственный и следующий контакт</small></span><i>⌄</i></summary><div class="conversation-details-body stack">' +
+      '<details class="conversation-details" open><summary><span><b>Сопровождение заявки</b><small>статус, ответственный и следующий шаг</small></span><i>⌄</i></summary><div class="conversation-details-body stack">' +
         selectionMatchingPanel(item) +
         (viewing ? '<div class="msg">📅 ' + esc((viewing.confirmedDate || viewing.dateText || "дата не выбрана") + " · " + (viewing.confirmedTime || viewing.timeText || "")) + (viewing.confirmedAt ? '<br><span class="small" style="color:var(--ok)">просмотр подтверждён</span>' : '<br><span class="small" style="color:var(--warn)">нужно подтвердить просмотр</span>') + "</div>" : "") +
         (viewing && !viewing.cancelledAt ? '<div class="row wrap"><button class="btn secondary small" id="scheduleViewing" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + '</button><span class="small muted">Клиент получит дату и время в Telegram</span></div>' : "") +
-        '<div class="field"><label>Статус обращения</label><div class="row wrap"><button class="btn secondary small" data-status="in_progress" type="button">В работу</button><button class="btn secondary small" data-status="closed" type="button">Закрыть</button><button class="btn secondary small" data-status="new" type="button">Открыть снова</button></div></div>' +
-        '<div class="grid cols-3"><div class="field"><label>Этап воронки</label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div><div class="field"><label>Ответственный менеджер</label><select id="inqAssignee"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div><div class="row followup-fields"><div class="field grow"><label>Следующий контакт</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label>Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div></div>' +
-        '<div class="field"><label>Заметка по этому обращению</label><textarea id="inqNote" placeholder="Что важно сделать по заявке">' + esc(item.note || "") + "</textarea></div>" +
+        '<div class="field"><label>Статус заявки</label><div class="row wrap"><button class="btn secondary small" data-status="in_progress" type="button">В работу</button><button class="btn secondary small" data-status="closed" type="button">Закрыть</button><button class="btn secondary small" data-status="new" type="button">Открыть снова</button></div></div>' +
+        '<div class="grid cols-3"><div class="field"><label>Этап воронки</label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div><div class="field"><label>Ответственный менеджер</label><select id="inqAssignee"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div><div class="row followup-fields"><div class="field grow"><label>Следующий шаг</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label>Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div></div>' +
+        '<div class="field"><label>Заметка по этой заявке</label><textarea id="inqNote" placeholder="Что важно сделать по заявке">' + esc(item.note || "") + "</textarea></div>" +
       '</div></details>' +
       '<details class="conversation-details"><summary><span><b>Карточка клиента</b><small>общие теги и заметка для всей истории общения</small></span><i>⌄</i></summary><div class="conversation-details-body stack"><div class="field"><label>Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div><div class="field"><label>Общая заметка о клиенте</label><textarea id="clientNoteInq" placeholder="Предпочтения, договорённости и важные детали">' + esc(user.note || "") + "</textarea></div></div></details>" +
-      '<div class="conversation-save"><button class="btn secondary" id="saveInq" type="button">Сохранить изменения</button><button class="btn ghost small" id="deleteInq" type="button">Удалить это обращение</button></div>' +
+      '<div class="conversation-save"><button class="btn secondary" id="saveInq" type="button">Сохранить изменения</button><button class="btn ghost small" id="deleteInq" type="button">Удалить эту заявку</button></div>' +
     "</div></div>";
 
   // Переписку открываем на последнем сообщении: читают всегда конец разговора,
@@ -768,7 +768,7 @@ function renderInquiryCard(host) {
     if (replyTarget) replyText.focus();
   }
   function showAttachment() {
-    host.querySelector("#replyFileName").textContent = replyAttachment ? replyAttachment.name : "JPG, PNG до 5 МБ; документы до 10 МБ";
+    host.querySelector("#replyFileName").textContent = replyAttachment ? replyAttachment.name : "Фотография до 5 МБ или документ до 10 МБ";
     host.querySelector("#clearReplyFile").classList.toggle("hidden", !replyAttachment);
   }
   host.querySelectorAll("[data-reply-target]").forEach(function (button) {
@@ -788,7 +788,7 @@ function renderInquiryCard(host) {
     var maximum = image ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
     if ((!image && !documentFile) || file.size > maximum) {
       replyFile.value = "";
-      return toast(!image && !documentFile ? "Выберите JPG, PNG, PDF, TXT или документ Office" : "Файл превышает допустимый размер", true);
+      return toast(!image && !documentFile ? "Можно отправить фотографию или документ: PDF, Word, Excel, текст" : "Файл превышает допустимый размер", true);
     }
     var reader = new FileReader();
     reader.onload = function () { replyAttachment = { kind: image ? "image" : "document", name: name, dataUrl: String(reader.result || "") }; showAttachment(); freshRequest(); };
@@ -862,7 +862,7 @@ function renderInquiryCard(host) {
     } catch (error) { fail(error); }
   };
   host.querySelector("#deleteInq").onclick = async function () {
-    if (!(await confirmDialog("Удалить обращение?", "Оно исчезнет из панели. Переписка в Telegram останется.", "Удалить", true))) return;
+    if (!(await confirmDialog("Удалить заявку?", "Она исчезнет из панели. Переписка в Telegram останется.", "Удалить", true))) return;
     try {
       await api("/api/inquiries/" + encodeURIComponent(item.id), { method: "DELETE" });
       selectConversation("");
@@ -934,7 +934,7 @@ function viewingEventHtml(item, today, compact) {
     '<div class="viewing-event-client">' + esc(userName(user)) + '</div>' +
     '<div class="viewing-event-property">⌂ ' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + '</div>' +
     (!compact && user.phone ? '<div class="small muted">' + esc(user.phone) + '</div>' : "") +
-    '<div class="viewing-event-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Обращение</button>' +
+    '<div class="viewing-event-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Заявка</button>' +
     (!item.viewing.cancelledAt && item.status !== "closed" ? '<button class="btn secondary small" data-viewing-schedule="' + esc(item.id) + '" type="button">' + (item.viewing.confirmedAt ? "Перенести" : "Подтвердить") + '</button>' : "") + '</div></article>';
 }
 function openViewingSchedule(item) {
@@ -1002,7 +1002,7 @@ function renderViewings(host) {
   if (viewingMode === "pending") {
     body = pending.length ? '<div class="viewing-pending-list">' + pending.map(function (item) {
       var key = viewingDateKey(item), requested = key ? viewingDayLabel(key).day + " · " + viewingTimeLabel(item) : (item.viewing.dateText || "Дата требует уточнения") + " · " + viewingTimeLabel(item);
-      return '<div class="card viewing-pending-card"><div><span class="chip ' + (key && key < today ? "bad" : "warn") + '">' + (key && key < today ? "Просрочено" : "Ждёт подтверждения") + '</span><h3>' + esc(userName(userOf(item))) + '</h3><p>' + esc(localized(viewingProperty(item) && viewingProperty(item).title, "ru") || "Объект не найден") + '</p><small>Запрошено: ' + esc(requested) + '</small></div><div class="viewing-pending-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Открыть обращение</button><button class="btn" data-viewing-schedule="' + esc(item.id) + '" type="button">Подтвердить и уведомить</button></div></div>';
+      return '<div class="card viewing-pending-card"><div><span class="chip ' + (key && key < today ? "bad" : "warn") + '">' + (key && key < today ? "Просрочено" : "Ждёт подтверждения") + '</span><h3>' + esc(userName(userOf(item))) + '</h3><p>' + esc(localized(viewingProperty(item) && viewingProperty(item).title, "ru") || "Объект не найден") + '</p><small>Запрошено: ' + esc(requested) + '</small></div><div class="viewing-pending-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Открыть заявку</button><button class="btn" data-viewing-schedule="' + esc(item.id) + '" type="button">Подтвердить и уведомить</button></div></div>';
     }).join("") + '</div>' : '<div class="card"><div class="empty"><b>Все просмотры подтверждены</b>Новых записей, ожидающих ответа менеджера, нет</div></div>';
   } else if (viewingMode === "history") {
     body = viewingHistoryHtml(history, today);
@@ -1017,7 +1017,7 @@ function renderViewings(host) {
       kpiCard("Ближайшие 7 дней", num(nextSeven.length), "активных записей") +
       kpiCard("Ждут подтверждения", num(pending.length), pending.length ? "нужно ответить клиентам" : "очередь пуста", pending.length ? "down" : "up") +
       kpiCard("Подтверждено", num(upcoming.filter(function (item) { return item.viewing.confirmedAt; }).length), "предстоящих", "up") +
-    '</div><div class="viewing-toolbar"><div class="tabs"><button class="' + (viewingMode === "calendar" ? "active" : "") + '" data-viewing-mode="calendar" type="button">Календарь</button><button class="' + (viewingMode === "pending" ? "active" : "") + '" data-viewing-mode="pending" type="button">Ждут подтверждения <span>' + pending.length + '</span></button><button class="' + (viewingMode === "history" ? "active" : "") + '" data-viewing-mode="history" type="button">История</button></div><span class="small muted">Время панели: ' + esc(panelTimeZone()) + '</span></div>' + body;
+    '</div><div class="viewing-toolbar"><div class="tabs"><button class="' + (viewingMode === "calendar" ? "active" : "") + '" data-viewing-mode="calendar" type="button">Календарь</button><button class="' + (viewingMode === "pending" ? "active" : "") + '" data-viewing-mode="pending" type="button">Ждут подтверждения <span>' + pending.length + '</span></button><button class="' + (viewingMode === "history" ? "active" : "") + '" data-viewing-mode="history" type="button">История</button></div><span class="small muted">Время: ' + esc(timeZoneName()) + '</span></div>' + body;
   host.querySelectorAll("[data-viewing-mode]").forEach(function (button) { button.onclick = function () { viewingMode = button.dataset.viewingMode; renderViewings(host); }; });
   host.querySelectorAll("[data-viewing-week]").forEach(function (button) { button.onclick = function () { viewingWeekOffset += Number(button.dataset.viewingWeek); renderViewings(host); }; });
   var todayButton = host.querySelector("[data-viewing-today]");
@@ -1091,7 +1091,7 @@ function renderClients(host) {
   });
   host.innerHTML = '<div class="toolbar"><div class="search"><input id="clientSearch" placeholder="Имя, телефон, @username" value="' + esc(clientSearch) + '"></div>' +
       '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) + " из " + num(state.userCount) + " · активных " + num(state.activeUserCount) + "</span></div>" +
-    '<div class="card"><div class="table-wrap"><table><thead><tr><th>Клиент</th><th>Источник и язык</th><th>Этап работы</th><th>Следующий контакт</th><th class="right">Последняя активность</th></tr></thead><tbody>' +
+    '<div class="card"><div class="table-wrap"><table><thead><tr><th>Клиент</th><th>Источник и язык</th><th>Этап работы</th><th>Следующий шаг</th><th class="right">Последняя активность</th></tr></thead><tbody>' +
     (rows.length ? rows.slice(0, clientsShown).map(function (row) {
       var user = row.user, latest = row.latest, active = row.active;
       return '<tr class="clickable" data-id="' + esc(user.id) + '"><td><div class="row"><span class="avatar">' + esc(initials(user.firstName)) + "</span><span><b>" + esc(userName(user)) + "</b>" +
@@ -1136,11 +1136,11 @@ function openClient(id) {
     body: '<div class="client-profile"><aside class="client-profile-side"><div class="client-profile-identity"><span class="conversation-avatar client-avatar">' + esc(initials(user.firstName)) + '</span><div><h2>' + esc(userName(user)) + '</h2><span class="small muted">ID ' + esc(user.id) + (user.username ? " · @" + esc(user.username) : "") + '</span></div></div>' +
       '<div class="client-facts"><div><span>Источник</span><b>' + esc(user.source || "без метки") + '</b></div><div><span>Первый контакт</span><b>' + dateTime(user.firstSeenAt) + '</b></div><div><span>Последняя активность</span><b>' + dateTime(user.lastSeenAt) + '</b></div>' + (latest ? '<div><span>Последний этап</span><b>' + esc(clientStageLabel(latest)) + '</b></div>' : "") + '</div>' +
       '<div class="client-edit stack"><div class="grid cols-2"><div class="field"><label for="clientContactName">Имя для связи</label><input id="clientContactName" data-client-edit value="' + esc(user.contactName || userName(user)) + '"></div><div class="field"><label for="clientLanguage">Язык</label><select id="clientLanguage" data-client-edit><option value="">Не выбран</option>' + [["ru", "Русский"], ["en", "English"], ["es", "Español"]].map(function (language) { return '<option value="' + language[0] + '"' + (user.preferredLanguage === language[0] ? " selected" : "") + '>' + language[1] + "</option>"; }).join("") + '</select></div></div><div class="field"><label for="clientPhone">Телефон</label><input id="clientPhone" data-client-edit value="' + esc(user.phone || "") + '" placeholder="+34 …"></div><div class="field"><label for="clientContactTime">Когда удобно связаться</label><input id="clientContactTime" data-client-edit value="' + esc(user.preferredContactTime || "") + '"></div><div class="field"><label for="clientTags">Теги через запятую</label><input id="clientTags" data-client-edit value="' + esc((user.tags || []).join(", ")) + '"></div><div class="field"><label for="clientNote">Общая заметка</label><textarea id="clientNote" data-client-edit>' + esc(user.note || "") + '</textarea></div><label class="check"><input type="checkbox" id="clientBlocked" data-client-edit' + (user.blocked ? " checked" : "") + '> не писать этому клиенту</label></div></aside>' +
-      '<main class="client-profile-main"><div class="grid cols-4">' + kpiCard("Сообщений", num(user.messages)) + kpiCard("Обращений", num(inquiries.length)) + kpiCard("Избранное", num((user.favorites || []).length)) + kpiCard("Просмотрено", num((user.recentlyViewed || []).length)) + '</div>' +
+      '<main class="client-profile-main"><div class="grid cols-4">' + kpiCard("Сообщений", num(user.messages)) + kpiCard("Заявок", num(inquiries.length)) + kpiCard("Избранное", num((user.favorites || []).length)) + kpiCard("Просмотрено", num((user.recentlyViewed || []).length)) + '</div>' +
       '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Личное сообщение от имени бота</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><textarea id="clientMessageText" placeholder="Введите сообщение клиенту…"' + (user.blocked || !user.chatId ? " disabled" : "") + '></textarea><details class="conversation-details"><summary><span><b>Дополнительно</b><small>изображение и кнопка-ссылка</small></span><i>⌄</i></summary><div class="conversation-details-body stack"><div class="image-upload-row"><label class="btn secondary small">＋ Изображение<input id="clientMessageImage" class="file-hidden" type="file" accept="image/jpeg,image/png"></label><span class="small muted" id="clientMessageImageName">Не выбрано</span></div><div class="grid cols-2"><div class="field"><label for="clientButtonText">Текст кнопки</label><input id="clientButtonText" placeholder="Посмотреть объект"></div><div class="field"><label for="clientButtonUrl">Ссылка</label><input id="clientButtonUrl" placeholder="https://…"></div></div></div></details><div class="row"><span class="small muted grow">Сообщение сохранится в общей переписке.</span><button class="btn" id="sendClientMessage" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Отправить в Telegram</button></div></div></section>' +
-      '<div class="grid cols-2 client-interest-grid"><section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section><section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий контакт не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть обращение</button></div>' : '<div class="empty"><b>Активных обращений нет</b></div>') + '</div></section></div>' +
+      '<div class="grid cols-2 client-interest-grid"><section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section><section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="empty"><b>Активных заявок нет</b></div>') + '</div></section></div>' +
       '<section class="card"><header><h3>Объекты и интересы</h3><div class="actions"><span class="small faint">избранное · сравнение · история · подбор</span></div></header>' + clientPropertiesHtml(user) + '</section>' +
-      '<section class="card"><header><h3>История обращений</h3></header>' + (inquiries.length ? '<div class="client-inquiries">' + inquiries.slice(0, 20).map(function (item) { return '<button class="client-inquiry" data-client-inquiry="' + esc(item.id) + '" type="button"><span><b>' + esc(inquiryTypeName(item)) + '</b><small>' + esc(String(item.text || "").replace(/\s+/g, " ").slice(0, 100)) + '</small></span><span class="chip ' + (awaitsReply(item) ? "bad" : item.status === "closed" ? "" : "ok") + '">' + (awaitsReply(item) ? "ждёт ответа" : item.status === "closed" ? "закрыто" : "в работе") + '</span><time>' + dateTime(item.updatedAt || item.createdAt) + '</time><i>→</i></button>'; }).join("") + '</div>' : '<div class="empty"><b>Обращений ещё нет</b></div>') + '</section></main></div>',
+      '<section class="card"><header><h3>История заявок</h3></header>' + (inquiries.length ? '<div class="client-inquiries">' + inquiries.slice(0, 20).map(function (item) { return '<button class="client-inquiry" data-client-inquiry="' + esc(item.id) + '" type="button"><span><b>' + esc(inquiryTypeName(item)) + '</b><small>' + esc(String(item.text || "").replace(/\s+/g, " ").slice(0, 100)) + '</small></span><span class="chip ' + (awaitsReply(item) ? "bad" : item.status === "closed" ? "" : "ok") + '">' + (awaitsReply(item) ? "ждёт ответа" : item.status === "closed" ? "закрыто" : "в работе") + '</span><time>' + dateTime(item.updatedAt || item.createdAt) + '</time><i>→</i></button>'; }).join("") + '</div>' : '<div class="empty"><b>Заявок ещё нет</b></div>') + '</section></main></div>',
       footer: '<button class="btn danger" id="eraseClient" type="button">Удалить данные</button><button class="btn ghost" id="exportClient" type="button">Выгрузить данные</button><div class="grow"></div><button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="saveClient" type="button">Сохранить</button>',
     ready: function (dialog) {
       var profileChanged = false, messageChanged = false, messageImage = null;
