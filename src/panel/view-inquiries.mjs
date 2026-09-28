@@ -120,6 +120,11 @@ function viewingCardHtml(item, property) {
     "</div>";
 }
 
+// Телефон: список и переписка — разные экраны, а не два блока друг под другом.
+function narrowScreen() {
+  return typeof window !== "undefined" && Number(window.innerWidth) > 0 && window.innerWidth <= 860;
+}
+
 function statusChip(item) {
   var state = inquiryState(item);
   return '<span class="chip ' + state.chip + '">' + state.text + "</span>";
@@ -433,7 +438,7 @@ function renderInquiryList(host) {
   // Выбор «сам собой» — только когда выбирать нечего: беседу удалили или её
   // ещё не открывали. Такая беседа показывается, но прочитанной не считается.
   if (!rows.length) selectConversation("");
-  else if (!selectedGroup) {
+  else if (!selectedGroup && !narrowScreen()) {
     selectedInquiry = rows[0].active.id;
     // Человек вошёл в раздел и видит эту беседу — значит прочитал её. А вот при
     // обновлении по таймеру ничего не помечаем: экран мог быть и не на виду.
@@ -483,6 +488,13 @@ function renderInquiryList(host) {
           return '<option value="' + option[0] + '"' + (inquiryFilter.type === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + '</select>' +
       '</div>' +
+      // На телефоне шесть вкладок не помещаются: тот же выбор одной строкой.
+      '<select class="messenger-filter-compact" id="inqStatusCompact">' +
+        [["unread", "Непрочитанные", counts.unread], ["waiting", "Ждут ответа", counts.waiting],
+          ["progress", "В работе", counts.progress], ["answered", "Отвеченные", counts.answered],
+          ["closed", "Закрытые", counts.closed], ["", "Все", counts.all]].map(function (option) {
+          return '<option value="' + option[0] + '"' + (inquiryFilter.status === option[0] ? " selected" : "") + ">" + option[1] + (option[2] ? " · " + option[2] : "") + "</option>";
+        }).join("") + "</select>" +
       '<div class="tabs messenger-filters" id="inqStatus">' +
         '<button type="button" data-status="unread" class="' + (inquiryFilter.status === "unread" ? "active" : "") + '">Непрочитанные' + (counts.unread ? " · " + counts.unread : "") + "</button>" +
         '<button type="button" data-status="waiting" class="' + (inquiryFilter.status === "waiting" ? "active" : "") + '">Ждут ответа' + (counts.waiting ? " · " + counts.waiting : "") + "</button>" +
@@ -492,7 +504,7 @@ function renderInquiryList(host) {
         '<button type="button" data-status="" class="' + (inquiryFilter.status === "" ? "active" : "") + '">Все · ' + counts.all + "</button>" +
       "</div>" +
     "</div>" +
-    '<div class="messenger-shell"><aside class="card conversation-list-panel"><header><div><h3>Диалоги</h3><span class="small muted">Один клиент — одна переписка</span></div><span class="chip">' + rows.length + " из " + counts.all + '</span></header><div class="conversation-list">' +
+    '<div class="messenger-shell' + (selectedInquiry ? " chat-open" : "") + '"><aside class="card conversation-list-panel"><header><div><h3>Диалоги</h3><span class="small muted">Один клиент — одна переписка</span></div><span class="chip">' + rows.length + " из " + counts.all + '</span></header><div class="conversation-list">' +
       (conversationItems || '<div class="empty"><b>Диалогов не найдено</b>Измените фильтр или поисковый запрос</div>') +
     '</div></aside><section class="messenger-chat" id="inquiryCard"></section></div>';
 
@@ -510,6 +522,11 @@ function renderInquiryList(host) {
       if (next) next.focus();
       searchConversations(host, inquiryFilter.search);
     }, 250);
+  };
+  var compact = host.querySelector("#inqStatusCompact");
+  if (compact) compact.onchange = function () {
+    inquiryFilter.status = compact.value;
+    renderInquiryList(host);
   };
   host.querySelectorAll(".conversation-item[data-id]").forEach(function (row) {
     row.onclick = function () { selectConversation(row.dataset.id); renderInquiryList(host); };
@@ -717,7 +734,7 @@ function renderInquiryCard(host) {
     conversationOpenedByUser = false;
     markConversationRead(item.userId);
   }
-  host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions">' + statusChip(item) + "</div></header>" +
+  host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><button class="btn ghost small conversation-back" id="backToList" type="button">← Диалоги</button><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions">' + statusChip(item) + "</div></header>" +
     '<div class="card-body conversation-body conversation-split">' +
       '<div class="conversation-main">' +
       '<div class="conversation-context">' +
@@ -771,10 +788,16 @@ function renderInquiryCard(host) {
   // На узком экране список и беседа идут друг под другом: выбрал беседу —
   // покажи её, иначе менеджер остаётся смотреть на список и не понимает, что
   // что-то открылось.
-  if (openedByHuman && window.innerWidth <= 860 && host.scrollIntoView) {
-    host.scrollIntoView({ block: "start", behavior: "smooth" });
+  if (openedByHuman && window.innerWidth <= 860 && window.scrollTo) {
+    // Переписка занимает весь экран — показываем её с начала.
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  var backToList = host.querySelector("#backToList");
+  if (backToList) backToList.onclick = function () {
+    selectConversation("");
+    renderInquiryList(el("viewBody"));
+  };
   var retryConversation = host.querySelector("#retryConversation");
   if (retryConversation) retryConversation.onclick = function () {
     delete conversationFailed[String(item.userId)];

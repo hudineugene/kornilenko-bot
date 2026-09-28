@@ -157,6 +157,8 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .messenger-controls .search{max-width:none;min-width:260px;flex:1}
 .messenger-controls select{width:auto;min-width:210px}
 .messenger-filters{align-self:flex-start;max-width:100%}
+.messenger-filter-compact{display:none}
+.conversation-back{display:none}
 .messenger-shell{display:grid;grid-template-columns:340px minmax(0,1fr);gap:12px;align-items:start}
 .conversation-list-panel{position:sticky;top:calc(var(--header) + 70px);display:flex;flex-direction:column;max-height:calc(100vh - var(--header) - 92px);overflow:hidden}
 .conversation-list-panel>header{flex:none}
@@ -564,7 +566,13 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .messenger-controls .search,.messenger-controls select{min-width:0;max-width:none;width:100%}
   .messenger-filters{width:100%}
   .messenger-shell{grid-template-columns:minmax(0,1fr)}
-  .conversation-list-panel{position:static;max-height:340px}
+  /* Телефон: либо список, либо переписка — целым экраном, с возвратом. */
+  .messenger-shell.chat-open .conversation-list-panel{display:none}
+  .messenger-shell:not(.chat-open) .messenger-chat{display:none}
+  .conversation-back{display:inline-flex}
+  .messenger-filters{display:none}
+  .messenger-filter-compact{display:block;width:100%}
+  .conversation-list-panel{position:static;max-height:none}
   .conversation-context{align-items:stretch;flex-direction:column}
   .conversation-context .property-link{width:100%;min-width:0}
   .reply-box-head{align-items:stretch;flex-direction:column}

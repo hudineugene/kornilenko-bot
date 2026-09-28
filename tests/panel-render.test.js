@@ -809,24 +809,51 @@ test('переписка открывается на последнем сооб
   assert.equal(thread.scrollTop, thread.scrollHeight, 'переписка прокручена к последнему сообщению');
 });
 
-test('на телефоне после выбора беседы экран сдвигается к ней', async () => {
+test('на телефоне список и переписка — разные экраны', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();
   sandbox.innerWidth = 375;
   const host = fakeElement('main');
-  const card = host.querySelector('#inquiryCard');
-  const shown = [];
-  card.scrollIntoView = function (options) { shown.push(options || {}); };
+  const scrolled = [];
+  sandbox.scrollTo = function (options) { scrolled.push(options || {}); };
 
-  // Открыл человек.
+  // Пока никого не выбрали — виден список.
+  await sandbox.VIEWS.clients.render(host, '');
+  assert.ok(!String(host.innerHTML).includes('chat-open'), 'сначала список');
+
+  // Открыл человек: переписка занимает экран целиком.
   sandbox.selectConversation('inq-olga');
   await sandbox.VIEWS.clients.render(host, '');
-  assert.equal(shown.length, 1, 'беседу показали, а не оставили менеджера смотреть на список');
+  assert.match(String(host.innerHTML), /messenger-shell chat-open/, 'переписка вместо списка');
+  assert.equal(scrolled.length, 1, 'экран показан с начала');
+  const card = host.querySelector('#inquiryCard');
+  assert.ok(card.querySelector('#backToList'), 'есть возврат к списку');
 
-  // Обновление по таймеру ту же беседу заново не выдёргивает.
+  // Обновление по таймеру экран не дёргает.
   await sandbox.VIEWS.clients.render(host, '');
-  assert.equal(shown.length, 1, 'при перерисовке экран не дёргается');
+  assert.equal(scrolled.length, 1, 'при перерисовке экран не дёргается');
+
+  // Возврат к списку.
+  await card.querySelector('#backToList').onclick();
+  assert.equal(sandbox.selectedInquiryId ? sandbox.selectedInquiryId() : '', '');
   sandbox.innerWidth = 1280;
+});
+
+test('три слоя фильтров сворачиваются в одну строку', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.clients.render(host, '');
+
+  const compact = host.querySelector('#inqStatusCompact');
+  assert.ok(compact, 'на телефоне состояние выбирается одной строкой');
+  assert.match(String(host.innerHTML), /Ждут ответа · 2/, 'в строке видно, сколько ждут ответа');
+
+  compact.value = 'unread';
+  await compact.onchange();
+  const active = String(host.innerHTML).match(/data-status="([a-z]*)" class="active"/);
+  assert.equal(active[1], 'unread', 'выбор из строки меняет фильтр');
+  assert.match(String(host.innerHTML), /Николай/, 'в списке остаётся непрочитанный диалог');
 });
 
 test('после отправки ответа страница не прыгает наверх', async () => {

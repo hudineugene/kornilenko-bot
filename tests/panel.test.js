@@ -123,7 +123,7 @@ test('центр переписки объединяет диалоги и по�
   assert.match(PANEL_HTML, /title: "Клиенты"/);
   assert.match(PANEL_HTML, /\["inbox", "Диалоги"\]/);
   assert.match(PANEL_HTML, /Непрочитанные/);
-  assert.match(PANEL_HTML, /class="messenger-shell"/);
+  assert.match(PANEL_HTML, /class="messenger-shell/);
   assert.match(PANEL_HTML, /Один клиент — одна переписка/);
   assert.match(PANEL_HTML, /class="conversation-thread"/);
   assert.match(PANEL_HTML, /conversation-media/);
