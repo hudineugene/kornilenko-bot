@@ -614,9 +614,14 @@ function forgetConversation(userId) {
   delete conversationCache[String(userId)];
 }
 
+// Переписку не удалось загрузить: раньше карточка показывала «Сообщений пока
+// нет» — то есть выдавала сбой связи за пустую переписку. Запоминаем причину и
+// говорим правду, с кнопкой «Повторить».
+var conversationFailed = {};
+
 function loadConversation(userId, onReady) {
   var key = String(userId);
-  if (conversationLoading[key]) return;
+  if (conversationLoading[key] || conversationFailed[key]) return;
   conversationLoading[key] = true;
   api("/api/conversations/" + encodeURIComponent(key) + "/timeline").then(function (body) {
     conversationLoading[key] = false;
@@ -624,7 +629,8 @@ function loadConversation(userId, onReady) {
     if (onReady) onReady();
   }, function (error) {
     conversationLoading[key] = false;
-    fail(error);
+    conversationFailed[key] = (error && error.message) || "связь с ботом потеряна";
+    if (onReady) onReady();
   });
 }
 function conversationMessageHtml(message) {
@@ -686,7 +692,10 @@ function renderInquiryCard(host) {
       '</div>' +
       '<div class="conversation-thread">' + (timeline.length
         ? timeline.map(conversationMessageHtml).join("")
-        : conversationLoading[String(item.userId)] ? '<div class="empty"><b>Загружаем переписку…</b></div>' : '<div class="empty"><b>Сообщений пока нет</b></div>') + "</div>" +
+        : conversationLoading[String(item.userId)] ? '<div class="empty"><b>Загружаем переписку…</b></div>'
+          : conversationFailed[String(item.userId)]
+            ? '<div class="empty"><b>Не удалось загрузить переписку</b>' + esc(conversationFailed[String(item.userId)]) + '<button class="btn secondary small" id="retryConversation" type="button">Повторить</button></div>'
+            : '<div class="empty"><b>Сообщений пока нет</b></div>') + "</div>" +
       '<div class="reply-box"><div class="reply-box-head"><b>Ответить в Telegram</b>' +
         (state.replyTemplates && state.replyTemplates.length ? '<select id="replyTemplate"><option value="">Вставить шаблон ответа…</option>' + state.replyTemplates.map(function (template) { return '<option value="' + esc(template.id) + '">' + esc(template.title) + "</option>"; }).join("") + "</select>" : "") +
       '</div><div class="reply-quote hidden" id="replyQuote"><div><span>Ответ на сообщение клиента</span><b id="replyQuoteText"></b></div><button class="reply-quote-remove" id="clearReplyQuote" type="button" aria-label="Убрать цитату">×</button></div>' +
@@ -718,6 +727,11 @@ function renderInquiryCard(host) {
     host.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
+  var retryConversation = host.querySelector("#retryConversation");
+  if (retryConversation) retryConversation.onclick = function () {
+    delete conversationFailed[String(item.userId)];
+    renderInquiryCard(host);
+  };
   var activeInquiry = host.querySelector("#activeInquiry");
   if (activeInquiry) activeInquiry.onchange = function () { selectConversation(activeInquiry.value); renderInquiryList(el("viewBody")); };
   var linkedProperty = host.querySelector("#linkedProperty");

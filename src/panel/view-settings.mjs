@@ -27,7 +27,7 @@ function renderConnection(host) {
       '<div class="field"><label for="setTokenPass">Текущий пароль панели</label><input id="setTokenPass" type="password" placeholder="нужен для смены токена" autocomplete="current-password"></div>' +
       '<div class="row wrap"><button class="btn secondary small" id="testToken" type="button">Проверить токен</button>' +
         '<button class="btn small" id="saveToken" type="button">Сменить токен</button><span id="tokenResult" class="small muted"></span></div>' +
-      '<div class="hint">Токен меняется отдельной кнопкой: остальные настройки сохраняются сами, а подключение к Telegram — только по паролю.</div>' +
+      '<div class="hint">Токен меняется отдельной кнопкой и только по текущему паролю панели. Остальные настройки этой страницы сохраняются кнопкой в полосе снизу.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Админ-чат в Telegram</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="setAdminChat">Chat ID администратора</label><input id="setAdminChat" value="' + esc(config.adminChatId || "") + '" placeholder="узнать: напишите боту /myid"></div>' +
@@ -360,7 +360,11 @@ function renderData(host) {
     if (!(await confirmDialog("Восстановить данные?", "Текущие данные бота будут заменены содержимым файла «" + file.name + "».", "Восстановить", true))) return;
     var current = await askPassword("Восстановить данные?", "Текущие данные будут заменены. Для этого нужен текущий пароль панели.");
     if (!current) return;
-    var password = encrypted ? prompt("Пароль от зашифрованной копии") : "";
+    // Своим окном с полем пароля: prompt() показывает набранное открытым текстом
+    // и остаётся в истории браузера.
+    var password = encrypted
+      ? await askPassword("Пароль зашифрованной копии", "Файл «" + file.name + "» зашифрован. Введите пароль, которым он защищён.", "Пароль копии")
+      : "";
     if (encrypted && !password) return toast("Без пароля зашифрованную копию не прочитать", true);
     try {
       // Файл уходит байтами: копия .json.gz и .kbk двоичные, а чтение текстом

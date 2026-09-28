@@ -146,13 +146,12 @@ function refreshStaffCommands(previousChatIds = []) {
     const newPassword = String(body.password || '');
     // A session alone must not be enough to take over the panel or the bot.
     if (newToken || newPassword || adminChatChanged) {
-      const ip = clientAddress(req);
-      if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
-      if (!verifyPassword(String(body.currentPassword || ''))) {
-        await delay(250);
-        return json(res, 403, { error: 'Для смены пароля, токена или чата администратора введите текущий пароль' });
-      }
-      loginAttempts.delete(ip);
+      // Пароль не введён и пароль введён неверно — разные вещи, и говорить о них
+      // надо по-разному. Проверку делает общая passwordAccepted: у неё и счёт
+      // попыток, и одинаковая по времени пауза.
+      const current = String(body.currentPassword || '');
+      if (!current) return json(res, 403, { error: 'Для смены пароля, токена или чата администратора введите текущий пароль' });
+      if (!(await passwordAccepted(req, res, current))) return;
     }
     if (newToken) {
       if (!BOT_TOKEN_PATTERN.test(newToken)) return json(res, 400, { error: 'Токен выглядит некорректно' });
@@ -315,13 +314,11 @@ function refreshStaffCommands(previousChatIds = []) {
     // Sending all data out of this computer needs the admin password, as
     // changing the token does.
     if (enabled || password) {
-      const ip = clientAddress(req);
-      if (!loginAllowed(ip)) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
-      if (!verifyPassword(String(body.currentPassword || ''))) {
-        await delay(250);
-        return json(res, 403, { error: 'Введите текущий пароль администратора' });
-      }
-      loginAttempts.delete(ip);
+      // Разные случаи — разные ответы: раньше на неверный пароль панель писала
+      // «Введите текущий пароль», и человек искал, куда его вводить, хотя ввёл.
+      const current = String(body.currentPassword || '');
+      if (!current) return json(res, 403, { error: 'Введите текущий пароль администратора' });
+      if (!(await passwordAccepted(req, res, current))) return;
     }
     if (password) {
       if (password.length < MIN_BACKUP_PASSWORD_LENGTH) return json(res, 400, { error: 'Пароль копии — не короче ' + MIN_BACKUP_PASSWORD_LENGTH + ' символов' });

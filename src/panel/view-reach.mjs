@@ -617,6 +617,8 @@ function renderGroupCard(host, group) {
   };
   host.querySelectorAll("[data-cancel-post]").forEach(function (button) {
     button.onclick = async function () {
+      // Спрашиваем: отменённую публикацию не вернуть, а текст поста пропадёт.
+      if (!(await confirmDialog("Отменить публикацию?", "Запланированный пост будет удалён вместе с текстом. Восстановить его будет нельзя.", "Отменить публикацию", true))) return;
       try {
         await api("/api/group-posts/" + encodeURIComponent(button.dataset.cancelPost), { method: "DELETE" });
         toast("Публикация убрана");

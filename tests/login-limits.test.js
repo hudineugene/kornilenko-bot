@@ -138,3 +138,25 @@ test('песочница не готовит данные с включённы�
   assert.match(source, /data\.config\.tunnelToken = '';/, 'и токен туннеля убран');
   assert.doesNotMatch(source, /remoteAccess = \{ enabled: false \}/);
 });
+
+test('неверный текущий пароль так и называется', async () => {
+  // Раньше на неверный пароль панель отвечала «введите текущий пароль», и
+  // человек искал, куда его вводить, хотя ввёл.
+  const session = await login(PASSWORD);
+  const cookie = session.headers.get('set-cookie').split(';')[0];
+  const csrf = (await session.json()).csrf;
+  const headers = { 'content-type': 'application/json', cookie, 'x-csrf-token': csrf };
+  // Включение отправки копий в Telegram — как раз действие «по текущему паролю».
+  const backup = (payload) => realFetch(base + '/api/telegram-backup', { method: 'PUT', headers, body: JSON.stringify(payload) });
+
+  const empty = await backup({ enabled: true, currentPassword: '' });
+  assert.equal(empty.status, 403);
+  assert.match((await empty.json()).error, /введите текущий пароль/i, 'пароль не введён — просим ввести');
+
+  const wrong = await backup({ enabled: true, currentPassword: 'не тот пароль' });
+  assert.equal(wrong.status, 403);
+  assert.match((await wrong.json()).error, /неверный пароль/i, 'пароль введён неверно — так и говорим');
+
+  // Настройка не изменилась: обе попытки отклонены.
+  assert.equal(Boolean(bot.getData().config.telegramBackup && bot.getData().config.telegramBackup.enabled), false);
+});

@@ -185,16 +185,25 @@ function api(url, options) {
 // Блокируем кнопку не в момент нажатия, а сразу после: иначе отправка формы
 // (кнопка входа) не состоялась бы вовсе. Кнопка оживает, когда запросы,
 // начатые этим нажатием, закончились.
+//
+// Отдельно — действия с подтверждением: запрос уходит не сразу, сначала
+// открывается окно «Удалить?». Пока оно открыто, запросов нет, и прежняя защита
+// кнопку не держала: второе нажатие открывало второе окно, а значит и второе
+// удаление. Поэтому открытое окно тоже держит кнопку.
+function waitingForAnswer() {
+  return Boolean(document.querySelector("dialog[open]"));
+}
+
 function guardDoubleClicks() {
   document.addEventListener("click", function (event) {
     var node = event.target;
     var button = node && node.closest ? node.closest("button") : null;
     if (!button || button.disabled) return;
     setTimeout(function () {
-      if (!pendingChanges || button.disabled) return;
+      if ((!pendingChanges && !waitingForAnswer()) || button.disabled) return;
       button.disabled = true;
       var timer = setInterval(function () {
-        if (pendingChanges) return;
+        if (pendingChanges || waitingForAnswer()) return;
         clearInterval(timer);
         button.disabled = false;
       }, 60);
@@ -250,12 +259,12 @@ function confirmDialog(title, text, confirmText, danger) {
 
 // Опасные действия просят текущий пароль: одной открытой сессии недостаточно,
 // чтобы скачать данные с токенами, заменить их или отдать заявки другому чату.
-function askPassword(title, text) {
+function askPassword(title, text, label) {
   return new Promise(function (resolve) {
     var dialog = openDialog({
       title: title,
       body: '<p class="muted small">' + esc(text) + '</p>' +
-        '<div class="field"><label for="gatePassword">Текущий пароль панели</label>' +
+        '<div class="field"><label for="gatePassword">' + esc(label || "Текущий пароль панели") + '</label>' +
         '<input id="gatePassword" type="password" autocomplete="current-password"></div>',
       footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="gateConfirm" type="button">Продолжить</button>',
       ready: function (node) {
@@ -466,7 +475,11 @@ async function refresh() {
 }
 
 function navItems() {
-  var waiting = Number(state && state.unreadConversationCount) || (state && state.inquiries || []).filter(awaitsReply).length;
+  // Счётчик у «Переписки» — это непрочитанные беседы. Ноль непрочитанных тоже
+  // ответ: раньше при нуле подставлялось число «ждут ответа», и на значке
+  // висело одно, а в списке «Непрочитанные» — совсем другое.
+  var unread = Number(state && state.unreadConversationCount);
+  var waiting = Number.isFinite(unread) ? unread : (state && state.inquiries || []).filter(awaitsReply).length;
   return [
     { id: "overview", icon: "◉", title: "Обзор" },
     { id: "notifications", icon: "🔔", title: "Центр уведомлений", hidden: true },

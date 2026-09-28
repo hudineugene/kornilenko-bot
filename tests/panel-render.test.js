@@ -364,7 +364,9 @@ test.describe('восстановление копии из панели', () =>
   test('для зашифрованной копии спрашивается пароль и уходит в заголовке', async () => {
     resetData((data) => { data.config.active = true; });
     const { sandbox, requests } = await panelSandbox();
-    sandbox.prompt = () => 'пароль-копии';
+    // Пароль копии спрашивается своим окном, а не prompt(): его не видно на
+    // экране и он не остаётся в истории браузера.
+    sandbox.askPassword = async (title) => (/копии/i.test(title) ? 'пароль-копии' : 'пароль-панели');
     const host = fakeElement('main');
     await sandbox.VIEWS.settings.render(host, 'data');
 
@@ -381,7 +383,7 @@ test.describe('восстановление копии из панели', () =>
   test('без пароля зашифрованная копия не отправляется', async () => {
     resetData((data) => { data.config.active = true; });
     const { sandbox, requests } = await panelSandbox();
-    sandbox.prompt = () => '';
+    sandbox.askPassword = async (title) => (/копии/i.test(title) ? '' : 'пароль-панели');
     const host = fakeElement('main');
     await sandbox.VIEWS.settings.render(host, 'data');
 
@@ -941,4 +943,79 @@ test('когда дата разобрана, она и подставляетс
   assert.match(html, /Клиент просил: в эту субботу · 12:00/);
   assert.doesNotMatch(html, /бот не разобрал/, 'предупреждения нет — разбирать было нечего');
   dialog.closeClean();
+});
+
+test('счётчик у «Переписки» — это непрочитанные, даже когда их ноль', async () => {
+  // Раньше при нуле непрочитанных подставлялось число «ждут ответа»: на значке
+  // висело одно, а во вкладке «Непрочитанные» — другое.
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.users['760001'] = { id: '760001', chatId: 760001, firstName: 'Зоя', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(5) };
+    // Клиент ждёт ответа, но беседу менеджер уже прочитал.
+    data.inquiries.push({
+      id: 'inq-read', userId: '760001', chatId: '760001', language: 'ru', type: 'general',
+      text: 'Вопрос по вилле', status: 'new', pipelineStage: 'new', replies: [], messages: [],
+      readAt: minutesAgo(1), createdAt: minutesAgo(30), updatedAt: minutesAgo(5), clientMessageAt: minutesAgo(5),
+    });
+  });
+  const { sandbox, state } = await panelSandbox();
+  assert.equal(state.unreadConversationCount, 0, 'непрочитанных нет');
+  const badge = sandbox.navItems().find((item) => item.id === 'inquiries').count;
+  assert.equal(badge, 0, 'на значке ноль, а не число «ждут ответа»');
+
+  state.unreadConversationCount = 2;
+  assert.equal(sandbox.navItems().find((item) => item.id === 'inquiries').count, 2, 'а появились непрочитанные — показывает их');
+});
+
+test('сбой загрузки переписки виден как сбой, а не как пустая беседа', async () => {
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.users['770001'] = { id: '770001', chatId: 770001, firstName: 'Павел', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(2) };
+    data.inquiries.push({
+      id: 'inq-broken', userId: '770001', chatId: '770001', language: 'ru', type: 'general',
+      text: 'Есть ли лифт?', status: 'new', pipelineStage: 'new', replies: [],
+      messages: [{ id: 'b-1', direction: 'in', kind: 'text', text: 'Есть ли лифт?', createdAt: minutesAgo(2) }],
+      createdAt: minutesAgo(10), updatedAt: minutesAgo(2), clientMessageAt: minutesAgo(2),
+    });
+  });
+  const { sandbox } = await panelSandbox();
+  const working = sandbox.fetch;
+  sandbox.fetch = async (url, options) => (String(url).includes('/timeline')
+    ? { ok: false, status: 500, json: async () => ({ error: 'Диск занят' }), text: async () => '', headers: { get: () => '' } }
+    : working(url, options));
+
+  sandbox.selectConversation('inq-broken');
+  const host = fakeElement('main');
+  await sandbox.VIEWS.inquiries.render(host, 'inbox');
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const card = host.querySelector('#inquiryCard');
+  const html = String(card.innerHTML);
+  assert.match(html, /Не удалось загрузить переписку/, 'сказано, что это сбой');
+  assert.match(html, /Диск занят/, 'и почему');
+  assert.match(html, /id="retryConversation"/, 'есть кнопка «Повторить»');
+  assert.doesNotMatch(html, /Сообщений пока нет/, 'сбой больше не выглядит пустой беседой');
+});
+
+test('отмена отложенной публикации спрашивает подтверждение', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /Отменить публикацию\?/, 'отмена публикации спрашивает');
+  assert.match(PANEL_HTML, /Запланированный пост будет удалён вместе с текстом/, 'и говорит, что пропадёт');
+});
+
+test('двойное нажатие не открывает второе окно подтверждения', async () => {
+  // Запрос уходит не сразу: сначала окно «Удалить?». Пока оно открыто, запросов
+  // нет, и прежняя защита кнопку не держала — второе нажатие открывало второе
+  // окно, то есть второе удаление.
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const guard = PANEL_HTML.match(/function guardDoubleClicks\(\) \{[\s\S]*?\n\}/);
+  assert.ok(guard, 'защита от двойного нажатия на месте');
+  assert.match(guard[0], /waitingForAnswer\(\)/, 'открытое окно тоже держит кнопку');
+});
+
+test('подсказка про сохранение настроек говорит правду', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.doesNotMatch(PANEL_HTML, /остальные настройки сохраняются сами/, 'неверная подсказка убрана');
+  assert.match(PANEL_HTML, /сохраняются кнопкой в полосе снизу/, 'сказано, как на самом деле');
 });
