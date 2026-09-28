@@ -427,6 +427,15 @@ function retrySaveLater() {
   if (saveTimer.unref) saveTimer.unref();
 }
 
+// Отменяет отложенную запись перед выходом. Просто clearTimeout не годится:
+// переменная осталась бы занятой, и scheduleSave решил бы, что запись уже
+// назначена, — всё, что изменится за последние секунды (ответ дошёл до клиента,
+// альбом собрался), не попало бы на диск.
+function cancelScheduledSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+}
+
 // Throttled rather than debounced: a steady stream of updates must not
 // postpone the write indefinitely.
 function scheduleSave() {
@@ -701,6 +710,7 @@ export {
   runDailyBackupSafely,
   runtime,
   saveDataNow,
+  cancelScheduledSave,
   saveTimer,
   scheduleSave,
   storedImageNames,

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { DATA_FILE, HOST, PORT } from './config.mjs';
 import { cleanText, delay, localDayKey } from './util.mjs';
-import { configured, data, runDailyBackupSafely, runtime, saveDataNow, saveTimer } from './store.mjs';
+import { cancelScheduledSave, configured, data, runDailyBackupSafely, runtime, saveDataNow } from './store.mjs';
 import { runScheduledNotices } from './notices.mjs';
 import { recordError } from './analytics.mjs';
 import { sendMessage } from './telegram.mjs';
@@ -174,7 +174,7 @@ function shutdown(signal) {
   console.log('\nЗавершение работы…');
   runtime.generation += 1;
   if (runtime.abortController) runtime.abortController.abort();
-  clearTimeout(saveTimer);
+  cancelScheduledSave();
   rememberShutdown(signal);
   try { saveDataNow(); } catch (error) { console.error('Не удалось сохранить данные:', error.message); }
   clearRunMarker();
@@ -182,9 +182,21 @@ function shutdown(signal) {
   const notice = statusNoticesOn()
     ? Promise.race([sendStatusNotice(stopNoticeText(signal)), delay(WINDOW_CLOSED_NOTICE_TIMEOUT_MS)])
     : Promise.resolve();
+  // Прощание занимает до нескольких секунд, и за это время данные ещё
+  // меняются: ответ дошёл до клиента, альбом собрался, просмотр подтвердился.
+  // Поэтому перед самым выходом сохраняем ещё раз.
+  const finish = () => {
+    cancelScheduledSave();
+    try {
+      saveDataNow();
+    } catch (error) {
+      console.error('Не удалось сохранить данные:', error.message);
+    }
+    process.exit(0);
+  };
   notice.finally(() => {
-    server.close(() => process.exit(0));
-    setTimeout(() => process.exit(0), 2000).unref();
+    server.close(finish);
+    setTimeout(finish, 2000).unref();
   });
 }
 
@@ -271,7 +283,7 @@ function start() {
   process.on('exit', () => {
     if (shuttingDown) return;
     try {
-      clearTimeout(saveTimer);
+      cancelScheduledSave();
       saveDataNow();
       rememberShutdown('');
       saveDataNow();
