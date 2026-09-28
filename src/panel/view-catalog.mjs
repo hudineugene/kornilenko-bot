@@ -4,7 +4,7 @@ const CATALOG_JS = String.raw`
 var catalogSearch = "", catalogStatus = "";
 var LANGUAGES = [["ru", "Русский"], ["en", "English"], ["es", "Español"]];
 var PROPERTY_TYPES = [["apartment", "Квартира"], ["house", "Дом"], ["villa", "Вилла"], ["townhouse", "Таунхаус"], ["land", "Участок"], ["commercial", "Коммерческая"], ["newbuild", "Новостройка"], ["other", "Другое"]];
-var PROPERTY_STATUS = [["active", "Активен"], ["reserved", "Забронирован"], ["sold", "Продан"], ["hidden", "Скрыт"]];
+var PROPERTY_STATUS = [["active", "Опубликован"], ["reserved", "Забронирован"], ["sold", "Продан"], ["hidden", "Черновик — клиенты не видят"]];
 var BADGES = [["new", "Новинка"], ["recommended", "Рекомендуем"], ["exclusive", "Эксклюзив"], ["price_reduced", "Цена снижена"]];
 var CONDITIONS = [["", "Не указано"], ["new", "Новое"], ["renovated", "После ремонта"], ["needs_renovation", "Требует ремонта"], ["under_construction", "Строится"]];
 
@@ -342,12 +342,31 @@ function openRecordEditor(kind, id) {
         var ready = rows.every(function (row) { return !row.issues.length; });
         var status = value("fStatus");
         var liveAndIncomplete = ["active", "reserved"].indexOf(status) >= 0 && !ready;
+        // Значок говорит про то, что видит клиент, а не про заполненность полей:
+        // Прежняя подпись про готовность у скрытого объекта читалась как
+        // «объект уже опубликован».
+        var live = ["active", "reserved"].indexOf(status) >= 0;
+        var state = !ready ? { text: "нужно заполнить", chip: "warn" }
+          : live ? { text: status === "reserved" ? "виден клиентам · забронирован" : "виден клиентам", chip: "ok" }
+            : status === "sold" ? { text: "продан — снят с показа", chip: "" }
+              : { text: "черновик — клиенты не видят", chip: "warn" };
         dialog.querySelector("#publicationCheck").innerHTML =
-          '<div class="publication-head"><div><b>Готовность карточки</b><span>Единый стандарт для всех языков</span></div><span class="chip ' + (ready ? "ok" : "warn") + '">' + (ready ? "готова к публикации" : "нужно заполнить") + "</span></div>" +
+          '<div class="publication-head"><div><b>Готовность карточки</b><span>Единый стандарт для всех языков</span></div><span class="chip ' + state.chip + '">' + state.text + "</span></div>" +
           '<div class="publication-rows">' + rows.map(function (row) {
             return '<div class="publication-row"><b>' + row.code.toUpperCase() + '</b><span class="grow">' + esc(row.name) + '</span><span class="' + (row.issues.length ? "warn-text" : "ok-text") + '">' + (row.issues.length ? esc(row.issues.join(", ")) : "готово") + "</span></div>";
           }).join("") + "</div>" +
+          // Одна кнопка вместо поиска нужного статуса в списке.
+          '<div class="publication-actions"><button class="btn' + (live ? " secondary" : "") + '" id="togglePublish" type="button"' + (!ready && !live ? " disabled" : "") + '>' +
+            (live ? "Снять с публикации" : "Опубликовать") + "</button>" +
+            '<span class="small muted">' + (live ? "Объект пропадёт из каталога, переписка и заявки останутся." : ready ? "Объект сразу появится в каталоге у клиентов." : "Сначала заполните то, чего не хватает.") + "</span></div>" +
           (liveAndIncomplete ? '<div class="publication-warning">Сохранить карточку можно и так, но клиенты видят её только на тех языках, где заполнено всё. Пока не хватает данных, объект в каталоге не показывается.</div>' : "");
+        var toggle = dialog.querySelector("#togglePublish");
+        if (toggle) toggle.onclick = function () {
+          dialog.querySelector("#fStatus").value = live ? "hidden" : "active";
+          renderPublicationCheck();
+          renderRecordPreview();
+          saveRecord();
+        };
         var type = value("fType");
         var residential = ["apartment", "house", "villa", "townhouse", "newbuild"].indexOf(type) >= 0;
         dialog.querySelectorAll("[data-required]").forEach(function (marker) {
@@ -510,7 +529,7 @@ function openRecordEditor(kind, id) {
       // Предпросмотр говорит теми же словами, что бот: тексты интерфейса
       // грузятся отдельно, поэтому обновляем его, когда они приедут.
       loadInterfaceText().then(renderRecordPreview).catch(function () {});
-      dialog.querySelector("#saveRecord").onclick = async function () {
+      async function saveRecord() {
         // Незаполненную карточку сохраняем: клиент увидит её только на тех
         // языках, где всё заполнено. Раньше кнопка «Сохранить» здесь молча
         // ничего не делала, и поправить город в карточке было нельзя.
@@ -569,7 +588,8 @@ function openRecordEditor(kind, id) {
           toast(done, incomplete.length > 0);
           await reload();
         } catch (error) { fail(error); }
-      };
+      }
+      dialog.querySelector("#saveRecord").onclick = saveRecord;
     },
   });
 }

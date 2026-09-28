@@ -76,6 +76,21 @@ test('редакторы предупреждают перед закрытие�
   assert.match(PANEL_HTML, /dialog\.closeClean\(\)/);
 });
 
+test('у объекта есть кнопка «Опубликовать», а значок говорит про клиента', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /id="togglePublish"/);
+  assert.match(PANEL_HTML, /"Снять с публикации" : "Опубликовать"/);
+  assert.match(PANEL_HTML, /Объект сразу появится в каталоге у клиентов/);
+  assert.match(PANEL_HTML, /Объект пропадёт из каталога, переписка и заявки останутся/);
+  // Значок больше не называет скрытый объект «готовым к публикации».
+  assert.ok(!/готова к публикации/.test(PANEL_HTML), 'старая подпись значка убрана');
+  assert.match(PANEL_HTML, /text: "черновик — клиенты не видят"/);
+  assert.match(PANEL_HTML, /виден клиентам · забронирован/);
+  assert.match(PANEL_HTML, /: "виден клиентам", chip: "ok"/);
+  // И в списке статусов «Скрыт» назван черновиком.
+  assert.match(PANEL_HTML, /\["hidden", "Черновик — клиенты не видят"\]/);
+});
+
 test('номер объекта стоит наверху формы, участок — только там, где он бывает', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   // Номер объекта — в первом разделе, до фотографий и характеристик.

@@ -532,6 +532,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
 .publication-row>b{width:22px;color:var(--brand-dark)}
 .publication-row .warn-text{max-width:62%;color:var(--warn);text-align:right}
 .publication-row .ok-text{color:var(--ok)}
+.publication-actions{display:flex;gap:var(--sp-3);align-items:center;flex-wrap:wrap;margin-top:var(--sp-2)}
 .publication-warning{padding:8px 12px;border-top:1px solid var(--warn-line);background:var(--warn-soft);color:var(--warn);font-size:var(--fs-sm)}
 
 /* --- Вход ------------------------------------------------------------------- */
