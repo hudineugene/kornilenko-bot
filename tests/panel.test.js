@@ -129,10 +129,10 @@ test('центр переписки объединяет диалоги и по�
   assert.match(PANEL_HTML, /conversation-media/);
   assert.match(PANEL_HTML, /message\.reactions/);
   assert.match(PANEL_HTML, /Ответить в Telegram/);
-  assert.match(PANEL_HTML, /Сопровождение заявки/);
+  assert.match(PANEL_HTML, /class="conversation-side"/);
   assert.match(PANEL_HTML, /Карточка клиента/);
   assert.match(PANEL_HTML, /id="inqAssignee"/);
-  assert.match(PANEL_HTML, /Сохранить изменения/);
+  assert.match(PANEL_HTML, /id="saveInq"/);
 });
 
 test('мессенджер отправляет файлы, цитирует сообщение и безопасно повторяет ответ', async () => {

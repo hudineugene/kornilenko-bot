@@ -685,7 +685,8 @@ function renderInquiryCard(host) {
     markConversationRead(item.userId);
   }
   host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions">' + statusChip(item) + "</div></header>" +
-    '<div class="card-body conversation-body">' +
+    '<div class="card-body conversation-body conversation-split">' +
+      '<div class="conversation-main">' +
       '<div class="conversation-context">' +
         (related.length > 1 ? '<div class="field grow"><label>Текущая заявка</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + (entry.status === "closed" ? "закрыто" : awaitsReply(entry) ? "ждёт ответа" : "в работе") + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущая заявка</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
         (property ? '<button class="property-link" id="linkedProperty" type="button">🏠 ' + esc(localized(property.title, "ru") || property.reference || property.id) + '<span>Открыть →</span></button>' : item.propertyId ? '<div class="chip bad">Связанный объект удалён</div>' : "") +
@@ -703,16 +704,26 @@ function renderInquiryCard(host) {
       '<div class="reply-attachments"><input class="hidden" id="replyFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,application/pdf,text/plain"><label class="btn secondary small" for="replyFile">📎 Добавить файл</label><span class="reply-file-name muted" id="replyFileName">Фотография до 5 МБ или документ до 10 МБ</span><button class="btn ghost small hidden" id="clearReplyFile" type="button">Убрать</button></div>' +
       '<div class="reply-delivery hidden" id="replyDelivery" aria-live="polite"><span id="replyDeliveryText"></span><button class="btn ghost small hidden" id="retryReply" type="button">Повторить отправку</button></div>' +
       '<div class="reply-actions"><button class="btn" id="sendReply" type="button">Отправить сообщение</button><label class="check"><input type="checkbox" id="keepOpen"> оставить диалог в работе</label></div></div>' +
-      '<details class="conversation-details" open><summary><span><b>Сопровождение заявки</b><small>статус, ответственный и следующий шаг</small></span><i>⌄</i></summary><div class="conversation-details-body stack">' +
+      '</div>' +
+      // Справа — всё, что менеджер меняет по этому клиенту. Одна панель, одна
+      // кнопка сохранения: раньше статус сохранялся сам по нажатию, а этап,
+      // заметка и теги — отдельно, и половина правок терялась.
+      '<aside class="conversation-side"><div class="conversation-side-inner stack">' +
         selectionMatchingPanel(item) +
         (viewing ? '<div class="msg">📅 ' + esc((viewing.confirmedDate || viewing.dateText || "дата не выбрана") + " · " + (viewing.confirmedTime || viewing.timeText || "")) + (viewing.confirmedAt ? '<br><span class="small ok-text">просмотр подтверждён</span>' : '<br><span class="small warn-text">нужно подтвердить просмотр</span>') + "</div>" : "") +
-        (viewing && !viewing.cancelledAt ? '<div class="row wrap"><button class="btn secondary small" id="scheduleViewing" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + '</button><span class="small muted">Клиент получит дату и время в Telegram</span></div>' : "") +
-        '<div class="field"><label>Статус заявки</label><div class="row wrap"><button class="btn secondary small" data-status="in_progress" type="button">В работу</button><button class="btn secondary small" data-status="closed" type="button">Закрыть</button><button class="btn secondary small" data-status="new" type="button">Открыть снова</button></div></div>' +
-        '<div class="grid cols-3"><div class="field"><label>Этап воронки</label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div><div class="field"><label>Ответственный менеджер</label><select id="inqAssignee"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div><div class="row followup-fields"><div class="field grow"><label>Следующий шаг</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label>Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div></div>' +
-        '<div class="field"><label>Заметка по этой заявке</label><textarea id="inqNote" placeholder="Что важно сделать по заявке">' + esc(item.note || "") + "</textarea></div>" +
-      '</div></details>' +
-      '<details class="conversation-details"><summary><span><b>Карточка клиента</b><small>общие теги и заметка для всей истории общения</small></span><i>⌄</i></summary><div class="conversation-details-body stack"><div class="field"><label>Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div><div class="field"><label>Общая заметка о клиенте</label><textarea id="clientNoteInq" placeholder="Предпочтения, договорённости и важные детали">' + esc(user.note || "") + "</textarea></div></div></details>" +
-      '<div class="conversation-save"><button class="btn secondary" id="saveInq" type="button">Сохранить изменения</button><button class="btn ghost small" id="deleteInq" type="button">Удалить эту заявку</button></div>' +
+        (viewing && !viewing.cancelledAt ? '<button class="btn secondary small" id="scheduleViewing" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + '</button>' : "") +
+        '<div class="field"><label for="inqStatusValue">Статус заявки</label><select id="inqStatusValue">' +
+          [["new", "Ждёт ответа"], ["in_progress", "В работе"], ["closed", "Закрыт"]].map(function (option) {
+            return '<option value="' + option[0] + '"' + (String(item.status || "new") === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
+          }).join("") + '</select></div>' +
+        '<div class="field"><label for="inqPipeline">Этап воронки</label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div>' +
+        '<div class="field"><label for="inqAssignee">Ответственный менеджер</label><select id="inqAssignee"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div>' +
+        '<div class="row followup-fields"><div class="field grow"><label for="followDate">Следующий шаг</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label for="followTime">Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div>' +
+        '<div class="field"><label for="inqNote">Заметка по этой заявке</label><textarea id="inqNote" placeholder="Что важно сделать по заявке">' + esc(item.note || "") + "</textarea></div>" +
+        '<div class="field"><label for="clientTagsInq">Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div>' +
+        '<div class="field"><label for="clientNoteInq">Общая заметка о клиенте</label><textarea id="clientNoteInq" placeholder="Предпочтения, договорённости и важные детали">' + esc(user.note || "") + "</textarea></div>" +
+        '<div class="conversation-save"><button class="btn" id="saveInq" type="button">Сохранить</button><button class="btn ghost small" id="openClientCard" type="button">Карточка клиента 360°</button><button class="btn ghost small" id="deleteInq" type="button">Удалить заявку</button></div>' +
+      '</div></aside>' +
     "</div></div>";
 
   // Переписку открываем на последнем сообщении: читают всегда конец разговора,
@@ -836,17 +847,11 @@ function renderInquiryCard(host) {
     var template = (state.replyTemplates || []).find(function (entry) { return entry.id === templates.value; });
     if (template) { replyText.value = localized(template.text, item.language || "ru") || template.text.ru || ""; freshRequest(); }
   };
-  host.querySelectorAll("[data-status]").forEach(function (button) {
-    button.onclick = async function () {
-      try {
-        await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", { status: button.dataset.status });
-        await reload(true, { keepScroll: true });
-      } catch (error) { fail(error); }
-    };
-  });
+  host.querySelector("#openClientCard").onclick = function () { openClient(String(item.userId)); };
   host.querySelector("#saveInq").onclick = async function () {
     try {
       await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", {
+        status: host.querySelector("#inqStatusValue").value,
         note: host.querySelector("#inqNote").value,
         followUpDate: host.querySelector("#followDate").value,
         followUpTime: host.querySelector("#followTime").value,

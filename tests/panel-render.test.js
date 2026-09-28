@@ -698,6 +698,37 @@ test('отвеченная беседа остаётся открытой, а н
   assert.match(String(after.innerHTML), /Ольга/, 'и она по-прежнему видна в списке');
 });
 
+test('сопровождение заявки собрано в одной панели и сохраняется одной кнопкой', async () => {
+  twoWaitingConversations();
+  const { sandbox, requests } = await panelSandbox();
+  sandbox.selectConversation('inq-olga');
+
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  await sandbox.VIEWS.clients.render(host, '');
+
+  const side = card.querySelector('.conversation-side');
+  assert.ok(side, 'справа от переписки — панель сопровождения');
+  for (const id of ['#inqStatusValue', '#inqPipeline', '#inqAssignee', '#followDate', '#inqNote', '#clientTagsInq', '#clientNoteInq', '#saveInq']) {
+    assert.ok(card.querySelector(id), id + ' живёт в этой же панели');
+  }
+  assert.ok(!String(card.innerHTML).includes('data-status='), 'статус больше не сохраняется отдельной кнопкой');
+
+  // Одно нажатие сохраняет и заявку, и карточку клиента.
+  card.querySelector('#inqStatusValue').value = 'closed';
+  card.querySelector('#inqNote').value = 'перезвонить в среду';
+  card.querySelector('#clientTagsInq').value = 'покупка, горячий лид';
+  const before = requests.length;
+  await card.querySelector('#saveInq').onclick();
+  const saved = requests.slice(before).filter((request) => request.method === 'PATCH');
+  assert.equal(saved.length, 2, 'одна кнопка — один заход: заявка и клиент');
+  const inquiry = saved.find((request) => request.url.includes('/api/inquiries/'));
+  assert.equal(inquiry.body.status, 'closed', 'статус уходит вместе с остальным');
+  assert.equal(inquiry.body.note, 'перезвонить в среду');
+  const client = saved.find((request) => request.url.includes('/api/users/'));
+  assert.deepEqual(client.body.tags, ['покупка', 'горячий лид']);
+});
+
 test('переписка открывается на последнем сообщении', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();

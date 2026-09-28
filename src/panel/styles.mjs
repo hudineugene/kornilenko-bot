@@ -189,6 +189,14 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .conversation-context{display:flex;align-items:flex-end;gap:10px;padding:10px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--surface-soft)}
 .conversation-context-title{margin-top:4px;font-weight:600}
 .conversation-context .property-link{width:auto;min-width:240px}
+/* Экран клиента: переписка слева, сопровождение справа. На узком экране одно
+   под другим — иначе на телефоне обе колонки становятся нечитаемыми. */
+.conversation-split{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--sp-4);align-items:start}
+.conversation-main{display:flex;flex-direction:column;gap:var(--sp-3);min-width:0}
+.conversation-side{position:sticky;top:var(--sp-3)}
+.conversation-side-inner{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:var(--sp-3)}
+.conversation-side .conversation-save{display:flex;flex-direction:column;gap:var(--sp-2);align-items:stretch}
+@media (max-width:1100px){.conversation-split{grid-template-columns:minmax(0,1fr)}.conversation-side{position:static}}
 .conversation-thread{display:flex;flex-direction:column;gap:8px;min-height:300px;max-height:min(54vh,620px);overflow:auto;padding:12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--tint);overscroll-behavior:contain}
 .conversation-line{display:flex;justify-content:flex-start}
 .conversation-line.out{justify-content:flex-end}
