@@ -105,11 +105,11 @@ function renderObjects(host) {
   pageAction("＋ Объект", function () { openRecordEditor("objects", null); });
   pageAction("⇩ Загрузить с сайта", function () { go("catalog", "feed"); }, "secondary");
   host.innerHTML = '<div class="toolbar"><div class="search"><input id="catalogSearch" placeholder="Название, номер, город" value="' + esc(catalogSearch) + '"></div>' +
-      '<select id="catalogStatus" style="max-width:170px"><option value="">Все статусы</option>' + PROPERTY_STATUS.map(function (item) {
+      '<select id="catalogStatus" class="field-sm"><option value="">Все статусы</option>' + PROPERTY_STATUS.map(function (item) {
         return '<option value="' + item[0] + '"' + (catalogStatus === item[0] ? " selected" : "") + ">" + item[1] + "</option>";
       }).join("") + "</select>" +
       '<span class="small faint">' + counted(rows.length, "объект", "объекта", "объектов") + "</span></div>" +
-    '<div class="card"><div class="table-wrap"><table><thead><tr><th style="width:52px"></th><th>Объект</th><th>Тип</th><th>Город</th><th class="right">Цена</th><th>Статус</th><th class="right">Эффективность</th><th></th></tr></thead><tbody>' +
+    '<div class="card"><div class="table-wrap"><table><thead><tr><th class="thumb-xs"></th><th>Объект</th><th>Тип</th><th>Город</th><th class="right">Цена</th><th>Статус</th><th class="right">Эффективность</th><th></th></tr></thead><tbody>' +
     (rows.length ? rows.map(function (record, index) {
       var images = propertyImages(record, "ru");
       var stats = catalogPropertyStats(record);
@@ -175,7 +175,7 @@ async function openObjectInsights(id) {
       wide: true,
       body: '<div class="object-insights stack"><section class="object-insights-head">' +
           (image ? '<img src="' + imageUrl("objects", record.id, image) + '" alt="">' : '<span class="object-insights-placeholder">⌂</span>') +
-          '<div><h2>' + esc(title) + '</h2><div class="small muted">' + esc([record.reference, location].filter(Boolean).join(" · ") || "Без номера и расположения") + '</div><div class="row wrap" style="margin-top:7px"><span class="chip ' + statusKind(record.status) + '">' + esc(statusName(record.status)) + '</span><span class="small faint">данные обновлены ' + (stats.updatedAt ? ago(stats.updatedAt) : "ещё не собирались") + '</span></div></div></section>' +
+          '<div><h2>' + esc(title) + '</h2><div class="small muted">' + esc([record.reference, location].filter(Boolean).join(" · ") || "Без номера и расположения") + '</div><div class="row wrap gap-top"><span class="chip ' + statusKind(record.status) + '">' + esc(statusName(record.status)) + '</span><span class="small faint">данные обновлены ' + (stats.updatedAt ? ago(stats.updatedAt) : "ещё не собирались") + '</span></div></div></section>' +
         '<div class="grid cols-4 object-insight-kpis">' + kpiCard("Видели в каталоге", num(impressions), "показов карточки") + kpiCard("Открыли карточку", num(details), percent(details, impressions) + " от показов") + kpiCard("Заявки", num(inquiries), percent(inquiries, impressions) + " от показов") + kpiCard("Записались на просмотр", num(viewings), percent(viewings, inquiries) + " от заявок") + '</div>' +
         '<section class="card"><header><div><h3>Путь клиента</h3><span class="small muted">События считаются с момента последнего обнуления статистики</span></div></header><div class="card-body"><div class="object-path"><div><b>' + num(impressions) + '</b><span>видели в каталоге</span></div><i>→</i><div><b>' + num(details) + '</b><span>открыли карточку</span></div><i>→</i><div><b>' + num(inquiries) + '</b><span>оставили заявку</span></div><i>→</i><div><b>' + num(viewings) + '</b><span>записались на просмотр</span></div></div><div class="row wrap object-signal-summary"><span class="chip">❤️ Сейчас в избранном: ' + num(summary.favorites) + '</span><span class="chip">⚖️ Сравнивают: ' + num(summary.comparisons) + '</span><span class="chip">Открывали карточку: ' + num(summary.viewed) + '</span><span class="chip">Подходит по запросу: ' + num(summary.matches) + '</span><span class="chip">Галерея: ' + num(stats.galleries) + '</span><span class="chip">Связь с менеджером: ' + num(stats.managerContacts) + '</span></div></div></section>' +
         '<section class="card"><header><div><h3>Заинтересованные клиенты</h3><span class="small muted">Сначала показаны клиенты с заявками и сильными сигналами</span></div><span class="chip brand">' + num(summary.clients) + '</span></header>' +
@@ -273,7 +273,7 @@ function openRecordEditor(kind, id) {
           '<div class="hint">Включённая акция показывается только между датами начала и окончания включительно.</div>' +
           '<div class="field"><label>Ссылка</label><input id="fUrl" value="' + esc(record && record.url || "") + '"></div>' +
         "</div></details>") +
-    '</div><aside class="editor-preview-panel"><div class="editor-preview-head"><b>Как увидит клиент</b><span id="recordPreviewLanguage">Русский</span></div><div class="tg-preview" id="recordPreview"></div><div class="tg-note" style="margin-top:8px">Предпросмотр обновляется сразу. Telegram может незначительно изменить переносы строк.</div></aside></div>';
+    '</div><aside class="editor-preview-panel"><div class="editor-preview-head"><b>Как увидит клиент</b><span id="recordPreviewLanguage">Русский</span></div><div class="tg-preview" id="recordPreview"></div><div class="tg-note gap-top">Предпросмотр обновляется сразу. Telegram может незначительно изменить переносы строк.</div></aside></div>';
 
   openDialog({
     title: title,
@@ -560,7 +560,7 @@ function openRecordEditor(kind, id) {
 function renderOffers(host) {
   var rows = state.promotions || [];
   pageAction("＋ Акция", function () { openRecordEditor("promotions", null); });
-  host.innerHTML = '<div class="card"><div class="table-wrap"><table><thead><tr><th style="width:52px"></th><th>Акция</th><th>Срок</th><th>Показ</th><th></th></tr></thead><tbody>' +
+  host.innerHTML = '<div class="card"><div class="table-wrap"><table><thead><tr><th class="thumb-xs"></th><th>Акция</th><th>Срок</th><th>Показ</th><th></th></tr></thead><tbody>' +
     (rows.length ? rows.map(function (record) {
       var images = propertyImages(record, "ru");
       var displayStatus = promotionStatus(record);

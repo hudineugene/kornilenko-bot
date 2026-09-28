@@ -35,7 +35,7 @@ function renderCampaigns(host) {
   var history = (state.broadcasts || []).filter(function (entry) { return entry.status !== "draft" && entry.status !== "scheduled"; });
   pageAction("＋ Рассылка", function () { openCampaignEditor(null); });
   host.innerHTML =
-    (drafts.length ? '<div class="card" style="margin-bottom:12px"><header><h3>Черновики и запланированные</h3></header><div class="table-wrap"><table><thead><tr><th>Текст</th><th>Когда</th><th>Аудитория</th><th></th></tr></thead><tbody>' +
+    (drafts.length ? '<div class="card gap-bottom"><header><h3>Черновики и запланированные</h3></header><div class="table-wrap"><table><thead><tr><th>Текст</th><th>Когда</th><th>Аудитория</th><th></th></tr></thead><tbody>' +
       drafts.map(function (entry) {
         return '<tr data-id="' + esc(entry.id) + '"><td class="clickable" data-edit="1">' + esc(String(localized(entry.messages, "ru")).slice(0, 70)) + "</td>" +
           "<td>" + (entry.status === "scheduled" ? dateTime(entry.scheduledAt) : "черновик") + "</td>" +
@@ -79,7 +79,7 @@ function openCampaignEditor(id) {
       '<div class="editor-language"><div class="row wrap">' + languageTabs() + '<span class="hint">Сообщение для выбранного языка</span></div></div>' +
       '<details class="editor-section" open><summary><b>Сообщение</b><span>текст, изображение и кнопка</span></summary><div class="editor-section-body stack">' +
         '<div class="field"><label>Текст сообщения</label>' + LANGUAGES.map(function (language) {
-          return '<textarea data-tr="messages" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" style="min-height:150px" placeholder="Введите текст для ' + esc(language[1]) + '">' + esc((entry && entry.messages && entry.messages[language[0]]) || "") + "</textarea>";
+          return '<textarea data-tr="messages" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-lg" placeholder="Введите текст для ' + esc(language[1]) + '">' + esc((entry && entry.messages && entry.messages[language[0]]) || "") + "</textarea>";
         }).join("") + '<div class="hint">Подстановка <b>{first_name}</b> заменится именем клиента.</div></div>' +
         '<div class="grid cols-2"><div class="field"><label>Текст кнопки</label>' + LANGUAGES.map(function (language) {
           return '<input data-tr="buttonText" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc((entry && entry.buttonText && entry.buttonText[language[0]]) || "") + '" placeholder="Например: Посмотреть объект">';
@@ -101,7 +101,7 @@ function openCampaignEditor(id) {
       '<details class="editor-section" open><summary><b>Время отправки</b><span>сейчас или по расписанию</span></summary><div class="editor-section-body">' +
         '<div class="field"><label for="campDate">Отправить позже</label><input id="campDate" type="datetime-local" value="' + esc(entry && entry.scheduledAt ? dateTimeLocalValue(entry.scheduledAt) : "") + '"><div class="hint">Оставьте поле пустым для отправки сейчас. Часовой пояс: ' + esc(timeZoneName()) + "</div></div>" +
       "</div></details></div>" +
-      '<aside class="editor-preview-panel"><div class="editor-preview-head"><b>Предпросмотр Telegram</b><span id="campaignPreviewLanguage">Русский</span></div><div class="tg-preview" id="campaignPreview"></div><div class="tg-note" style="margin-top:8px">Имя в предпросмотре показано как пример. Перед отправкой бот подставит имя каждого клиента.</div></aside></div>',
+      '<aside class="editor-preview-panel"><div class="editor-preview-head"><b>Предпросмотр Telegram</b><span id="campaignPreviewLanguage">Русский</span></div><div class="tg-preview" id="campaignPreview"></div><div class="tg-note gap-top">Имя в предпросмотре показано как пример. Перед отправкой бот подставит имя каждого клиента.</div></aside></div>',
     footer: '<button class="btn secondary" id="campTest" type="button">Себе для проверки</button><div class="grow"></div>' +
       '<button class="btn secondary" id="campDraft" type="button">В черновик</button><button class="btn" id="campSend" type="button">Отправить</button>',
     ready: function (dialog) {
@@ -129,7 +129,7 @@ function openCampaignEditor(id) {
         preview.innerHTML = '<div class="tg-bubble">' + (imageUrlValue ? '<img src="' + esc(imageUrlValue) + '" alt="">' : "") +
           (message ? '<div class="tg-text">' + linkedPreview(message) + "</div>" : "") + "</div>" +
           (buttonText ? '<div class="tg-buttons"><div class="tg-button">' + esc(buttonText) + "</div></div>" : "") +
-          (buttonText && !buttonUrl ? '<div class="tg-note" style="color:var(--warn)">Добавьте ссылку для кнопки</div>' : "");
+          (buttonText && !buttonUrl ? '<div class="tg-note warn-text">Добавьте ссылку для кнопки</div>' : "");
       }
       dialog.querySelector("#campImage").onchange = function (event) {
         var file = event.target.files && event.target.files[0];
@@ -234,9 +234,9 @@ function groupCan(group, right) {
 
 // Группу, где бот уже состоит, Telegram сам не покажет: подключаем по ID.
 function connectGroupCard(compact) {
-  return '<div class="card"' + (compact ? ' style="margin-bottom:12px"' : "") + '><header><h3>Подключить группу или канал</h3></header><div class="card-body stack">' +
-    '<div class="row wrap"><input id="newGroupId" placeholder="-1001234567890 или @channel" style="max-width:260px">' +
-    '<button class="btn" id="connectGroup" type="button">Подключить</button></div>' +
+  return '<div class="card"' + (compact ? ' class="gap-bottom"' : "") + '><header><h3>Подключить группу или канал</h3></header><div class="card-body stack">' +
+    '<div class="row wrap"><input id="newGroupId" placeholder="-1001234567890 или @channel" class="field-xl">' +
+    '<button class="btn secondary" id="connectGroup" type="button">Подключить</button></div>' +
     '<div class="hint">Бот уже должен состоять там администратором. ID начинается с -100; у канала подойдёт и @имя. Новую группу или канал, куда бота добавят позже, панель увидит сама.</div>' +
   "</div></div>";
 }
@@ -298,7 +298,7 @@ function bindRubricPicker(host) {
     var ownPhoto = host.querySelector("#groupImage") && host.querySelector("#groupImage").files.length;
     var longText = ((host.querySelector("#groupText") || {}).value || "").length > 900;
     host.querySelector("#rubricPreview").innerHTML = rubric
-      ? '<img class="thumb" style="width:120px;height:auto;border-radius:6px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + '" alt=""> ' +
+      ? '<img class="thumb thumb-preview" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + '" alt=""> ' +
         (rubric.placement === "top"
           ? "плашка встанет над текстом"
           : rubric.placement === "separate"
@@ -320,7 +320,7 @@ function buttonsNote() {
   var list = (publishing().buttons || []).filter(function (button) { return button.text; });
   if (!list.length) return "";
   return '<div class="field"><span class="field-label">Кнопки под постом</span><div class="row wrap">' +
-    list.map(function (button) { return '<span class="chip brand" style="padding:6px 12px">' + esc(button.text) + "</span>"; }).join("") +
+    list.map(function (button) { return '<span class="chip brand pad-sm">' + esc(button.text) + "</span>"; }).join("") +
     '</div><div class="hint">Настраиваются во вкладке «Оформление постов».</div></div>';
 }
 
@@ -380,7 +380,7 @@ function renderGroups(host) {
   host.innerHTML = (groups.length > 1 ? '<div class="toolbar"><div class="tabs" id="groupPicker">' + groups.map(function (item) {
       return '<button type="button" data-group="' + esc(item.id) + '" class="' + (item.id === selectedGroup ? "active" : "") + '">' + esc(item.title || item.id) + "</button>";
     }).join("") + "</div></div>" : "") + '<div id="groupBody"></div>' +
-    '<div style="margin-top:12px">' + connectGroupCard(false) + "</div>";
+    '<div class="gap-top-lg">' + connectGroupCard(false) + "</div>";
   bindConnectGroup(host);
   host.querySelectorAll("#groupPicker button").forEach(function (button) {
     button.onclick = function () { selectedGroup = button.dataset.group; renderGroups(host); };
@@ -407,17 +407,17 @@ function renderGroupCard(host, group) {
   var admin = group.status === "administrator" || group.status === "creator";
   var pinned = (group.messages || []).find(function (message) { return message.messageId === group.pinnedMessageId; });
   host.innerHTML =
-    '<div class="grid cols-4" style="margin-bottom:12px">' +
+    '<div class="grid cols-4 gap-bottom">' +
       kpiCard(membersWord(group), num(group.memberCount), groupKindName(group)) +
       kpiCard("Права бота", admin ? "администратор" : "участник", admin ? "" : "назначьте администратором", admin ? "up" : "down") +
       kpiCard("Сообщений видно", num((group.messages || []).length), "из последних 200") +
       kpiCard("Заявок на вступление", num((group.joinRequests || []).length), (group.joinRequests || []).length ? "ждут решения" : "") +
     "</div>" +
-    (group.lastError ? '<div class="card" style="margin-bottom:12px"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
+    (group.lastError ? '<div class="card gap-bottom"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
     '<div class="split"><div class="stack">' +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Опубликовать в канале" : "Написать в группу") + '</h3></header><div class="card-body stack">' +
         markupToolbar("groupText") +
-        '<textarea id="groupText" placeholder="' + (group.type === "channel" ? "Текст поста от имени канала" : "Текст сообщения от имени бота") + '" style="min-height:110px"></textarea>' +
+        '<textarea id="groupText" placeholder="' + (group.type === "channel" ? "Текст поста от имени канала" : "Текст сообщения от имени бота") + '" class="area-sm"></textarea>' +
         '<div class="hint">Ссылка надписью: <code>[смотреть объекты](https://t.me/…)</code></div>' +
         '<div class="grid cols-2"><div class="field"><label for="groupButtonText">Кнопка (необязательно)</label><input id="groupButtonText" placeholder="Смотреть объекты"></div>' +
         '<div class="field"><label for="groupButtonUrl">Ссылка кнопки</label><input id="groupButtonUrl" placeholder="https://t.me/…"></div></div>' +
@@ -528,7 +528,7 @@ function renderGroupCard(host, group) {
       return;
     }
     var signatureHtml = view.signature
-      ? '<div class="' + (view.quote ? "tg-quote" : "") + '" ' + (view.quote ? "" : 'style="margin-top:8px"') + ">" +
+      ? '<div class="' + (view.quote ? "tg-quote" : "") + '" ' + (view.quote ? "" : 'class="gap-top"') + ">" +
         (view.divider ? esc(view.divider) + "\n" : "") + linkedPreview(view.signature) + "</div>"
       : "";
     var textHtml = (view.body || signatureHtml)
@@ -752,7 +752,7 @@ function checkPlateWidth(row, index, onPad) {
     var small = picture.naturalWidth < 1280;
     note.innerHTML = picture.naturalWidth + "×" + picture.naturalHeight + " (" + ratio.toFixed(1) + ":1)" +
       (narrow ? " — узкая: текст под ней будет сжат." : small ? " — для чёткости лучше 1280 точек по ширине." : "") +
-      (flat ? ' — слишком вытянутая: Telegram добавит размытый фон сверху и снизу. <select data-padratio="' + index + '" style="width:auto;display:inline-block;padding:2px 6px"><option value="3">до 3:1</option><option value="2.5">до 2,5:1</option><option value="2">до 2:1</option><option value="1.78">до 16:9</option></select> <input type="color" data-padcolor="' + index + '" value="#ffffff" style="width:34px;height:24px;padding:0;vertical-align:middle"> <label class="check" style="display:inline-flex"><input type="checkbox" data-padtransparent="' + index + '"> прозрачный</label> <button class="btn ghost small" data-pad="' + index + '" type="button">Дорисовать фон</button>' : "");
+      (flat ? ' — слишком вытянутая: Telegram добавит размытый фон сверху и снизу. <select data-padratio="' + index + '" class="chip-inline"><option value="3">до 3:1</option><option value="2.5">до 2,5:1</option><option value="2">до 2:1</option><option value="1.78">до 16:9</option></select> <input type="color" data-padcolor="' + index + '" value="#ffffff" class="switch-inline"> <label class="check inline-flex"><input type="checkbox" data-padtransparent="' + index + '"> прозрачный</label> <button class="btn ghost small" data-pad="' + index + '" type="button">Дорисовать фон</button>' : "");
     note.style.color = narrow || flat ? "var(--warn)" : "var(--faint)";
     var padButton = note.querySelector("[data-pad]");
     if (padButton) {
@@ -784,7 +784,7 @@ function renderPostStyle(host) {
       '<div class="card"><header><h3>Постоянная подпись</h3></header><div class="card-body stack">' +
         '<p class="muted small">Добавляется в конце каждого поста в группу или канал. Сюда обычно ставят контакты, сайт и ссылки на соцсети — ссылки Telegram сделает кликабельными сам.</p>' +
         '<label class="switch"><input type="checkbox" id="signOn"' + (draft.signatureEnabled ? " checked" : "") + '><span class="track"></span><span>Подпись включена</span></label>' +
-        '<div class="field"><label for="signText">Текст подписи</label>' + markupToolbar("signText") + '<textarea id="signText" style="min-height:130px" placeholder="Construcciones Kornilenko&#10;+34 664 17 96 37&#10;https://t.me/имя_бота">' + esc(draft.signature) + "</textarea></div>" +
+        '<div class="field"><label for="signText">Текст подписи</label>' + markupToolbar("signText") + '<textarea id="signText" class="area-md" placeholder="Construcciones Kornilenko&#10;+34 664 17 96 37&#10;https://t.me/имя_бота">' + esc(draft.signature) + "</textarea></div>" +
         '<div class="field"><label for="signWrap">Переносы строк</label><select id="signWrap">' +
           '<option value="keep"' + (draft.signatureWrap === "keep" ? " selected" : "") + '>как набрано</option>' +
           '<option value="space"' + (draft.signatureWrap === "space" ? " selected" : "") + '>одной строкой (перенос по ширине)</option>' +
@@ -797,18 +797,18 @@ function renderPostStyle(host) {
             return '<option value="' + option[0] + '"' + (draft.signatureDivider === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
           }).join("") +
         '</select><div class="hint">Длинная линия задаёт ширину сообщения: блок подписи перестаёт быть узким и виден сразу.</div></div>' +
-        '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div><div id="signCodes" class="hint" style="color:var(--warn)"></div></div>' +
+        '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div><div id="signCodes" class="hint warn-text"></div></div>' +
         '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
       "</div></div>" +
       '<div class="card"><header><h3>Кнопки под постом</h3><div class="actions"><button class="btn secondary small" id="addButton" type="button">＋ Кнопка</button></div></header><div class="card-body stack">' +
         '<p class="muted small">Кнопки идут под каждым постом и ведут по ссылке. По ним удобно попадать с телефона, и в них видно, куда ведёт ссылка. Значок ставится прямо в названии: «🎵 ТикТок».</p>' +
         (buttons.length ? buttons.map(function (button, index) {
           return '<div class="row wrap" data-button="' + index + '">' +
-            '<input data-bfield="text" value="' + esc(button.text || "") + '" placeholder="🎵 ТикТок" style="max-width:190px">' +
+            '<input data-bfield="text" value="' + esc(button.text || "") + '" placeholder="🎵 ТикТок" class="field-md">' +
             '<input data-bfield="url" value="' + esc(button.url || "") + '" placeholder="https://..." class="grow">' +
             '<button class="btn ghost small" data-bdrop="' + index + '" type="button">✕</button></div>';
         }).join("") : '<span class="muted small">Кнопок нет.</span>') +
-        '<div class="field"><label for="btnPerRow">Кнопок в ряд</label><select id="btnPerRow" style="max-width:140px">' +
+        '<div class="field"><label for="btnPerRow">Кнопок в ряд</label><select id="btnPerRow" class="field-xs">' +
           [1, 2, 3].map(function (value) { return '<option value="' + value + '"' + (perRow === value ? " selected" : "") + ">" + value + "</option>"; }).join("") +
         "</select></div>" +
         '<div class="field"><span class="field-label">Так будет выглядеть</span><div id="btnPreview" class="row wrap"></div></div>' +
@@ -820,15 +820,15 @@ function renderPostStyle(host) {
           '<b>Над текстом</b> — плашка становится картинкой поста, текст под ней.</p>' +
         '<div id="plateSizes" class="hint"></div>' +
         (rubrics.length ? rubrics.map(function (rubric, index) {
-          return '<div class="row wrap" data-rubric="' + index + '" style="border-top:1px solid var(--line-soft);padding-top:8px">' +
-            (rubric.pendingImage ? '<img class="thumb" style="width:74px;height:52px" src="' + rubric.pendingImage + '" alt="">' : rubric.image && rubric.image.exists ? '<img class="thumb" style="width:74px;height:52px" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + "?rev=" + encodeURIComponent(rubric.image.updatedAt || "") + '" alt="">' : '<span class="thumb" style="width:74px;height:52px"></span>') +
-            '<input data-field="name" value="' + esc(rubric.name || "") + '" placeholder="Название рубрики" style="max-width:220px">' +
-            '<select data-field="placement" style="max-width:210px">' +
+          return '<div class="row wrap" data-rubric="' + index + '" class="divided">' +
+            (rubric.pendingImage ? '<img class="thumb thumb-sm" src="' + rubric.pendingImage + '" alt="">' : rubric.image && rubric.image.exists ? '<img class="thumb thumb-sm" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + "?rev=" + encodeURIComponent(rubric.image.updatedAt || "") + '" alt="">' : '<span class="thumb thumb-sm"></span>') +
+            '<input data-field="name" value="' + esc(rubric.name || "") + '" placeholder="Название рубрики" class="field-lg">' +
+            '<select data-field="placement" class="field-lg">' +
               '<option value="bottom"' + (rubric.placement === "bottom" || !rubric.placement ? " selected" : "") + '>внизу сообщения</option>' +
               '<option value="separate"' + (rubric.placement === "separate" ? " selected" : "") + '>отдельным сообщением</option>' +
               '<option value="top"' + (rubric.placement === "top" ? " selected" : "") + ">над текстом</option>" +
             "</select>" +
-            '<input type="file" accept="image/jpeg,image/png" data-file="' + index + '" style="max-width:190px">' +
+            '<input type="file" accept="image/jpeg,image/png" data-file="' + index + '" class="field-md">' +
             '<button class="btn ghost small" data-drop="' + index + '" type="button">✕</button></div>';
         }).join("") : '<span class="muted small">Рубрик пока нет.</span>') +
       "</div></div></div>";
@@ -868,9 +868,9 @@ function renderPostStyle(host) {
       var tooLong = visible.filter(function (button) { return [...button.text].length > limit; });
       box.innerHTML = (visible.map(function (button) {
         var long = [...button.text].length > limit;
-        return '<span class="chip ' + (long ? "warn" : "brand") + '" style="padding:6px 12px">' + esc(button.text) + "</span>";
+        return '<span class="chip ' + (long ? "warn" : "brand") + '" class="pad-sm">' + esc(button.text) + "</span>";
       }).join("") || '<span class="muted small">кнопок нет</span>') +
-        (tooLong.length ? '<div class="hint" style="flex-basis:100%;color:var(--warn)">При ' + perRow + ' кнопках в ряд на телефоне помещается около ' + limit + ' знаков — подписи длиннее обрежутся многоточием. Уменьшите число кнопок в ряд или сократите названия.</div>' : "");
+        (tooLong.length ? '<div class="hint warn-line">При ' + perRow + ' кнопках в ряд на телефоне помещается около ' + limit + ' знаков — подписи длиннее обрежутся многоточием. Уменьшите число кнопок в ряд или сократите названия.</div>' : "");
     };
     drawButtonPreview();
     host.querySelectorAll("[data-button]").forEach(function (row) {

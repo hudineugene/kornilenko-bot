@@ -134,7 +134,7 @@ VIEWS.today = {
           "</div>" +
           '<div class="card"><header><h3>Сообщения и заявки, 14 дней</h3></header><div class="card-body">' +
             sparkline(weekDays, "received", "var(--brand)") +
-            '<div class="legend"><span><i style="background:var(--brand)"></i>сообщения от клиентов</span><span>' + num(sumDays(weekDays, "received")) + " за 14 дней · " + num(sumDays(weekDays, "inquiries")) + " заявок</span></div>" +
+            '<div class="legend"><span><i class="brand-dot"></i>сообщения от клиентов</span><span>' + num(sumDays(weekDays, "received")) + " за 14 дней · " + num(sumDays(weekDays, "inquiries")) + " заявок</span></div>" +
           "</div></div>" +
         "</div>" +
         '<div class="stack">' +
@@ -228,7 +228,7 @@ function sourceLinkCard() {
   var username = (state.bot || {}).username || "";
   return '<div class="card"><header><h3>Ссылки с меткой источника</h3></header><div class="card-body stack">' +
     '<p class="muted small">Разместите такую ссылку в рекламе или соцсетях — в карточке клиента, уведомлениях и выгрузке будет видно, откуда он пришёл.</p>' +
-    '<div class="row"><input id="sourceLabel" placeholder="instagram" style="max-width:200px"><button class="btn secondary small" id="makeSourceLink" type="button">Собрать ссылку</button></div>' +
+    '<div class="row"><input id="sourceLabel" placeholder="instagram" class="field-md"><button class="btn secondary small" id="makeSourceLink" type="button">Собрать ссылку</button></div>' +
     '<div class="row"><input id="sourceLink" readonly value="' + (username ? esc("https://t.me/" + username + "?start=src_метка") : "Сначала подключите бота") + '"><button class="btn ghost small" id="copySourceLink" type="button">Копировать</button></div>' +
   "</div></div>";
 }
@@ -276,21 +276,21 @@ VIEWS.reports = {
     var campaigns = (state.broadcasts || []).filter(function (entry) { return entry.sent; });
 
     host.innerHTML =
-      '<div class="grid cols-4" style="margin-bottom:12px">' +
+      '<div class="grid cols-4 gap-bottom">' +
         kpiCard("Всего клиентов", num(state.userCount), "+" + usersInRange(week) + " за 7 дней") +
         kpiCard("Сообщений за 30 дней", num(sumDays(days, "received"))) +
         kpiCard("Заявок за 30 дней", num(sumDays(days, "inquiries"))) +
         kpiCard("Конверсия в заявку", (state.userCount ? Math.round((inquiryUsers / state.userCount) * 100) : 0) + "%", "клиенты, оставившие заявку") +
       "</div>" +
-      '<div class="card" style="margin-bottom:12px"><header><h3>Активность за 30 дней</h3></header><div class="card-body">' +
+      '<div class="card gap-bottom"><header><h3>Активность за 30 дней</h3></header><div class="card-body">' +
         sparkline(days, "received", "var(--brand)") +
-        '<div class="legend"><span><i style="background:var(--brand)"></i>сообщения</span><span>заявок: ' + num(sumDays(days, "inquiries")) + " · новых клиентов: " + num(usersInRange(Date.now() - 30 * 864e5)) + "</span></div>" +
+        '<div class="legend"><span><i class="brand-dot"></i>сообщения</span><span>заявок: ' + num(sumDays(days, "inquiries")) + " · новых клиентов: " + num(usersInRange(Date.now() - 30 * 864e5)) + "</span></div>" +
       "</div></div>" +
-      '<div class="grid cols-2" style="margin-bottom:12px">' +
+      '<div class="grid cols-2 gap-bottom">' +
         '<div class="card"><header><h3>Заявки по типам</h3></header>' + barList(typeRows, inquiries.length) + "</div>" +
         '<div class="card"><header><h3>Откуда приходят клиенты</h3></header>' + barList(sources, state.userCount) + "</div>" +
       "</div>" +
-      '<div class="grid cols-2" style="margin-bottom:12px">' +
+      '<div class="grid cols-2 gap-bottom">' +
         sourceLinkCard() +
         '<div class="card"><header><h3>Языки клиентов</h3></header>' + barList(Object.keys(languages).filter(function (code) { return languages[code]; }).map(function (code) {
           return [{ ru: "Русский", en: "English", es: "Español", unknown: "Язык не выбран" }[code] || code, languages[code]];
@@ -302,7 +302,7 @@ VIEWS.reports = {
             }).join("") + "</tbody></table></div>" : '<div class="empty">Рассылок ещё не было</div>') +
         "</div>" +
       "</div>" +
-      '<div class="card" style="margin-bottom:12px"><header><h3>Реакции клиентов</h3><div class="actions"><span class="small faint">всего ' + num((state.stats || {}).reactionsReceived) + "</span></div></header>" +
+      '<div class="card gap-bottom"><header><h3>Реакции клиентов</h3><div class="actions"><span class="small faint">всего ' + num((state.stats || {}).reactionsReceived) + "</span></div></header>" +
         (recentReactions().length ? '<div class="list">' + recentReactions().map(function (event) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(event.user.firstName)) + '</span><span class="grow"><b>' + esc(userName(event.user)) + "</b> " + esc(event.item.text || "") + "</span>" +
             '<span class="small faint">' + ago(event.item.createdAt) + "</span></div>";

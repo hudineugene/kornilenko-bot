@@ -152,7 +152,7 @@ function renderConnection(host) {
     var list = host.querySelector("#managerList");
     list.innerHTML = managers.length ? managers.map(function (manager, index) {
       return '<div class="row" data-manager="' + index + '"><input class="grow" data-field="name" value="' + esc(manager.name || "") + '" placeholder="Имя">' +
-        '<input style="max-width:170px" data-field="chatId" value="' + esc(manager.chatId || "") + '" placeholder="Telegram-чат">' +
+        '<input class="field-sm" data-field="chatId" value="' + esc(manager.chatId || "") + '" placeholder="Telegram-чат">' +
         (manager.verifiedAt ? '<span class="chip ok">ок</span>' : manager.id ? '<button class="btn ghost small" data-test="' + esc(manager.id) + '" type="button">Тест</button>' : "") +
         '<button class="btn ghost small" data-drop="' + index + '" type="button">✕</button></div>';
     }).join("") : '<span class="muted small">Менеджеров нет — заявки приходят только администратору.</span>';
@@ -312,7 +312,7 @@ function renderData(host) {
     '<div class="card"><header><h3>Резервная копия</h3></header><div class="card-body stack">' +
       '<p class="muted small">Копия содержит объекты, тексты, клиентов, заявки и фотографии. Храните её в надёжном месте.</p>' +
       '<div class="row wrap"><button class="btn secondary" id="downloadBackup" type="button">⬇ Скачать копию</button>' +
-      '<label class="btn ghost" style="cursor:pointer">⬆ Восстановить<input type="file" id="restoreFile" accept=".kbz,.json,.gz,.kbk,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
+      '<label class="btn ghost clickable-area">⬆ Восстановить<input type="file" id="restoreFile" accept=".kbz,.json,.gz,.kbk,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
       '<div class="hint">Подходит любая копия, сделанная ботом: скачанная этой кнопкой, из папки <b>backups</b> рядом с ботом или присланная в Telegram (для неё понадобится пароль копии). Ежедневная копия создаётся сама. Перед восстановлением прежние данные бот складывает в ту же папку — вернуться будет куда.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack">' +

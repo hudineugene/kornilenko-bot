@@ -11,10 +11,10 @@ function renderWelcome(host) {
   host.innerHTML = '<div class="split"><div class="card"><header><h3>Сообщения бота</h3></header><div class="card-body stack" id="welcomeForm">' +
       languageTabs() +
       '<div class="field"><label>Приветствие (/start)</label>' + LANGUAGES.map(function (language) {
-        return '<textarea data-tr="greeting" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" style="min-height:120px">' + esc((messages[language[0]] || {}).greeting || "") + "</textarea>";
+        return '<textarea data-tr="greeting" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-sm">' + esc((messages[language[0]] || {}).greeting || "") + "</textarea>";
       }).join("") + '<div class="hint">Можно использовать {first_name}, {last_name}, {username}</div></div>' +
       '<div class="field"><label>Помощь (/help)</label>' + LANGUAGES.map(function (language) {
-        return '<textarea data-tr="help" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" style="min-height:150px">' + esc((messages[language[0]] || {}).help || "") + "</textarea>";
+        return '<textarea data-tr="help" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-lg">' + esc((messages[language[0]] || {}).help || "") + "</textarea>";
       }).join("") + "</div>" +
       '<div class="field"><label>Если бот не понял сообщение</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-tr="fallback" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((messages[language[0]] || {}).fallback || "") + "</textarea>";
@@ -22,14 +22,14 @@ function renderWelcome(host) {
       '<div class="field"><span class="field-label">Картинка приветствия</span>' + LANGUAGES.map(function (language) {
         var image = images[language[0]] || {};
         return '<div data-langpane="' + language[0] + '" class="' + (language[0] === "ru" ? "" : "hidden") + '">' +
-          (image.exists ? '<img class="thumb" style="width:130px;height:90px" src="/api/images/' + language[0] + '/welcome?rev=' + encodeURIComponent(image.updatedAt || "") + '" alt="">' : '<span class="muted small">Картинки нет</span>') +
+          (image.exists ? '<img class="thumb thumb-md" src="/api/images/' + language[0] + '/welcome?rev=' + encodeURIComponent(image.updatedAt || "") + '" alt="">' : '<span class="muted small">Картинки нет</span>') +
           '<div class="row"><input type="file" accept="image/jpeg,image/png" data-welcome="' + language[0] + '">' +
           (image.exists ? '<button class="btn ghost small" type="button" data-drop="' + language[0] + '">Удалить</button>' : "") + "</div></div>";
       }).join("") + "</div>" +
     "</div></div>" +
     '<div class="card"><header><h3>Как это выглядит у клиента</h3></header><div class="card-body">' +
       '<div class="msg" id="welcomePreview">' + esc((messages.ru || {}).greeting || "") + "</div>" +
-      '<div class="hint" style="margin-top:8px">Кнопки меню настраиваются во вкладке «Интерфейс» → «Кнопки главного меню».</div>' +
+      '<div class="hint gap-top">Кнопки меню настраиваются во вкладке «Интерфейс» → «Кнопки главного меню».</div>' +
     "</div></div></div>";
 
   bindLanguageTabs(host);
@@ -195,7 +195,7 @@ function openRuleEditor(id) {
         return '<option value="' + type[0] + '"' + (rule && rule.type === type[0] ? " selected" : "") + ">" + type[1] + "</option>";
       }).join("") + "</select></div>" +
       '<div class="field"><label for="rLang">Язык</label><select id="rLang"><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option><option value="all">Любой</option></select></div></div>' +
-      '<div class="field"><label for="rAnswer">Ответ бота</label><textarea id="rAnswer" style="min-height:120px">' + esc(rule && rule.answer || "") + "</textarea></div>" +
+      '<div class="field"><label for="rAnswer">Ответ бота</label><textarea id="rAnswer" class="area-sm">' + esc(rule && rule.answer || "") + "</textarea></div>" +
       '<label class="check"><input type="checkbox" id="rEnabled"' + (!rule || rule.enabled !== false ? " checked" : "") + "> автоответ включён</label></div>",
     footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveRule" type="button">Сохранить</button>',
     ready: function (dialog) {
@@ -266,8 +266,8 @@ async function renderInterface(host) {
     '<div class="card" id="interfaceForm"><div class="card-body stack">' + languageTabs() + "</div>" +
     INTERFACE_GROUPS.filter(function (group) { return texts[group[0]]; }).map(function (group) {
       var keys = Object.keys(texts[group[0]].ru || {});
-      return '<details class="card" style="border:0;box-shadow:none;border-top:1px solid var(--line-soft);border-radius:0"' + (interfaceGroupOpen === group[0] ? " open" : "") + ' data-group="' + group[0] + '">' +
-        '<summary style="padding:10px 14px;cursor:pointer"><b>' + esc(group[1]) + '</b> <span class="small faint">' + counted(keys.length, "текст", "текста", "текстов") + "</span></summary>" +
+      return '<details class="card flat-divided"' + (interfaceGroupOpen === group[0] ? " open" : "") + ' data-group="' + group[0] + '">' +
+        '<summary class="pad-md"><b>' + esc(group[1]) + '</b> <span class="small faint">' + counted(keys.length, "текст", "текста", "текстов") + "</span></summary>" +
         '<div class="card-body grid cols-2">' + keys.map(function (key) {
           var value = (texts[group[0]].ru || {})[key];
           if (Array.isArray(value)) {
