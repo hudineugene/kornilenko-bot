@@ -262,6 +262,9 @@ async function confirmViewingOnce(inquiry, options, token) {
   });
   inquiry.replies = inquiry.replies.slice(-50);
   if (inquiry.status !== 'in_progress') inquiry.status = 'in_progress';
+  // Подтверждённый просмотр сам двигает воронку: менеджеру не надо помнить
+  // про отдельный выпадающий список.
+  inquiry.pipelineStage = 'viewing';
   inquiry.updatedAt = new Date().toISOString();
   saveDataNow();
   return inquiry;

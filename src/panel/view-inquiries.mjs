@@ -101,12 +101,8 @@ function selectionMatchingPanel(item) {
   return '<div class="card flat"><header><h3>Автоматический подбор</h3><div class="actions"><span class="chip ok">точно ' + counts.exact + '</span><span class="chip warn">близко ' + counts.close + '</span><span class="chip">рассмотреть ' + counts.consider + '</span></div></header><div class="list">' + rows + '</div></div>';
 }
 function statusChip(item) {
-  if (item.status === "closed") return '<span class="chip">закрыто</span>';
-  // Клиент искал сам и получил каталог: это лид, а не вопрос без ответа.
-  if (item.searchLead) return '<span class="chip">ответ не нужен</span>';
-  if (awaitsReply(item)) return '<span class="chip bad">ждёт ответа</span>';
-  if (item.status === "in_progress") return '<span class="chip warn">в работе</span>';
-  return '<span class="chip">новое</span>';
+  var state = inquiryState(item);
+  return '<span class="chip ' + state.chip + '">' + state.text + "</span>";
 }
 function inquiryUnread(item) {
   var incoming = (item.messages || []).filter(function (message) { return message.direction === "in"; }).map(function (message) { return Date.parse(message.createdAt) || 0; });
@@ -203,7 +199,7 @@ function pipelineCardHtml(row) {
     '<button class="funnel-open" data-inquiry="' + esc(item.id) + '" type="button"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><span class="funnel-person"><b>' + esc(userName(user)) + '</b><small>' + esc(inquiryTypeName(item)) + '</small></span><span class="funnel-arrow">→</span></button>' +
     (property ? '<div class="funnel-property">⌂ ' + esc(localized(property.title, "ru") || property.reference || property.id) + '</div>' : "") +
     '<div class="funnel-signals">' +
-      (row.group.waiting ? '<span class="chip bad">ждёт ответа</span>' : '<span class="chip ok">ответили</span>') +
+      (row.group.waiting ? '<span class="chip bad">Ждёт ответа</span>' : '<span class="chip ok">Отвечено</span>') +
       (item.assignee ? '<span class="chip">' + esc(item.assignee) + '</span>' : '<span class="chip warn">без менеджера</span>') +
       (item.followUpDate ? '<span class="chip ' + (due ? "bad" : "") + '">⏱ ' + pipelineDate(item.followUpDate) + (item.followUpTime ? " " + esc(item.followUpTime) : "") + '</span>' : "") +
     '</div><select class="pipeline-stage-select" data-pipeline-stage="' + esc(item.id) + '" aria-label="Этап воронки">' + pipelineStageOptions(row.stage, false) + '</select></article>';
@@ -688,7 +684,7 @@ function renderInquiryCard(host) {
     '<div class="card-body conversation-body conversation-split">' +
       '<div class="conversation-main">' +
       '<div class="conversation-context">' +
-        (related.length > 1 ? '<div class="field grow"><label>Текущая заявка</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + (entry.status === "closed" ? "закрыто" : awaitsReply(entry) ? "ждёт ответа" : "в работе") + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущая заявка</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
+        (related.length > 1 ? '<div class="field grow"><label>Текущая заявка</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + inquiryState(entry).text + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущая заявка</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
         (property ? '<button class="property-link" id="linkedProperty" type="button">🏠 ' + esc(localized(property.title, "ru") || property.reference || property.id) + '<span>Открыть →</span></button>' : item.propertyId ? '<div class="chip bad">Связанный объект удалён</div>' : "") +
       '</div>' +
       '<div class="conversation-thread">' + (timeline.length
@@ -703,7 +699,7 @@ function renderInquiryCard(host) {
       '<textarea id="replyText" maxlength="3800" placeholder="Напишите сообщение клиенту…"></textarea>' +
       '<div class="reply-attachments"><input class="hidden" id="replyFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,application/pdf,text/plain"><label class="btn secondary small" for="replyFile">📎 Добавить файл</label><span class="reply-file-name muted" id="replyFileName">Фотография до 5 МБ или документ до 10 МБ</span><button class="btn ghost small hidden" id="clearReplyFile" type="button">Убрать</button></div>' +
       '<div class="reply-delivery hidden" id="replyDelivery" aria-live="polite"><span id="replyDeliveryText"></span><button class="btn ghost small hidden" id="retryReply" type="button">Повторить отправку</button></div>' +
-      '<div class="reply-actions"><button class="btn" id="sendReply" type="button">Отправить сообщение</button><label class="check"><input type="checkbox" id="keepOpen"> оставить диалог в работе</label></div></div>' +
+      '<div class="reply-actions"><button class="btn" id="sendReply" type="button">Отправить сообщение</button><span class="small muted">После ответа заявка станет «Отвечено». Закрыть её можно справа.</span></div></div>' +
       '</div>' +
       // Справа — всё, что менеджер меняет по этому клиенту. Одна панель, одна
       // кнопка сохранения: раньше статус сохранялся сам по нажатию, а этап,
@@ -712,9 +708,11 @@ function renderInquiryCard(host) {
         selectionMatchingPanel(item) +
         (viewing ? '<div class="msg">📅 ' + esc((viewing.confirmedDate || viewing.dateText || "дата не выбрана") + " · " + (viewing.confirmedTime || viewing.timeText || "")) + (viewing.confirmedAt ? '<br><span class="small ok-text">просмотр подтверждён</span>' : '<br><span class="small warn-text">нужно подтвердить просмотр</span>') + "</div>" : "") +
         (viewing && !viewing.cancelledAt ? '<button class="btn secondary small" id="scheduleViewing" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + '</button>' : "") +
-        '<div class="field"><label for="inqStatusValue">Статус заявки</label><select id="inqStatusValue">' +
-          [["new", "Ждёт ответа"], ["in_progress", "В работе"], ["closed", "Закрыт"]].map(function (option) {
-            return '<option value="' + option[0] + '"' + (String(item.status || "new") === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
+        // «Ждёт ответа» и «Отвечено» бот ставит сам по переписке — руками
+        // остаётся только закрыть заявку или вернуть её в работу.
+        '<div class="field"><label for="inqStatusValue">Заявка</label><select id="inqStatusValue">' +
+          [["open", "Открыта · " + inquiryState(item).text], ["closed", "Закрыта"]].map(function (option) {
+            return '<option value="' + option[0] + '"' + ((item.status === "closed" ? "closed" : "open") === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
           }).join("") + '</select></div>' +
         '<div class="field"><label for="inqPipeline">Этап воронки</label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div>' +
         '<div class="field"><label for="inqAssignee">Ответственный менеджер</label><select id="inqAssignee"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div>' +
@@ -811,7 +809,7 @@ function renderInquiryCard(host) {
     if (!text && !replyAttachment) return toast("Введите сообщение или добавьте файл", true);
     if (replyAttachment && text.length > 800) return toast("С вложением подпись должна быть не длиннее 800 знаков", true);
     var button = host.querySelector("#sendReply");
-    var payload = { text: text, keepOpen: host.querySelector("#keepOpen").checked, clientRequestId: requestId() };
+    var payload = { text: text, clientRequestId: requestId() };
     if (replyTarget) payload.replyToMessageId = replyTarget.telegramMessageId;
     if (replyAttachment && replyAttachment.kind === "image") { payload.imageDataUrl = replyAttachment.dataUrl; payload.imageName = replyAttachment.name; }
     if (replyAttachment && replyAttachment.kind === "document") { payload.documentDataUrl = replyAttachment.dataUrl; payload.documentName = replyAttachment.name; }
@@ -841,7 +839,6 @@ function renderInquiryCard(host) {
   host.querySelector("#sendReply").onclick = sendReply;
   retryReply.onclick = sendReply;
   replyText.oninput = freshRequest;
-  host.querySelector("#keepOpen").onchange = freshRequest;
   var templates = host.querySelector("#replyTemplate");
   if (templates) templates.onchange = function () {
     var template = (state.replyTemplates || []).find(function (entry) { return entry.id === templates.value; });
@@ -851,7 +848,7 @@ function renderInquiryCard(host) {
   host.querySelector("#saveInq").onclick = async function () {
     try {
       await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", {
-        status: host.querySelector("#inqStatusValue").value,
+        status: host.querySelector("#inqStatusValue").value === "closed" ? "closed" : (item.status === "closed" ? "in_progress" : item.status || "new"),
         note: host.querySelector("#inqNote").value,
         followUpDate: host.querySelector("#followDate").value,
         followUpTime: host.querySelector("#followTime").value,

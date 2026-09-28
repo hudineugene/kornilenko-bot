@@ -238,6 +238,34 @@ test('a direct message from the client card is stored in the unified conversatio
   }
 });
 
+test('an answer leaves the inquiry open and moves the funnel by itself', async () => {
+  const client = createChat({ firstName: 'Павел' });
+  await client.say('Сколько стоит содержание виллы?');
+  const inquiry = client.inquiries[0];
+  assert.equal(inquiry.status, 'new');
+  const data = bot.getData();
+  const password = bot.hashPassword('correct-password');
+  data.config.passwordSalt = password.salt;
+  data.config.passwordHash = password.hash;
+  data.config.adminName = 'Олег';
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = 'http://127.0.0.1:' + bot.server.address().port;
+    const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
+    const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+    const response = await realFetch(base + '/api/inquiries/' + inquiry.id + '/reply', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ text: 'Около 4 000 € в год', clientRequestId: 'plain-answer-0001' }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(inquiry.status, 'in_progress', 'ответ не закрывает переписку');
+    assert.equal(inquiry.pipelineStage, 'contact', 'первый ответ сам сдвигает воронку с «Новый»');
+  } finally {
+    await new Promise((resolve) => bot.server.close(resolve));
+  }
+});
+
 test('the conversation sends photos and documents, quotes a client message and deduplicates retries', async () => {
   const client = createChat({ firstName: 'Ирина' });
   await client.say('Покажите, пожалуйста, план и презентацию');
@@ -254,7 +282,7 @@ test('the conversation sends photos and documents, quotes a client message and d
     const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'correct-password' }) });
     const headers = { 'content-type': 'application/json', cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
     const imageDataUrl = 'data:image/png;base64,' + Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('panel photo')]).toString('base64');
-    const photoPayload = { text: 'Вот планировка', imageDataUrl, imageName: 'plan.png', replyToMessageId: sourceMessageId, clientRequestId: 'photo-request-12345', keepOpen: true };
+    const photoPayload = { text: 'Вот планировка', imageDataUrl, imageName: 'plan.png', replyToMessageId: sourceMessageId, clientRequestId: 'photo-request-12345' };
     const beforePhoto = telegram.calls.length;
     const photoResponse = await realFetch(base + '/api/inquiries/' + inquiry.id + '/reply', { method: 'POST', headers, body: JSON.stringify(photoPayload) });
     assert.equal(photoResponse.status, 200);

@@ -529,7 +529,12 @@ async function handleClientsApi(req, res, url) {
         deliveryStatus: 'delivered',
         clientRequestId,
       }));
-      inquiry.status = body.keepOpen ? 'in_progress' : 'closed';
+      // Ответ не закрывает заявку: закрытие — отдельное решение человека.
+      // Раньше галочка «оставить диалог в работе» решала это за менеджера, и
+      // живые переписки закрывались сами собой.
+      inquiry.status = 'in_progress';
+      // Первый ответ сдвигает воронку с «Новый» на «Контакт» сам.
+      if (!inquiry.pipelineStage || inquiry.pipelineStage === 'new') inquiry.pipelineStage = 'contact';
       inquiry.readAt = createdAt;
       inquiry.updatedAt = createdAt;
       saveDataNow();

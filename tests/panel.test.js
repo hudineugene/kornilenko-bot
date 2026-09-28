@@ -147,6 +147,15 @@ test('мессенджер отправляет файлы, цитирует с�
   assert.match(PANEL_HTML, /черновик сохранён/i);
 });
 
+test('состояние заявки — одно на всю панель', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /function inquiryState\(inquiry\)/);
+  assert.match(PANEL_HTML, /text: "Ждёт ответа"/);
+  assert.match(PANEL_HTML, /text: "Отвечено"/);
+  assert.match(PANEL_HTML, /text: "Закрыт"/);
+  assert.ok(!/оставить диалог в работе/.test(PANEL_HTML), 'галочка «оставить диалог в работе» убрана');
+});
+
 test('воронка отделяет этап продажи от статуса переписки', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /\["pipeline", "Воронка"\]/);

@@ -532,6 +532,17 @@ function normalizeRoute(view, tab) {
   return moved ? moved.slice() : [view, tab || ""];
 }
 
+// Одно состояние заявки на всю панель: ждёт ответа, отвечено или закрыта.
+// Первые два бот считает сам по переписке, закрывает заявку только человек.
+function inquiryState(inquiry) {
+  if (!inquiry) return { key: "answered", text: "Отвечено", chip: "ok" };
+  if (inquiry.status === "closed") return { key: "closed", text: "Закрыт", chip: "" };
+  // Клиент искал сам и получил каталог — ответа никто не ждёт.
+  if (inquiry.searchLead) return { key: "answered", text: "Ответ не нужен", chip: "" };
+  if (awaitsReply(inquiry)) return { key: "waiting", text: "Ждёт ответа", chip: "bad" };
+  return { key: "answered", text: "Отвечено", chip: "ok" };
+}
+
 function awaitsReply(inquiry) {
   if (!inquiry || inquiry.status === "closed") return false;
   // Клиент искал сам и получил каталог — ответа никто не ждёт.

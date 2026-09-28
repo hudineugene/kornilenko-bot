@@ -698,6 +698,33 @@ test('отвеченная беседа остаётся открытой, а н
   assert.match(String(after.innerHTML), /Ольга/, 'и она по-прежнему видна в списке');
 });
 
+test('состояние заявки бот считает сам, руками остаётся только закрыть', async () => {
+  twoWaitingConversations();
+  const { sandbox, requests } = await panelSandbox();
+  sandbox.selectConversation('inq-olga');
+
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  await sandbox.VIEWS.clients.render(host, '');
+
+  // Клиент написал последним — «Ждёт ответа».
+  assert.match(String(card.innerHTML), /Ждёт ответа/);
+  assert.ok(!String(card.innerHTML).includes('оставить диалог в работе'), 'галочки больше нет');
+  assert.ok(!String(card.innerHTML).includes('id="keepOpen"'));
+
+  const options = String(card.innerHTML).match(/<select id="inqStatusValue">.*?<\/select>/s)[0];
+  assert.match(options, /Открыта/);
+  assert.match(options, /Закрыта/);
+  assert.ok(!/В работе<\/option>/.test(options), 'промежуточного статуса в списке нет');
+
+  // Закрытие — обычное сохранение.
+  card.querySelector('#inqStatusValue').value = 'closed';
+  const before = requests.length;
+  await card.querySelector('#saveInq').onclick();
+  const saved = requests.slice(before).find((request) => request.url.includes('/api/inquiries/'));
+  assert.equal(saved.body.status, 'closed');
+});
+
 test('сопровождение заявки собрано в одной панели и сохраняется одной кнопкой', async () => {
   twoWaitingConversations();
   const { sandbox, requests } = await panelSandbox();
