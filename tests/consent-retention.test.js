@@ -137,6 +137,48 @@ test.describe('срок хранения данных', () => {
     assert.ok(bot.getData().users['7005'], 'клиент с предстоящим просмотром остаётся');
   });
 
+  test('брошенное дело без ответа и без закрытия не держит данные вечно', async () => {
+    // Обращения закрывают редко: «искал сам», «в работе» и просто забытые так и
+    // остаются незакрытыми. Раньше любого такого хватало, чтобы данные клиента
+    // хранились без срока — срок хранения почти никогда не срабатывал.
+    bot.getData().config.retentionMonths = 12;
+    sleeper(7101, 40);
+    oldInquiry(7101, 40, { status: 'in_progress', pipelineStage: 'selection', replies: [{ text: 'Подобрал варианты', createdAt: months(39) }] });
+    sleeper(7102, 40);
+    oldInquiry(7102, 40, { status: 'new', searchLead: true, pipelineStage: 'new' });
+    sleeper(7103, 40);
+    oldInquiry(7103, 40, { status: 'in_progress', viewing: { confirmedDate: new Date(Date.now() - 300 * 864e5).toISOString().slice(0, 10), confirmedAt: months(30), confirmedTime: '12:00', cancelledAt: '' } });
+
+    const result = await bot.runRetentionCleanup(new Date());
+    assert.equal(result.users, 3, 'удалены все трое');
+    for (const id of ['7101', '7102', '7103']) {
+      assert.equal(bot.getData().users[id], undefined, 'данные клиента ' + id + ' удалены');
+      assert.deepEqual(bot.getData().inquiries.filter((item) => item.userId === id), [], 'и его обращения');
+    }
+  });
+
+  test('напоминание менеджера на будущую дату держит данные', async () => {
+    bot.getData().config.retentionMonths = 12;
+    sleeper(7104, 40);
+    const future = new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10);
+    oldInquiry(7104, 40, { status: 'in_progress', followUpDate: future, followUpTime: '10:00' });
+
+    await bot.runRetentionCleanup(new Date());
+    assert.ok(bot.getData().users['7104'], 'менеджер собирался позвонить — данные нужны');
+  });
+
+  test('обращение клиента, которого в базе уже нет, тоже убирается по сроку', async () => {
+    bot.getData().config.retentionMonths = 12;
+    oldInquiry(7105, 40, { status: 'in_progress' });
+    const kept = oldInquiry(7106, 40, { status: 'in_progress', replies: [] });
+    kept.status = 'new';
+
+    await bot.runRetentionCleanup(new Date());
+    const left = bot.getData().inquiries.map((item) => item.userId);
+    assert.equal(left.includes('7105'), false, 'брошенное обращение удалено');
+    assert.equal(left.includes('7106'), true, 'а то, где клиент ждёт ответа, осталось');
+  });
+
   test('за сутки уборка идёт один раз', async () => {
     bot.getData().config.retentionMonths = 24;
     sleeper(7006, 40);

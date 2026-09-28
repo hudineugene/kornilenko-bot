@@ -1,6 +1,7 @@
 // Срок хранения данных клиента: RGPD не разрешает держать персональные данные
 // дольше, чем нужно. Раз в сутки бот удаляет данные клиентов, от которых давно
-// ничего не было, и старые закрытые обращения. Открытые дела не трогаются.
+// ничего не было. Незаконченные дела не трогаются — что это значит, см. ниже
+// у inquiryStillOpen.
 
 import { cleanText, localDayKey } from './util.mjs';
 import { data, saveDataNow } from './store.mjs';
@@ -27,19 +28,32 @@ function lastTouchAt(user, inquiries) {
   return Math.max(...times.filter(Number.isFinite), 0);
 }
 
-// Незакрытое дело держит данные: пока менеджер не ответил или просмотр ещё
-// впереди, удалять нельзя.
-function hasOpenBusiness(inquiries) {
-  return inquiries.some((inquiry) => {
-    if (inquiry.status !== 'closed') return true;
-    if (awaitingReply(inquiry)) return true;
-    const viewing = inquiry.viewing;
-    if (viewing && viewing.confirmedDate && !viewing.cancelledAt) {
-      const day = Date.parse(viewing.confirmedDate + 'T23:59:59');
-      if (Number.isFinite(day) && day > Date.now()) return true;
-    }
-    return false;
-  });
+function dayStillAhead(day, now) {
+  const end = Date.parse(cleanText(day, 10) + 'T23:59:59');
+  return Number.isFinite(end) && end > now.getTime();
+}
+
+// Что значит «дело ещё не закончено». Раньше сюда попадало всё, у чего статус
+// не `closed`, — а закрывают обращения редко: «искал сам», «в работе» и просто
+// брошенные так и остаются открытыми. Из-за этого срок хранения почти никогда
+// не срабатывал: данные клиента, от которого три года ни слова, держались
+// вечно из-за одного незакрытого обращения. Теперь дело держит данные, только
+// если кто-то действительно чего-то ждёт:
+//   — клиент ждёт ответа менеджера;
+//   — просмотр назначен на будущее;
+//   — менеджер сам поставил напоминание на будущую дату.
+// Свежие дела и так не удаляются: отсчёт идёт от последнего события, а правка
+// обращения в панели обновляет его время.
+function inquiryStillOpen(inquiry, now) {
+  if (awaitingReply(inquiry)) return true;
+  const viewing = inquiry.viewing;
+  if (viewing && viewing.confirmedDate && !viewing.cancelledAt && dayStillAhead(viewing.confirmedDate, now)) return true;
+  if (dayStillAhead(inquiry.followUpDate, now)) return true;
+  return false;
+}
+
+function hasOpenBusiness(inquiries, now) {
+  return inquiries.some((inquiry) => inquiryStillOpen(inquiry, now));
 }
 
 function retentionPlan(now = new Date()) {
@@ -49,7 +63,7 @@ function retentionPlan(now = new Date()) {
   const users = [];
   for (const user of Object.values(data.users)) {
     const inquiries = data.inquiries.filter((item) => String(item.userId) === String(user.id));
-    if (hasOpenBusiness(inquiries)) continue;
+    if (hasOpenBusiness(inquiries, now)) continue;
     if (lastTouchAt(user, inquiries) > cutoff) continue;
     users.push(user);
   }
@@ -58,7 +72,7 @@ function retentionPlan(now = new Date()) {
   const inquiries = data.inquiries.filter((item) => {
     if (userIds.has(String(item.userId))) return false;
     if (data.users[String(item.userId)]) return false;
-    if (item.status !== 'closed' && awaitingReply(item)) return false;
+    if (inquiryStillOpen(item, now)) return false;
     const at = Date.parse(item.updatedAt || item.createdAt || '');
     return Number.isFinite(at) && at <= cutoff;
   });
@@ -91,7 +105,7 @@ async function runRetentionCleanup(now = new Date(), token = data.config.botToke
     const lines = ['🗂 Срок хранения данных (' + months + ' мес.): удалены данные, от которых давно ничего не было.'];
     if (plan.users.length) lines.push('Клиентов: ' + plan.users.length);
     if (removeIds.size) lines.push('Отдельных обращений: ' + removeIds.size);
-    lines.push('Открытые дела и предстоящие просмотры не удаляются. Срок меняется в панели: Настройки → Работа с клиентами.');
+    lines.push('Не удаляются те, кто ждёт ответа, с предстоящим просмотром или напоминанием. Срок меняется в панели: Настройки → Работа с клиентами.');
     await sendMessage(adminChatId, lines.join('\n'), token, { track: false }).catch((error) => recordError('Срок хранения данных', error));
   }
   return removed;
