@@ -307,6 +307,33 @@ test('version 25 keeps the district in a saved search', () => {
   assert.equal(saved.users.client.savedSearch.filter.district, 'Сьерра-Бланка');
 });
 
+// Списки прежних подписей кнопок остаются дословными: по ним бот узнаёт
+// кнопки, которые всё ещё висят у старых клиентов.
+const PREVIOUS_LABELS = /Our properties|Nuestros inmuebles|Contact an agent|Contactar con un agente/;
+
+test('the Spanish and English wording matches how agencies actually speak', () => {
+  // «Gestor» в Испании — тот, кто оформляет документы, а не тот, кто продаёт
+  // дома. Клиент ждёт «asesor» или «agente».
+  // Смотрим весь словарь на диске, а не только то, что бот экспортирует.
+  const dictionary = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'texts.mjs'), 'utf8');
+  const stray = dictionary.split(/\r?\n/).filter(function (line) {
+    // В расходах на покупку gestoría — это именно оформление документов.
+    return /gestor/i.test(line) && !/otherCosts:/.test(line) && !PREVIOUS_LABELS.test(line);
+  });
+  assert.deepEqual(stray, [], 'в текстах для клиента «gestor» остался только в расходах на оформление');
+
+  assert.equal(bot.text.propertyActions.en.contactManager, 'Contact an agent');
+  assert.equal(bot.text.propertyActions.es.contactManager, 'Contactar con un asesor');
+  assert.equal(bot.text.menuLabels.en.contacts, '💬 Agent');
+  assert.equal(bot.text.menuLabels.es.contacts, '💬 Asesor');
+  assert.equal(bot.text.propertyActions.en.cardFavoriteRemove, 'Saved ✓', 'кнопка показывает состояние, а не действие «не сохранять»');
+  assert.match(bot.text.selection.es.askBudget, /¿Cuál es tu presupuesto\?/);
+
+  // Прежние подписи бот всё ещё понимает: у старых клиентов они на экране.
+  assert.equal(bot.menuItemForText('💬 Contactar con un gestor', 'es'), 'contacts');
+  assert.equal(bot.menuItemForText('💬 Contact a manager', 'en'), 'contacts');
+});
+
 test('an old menu keyboard still opens its sections', async () => {
   assert.equal(bot.menuItemForText('🏘 Наши объекты', 'ru'), 'objects');
   assert.equal(bot.menuItemForText('📞 Заказать звонок', 'ru'), 'request');

@@ -1084,7 +1084,7 @@
 - [x] Язык Telegram uk/be/kk — сразу русский, все прочие (de, nl, fr,
       pl…) — сразу английский с кнопкой «🌐» в приветствии; экран выбора
       языка — только по кнопке (`users.mjs:61-64`, `updates.mjs:276-290`)
-- [ ] Терминология EN/ES: «Gestor» (32 раза в `texts.mjs`) — в испанской
+- [x] Терминология EN/ES: «Gestor» (32 раза в `texts.mjs`) — в испанской
       сделке это оформитель документов, заменить на «Asesor»/«Agente»;
       «¿Qué presupuesto consideras?» → «¿Cuál es tu presupuesto?»;
       «Contact a manager» → «Contact an agent»; «Unsave» → «Saved ✓»
