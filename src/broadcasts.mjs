@@ -61,6 +61,27 @@ function broadcastUsers(entry) {
   });
 }
 
+// Длинный текст с фотографией уходит двумя сообщениями. Если связь оборвалась
+// между ними, рассылка продолжится с этого же получателя — и фотография ушла бы
+// ему второй раз. Поэтому запоминаем тех, кому снимок уже доставлен, а текст
+// ещё нет. Список короткий: запись живёт от одного сообщения до другого.
+function photoAheadOfText(entry) {
+  entry.photoOnlyUserIds = Array.isArray(entry.photoOnlyUserIds) ? entry.photoOnlyUserIds.map(String) : [];
+  return entry.photoOnlyUserIds;
+}
+
+function rememberPhotoSent(entry, user) {
+  const waiting = photoAheadOfText(entry);
+  const id = String(user.id);
+  if (!waiting.includes(id)) waiting.push(id);
+}
+
+function forgetPhotoSent(entry, user) {
+  const waiting = photoAheadOfText(entry);
+  const index = waiting.indexOf(String(user.id));
+  if (index >= 0) waiting.splice(index, 1);
+}
+
 async function deliverBroadcast(user, entry, token = data.config.botToken) {
   const language = user.preferredLanguage || 'ru';
   const text = fillTemplate(localized(entry.messages, language), user);
@@ -72,8 +93,12 @@ async function deliverBroadcast(user, entry, token = data.config.botToken) {
   if (imageExists(entry.image)) {
     if (text.length <= 1000) await sendPhotoMessage(user.chatId, entry.image, text, token, markup);
     else {
-      await sendPhotoMessage(user.chatId, entry.image, '', token, null);
+      if (!photoAheadOfText(entry).includes(String(user.id))) {
+        await sendPhotoMessage(user.chatId, entry.image, '', token, null);
+        rememberPhotoSent(entry, user);
+      }
       await sendMessage(user.chatId, text, token, markup ? { reply_markup: markup } : {});
+      forgetPhotoSent(entry, user);
     }
   } else {
     await sendMessage(user.chatId, text, token, markup ? { reply_markup: markup } : {});
