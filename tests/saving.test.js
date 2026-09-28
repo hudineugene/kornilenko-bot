@@ -168,3 +168,26 @@ test('сбой записи не обрывает рассылку', async () =>
   assert.equal(bot.runtime.nextSaveRetryAt, null, 'после удачной записи повтор не нужен');
   assert.equal(bot.runtime.lastSaveError, '', 'и ошибка снята');
 });
+
+test('о сбое записи узнают и самопроверка, и панель', async () => {
+  const { runtime } = await import('../src/store.mjs');
+  const { safeState } = await import('../src/admin-http.mjs');
+  const before = runtime.lastSaveError;
+  runtime.lastSaveError = 'EPERM: нет доступа к файлу';
+  runtime.lastSaveErrorAt = new Date().toISOString();
+  runtime.nextSaveRetryAt = new Date(Date.now() + 2000).toISOString();
+  try {
+    const check = bot.runSelfCheck().checks.find((entry) => entry.id === 'save');
+    assert.ok(check, 'самопроверка говорит о сбое записи');
+    assert.equal(check.status, 'bad', 'и считает это серьёзным');
+    assert.match(check.detail, /нет доступа к файлу/);
+
+    const shown = safeState({ csrf: 'x' }).runtime.save;
+    assert.equal(shown.error, 'EPERM: нет доступа к файлу', 'панель получает причину');
+    assert.ok(shown.nextRetryAt, 'и время следующей попытки');
+  } finally {
+    runtime.lastSaveError = before;
+    runtime.lastSaveErrorAt = null;
+    runtime.nextSaveRetryAt = null;
+  }
+});

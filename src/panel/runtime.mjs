@@ -56,6 +56,7 @@ const PANEL_SHELL = String.raw`
 <div id="toast" class="toast hidden"></div>
 <div id="savebar" class="savebar hidden"><span class="grow" id="savebarText">Есть несохранённые изменения</span><button class="btn secondary" id="savebarReset" type="button">Отменить</button><button class="btn" id="savebarSave" type="button">Сохранить</button></div>
 <div id="refreshHint" class="refresh-hint hidden"><span class="grow">Появились новые данные</span><button class="btn secondary" id="refreshHintApply" type="button">Обновить экран</button></div>
+<div id="saveAlert" class="save-alert hidden" role="alert"><b>⚠️ Бот не может сохранить данные на диск</b><span id="saveAlertText"></span></div>
 `;
 
 const PANEL_RUNTIME_JS = String.raw`
@@ -537,8 +538,28 @@ function renderNotificationBell() {
   button.setAttribute("aria-label", count ? "Открыть уведомления: непрочитанных " + count : "Открыть уведомления");
 }
 
+// Запись на диск не удалась: полоса видна на всех экранах, пока не получится.
+// Молчать нельзя — всё, что владелец делает сейчас, живёт только в памяти.
+function renderSaveAlert() {
+  var save = (state.runtime || {}).save || {};
+  var alert = el("saveAlert");
+  if (!save.error) {
+    alert.classList.add("hidden");
+    return;
+  }
+  var when = save.nextRetryAt ? Date.parse(save.nextRetryAt) : NaN;
+  var retry = isFinite(when)
+    ? " Бот пробует записать снова" + (when > Date.now() ? " в " + dateTime(save.nextRetryAt) : "") + "."
+    : "";
+  el("saveAlertText").textContent = save.error + "."
+    + " Изменения пока только в памяти: если бота закрыть, они потеряются." + retry
+    + " Обычно так бывает из-за антивируса, программы резервного копирования или нехватки места на диске.";
+  alert.classList.remove("hidden");
+}
+
 function renderBotState() {
   var runtime = state.runtime || {}, active = state.config.active;
+  renderSaveAlert();
   var bad = runtime.status === "error" || runtime.consecutiveFailures > 0;
   var dot = !active ? "off" : bad ? "bad" : "on";
   el("botState").querySelector(".dot").className = "dot " + dot;

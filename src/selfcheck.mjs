@@ -191,6 +191,13 @@ function runSelfCheck(now = new Date()) {
   else if (!months) add('privacy', 'Политика конфиденциальности', 'warn', 'политика заполнена, но срок хранения данных не задан', 'Настройки → Работа с клиентами');
   else add('privacy', 'Политика конфиденциальности', 'ok', 'заполнена, срок хранения ' + months + ' мес.');
 
+  // Данные не сохраняются: самая тяжёлая из возможных неприятностей — вся
+  // работа держится в памяти до перезапуска.
+  if (runtime.lastSaveError) {
+    add('save', 'Сохранение данных', 'bad', 'последняя запись не удалась: ' + runtime.lastSaveError
+      + (runtime.nextSaveRetryAt ? '; повтор запланирован' : ''), 'Настройки → Данные');
+  }
+
   const media = mediaReport();
   if (media.missing.length) {
     add('media', 'Файлы картинок', 'bad', 'нет файлов: ' + media.missing.length + ' из ' + media.total

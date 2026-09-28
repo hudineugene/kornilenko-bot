@@ -183,6 +183,13 @@ function publicRuntime() {
     nextRetryAt: runtime.nextRetryAt,
     pollingStartedAt: runtime.pollingStartedAt,
     broadcastRunning: runtime.broadcastRunning,
+    // Запись на диск не удалась: изменения пока только в памяти. Панель должна
+    // сказать об этом сразу — иначе владелец узнает о потере после перезапуска.
+    save: {
+      error: runtime.lastSaveError || '',
+      at: runtime.lastSaveErrorAt || null,
+      nextRetryAt: runtime.nextSaveRetryAt || null,
+    },
     tunnel: { status: runtime.tunnel.status, url: runtime.tunnel.url, error: runtime.tunnel.error, installed: tunnelInstalled() },
   };
 }

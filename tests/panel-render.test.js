@@ -1019,3 +1019,31 @@ test('подсказка про сохранение настроек говор
   assert.doesNotMatch(PANEL_HTML, /остальные настройки сохраняются сами/, 'неверная подсказка убрана');
   assert.match(PANEL_HTML, /сохраняются кнопкой в полосе снизу/, 'сказано, как на самом деле');
 });
+
+test('сбой записи на диск виден на всех экранах панели', async () => {
+  // Раньше про это знал только журнал ошибок: владелец продолжал работать, не
+  // подозревая, что всё держится в памяти до перезапуска.
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, state } = await panelSandbox();
+  const alert = sandbox.document.getElementById('saveAlert');
+  assert.equal(alert.classList.contains('hidden'), true, 'пока всё хорошо — полосы нет');
+
+  state.runtime.save = {
+    error: 'EBUSY: файл занят другой программой',
+    at: new Date().toISOString(),
+    nextRetryAt: new Date(Date.now() + 60000).toISOString(),
+  };
+  sandbox.renderBotState();
+
+  assert.equal(alert.classList.contains('hidden'), false, 'полоса появилась');
+  const text = String(sandbox.document.getElementById('saveAlertText').textContent);
+  assert.match(text, /файл занят другой программой/, 'сказано, в чём дело');
+  assert.match(text, /только в памяти/, 'и чем это грозит');
+  assert.match(text, /пробует записать снова/, 'и что бот делает');
+  assert.match(text, /антивируса|места на диске/, 'и с чего начать разбираться');
+
+  // Запись удалась — полоса уходит сама.
+  state.runtime.save = { error: '', at: null, nextRetryAt: null };
+  sandbox.renderBotState();
+  assert.equal(alert.classList.contains('hidden'), true, 'полоса убрана');
+});
