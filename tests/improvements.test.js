@@ -61,11 +61,24 @@ test.describe('language from Telegram', () => {
     assert.match(sent[0].body.text, /^Hello, John!/);
   });
 
-  test('a language the bot does not speak still gets the picker', async () => {
+  test('a neighbouring language gets the Russian welcome, not a language screen', async () => {
     const client = newcomer('uk');
     const sent = await client.say('/start');
-    assert.equal(client.user.preferredLanguage, '');
-    assert.deepEqual(callbacksOf(sent[0].body.reply_markup), ['language:ru', 'language:en', 'language:es']);
+    assert.equal(client.user.preferredLanguage, 'ru', 'украинскому Telegram русский ближе английского');
+    assert.match(sent[0].body.text, /^Здравствуйте/);
+    assert.ok(buttonsOf(sent[0].body.reply_markup).includes(MENU.ru.language), 'язык угадан — кнопка «🌐» сразу в приветствии');
+  });
+
+  test('any other language gets the English welcome with a language button', async () => {
+    const client = newcomer('de', 'Hans');
+    const sent = await client.say('/start');
+    assert.equal(client.user.preferredLanguage, 'en');
+    assert.match(sent[0].body.text, /^Hello, Hans!/);
+    assert.ok(buttonsOf(sent[0].body.reply_markup).includes(MENU.en.language));
+    // И передумать можно словом, не только кнопкой.
+    const switched = await client.say('Español');
+    assert.equal(client.user.preferredLanguage, 'es');
+    assert.match(switched[switched.length - 1].body.text, /^¡Hola/);
   });
 
   test('a first message that is a question is greeted and answered', async () => {

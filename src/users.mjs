@@ -58,9 +58,26 @@ function leadSourceFromPayload(payload) {
   return match ? match[1].toLowerCase() : '';
 }
 
+// Языки, в которых русский понятнее английского: соседние страны, где им
+// пользуются каждый день.
+const RUSSIAN_NEIGHBOUR_LANGUAGES = ['uk', 'be', 'kk', 'ky', 'uz', 'tg', 'hy', 'az', 'mo'];
+
+// Язык клиента по настройкам Telegram. Мы говорим на трёх языках, поэтому
+// выбираем ближайший: русский соседям, испанский испаноязычным, всем
+// остальным — английский. Пустой ответ не возвращаем никогда: экран выбора
+// языка в начале разговора отпугивает сильнее, чем чужой язык, который можно
+// переключить одной кнопкой.
 function telegramInterfaceLanguage(user) {
   const code = String(user && user.languageCode || '').toLowerCase().split('-')[0];
-  return ['ru', 'en', 'es'].includes(code) ? code : '';
+  if (['ru', 'en', 'es'].includes(code)) return code;
+  if (RUSSIAN_NEIGHBOUR_LANGUAGES.includes(code)) return 'ru';
+  return 'en';
+}
+
+// Язык угадан, а не задан клиентом: в приветствии показываем кнопку «🌐».
+function languageWasGuessed(user) {
+  const code = String(user && user.languageCode || '').toLowerCase().split('-')[0];
+  return !['ru', 'en', 'es'].includes(code);
 }
 
 // Telegram отказался доставлять: клиент заблокировал бота или удалил аккаунт.
@@ -263,6 +280,7 @@ export {
   leadSourceFromPayload,
   normalizeUser,
   rebuildUserIndex,
+  languageWasGuessed,
   telegramInterfaceLanguage,
   userByChatId,
   userById,

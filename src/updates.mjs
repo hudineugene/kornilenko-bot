@@ -4,7 +4,7 @@ import { cleanText, delay, fillTemplate } from './util.mjs';
 import { COMMAND_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, MANAGER_CONTACT_TEXT, MENU_LABELS, PROPERTY_ACTION_TEXT } from './texts.mjs';
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError, recordPropertyEvent } from './analytics.mjs';
-import { leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from './users.mjs';
+import { languageWasGuessed, leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from './users.mjs';
 import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, isLanguageChangeText, languageFromText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleLeadMethodCallback, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, saveViewingPhone, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
@@ -255,24 +255,28 @@ async function handleUpdate(update, token) {
     await sendMessage(message.chat.id, copy.myId + ' ' + String(message.chat.id), token);
     return;
   }
-  // First contact: when the client's Telegram is set to a language the bot
-  // speaks, greet them in it instead of asking. "🌐 Change language" stays in
-  // the menu. Other Telegram languages still get the picker.
+  // Первый контакт: язык берём из настроек Telegram и здороваемся сразу.
+  // Экрана выбора языка в начале разговора больше нет — он отпугивал раньше,
+  // чем клиент видел хоть один объект. Сменить язык можно кнопкой «🌐».
   const telegramLanguage = telegramInterfaceLanguage(user);
+  const guessed = languageWasGuessed(user);
   if (!user.preferredLanguage && telegramLanguage && command !== '/language') {
     user.preferredLanguage = telegramLanguage;
     scheduleSave();
-    void notifyAdministratorAction(user, 'Первый запуск', 'Язык по настройкам Telegram: ' + LANGUAGE_NAMES[telegramLanguage]);
-    await sendWelcome(message.chat.id, user, token);
+    const detail = 'Язык по настройкам Telegram: ' + LANGUAGE_NAMES[telegramLanguage]
+      + (guessed && user.languageCode ? ' (в Telegram: ' + user.languageCode + ')' : '');
+    void notifyAdministratorAction(user, 'Первый запуск', detail);
+    await sendWelcome(message.chat.id, user, token, { languageButton: guessed });
     if (command === '/start') {
       await openPendingStartPayload(user, token);
       return;
     }
   }
-  // A newcomer may type the language instead of tapping the button; without
-  // this the picker would be sent again for every message.
-  const typedLanguage = !user.preferredLanguage && command !== '/language' ? languageFromText(text) : '';
-  if (typedLanguage) {
+  // Клиент может назвать язык словом вместо кнопки — например, когда бот
+  // угадал язык неверно. Тому, у кого язык уже выбран, засчитываем только
+  // точное «Русский», «English», «Español».
+  const typedLanguage = command !== '/language' ? languageFromText(text, { exact: Boolean(user.preferredLanguage) }) : '';
+  if (typedLanguage && typedLanguage !== user.preferredLanguage) {
     user.preferredLanguage = typedLanguage;
     scheduleSave();
     void notifyAdministratorAction(user, 'Выбрал язык сообщением', LANGUAGE_NAMES[typedLanguage]);

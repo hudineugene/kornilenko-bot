@@ -50,11 +50,13 @@ const LANGUAGE_TEXT_ALIASES = {
   es: ['español', 'espanol', 'espanol', 'испанский', 'испания', 'spanish', 'es', 'spa', '🇪🇸'],
 };
 
-function languageFromText(text) {
+function languageFromText(text, options = {}) {
   const value = String(text || '').toLocaleLowerCase('ru-RU').replace(/[^\p{L}\p{Emoji_Presentation}]+/gu, ' ').trim();
   if (!value || value.length > 20) return '';
   for (const [language, aliases] of Object.entries(LANGUAGE_TEXT_ALIASES)) {
-    if (aliases.some((alias) => value === alias || value.split(' ').includes(alias))) return language;
+    // Точное совпадение — когда язык уже выбран: «есть русский агент?» должно
+    // остаться вопросом менеджеру, а не сменой языка.
+    if (aliases.some((alias) => value === alias || (!options.exact && value.split(' ').includes(alias)))) return language;
   }
   return '';
 }
@@ -65,13 +67,17 @@ function isLanguageChangeText(text, language) {
   return text === labels.language || text === legacy.language;
 }
 
-async function sendWelcome(chatId, user, token) {
+async function sendWelcome(chatId, user, token, options = {}) {
   const language = user.preferredLanguage || 'ru';
   await clearUiMessages(chatId, user, token);
   await clearGalleryMessages(chatId, user, token);
   await clearCatalogMessages(chatId, user, token);
   const greeting = fillTemplate(languageMessages(language).greeting, user) + '\n\n' + MENU_HINTS[language];
-  const keyboard = menuKeyboard(language);
+  const menu = menuKeyboard(language);
+  // Язык выбран за клиента — значит первым делом даём его сменить.
+  const keyboard = options.languageButton
+    ? { ...menu, keyboard: [...menu.keyboard, [{ text: (MENU_LABELS[language] || MENU_LABELS.ru).language }]] }
+    : menu;
   const image = data.welcomeImages[language];
   if (imageExists(image)) {
     if (greeting.length <= 1000) {

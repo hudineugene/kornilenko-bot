@@ -88,15 +88,15 @@ test.describe('a request written in the client own words', () => {
 });
 
 test.describe('a language typed instead of tapped', () => {
-  test('a newcomer who writes the language name gets the menu, not the picker again', async () => {
+  test('a newcomer who writes the language name gets the menu, not the picker', async () => {
     const chat = createChat({ language: '' });
     chat.user.preferredLanguage = '';
-    const picker = await chat.say('Привет');
-    assert.ok(picker.last.buttons.length === 0 || picker.last.text.includes('Выберите язык'));
+    const greeted = await chat.say('Привет');
+    assert.equal(chat.user.preferredLanguage, 'en', 'язык Telegram неизвестен — говорим по-английски');
+    assert.deepEqual(greeted.calls.filter((call) => String(call.body.text || '').includes('Выберите язык')), [], 'экрана выбора нет');
 
     const chosen = await chat.say('Русский');
     assert.equal(chat.user.preferredLanguage, 'ru');
-    assert.deepEqual(chosen.calls.filter((call) => call.method === 'sendMessage' && String(call.body.text || '').includes('Выберите язык')), []);
     assert.ok(chosen.calls.some((call) => ['sendMessage', 'sendPhoto'].includes(call.method)), 'клиент получает приветствие');
   });
 
@@ -112,11 +112,12 @@ test.describe('a language typed instead of tapped', () => {
     assert.equal(spanish.user.preferredLanguage, 'es');
   });
 
-  test('an unrelated message still brings the language picker', async () => {
+  test('an unrelated message is answered instead of asking about the language', async () => {
     const chat = createChat({ language: '' });
     chat.user.preferredLanguage = '';
     const step = await chat.say('Сколько стоит вилла?');
-    assert.ok(step.calls.some((call) => String(call.body.text || '').includes('Выберите язык')));
-    assert.equal(chat.user.preferredLanguage, '');
+    assert.deepEqual(step.calls.filter((call) => String(call.body.text || '').includes('Выберите язык')), []);
+    assert.equal(chat.user.preferredLanguage, 'en');
+    assert.equal(chat.inquiries.length, 1, 'вопрос дошёл до менеджера');
   });
 });
