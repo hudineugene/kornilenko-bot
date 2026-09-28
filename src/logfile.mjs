@@ -22,6 +22,14 @@ let handle = null;
 let written = 0;
 let failed = false;
 let capturing = false;
+// Если перенести журнал не дали (файл открыт в другой программе), пробовать
+// на каждой строке бессмысленно: ждём и пишем дальше в тот же файл.
+let rotateBlockedUntil = 0;
+let writeFailures = 0;
+let pausedUntil = 0;
+const ROTATE_RETRY_MS = 10 * 60 * 1000;
+const WRITE_PAUSE_MS = 5 * 60 * 1000;
+const WRITE_FAILURES_BEFORE_PAUSE = 3;
 
 function logFileSize(file = LOG_FILE) {
   try {
@@ -40,41 +48,68 @@ function openLogFile() {
 }
 
 // Предыдущий журнал остаётся рядом как bot.log.1 — по нему видно, что было до.
+// Прежнюю копию убираем только после удачного переноса: если перенести не
+// вышло, она должна остаться на месте.
 function rotateLogFile() {
   if (handle === null) return false;
+  const previous = LOG_FILE + '.1';
+  const spare = LOG_FILE + '.1.old';
   try {
     fs.closeSync(handle);
   } catch {
     // Уже закрыт — не беда.
   }
   handle = null;
+  let moved = false;
   try {
-    fs.rmSync(LOG_FILE + '.1', { force: true });
-    fs.renameSync(LOG_FILE, LOG_FILE + '.1');
+    if (fs.existsSync(previous)) fs.renameSync(previous, spare);
+    fs.renameSync(LOG_FILE, previous);
+    moved = true;
+    rotateBlockedUntil = 0;
   } catch {
-    // Файл кто-то держит: продолжим писать в него же и попробуем позже.
+    // Файл держит другая программа. Возвращаем прежнюю копию на место и
+    // ждём: пробовать на каждой строке — только плодить записи.
+    rotateBlockedUntil = Date.now() + ROTATE_RETRY_MS;
+  }
+  try {
+    if (fs.existsSync(spare)) {
+      if (moved) fs.rmSync(spare, { force: true });
+      else if (!fs.existsSync(previous)) fs.renameSync(spare, previous);
+    }
+  } catch {
+    // Лишняя копия рядом не мешает работе.
   }
   openLogFile();
-  return true;
+  return moved;
 }
 
 function writeToLog(text) {
-  if (failed) return;
+  // Записывать не вышло — делаем перерыв, а не выключаем журнал навсегда:
+  // файл мог быть занят на минуту антивирусом или открытым редактором.
+  if (failed && Date.now() < pausedUntil) return;
+  failed = false;
   try {
     if (handle === null) openLogFile();
     fs.writeSync(handle, text);
+    writeFailures = 0;
     written += Buffer.byteLength(text, 'utf8');
-    if (written <= LOG_MAX_BYTES) return;
+    if (written <= LOG_MAX_BYTES || Date.now() < rotateBlockedUntil) return;
     const size = written;
-    rotateLogFile();
+    if (!rotateLogFile()) return;
     const notice = '[' + new Date().toISOString().slice(0, 19) + '] Журнал вырос до '
       + Math.round(size / (1024 * 1024)) + ' МБ, прежний перенесён в bot.log.1\n';
     fs.writeSync(handle, notice);
     written += Buffer.byteLength(notice, 'utf8');
   } catch {
-    // Окно бота важнее журнала: если писать не выходит, просто перестаём.
-    failed = true;
+    // Окно бота важнее журнала: пробуем открыть файл заново, а после
+    // нескольких неудач подряд молчим пять минут и пробуем снова.
     handle = null;
+    writeFailures += 1;
+    if (writeFailures >= WRITE_FAILURES_BEFORE_PAUSE) {
+      failed = true;
+      pausedUntil = Date.now() + WRITE_PAUSE_MS;
+      writeFailures = 0;
+    }
   }
 }
 

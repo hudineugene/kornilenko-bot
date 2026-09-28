@@ -67,3 +67,66 @@ test('окно запуска больше не перенаправляет в�
   assert.doesNotMatch(script, /cmd\.exe \/c \(\$command \+ ' >> /, 'перенаправления нет — файл ведёт сам бот');
   assert.match(script, /cmd\.exe \/c \$command/);
 });
+
+test('журнал, который держит другая программа, не плодит записи о переносе', () => {
+  // Раньше при неудачном переносе бот пробовал снова на каждой строке и каждый
+  // раз дописывал «Журнал вырос…» — 763 таких записи на 760 строк, а файл всё
+  // равно рос. И прежняя копия удалялась до переименования, то есть зря.
+  fs.writeFileSync(logFile + '.1', 'прежний журнал');
+  // В журнале уже есть одна такая запись — от удачного переноса выше.
+  const noticesBefore = (fs.readFileSync(logFile, 'utf8').match(/Журнал вырос/g) || []).length;
+  const realRename = fs.renameSync;
+  fs.renameSync = (from, to) => {
+    if (String(from) === logFile) throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' });
+    return realRename(from, to);
+  };
+  try {
+    const line = 'занятый журнал: ' + 'ж'.repeat(400) + '\n';
+    const times = Math.ceil(logs.LOG_MAX_BYTES / Buffer.byteLength(line, 'utf8')) + 40;
+    for (let index = 0; index < times; index += 1) logs.writeToLog(line);
+  } finally {
+    fs.renameSync = realRename;
+  }
+  const current = fs.readFileSync(logFile, 'utf8');
+  assert.equal((current.match(/Журнал вырос/g) || []).length, noticesBefore, 'переноса не было — и новых записей о нём нет');
+  assert.equal(fs.readFileSync(logFile + '.1', 'utf8'), 'прежний журнал', 'прежняя копия осталась на месте');
+  assert.match(current, /занятый журнал/, 'бот продолжает писать в тот же файл');
+  assert.ok(!fs.existsSync(logFile + '.1.old'), 'лишних файлов рядом не осталось');
+});
+
+test('когда файл освобождается, перенос удаётся со следующей попыткой', () => {
+  const realNow = Date.now;
+  const later = realNow() + 11 * 60 * 1000;
+  Date.now = () => later;
+  try {
+    logs.writeToLog('[попытка после ожидания]\n');
+  } finally {
+    Date.now = realNow;
+  }
+  assert.ok(fs.statSync(logFile + '.1').size > logs.LOG_MAX_BYTES, 'разросшийся журнал ушёл в bot.log.1');
+  assert.match(fs.readFileSync(logFile, 'utf8'), /Журнал вырос до \d+ МБ/, 'а в новом сказано, что случилось');
+});
+
+test('после ошибки записи журнал не выключается до перезапуска', () => {
+  // Раньше одна неудачная запись (файл занят антивирусом, открыт редактором)
+  // молча выключала журнал до следующего запуска бота.
+  const realWrite = fs.writeSync;
+  const realNow = Date.now;
+  let broken = true;
+  fs.writeSync = (...args) => {
+    if (broken) throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' });
+    return realWrite(...args);
+  };
+  try {
+    for (let index = 0; index < 4; index += 1) logs.writeToLog('[запись не дошла]\n');
+    broken = false;
+    // Через шесть минут — перерыв закончился, переносить пока нечего.
+    const later = realNow() + 6 * 60 * 1000;
+    Date.now = () => later;
+    logs.writeToLog('[журнал снова пишет]\n');
+  } finally {
+    fs.writeSync = realWrite;
+    Date.now = realNow;
+  }
+  assert.match(fs.readFileSync(logFile, 'utf8'), /журнал снова пишет/, 'журнал вернулся к работе сам');
+});
