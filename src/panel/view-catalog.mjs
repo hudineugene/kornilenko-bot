@@ -233,6 +233,9 @@ function openRecordEditor(kind, id) {
     '<div class="editor-language"><div class="row wrap">' + languageTabs() + '<span class="hint">Редактируется выбранный язык</span></div></div>' +
     (isObject ? '<div class="publication-check" id="publicationCheck"></div>' : "") +
     '<details class="editor-section" open><summary><b>Карточка для клиента</b><span>название, описание и фотографии</span></summary><div class="editor-section-body stack">' +
+      // Номер объекта обязателен для публикации, поэтому стоит первым: раньше
+      // он прятался в свёрнутом разделе внизу и о нём вспоминали последним.
+      (isObject ? '<div class="field"><label for="fReference">Номер объекта <span class="required">*</span></label><input id="fReference" value="' + esc(record && record.reference || "") + '" placeholder="REF-1024"><div class="hint">Свой код объекта. Клиент видит его в подробной карточке.</div></div>' : "") +
       translatedField("title", "Название", record && record.title, false, "", true) +
       (isObject ? translatedField("description", "Описание", record && record.description, true, "", true) : translatedField("text", "Текст акции", record && record.text, true)) +
       '<div class="field photo-field"><span class="field-label">Фотографии' + (isObject ? ' <span class="required">*</span>' : "") + '</span>' + LANGUAGES.map(function (language) { return imageBlock(kind, record, language[0]); }).join("") + "</div>" +
@@ -258,7 +261,7 @@ function openRecordEditor(kind, id) {
           '<div class="field"><label>Спальни <span class="required" data-required="bedrooms">*</span></label><input id="fBedrooms" type="number" min="0" value="' + esc(record && record.bedrooms != null ? record.bedrooms : "") + '"></div>' +
           '<div class="field"><label>Санузлы <span class="required" data-required="bathrooms">*</span></label><input id="fBathrooms" type="number" min="0" value="' + esc(record && record.bathrooms || "") + '"></div>' +
           '<div class="field"><label>Площадь, м² <span class="required" data-required="area">*</span></label><input id="fArea" type="number" min="0" value="' + esc(record && record.area || "") + '"></div>' +
-          '<div class="field"><label>Участок, м² <span class="required" data-required="plotArea">*</span></label><input id="fPlot" type="number" min="0" value="' + esc(record && record.plotArea || "") + '"></div>' +
+          '<div class="field" data-field="plotArea"><label>Участок, м² <span class="required" data-required="plotArea">*</span></label><input id="fPlot" type="number" min="0" value="' + esc(record && record.plotArea || "") + '"></div>' +
           '<div class="field"><label>Этаж</label><input id="fFloor" value="' + esc(record && record.floor || "") + '"></div>' +
           '<div class="field"><label>Этажей в доме</label><input id="fFloors" value="' + esc(record && record.floors || "") + '"></div>' +
           '<div class="field"><label>До моря, м</label><input id="fSea" type="number" min="0" value="' + esc(record && record.distanceSea || "") + '"></div>' +
@@ -270,10 +273,10 @@ function openRecordEditor(kind, id) {
           return '<label class="check"><input type="checkbox" data-badge="' + badge[0] + '"' + (record && (record.badges || []).indexOf(badge[0]) >= 0 ? " checked" : "") + "> " + badge[1] + "</label>";
         }).join("") + "</div></div></div></details>" +
         '<details class="editor-section"><summary><b>Адрес и ссылки</b><span>данные подробной карточки и внешние страницы</span></summary><div class="editor-section-body stack">' +
-          '<div class="grid cols-2"><div class="field"><label>Номер объекта <span class="required">*</span></label><input id="fReference" value="' + esc(record && record.reference || "") + '"></div>' + translatedField("address", "Адрес", record && record.address) + "</div>" +
+          translatedField("address", "Адрес", record && record.address) +
           '<div class="grid cols-2"><div class="field"><label>Ссылка на объект</label><input id="fUrl" value="' + esc(record && record.url || "") + '"></div>' +
           '<div class="field"><label>Ссылка на карту</label><input id="fMap" value="' + esc(record && record.mapUrl || "") + '"></div></div>' +
-          '<div class="hint">Номер объекта и полный адрес показываются клиенту только после нажатия «Подробнее».</div>' +
+          '<div class="hint">Полный адрес показывается клиенту только после нажатия «Подробнее».</div>' +
         "</div></details>"
       : '<details class="editor-section" open><summary><b>Показ акции</b><span>срок действия и ссылка</span></summary><div class="editor-section-body stack">' +
           '<div class="grid cols-2"><div class="field"><label>Начало</label><input id="fStart" type="date" value="' + esc((record && record.startAt || "").slice(0, 10)) + '"></div>' +
@@ -351,6 +354,9 @@ function openRecordEditor(kind, id) {
           var required = marker.dataset.required === "plotArea" ? type === "land" : marker.dataset.required === "area" ? type !== "land" : residential;
           marker.classList.toggle("hidden", !required);
         });
+        // У квартиры участка не бывает — поле не показываем вовсе.
+        var plotField = dialog.querySelector('[data-field="plotArea"]');
+        if (plotField) plotField.classList.toggle("hidden", ["apartment", "newbuild"].indexOf(type) >= 0);
       }
       function metreShort(language) {
         return language === "ru" ? "м" : "m";

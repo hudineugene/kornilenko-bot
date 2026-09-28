@@ -76,6 +76,22 @@ test('редакторы предупреждают перед закрытие�
   assert.match(PANEL_HTML, /dialog\.closeClean\(\)/);
 });
 
+test('номер объекта стоит наверху формы, участок — только там, где он бывает', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  // Номер объекта — в первом разделе, до фотографий и характеристик.
+  const referenceAt = PANEL_HTML.indexOf('id="fReference"');
+  const photosAt = PANEL_HTML.indexOf('photo-field');
+  const specsAt = PANEL_HTML.indexOf('Характеристики');
+  const addressAt = PANEL_HTML.indexOf('Адрес и ссылки');
+  assert.ok(referenceAt > 0 && referenceAt < photosAt, 'номер объекта выше фотографий');
+  assert.ok(referenceAt < specsAt && referenceAt < addressAt, 'и выше характеристик с адресом');
+  assert.equal(PANEL_HTML.split('id="fReference"').length - 1, 1, 'поле одно, а не два');
+
+  // Участок прячется у квартиры и новостройки.
+  assert.match(PANEL_HTML, /data-field="plotArea"/);
+  assert.match(PANEL_HTML, /\["apartment", "newbuild"\]\.indexOf\(type\) >= 0\)/);
+});
+
 test('редакторы объекта и рассылки имеют живой предпросмотр', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /id="recordPreview"/);
@@ -91,7 +107,7 @@ test('редакторы объекта и рассылки имеют живо�
   assert.match(PANEL_HTML, /facts\.slice\(factIndex, factIndex \+ 2\)/, 'в строке предпросмотра должно быть не больше двух характеристик');
   assert.match(PANEL_HTML, /✦ /, 'премиальные метки должны совпадать с карточкой Telegram');
   assert.match(PANEL_HTML, /Цена по запросу \/ текст/);
-  assert.match(PANEL_HTML, /полный адрес показываются клиенту только после нажатия/);
+  assert.match(PANEL_HTML, /Полный адрес показывается клиенту только после нажатия/);
 });
 
 test('в заявке на подбор менеджер видит результаты и недостающие данные', async () => {
