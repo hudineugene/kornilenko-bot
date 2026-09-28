@@ -29,7 +29,10 @@ test.after(cleanup);
 test('the current catalog filter becomes a clear saved search in My space', async () => {
   const chat = createChat();
   await chat.press('cfilter:deal:sale');
-  const panel = await chat.press('cfilter:type:villa');
+  await chat.press('cfilter:type:villa');
+  // Сохранить поиск можно за кнопкой «Ещё»: на главном экране фильтра
+  // остаётся только частое.
+  const panel = await chat.press('cfilter:more');
   const markup = panel.calls.filter((call) => call.method === 'editMessageText').pop().body.reply_markup;
   assert.ok(callbacksOf(markup).includes('saved:save'));
 
@@ -50,8 +53,10 @@ test('the current catalog filter becomes a clear saved search in My space', asyn
 
   await chat.press('saved:results');
   assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['saved-villa-fit']);
-  const edit = await chat.press('saved:edit');
-  assert.ok(callbacksOf(edit.last.markup).includes('saved:view'), 'unchanged criteria open the saved search instead of saving a duplicate');
+  await chat.press('saved:edit');
+  const edit = await chat.press('cfilter:more');
+  const editMarkup = edit.calls.filter((call) => ['sendMessage', 'editMessageText'].includes(call.method)).pop().body.reply_markup;
+  assert.ok(callbacksOf(editMarkup).includes('saved:view'), 'unchanged criteria open the saved search instead of saving a duplicate');
 });
 
 test('a client can pause, resume and delete the saved search', async () => {

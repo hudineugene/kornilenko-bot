@@ -13,7 +13,7 @@ import { startLeadForm, startSelectionForm, startViewingForm } from './forms.mjs
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
-import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { CATALOG_MODES, catalogHeading, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
 import { similarPropertyRanking } from './similar.mjs';
 
@@ -460,22 +460,56 @@ async function handlePropertyCallback(query, token) {
   if (actionName === 'details') {
     recordPropertyEvent(record.id, 'details');
     const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
-    const rows = [];
-    const images = recordImages(record, language);
-    if (images.length > 1) rows.push([{ text: '📷 ' + text.gallery + ' (' + images.length + ')', callback_data: 'property:gallery:' + record.id }]);
-    const calculator = calculatorButton(record, language);
-    if (calculator) rows.push([calculator]);
+    const interaction = INTERACTION_TEXT[language] || INTERACTION_TEXT.ru;
+    const full = objectCaptionHtml(record, language, { full: true });
+    // Ссылки и расчёт — не повтор кнопок карточки, они только здесь.
+    const links = [];
     const external = validHttpUrl(record.url);
     const map = validHttpUrl(record.mapUrl);
     const share = propertyShareUrl(record, language);
-    if (external) rows.push([{ text: '🌐 ' + text.viewWebsite, url: external }]);
-    if (map) rows.push([{ text: '📍 ' + text.openMap, url: map }]);
-    if (share) rows.push([{ text: '📤 ' + text.share, url: share }]);
-    rows.push([{ text: '🏘 ' + text.similar, callback_data: 'property:similar:' + record.id }]);
-    rows.push([{ text: '💬 ' + text.contact, callback_data: 'property:manager:' + record.id }]);
-    rows.push([{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:return:' + record.id }]);
+    if (external) links.push({ text: '🌐 ' + text.viewWebsite, url: external });
+    if (map) links.push({ text: '📍 ' + text.openMap, url: map });
+    if (share) links.push({ text: '📤 ' + text.share, url: share });
+    const extra = [];
+    const calculator = calculatorButton(record, language);
+    if (calculator) extra.push(calculator);
+    extra.push({ text: '🏘 ' + text.similar, callback_data: 'property:similar:' + record.id });
+
     await acknowledgeCallback(query, token);
-    await sendUiMessage(chatId, user, objectCaptionHtml(record, language, { full: true }), token, {
+    // Подпись под фотографией Telegram ограничивает 1024 знаками — считаем по
+    // видимому тексту, без разметки.
+    const plainLength = full.replace(/<[^>]*>/g, '').length;
+    const isCard = Boolean(query.message && Array.isArray(query.message.photo) && query.message.photo.length);
+    if (isCard && plainLength <= 1024) {
+      const rows = [
+        ...(record.status === 'active'
+          ? [[{ text: mobileButtonText('📅', text.viewing), callback_data: 'property:viewing:' + record.id },
+            { text: mobileButtonText('💬', text.contact), callback_data: 'property:manager:' + record.id }]]
+          : [[{ text: mobileButtonText('💬', text.contact), callback_data: 'property:manager:' + record.id }]]),
+        extra,
+        ...(links.length ? [links] : []),
+        [{ text: '🔼 ' + interaction.collapseDetails, callback_data: 'property:card:' + record.id }],
+      ];
+      try {
+        await telegramRequest(token, 'editMessageCaption', {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          caption: full,
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: rows },
+        });
+        return;
+      } catch {
+        // Не получилось изменить карточку — покажем отдельным сообщением.
+      }
+    }
+    // Длинное описание отдельным сообщением: здесь только то, чего нет на
+    // карточке, и возврат к ней.
+    const rows = [];
+    if (extra.length) rows.push(extra);
+    if (links.length) rows.push(links);
+    rows.push([{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:return:' + record.id }]);
+    await sendUiMessage(chatId, user, full, token, {
       parse_mode: 'HTML',
       reply_markup: { inline_keyboard: rows },
     });

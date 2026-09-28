@@ -1256,84 +1256,131 @@ function catalogFilterPanel(user) {
   const visibleButtons = (items) => items.filter((item) => item.count > 0 || item.selected).map((item) => item.button);
   const typeButtons = [facetButton('type', '', copy.anyType, !filter.type, 'cfilter:type:any')]
     .concat(Object.keys(typeLabels).map((type) => facetButton('type', type, typeLabels[type], filter.type === type, 'cfilter:type:' + type)));
-  const rows = [[facetButton('deal', '', copy.anyDeal, !filter.deal, 'cfilter:deal:any').button]];
-  const dealButtons = visibleButtons([
+  // Экран фильтра — не больше восьми рядов кнопок: длинный список никто не
+  // дочитывает. Частое остаётся на виду, редкое (сортировка, своя цена,
+  // сохранённый поиск, сброс) уезжает под «Ещё». Раньше рядов бывало
+  // пятнадцать — фильтр не помещался на экран телефона.
+  const MAX_ROWS = 8;
+  const dealRows = [[facetButton('deal', '', copy.anyDeal, !filter.deal, 'cfilter:deal:any').button].concat(visibleButtons([
     facetButton('deal', 'sale', action.forSale, filter.deal === 'sale', 'cfilter:deal:sale'),
     facetButton('deal', 'rent', action.forRent, filter.deal === 'rent', 'cfilter:deal:rent'),
-  ]);
-  if (dealButtons.length) rows.push(dealButtons);
+  ]))];
+
+  // Типы — по три в ряд: подписи короткие, а рядов уходит втрое меньше.
   const shownTypes = visibleButtons(typeButtons);
-  if (shownTypes.length) rows.push([shownTypes[0]]);
-  for (let index = 1; index < shownTypes.length; index += 2) rows.push(shownTypes.slice(index, index + 2));
-  rows.push([facetButton('bedrooms', 0, copy.anyBedrooms, !filter.bedrooms, 'cfilter:bed:0').button]);
-  const bedroomButtons = visibleButtons(CATALOG_FILTER_BEDROOMS.map((count) => facetButton('bedrooms', count, count + '+', filter.bedrooms === count, 'cfilter:bed:' + count)));
-  for (let index = 0; index < bedroomButtons.length; index += 2) rows.push(bedroomButtons.slice(index, index + 2));
-  // Cities appear once there is a choice; a chosen city stays visible even if
-  // it is the only one left.
+  const typeRows = [];
+  for (let index = 0; index < shownTypes.length; index += 3) typeRows.push(shownTypes.slice(index, index + 3));
+
+  const bedroomRows = [[facetButton('bedrooms', 0, copy.anyBedrooms, !filter.bedrooms, 'cfilter:bed:0').button]
+    .concat(visibleButtons(CATALOG_FILTER_BEDROOMS.map((count) => facetButton('bedrooms', count, count + '+', filter.bedrooms === count, 'cfilter:bed:' + count))))];
+
+  // Город и район — кнопки-списки в одном ряду: раньше каждый город занимал
+  // отдельный ряд и каталог из восьми городов съедал весь экран.
+  const found = applyCatalogFilter(published, filter, language).length;
   const cities = catalogCities(published, language);
-  if (cities.length > 1 || filter.city) {
-    if (cities.length > CATALOG_INLINE_LOCATION_LIMIT) {
-      rows.push([{
-        text: countedFilterLabel(filter.city || copy.chooseCity, applyCatalogFilter(published, filter, language).length, Boolean(filter.city)),
-        callback_data: 'cfilter:cities:0',
-      }]);
-    } else {
-      const cityButtons = [facetButton('city', '', copy.anyCity, !filter.city, 'cfilter:city:any')]
-        .concat(cities.map((city) => facetButton('city', city, city, sameCity(city, filter.city), 'cfilter:city:' + cityKey(city))));
-      for (const button of visibleButtons(cityButtons)) rows.push([button]);
-    }
-  }
-  // District is the second level of location. Show it after a city is chosen
-  // (or when the catalog has only one city), so a large catalog stays readable.
   const districtCity = filter.city || (cities.length === 1 ? cities[0] : '');
   const districts = catalogDistricts(published, language, districtCity);
+  const locationRow = [];
+  if (cities.length > 1 || filter.city) {
+    locationRow.push({
+      text: countedFilterLabel(filter.city || copy.chooseCity, found, Boolean(filter.city)),
+      callback_data: 'cfilter:cities:0',
+    });
+  }
   if (districtCity && (districts.length > 1 || filter.district)) {
-    if (districts.length > CATALOG_INLINE_LOCATION_LIMIT) {
-      rows.push([{
-        text: countedFilterLabel(filter.district || copy.chooseDistrict, applyCatalogFilter(published, filter, language).length, Boolean(filter.district)),
-        callback_data: 'cfilter:districts:0',
-      }]);
-    } else {
-      const districtButtons = [facetButton('district', '', copy.anyDistrict, !filter.district, 'cfilter:district:any')]
-        .concat(districts.map((district) => facetButton('district', district, district, sameCity(district, filter.district), 'cfilter:district:' + cityKey(district))));
-      for (const button of visibleButtons(districtButtons)) rows.push([button]);
-    }
+    locationRow.push({
+      text: countedFilterLabel(filter.district || copy.chooseDistrict, found, Boolean(filter.district)),
+      callback_data: 'cfilter:districts:0',
+    });
   }
+  const locationRows = locationRow.length ? [locationRow] : [];
+
+  // Цена — тоже кнопка-список: пороги, своя цена и нижняя граница живут на
+  // отдельном экране, а здесь видно выбранное.
   const priceDeal = catalogPriceDeal(filter, published);
-  if (priceDeal) {
-    const prices = CATALOG_FILTER_PRICES[priceDeal];
-    const customPrice = filter.maxPrice && !prices.includes(filter.maxPrice) ? [filter.maxPrice] : [];
-    const priceButtons = [facetButton('priceRange', 0, copy.anyPrice, !filter.minPrice && !filter.maxPrice, 'cfilter:price:0')]
-      .concat(customPrice.map((price) => facetButton('maxPrice', price, copy.upTo + ' ' + formattedPriceLimit(price, language), true, 'cfilter:price:' + price)))
-      .concat(prices.map((price) => facetButton('maxPrice', price, copy.upTo + ' ' + formattedPriceLimit(price, language), filter.maxPrice === price, 'cfilter:price:' + price)));
-    const shownPrices = visibleButtons(priceButtons);
-    if (shownPrices.length) rows.push([shownPrices[0]]);
-    for (let index = 1; index < shownPrices.length; index += 2) rows.push(shownPrices.slice(index, index + 2));
-    if (filter.minPrice) {
-      rows.push([facetButton('minPrice', filter.minPrice, copy.from + ' ' + formattedPriceLimit(filter.minPrice, language), true, 'cfilter:minprice:' + filter.minPrice).button]);
-    }
-    rows.push([
-      { text: '✎ ' + copy.minimumPrice, callback_data: 'cfilter:minprice:custom' },
-      { text: '✎ ' + copy.customPrice, callback_data: 'cfilter:price:custom' },
-    ]);
+  const priceRows = priceDeal
+    ? [[{ text: countedFilterLabel(catalogPriceLabel(filter, language), found, Boolean(filter.minPrice || filter.maxPrice)), callback_data: 'cfilter:prices:0' }]]
+    : [];
+
+  const tail = [
+    [{ text: copy.show + ': ' + found, callback_data: 'cfilter:show' }],
+    [{ text: '⋯ ' + copy.moreOptions, callback_data: 'cfilter:more' }],
+  ];
+  // Если в каталоге много типов или цен, лишние ряды убираем — сначала у цен,
+  // потом у типов. Хотя бы один ряд у каждого остаётся.
+  const blocks = [dealRows, typeRows, bedroomRows, locationRows, priceRows];
+  const total = () => blocks.reduce((sum, block) => sum + block.length, 0) + tail.length;
+  for (const block of [typeRows]) {
+    while (total() > MAX_ROWS && block.length > 1) block.pop();
   }
+  const rows = blocks.reduce((all, block) => all.concat(block), []).concat(tail);
+  return { text: copy.title, markup: { inline_keyboard: rows } };
+}
+
+// Подпись кнопки цены: «Цена: любая» или выбранные границы.
+function catalogPriceLabel(filter, language) {
+  const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
+  const parts = [];
+  if (filter.minPrice) parts.push(copy.from + ' ' + formattedPriceLimit(filter.minPrice, language));
+  if (filter.maxPrice) parts.push(copy.upTo + ' ' + formattedPriceLimit(filter.maxPrice, language));
+  return parts.length ? parts.join(' ') : copy.anyPrice;
+}
+
+// Экран цены: готовые пороги по два в ряд, своя цена и нижняя граница. На
+// основном экране фильтра всё это занимало до четырёх рядов.
+function catalogPricePanel(user) {
+  const language = user.preferredLanguage || 'ru';
+  const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
+  const filter = normalizedCatalogFilter(user.catalogFilter);
+  const published = publishedCatalog(user);
+  const priceDeal = catalogPriceDeal(filter, published);
+  const prices = priceDeal ? CATALOG_FILTER_PRICES[priceDeal] : [];
+  const rows = [[{
+    text: countedFilterLabel(copy.anyPrice, catalogFacetCount(published, filter, 'priceRange', 0, language), !filter.minPrice && !filter.maxPrice),
+    callback_data: 'cfilter:price:0',
+  }]];
+  const custom = filter.maxPrice && !prices.includes(filter.maxPrice) ? [filter.maxPrice] : [];
+  // Порог, под который ничего нет, не показываем — кроме выбранного.
+  const limits = custom.concat(prices).map((price) => ({
+    count: catalogFacetCount(published, filter, 'maxPrice', price, language),
+    selected: filter.maxPrice === price,
+    price,
+  })).filter((item) => item.count > 0 || item.selected).map((item) => ({
+    text: countedFilterLabel(copy.upTo + ' ' + formattedPriceLimit(item.price, language), item.count, item.selected),
+    callback_data: 'cfilter:price:' + item.price,
+  }));
+  for (let index = 0; index < limits.length; index += 2) rows.push(limits.slice(index, index + 2));
+  if (filter.minPrice) {
+    rows.push([{ text: '✓ ' + copy.from + ' ' + formattedPriceLimit(filter.minPrice, language), callback_data: 'cfilter:minprice:0' }]);
+  }
+  rows.push([
+    { text: '✎ ' + copy.minimumPrice, callback_data: 'cfilter:minprice:custom' },
+    { text: '✎ ' + copy.customPrice, callback_data: 'cfilter:price:custom' },
+  ]);
+  rows.push([{ text: '⬅️ ' + copy.backToFilter, callback_data: 'cfilter:open' }]);
+  return { text: copy.title, markup: { inline_keyboard: rows } };
+}
+
+// «Ещё»: то, чем пользуются редко — сортировка, своя цена, сохранённый поиск и
+// сброс. На основном экране фильтра им не место.
+function catalogFilterExtraScreen(user, language) {
+  const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
+  const savedCopy = SAVED_SEARCH_TEXT[language] || SAVED_SEARCH_TEXT.ru;
+  const filter = normalizedCatalogFilter(user.catalogFilter, language);
+  const mark = (active, label) => (active ? '✅ ' : '') + label;
+  const rows = [];
   rows.push([
     { text: mark(filter.sort === 'asc', copy.sortAsc), callback_data: 'cfilter:sort:' + (filter.sort === 'asc' ? 'none' : 'asc') },
     { text: mark(filter.sort === 'desc', copy.sortDesc), callback_data: 'cfilter:sort:' + (filter.sort === 'desc' ? 'none' : 'desc') },
   ]);
-  rows.push([{ text: copy.show + ': ' + applyCatalogFilter(published, filter, language).length, callback_data: 'cfilter:show' }]);
   if (catalogSearchActive(filter)) {
-    const savedCopy = SAVED_SEARCH_TEXT[language] || SAVED_SEARCH_TEXT.ru;
     rows.push([{
-      text: sameSavedSearch(user.savedSearch, filter)
-        ? savedCopy.open
-        : user.savedSearch
-          ? savedCopy.update
-          : savedCopy.save,
+      text: sameSavedSearch(user.savedSearch, filter) ? savedCopy.open : user.savedSearch ? savedCopy.update : savedCopy.save,
       callback_data: sameSavedSearch(user.savedSearch, filter) ? 'saved:view' : 'saved:save',
     }]);
   }
   if (catalogFilterActive(filter)) rows.push([{ text: copy.reset, callback_data: 'cfilter:reset' }]);
+  rows.push([{ text: '⬅️ ' + copy.backToFilter, callback_data: 'cfilter:open' }]);
   return { text: copy.title, markup: { inline_keyboard: rows } };
 }
 
@@ -1350,9 +1397,11 @@ async function handleCatalogFilterCallback(query, token) {
     await acknowledgeCallback(query, token);
     return;
   }
-  if (action === 'cities' || action === 'districts') {
+  if (action === 'cities' || action === 'districts' || action === 'prices') {
     await acknowledgeCallback(query, token);
-    const locationPanel = catalogLocationPanel(user, action === 'districts' ? 'district' : 'city', Number(value) || 0);
+    const locationPanel = action === 'prices'
+      ? catalogPricePanel(user)
+      : catalogLocationPanel(user, action === 'districts' ? 'district' : 'city', Number(value) || 0);
     if (query.message && query.message.message_id) {
       try {
         await telegramRequest(token, 'editMessageText', {
@@ -1460,9 +1509,11 @@ async function handleCatalogFilterCallback(query, token) {
   const districtChoices = action === 'city' && filter.city
     ? catalogDistricts(publishedCatalog(user), user.preferredLanguage, filter.city)
     : [];
-  const panel = districtChoices.length > CATALOG_INLINE_LOCATION_LIMIT
-    ? catalogLocationPanel(user, 'district', 0)
-    : catalogFilterPanel(user);
+  const panel = action === 'more'
+    ? catalogFilterExtraScreen(user, user.preferredLanguage)
+    : districtChoices.length > CATALOG_INLINE_LOCATION_LIMIT
+      ? catalogLocationPanel(user, 'district', 0)
+      : catalogFilterPanel(user);
   if (action !== 'open' && query.message && query.message.message_id) {
     try {
       await telegramRequest(token, 'editMessageText', { chat_id: chatId, message_id: query.message.message_id, text: panel.text, reply_markup: panel.markup });
@@ -1523,6 +1574,9 @@ function promotionButtons(record, language, page, totalPages) {
 }
 
 export {
+  catalogFilterExtraScreen,
+  catalogPricePanel,
+  mobileButtonText,
   priceDropVisible,
   showPropertyPhoto,
   CATALOG_FILTER_BEDROOMS,

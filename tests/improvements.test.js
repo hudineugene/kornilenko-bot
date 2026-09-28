@@ -437,9 +437,13 @@ test.describe('search in client messages', () => {
     assert.equal(russian.inquiries.length, 1);
     assert.equal(russian.inquiries[0].searchLead, true);
     assert.equal(bot.awaitingReply(russian.inquiries[0]), false);
-    const customPricePanel = await russian.press('cfilter:open');
-    const customPriceButton = customPricePanel.last.markup.inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:price:500000');
-    assert.ok(customPriceButton && customPriceButton.text.startsWith('✓ '), 'a price typed by the client stays visible in the filter');
+    const filterPanel = await russian.press('cfilter:open');
+    const priceButton = filterPanel.last.markup.inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:prices:0');
+    assert.match(priceButton.text.replace(/[   ]/g, ' '), /500 000 €/, 'a price typed by the client stays visible in the filter');
+    const customPricePanel = await russian.press('cfilter:prices:0');
+    const customPriceButton = customPricePanel.calls.filter((call) => ['sendMessage', 'editMessageText'].includes(call.method)).pop()
+      .body.reply_markup.inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:price:500000');
+    assert.ok(customPriceButton && customPriceButton.text.startsWith('✓ '), 'and stays chosen on the price screen');
 
     const english = createChat({ language: 'en' });
     await english.say('Looking to buy a villa in Marbella under 1.2 million, 3 bedrooms');
@@ -611,13 +615,17 @@ test.describe('catalog filter', () => {
     const chat = createChat();
     let panel = await chat.press('cfilter:open');
     const buttons = () => panel.calls.filter((call) => ['sendMessage', 'editMessageText'].includes(call.method)).pop().body.reply_markup.inline_keyboard.flat();
-    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:city:')).map((button) => withoutCount(button.text)), ['✓ ' + FILTER.anyCity, 'Малага', 'Марбелья', 'Эстепона'], 'each city once, whatever the case');
     assert.ok(!buttons().some((button) => button.callback_data.startsWith('cfilter:price:')), 'no price scale while sale and rent are mixed');
+
+    // Города живут за одной кнопкой-списком, чтобы фильтр не разрастался.
+    panel = await chat.press('cfilter:cities:0');
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:city:')).map((button) => withoutCount(button.text)), ['✓ ' + FILTER.anyCity, 'Малага', 'Марбелья', 'Эстепона'], 'each city once, whatever the case');
 
     const marbella = buttons().find((button) => withoutCount(button.text) === 'Марбелья');
     panel = await chat.press(marbella.callback_data);
     assert.equal(chat.user.catalogFilter.city, 'Марбелья');
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-1', 'sale-marbella-2']);
+    panel = await chat.press('cfilter:districts:0');
     assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:district:')).map((button) => withoutCount(button.text)), ['✓ ' + FILTER.anyDistrict, 'Нагуэлес', 'Сьерра-Бланка']);
 
     const sierra = buttons().find((button) => withoutCount(button.text) === 'Сьерра-Бланка');
@@ -625,13 +633,16 @@ test.describe('catalog filter', () => {
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-1']);
     assert.equal(chat.user.catalogFilter.city + ', ' + chat.user.catalogFilter.district, 'Марбелья, Сьерра-Бланка');
 
+    panel = await chat.press('cfilter:cities:0');
     const estepona = buttons().find((button) => withoutCount(button.text) === 'Эстепона');
     panel = await chat.press(estepona.callback_data);
     assert.equal(chat.user.catalogFilter.district, '', 'a district from another city is cleared');
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-estepona-3', 'sale-estepona-4']);
 
     panel = await chat.press('cfilter:city:any');
-    panel = await chat.press('cfilter:deal:sale');
+    await chat.press('cfilter:deal:sale');
+    // Пороги цены живут на своём экране, на фильтре цена — одной кнопкой.
+    panel = await chat.press('cfilter:prices:0');
     assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => withoutCount(button.text).replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 250 000 €', 'до 400 000 €', 'до 600 000 €', 'до 1 000 000 €', '✎ ' + FILTER.customPrice]);
     await chat.press('cfilter:price:400000');
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-2', 'sale-estepona-3'], 'a price on request is left out');
@@ -643,8 +654,9 @@ test.describe('catalog filter', () => {
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-2', 'sale-estepona-3', 'sale-marbella-1', 'sale-estepona-4']);
 
     await chat.press('cfilter:price:250000');
-    panel = await chat.press('cfilter:deal:rent');
+    await chat.press('cfilter:deal:rent');
     assert.equal(chat.user.catalogFilter.maxPrice, 0, 'a purchase limit does not carry over to rent');
+    panel = await chat.press('cfilter:prices:0');
     assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => withoutCount(button.text).replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 1 200 €', 'до 2 000 €', 'до 3 000 €', '✎ ' + FILTER.customPrice]);
     await chat.press('cfilter:show');
     const filterButton = cardMarkup().inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:open');
@@ -653,6 +665,63 @@ test.describe('catalog filter', () => {
     const english = createChat({ language: 'en' });
     english.user.catalogFilter = { city: 'Marbella' };
     assert.deepEqual(bot.catalogRecords(english.user).map((record) => record.id), ['sale-marbella-1', 'sale-marbella-2'], 'the city in the client\'s language');
+  });
+
+  test('the filter fits on one screen and hides rare options behind "more"', async () => {
+    // Богатый каталог: все типы, много городов и районов, обе сделки.
+    resetData((data) => {
+      const place = (value) => ({ ru: value, en: value, es: value });
+      const types = ['apartment', 'villa', 'house', 'townhouse', 'plot', 'commercial'];
+      types.forEach((propertyType, index) => {
+        for (let city = 1; city <= 5; city += 1) {
+          data.objects.push(property('rich-' + propertyType + '-' + city, 'Объект ' + propertyType + ' ' + city, 'active', {
+            dealType: index % 2 ? 'rent' : 'sale',
+            propertyType,
+            bedrooms: (index % 4) + 1,
+            priceValue: index % 2 ? 900 + city * 200 : 200000 + city * 90000,
+            city: place('Город ' + city),
+            district: place('Район ' + city),
+          }));
+        }
+      });
+    });
+    const chat = createChat();
+    const keyboard = (step) => step.calls.filter((call) => ['sendMessage', 'editMessageText'].includes(call.method)).pop().body.reply_markup.inline_keyboard;
+
+    let step = await chat.press('cfilter:open');
+    assert.ok(keyboard(step).length <= 8, 'the filter is at most eight rows, even in a rich catalog');
+    step = await chat.press('cfilter:deal:sale');
+    assert.ok(keyboard(step).length <= 8, 'choosing a deal adds a price button, not price rows');
+    step = await chat.press('cfilter:bed:2');
+    assert.ok(keyboard(step).length <= 8);
+    const filterCallbacks = callbacksOf({ inline_keyboard: keyboard(step) });
+    assert.ok(filterCallbacks.includes('cfilter:cities:0'), 'cities live behind a list button');
+    assert.ok(filterCallbacks.includes('cfilter:prices:0'), 'prices live behind a list button');
+    assert.ok(filterCallbacks.includes('cfilter:more'), 'the rest is behind "more"');
+    for (const rare of ['cfilter:sort:asc', 'cfilter:sort:desc', 'cfilter:price:custom', 'cfilter:minprice:custom', 'cfilter:reset']) {
+      assert.ok(!filterCallbacks.includes(rare), rare + ' does not take a row on the main screen');
+    }
+
+    // «Ещё»: сортировка, сохранённый поиск, сброс и возврат к фильтру.
+    step = await chat.press('cfilter:more');
+    const moreCallbacks = callbacksOf({ inline_keyboard: keyboard(step) });
+    assert.ok(moreCallbacks.includes('cfilter:sort:asc') && moreCallbacks.includes('cfilter:sort:desc'));
+    assert.ok(moreCallbacks.includes('saved:save'), 'the current search can be saved from here');
+    assert.ok(moreCallbacks.includes('cfilter:reset'));
+    assert.ok(moreCallbacks.includes('cfilter:open'), 'and there is a way back to the filter');
+
+    // Экран цены: пороги, своя цена и нижняя граница.
+    step = await chat.press('cfilter:prices:0');
+    const priceCallbacks = callbacksOf({ inline_keyboard: keyboard(step) });
+    assert.ok(priceCallbacks.includes('cfilter:price:0') && priceCallbacks.includes('cfilter:price:custom'));
+    assert.ok(priceCallbacks.includes('cfilter:minprice:custom'));
+    assert.ok(priceCallbacks.includes('cfilter:open'));
+
+    // Выбранное видно на кнопке фильтра, экран не разрастается.
+    step = await chat.press('cfilter:price:400000');
+    assert.ok(keyboard(step).length <= 8, 'a chosen price still fits');
+    const priceButton = keyboard(step).flat().find((button) => button.callback_data === 'cfilter:prices:0');
+    assert.match(priceButton.text.replace(/[   ]/g, ' '), /400 000 €/, 'the chosen price is visible without opening the screen');
   });
 
   test('long city and district lists use compact paginated pickers', async () => {
@@ -726,7 +795,8 @@ test.describe('catalog filter', () => {
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['custom-price-low', 'custom-price-fit']);
     assert.equal(chat.inquiries.length, 0, 'a budget is filter input, not a manager message');
     assert.ok(applied.replies.some((reply) => reply.text.includes('525') && reply.text.includes('€')));
-    const selected = applied.calls.filter((call) => call.method === 'sendMessage').pop().body.reply_markup.inline_keyboard.flat()
+    const priceScreen = await chat.press('cfilter:prices:0');
+    const selected = priceScreen.calls.filter((call) => ['sendMessage', 'editMessageText'].includes(call.method)).pop().body.reply_markup.inline_keyboard.flat()
       .find((button) => button.callback_data === 'cfilter:price:525000');
     assert.ok(selected && selected.text.startsWith('✓ '));
 
@@ -743,10 +813,10 @@ test.describe('catalog filter', () => {
     assert.equal(chat.user.catalogFilter.minPrice, 500000);
     assert.equal(chat.user.catalogFilter.maxPrice, 525000);
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['custom-price-fit']);
-    const selectedMinimum = minimumApplied.calls.filter((call) => call.method === 'sendMessage').pop().body.reply_markup.inline_keyboard.flat()
-      .find((button) => button.callback_data === 'cfilter:minprice:500000');
-    assert.ok(selectedMinimum && selectedMinimum.text.startsWith('✓ '));
-    assert.match(selectedMinimum.text.replace(/[  ]/g, ' '), /от 500 000 €/);
+    const filterAfterMinimum = minimumApplied.calls.filter((call) => call.method === 'sendMessage').pop().body.reply_markup.inline_keyboard.flat()
+      .find((button) => button.callback_data === 'cfilter:prices:0');
+    assert.ok(filterAfterMinimum, 'the filter keeps a single price button');
+    assert.match(filterAfterMinimum.text.replace(/[   ]/g, ' '), /от 500 000 €/, 'the chosen range is visible on the filter');
 
     await chat.press('cfilter:price:custom');
     const cancelled = await chat.say(FILTER.cancelCustomPrice);
@@ -1231,4 +1301,48 @@ test('старое снижение цены перестаёт показыва
 
   record.priceChangedAt = new Date(Date.now() - 3 * 864e5).toISOString();
   assert.match(bot.objectCaptionHtml(record, 'ru'), /<s>240\s000 €<\/s>/, 'свежее — показываем');
+});
+
+test('«Подробнее» раскрывается в самой карточке, без второго набора кнопок', async () => {
+  // Раньше «Подробнее» присылало отдельное сообщение и в нём ещё раз всё:
+  // фотографии, связаться, похожие, назад. В чате оказывалось два набора
+  // кнопок к одному объекту, и было неясно, какой из них «главный».
+  resetData((data) => {
+    data.objects.push(property('details-01', 'Квартира с описанием', 'active', {
+      priceValue: 210000, currency: 'EUR', area: 75, url: 'https://example.com/flat', mapUrl: 'https://maps.google.com/?q=Benidorm',
+    }));
+  });
+  const chat = createChat();
+  await chat.say(bot.text.menuLabels.ru.objects);
+
+  const opened = await chat.press('property:details:details-01', { card: true });
+  const edited = opened.calls.filter((call) => call.method === 'editMessageCaption');
+  assert.equal(edited.length, 1, 'описание раскрылось в той же карточке');
+  assert.equal(opened.calls.some((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id)), false, 'второго сообщения нет');
+  assert.match(edited[0].body.caption, /<b>Характеристики<\/b>/, 'показаны характеристики');
+  const buttons = edited[0].body.reply_markup.inline_keyboard.flat().map((button) => button.callback_data || button.url);
+  assert.ok(buttons.includes('property:card:details-01'), 'есть «Свернуть»');
+  assert.ok(buttons.includes('property:similar:details-01'), 'похожие объекты — только здесь');
+  assert.ok(buttons.includes('https://example.com/flat'), 'и ссылка на сайт');
+  assert.equal(buttons.filter((data) => data === 'property:details:details-01').length, 0, '«Подробнее» само себя не повторяет');
+});
+
+test('длинное описание приходит отдельным сообщением, но без повтора кнопок', async () => {
+  resetData((data) => {
+    data.objects.push(property('details-02', 'Объект с длинным текстом', 'active', {
+      priceValue: 300000, currency: 'EUR', area: 120,
+      description: { ru: 'Очень подробное описание. '.repeat(60), en: 'Long text. '.repeat(60), es: 'Texto largo. '.repeat(60) },
+    }));
+  });
+  const chat = createChat();
+  await chat.say(bot.text.menuLabels.ru.objects);
+
+  const opened = await chat.press('property:details:details-02', { card: true });
+  assert.equal(opened.calls.filter((call) => call.method === 'editMessageCaption').length, 0, 'в подпись такой текст не помещается');
+  const sent = opened.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id));
+  assert.equal(sent.length, 1, 'пришло отдельное сообщение');
+  const buttons = sent[0].body.reply_markup.inline_keyboard.flat().map((button) => button.callback_data || button.url);
+  assert.ok(buttons.includes('property:return:details-02'), 'есть возврат к карточке');
+  assert.equal(buttons.includes('property:manager:details-02'), false, 'кнопки карточки не повторяются');
+  assert.equal(buttons.includes('property:viewing:details-02'), false, 'и запись на просмотр тоже');
 });
