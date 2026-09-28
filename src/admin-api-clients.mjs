@@ -9,7 +9,7 @@ import { recordError } from './analytics.mjs';
 import { eraseUserData, markUnavailable, userByChatId, userById, userDataExport } from './users.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
-import { appendInquiryMessage, awaitingReply, inquiryTimelineMessage } from './inquiries.mjs';
+import { appendInquiryMessage, awaitingReply, inquiryTimelineMessage, trimInquiries } from './inquiries.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
 import { json, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
@@ -100,7 +100,11 @@ async function handleClientsApi(req, res, url) {
           createdAt: now, updatedAt: now, clientMessageAt: '',
         };
         data.inquiries.unshift(inquiry);
-        data.inquiries = data.inquiries.slice(0, 5000);
+        // Через общую защиту: она сначала убирает закрытые обращения и
+        // предупреждает владельца, если пришлось тронуть живые. Прежний
+        // slice(0, 5000) просто отрезал хвост — вместе с открытыми делами и
+        // молча.
+        trimInquiries();
       }
       const replyText = [text, buttonText ? '🔗 ' + buttonText : ''].filter(Boolean).join('\n') || 'Изображение';
       const lastMessage = delivered[delivered.length - 1] && delivered[delivered.length - 1].message;

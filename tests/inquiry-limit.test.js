@@ -6,9 +6,15 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+// Запросы к панели идут по-настоящему, ответы Telegram — через заглушку.
+const realFetch = global.fetch;
 const { bot, telegram, ADMIN_CHAT, resetData, cleanup } = require('./helpers/chat');
+const telegramStub = global.fetch;
+global.fetch = (url, init) => (String(url).startsWith('http://127.0.0.1') ? realFetch(url, init) : telegramStub(url, init));
 
+const PASSWORD = 'panel-password-42';
 let MAX = 0;
+let base = '';
 
 function fill({ open, closed }) {
   const data = bot.getData();
@@ -27,13 +33,92 @@ function fill({ open, closed }) {
 
 test.before(async () => {
   ({ MAX_INQUIRIES: MAX } = await import('../src/inquiries.mjs'));
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  base = 'http://127.0.0.1:' + bot.server.address().port;
 });
 test.beforeEach(() => resetData((data) => {
   data.config.active = true;
   data.config.adminChatId = ADMIN_CHAT;
   data.config.statusNotices = true;
 }));
-test.after(cleanup);
+test.after(async () => {
+  await new Promise((resolve) => bot.server.close(resolve));
+  cleanup();
+});
+
+// Вход в панель: пароль задаём после resetData, он стирает настройки.
+async function panelHeaders() {
+  const data = bot.getData();
+  const password = bot.hashPassword(PASSWORD);
+  data.config.passwordSalt = password.salt;
+  data.config.passwordHash = password.hash;
+  const login = await realFetch(base + '/api/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: PASSWORD }),
+  });
+  assert.equal(login.status, 200, 'вход в панель удался');
+  return {
+    'content-type': 'application/json',
+    cookie: login.headers.get('set-cookie').split(';')[0],
+    'x-csrf-token': (await login.json()).csrf,
+  };
+}
+
+// Список на пределе, где в конце — открытые обращения: раньше исходящее
+// сообщение из панели отрезало именно их.
+function fillOldestOpen({ closed }) {
+  const data = bot.getData();
+  const at = (index) => new Date(Date.now() - index * 60000).toISOString();
+  data.inquiries = [];
+  for (let index = 0; index < closed; index += 1) {
+    data.inquiries.push({
+      id: 'closed-' + index, userId: '6' + index, chatId: '6' + index, language: 'ru', type: 'general',
+      text: 'Закрыто', status: 'closed', replies: [], messages: [], createdAt: at(index), updatedAt: at(index), clientMessageAt: at(index),
+    });
+  }
+  for (let index = 0; index < MAX - closed; index += 1) {
+    data.inquiries.push({
+      id: 'open-' + index, userId: '7' + index, chatId: '7' + index, language: 'ru', type: 'general',
+      text: 'Клиент ждёт ответа', status: 'new', replies: [], messages: [], createdAt: at(closed + index), updatedAt: at(closed + index), clientMessageAt: at(closed + index),
+    });
+  }
+  data.users['8001'] = { id: '8001', chatId: 8001, firstName: 'Новый клиент', preferredLanguage: 'ru', activity: [], favouriteIds: [], comparisonIds: [] };
+  return data;
+}
+
+const sendFromPanel = (headers) => realFetch(base + '/api/users/8001/message', {
+  method: 'POST', headers, body: JSON.stringify({ text: 'Здравствуйте, я ваш менеджер' }),
+});
+
+test('исходящее сообщение из панели не срезает открытые обращения молча', async () => {
+  const data = fillOldestOpen({ closed: 10 });
+  const headers = await panelHeaders();
+  const openBefore = data.inquiries.filter((item) => item.status !== 'closed').map((item) => item.id);
+  telegram.calls = [];
+
+  const response = await sendFromPanel(headers);
+  assert.equal(response.status, 200, await response.text());
+
+  assert.equal(data.inquiries.length, MAX, 'список остался на пределе');
+  const openAfter = data.inquiries.filter((item) => item.status !== 'closed' && item.userId !== '8001').map((item) => item.id);
+  assert.deepEqual(openAfter, openBefore, 'ни одно обращение, где клиент ждёт ответа, не пропало');
+  assert.equal(data.inquiries.filter((item) => item.status === 'closed').length, 9, 'место освободило закрытое обращение');
+  assert.ok(data.inquiries.some((item) => item.userId === '8001'), 'новое обращение на месте');
+});
+
+test('если закрытых нет, владелец узнаёт и об этом случае', async () => {
+  const data = fillOldestOpen({ closed: 0 });
+  const headers = await panelHeaders();
+  telegram.calls = [];
+
+  const response = await sendFromPanel(headers);
+  assert.equal(response.status, 200, await response.text());
+
+  assert.equal(data.inquiries.length, MAX);
+  assert.equal(data.errors[0] && data.errors[0].area, 'Предел обращений', 'в журнале панели есть запись');
+  const notice = telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === ADMIN_CHAT);
+  assert.equal(notice.length, 1, 'администратор получил предупреждение');
+  assert.match(notice[0].body.text, /Обращений стало больше/);
+});
 
 test('сначала уходят закрытые, живые остаются', async () => {
   const { trimInquiries } = await import('../src/inquiries.mjs');
