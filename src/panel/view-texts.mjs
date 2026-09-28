@@ -165,8 +165,10 @@ function buildMessages(host) {
 // --- Запасные тексты разделов ---------------------------------------------------
 function renderSections(host) {
   var menu = state.config.menu || {};
-  var fields = [["objects", "Объекты"], ["promotions", "Акции"], ["contacts", "Контакты"], ["about", "О компании"]];
-  host.innerHTML = '<div class="card"><header><h3>Тексты разделов</h3><div class="actions"><span class="small faint">показываются, если карточек нет</span></div></header>' +
+  // Контакты и «О компании» правятся на своей вкладке — здесь остаются только
+  // тексты, которые клиент видит вместо пустого раздела.
+  var fields = [["objects", "Объекты"], ["promotions", "Акции"]];
+  host.innerHTML = '<div class="card"><header><h3>Пустые разделы</h3><div class="actions"><span class="small faint">показываются, если карточек нет</span></div></header>' +
     '<div class="card-body stack" id="menuForm">' + languageTabs() +
     fields.map(function (field) {
       return '<div class="field"><label>' + field[1] + "</label>" + LANGUAGES.map(function (language) {
@@ -177,7 +179,9 @@ function renderSections(host) {
   watchForm(host, async function () {
     var payload = {};
     LANGUAGES.forEach(function (language) {
-      payload[language[0]] = {};
+      // Остальные тексты раздела оставляем как есть: они правятся на других
+      // вкладках, и пустой ответ стёр бы их.
+      payload[language[0]] = Object.assign({}, (state.config.menu || {})[language[0]] || {});
       fields.forEach(function (field) {
         payload[language[0]][field[0]] = host.querySelector('[data-tr="' + field[0] + '"][data-lang="' + language[0] + '"]').value;
       });
@@ -189,6 +193,7 @@ function renderSections(host) {
 // --- Контакты -------------------------------------------------------------------
 function renderContacts(host) {
   var contacts = state.contacts || {};
+  var hours = (state.config || {}).workingHours || {};
   var phones = String(contacts.phone || "").match(/\+?\d[\d\s().-]{5,}\d/g) || [];
   var whatsappAvailable = contacts.whatsappEnabled !== false && Boolean(contacts.whatsapp || phones[0]);
   var previewLines = [(contacts.text || {}).ru || ""];
@@ -210,10 +215,16 @@ function renderContacts(host) {
       '<div class="field"><label>Поясняющий текст</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-tr="text" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((contacts.text || {})[language[0]] || "") + "</textarea>";
       }).join("") + "</div>" +
+      '<div class="field"><label>О компании</label>' + LANGUAGES.map(function (language) {
+        return '<textarea data-about="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-lg">' + esc(((state.config.menu || {})[language[0]] || {}).about || "") + "</textarea>";
+      }).join("") + '<div class="hint">Открывается кнопкой «ℹ️ О компании» на этом же экране у клиента.</div></div>' +
+      '<div class="field"><label>Сообщение в нерабочее время</label>' + LANGUAGES.map(function (language) {
+        return '<textarea data-hours="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((hours.note || {})[language[0]] || "") + "</textarea>";
+      }).join("") + '<div class="hint">{next} подставит ближайшее рабочее время. Сами часы работы — в «Настройках».</div></div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Так увидит клиент</h3></header><div class="card-body stack">' +
       '<div class="msg">' + esc(previewLines.filter(Boolean).join("\n\n")) + "</div>" +
-      '<div class="row wrap">' + [whatsappAvailable ? "🟢 WhatsApp" : "", contacts.telegram ? "✈️ Telegram" : "", contacts.website ? "🌐 Сайт" : "", contacts.mapUrl ? "📍 Карта" : "", "📞 Позвоните мне", "❓ Задать вопрос", "🏠 Главное меню"].filter(Boolean).map(function (label) {
+      '<div class="row wrap">' + [whatsappAvailable ? "🟢 WhatsApp" : "", contacts.telegram ? "✈️ Telegram" : "", contacts.website ? "🌐 Сайт" : "", contacts.mapUrl ? "📍 Карта" : "", "📞 Позвоните мне", "❓ Задать вопрос", "ℹ️ О компании", "🏠 Главное меню"].filter(Boolean).map(function (label) {
         return '<span class="chip brand">' + esc(label) + "</span>";
       }).join("") + "</div>" +
     "</div></div></div>";
@@ -229,6 +240,29 @@ function renderContacts(host) {
       website: host.querySelector("#cSite").value,
       mapUrl: host.querySelector("#cMap").value,
       text: collectTranslated(host, "text"),
+    });
+    // «О компании» и текст нерабочего времени хранятся в других местах, но
+    // для владельца это один экран и одно сохранение.
+    var menu = {};
+    LANGUAGES.forEach(function (language) {
+      menu[language[0]] = Object.assign({}, (state.config.menu || {})[language[0]] || {});
+      var about = host.querySelector('[data-about="1"][data-lang="' + language[0] + '"]');
+      if (about) menu[language[0]].about = about.value;
+    });
+    await send("/api/menu", "PUT", { menu: menu });
+    var note = {};
+    LANGUAGES.forEach(function (language) {
+      var field = host.querySelector('[data-hours="1"][data-lang="' + language[0] + '"]');
+      if (field) note[language[0]] = field.value;
+    });
+    await send("/api/working-hours", "PUT", {
+      enabled: hours.enabled === true,
+      timeZone: state.config.timeZone,
+      from: hours.from || "09:00",
+      to: hours.to || "19:00",
+      days: Array.isArray(hours.days) ? hours.days : [],
+      replyMinutes: hours.replyMinutes || 0,
+      note: note,
     });
   }, "Контакты изменены");
 }

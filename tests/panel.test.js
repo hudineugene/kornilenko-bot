@@ -76,6 +76,23 @@ test('редакторы предупреждают перед закрытие�
   assert.match(PANEL_HTML, /dialog\.closeClean\(\)/);
 });
 
+test('«Контакты и о компании» собраны в одном месте', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  // «О компании» и сообщение нерабочего времени — на вкладке контактов.
+  assert.match(PANEL_HTML, /data-about="1"/);
+  assert.match(PANEL_HTML, /data-hours="1"/);
+  assert.match(PANEL_HTML, /Сообщение в нерабочее время/);
+  assert.match(PANEL_HTML, /\["contacts", "Контакты и о компании"\]/);
+
+  // «Разделы» больше не повторяют контакты и «О компании».
+  assert.match(PANEL_HTML, /var fields = \[\["objects", "Объекты"\], \["promotions", "Акции"\]\]/);
+  assert.match(PANEL_HTML, /\["sections", "Пустые разделы"\]/);
+
+  // В настройках вместо поля — ссылка, где его искать.
+  assert.match(PANEL_HTML, /во вкладке «Тексты бота» → «Контакты и о компании»/);
+  assert.ok(!/data-tr="hoursNote"/.test(PANEL_HTML), 'второго поля для того же текста больше нет');
+});
+
 test('«Приветствие и меню» — на одной вкладке и с живым предпросмотром', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   // Приветствие, подсказка, помощь и подписи кнопок — в одной форме.
