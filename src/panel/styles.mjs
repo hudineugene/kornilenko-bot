@@ -146,7 +146,9 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .bar{height:7px;border-radius:4px;background:var(--brand-soft);overflow:hidden}
 .bar>span{display:block;height:100%;background:var(--brand);border-radius:4px}
 .spark{display:flex;align-items:flex-end;gap:2px;height:74px}
-.spark div{flex:1;min-width:3px;background:var(--brand-soft);border-radius:3px 3px 0 0;position:relative}
+/* Высота столбика задаётся в процентах, поэтому у дорожки должна быть своя
+   высота: без неё проценты считались от нуля и график не рисовался никогда. */
+.spark div{flex:1;min-width:3px;height:100%;background:var(--brand-soft);border-radius:3px 3px 0 0;position:relative}
 .spark div>i{position:absolute;inset:auto 0 0 0;background:var(--brand);border-radius:3px 3px 0 0;display:block}
 .legend{display:flex;gap:12px;font-size:11.5px;color:var(--muted);margin-top:6px}
 .legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
