@@ -9,7 +9,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 31;
+const DATA_VERSION = 32;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -913,6 +913,7 @@ function normalizeLoadedData(parsed) {
         name: cleanText(item.lead.name, 120),
         phone: cleanText(item.lead.phone, 80),
         preferredTime: cleanText(item.lead.preferredTime, 160),
+        method: ['call', 'whatsapp', 'telegram'].includes(item.lead.method) ? item.lead.method : 'call',
       } : null,
       selection: item.selection && typeof item.selection === 'object' ? {
         deal: cleanText(item.selection.deal, 200),

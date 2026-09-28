@@ -7,7 +7,7 @@ import { recordActivity, recordDaily, recordError, recordPropertyEvent } from '.
 import { leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from './users.mjs';
 import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, isLanguageChangeText, languageFromText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
-import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
+import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleLeadMethodCallback, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
 import {
   adminChatFor,
   createInquiry,
@@ -175,6 +175,10 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('saved:')) await handleSavedSearchCallback(update.callback_query, token, notifyAdministratorAction);
       else if (callbackData.startsWith('promotions:')) await handlePromotionCallback(update.callback_query, token);
       else if (callbackData.startsWith('contact:')) await handleContactCallback(update.callback_query, token);
+      else if (callbackData.startsWith('lead:')) {
+        await acknowledgeCallback(update.callback_query, token);
+        await handleLeadMethodCallback(update.callback_query, token, callbackUser);
+      }
       else if (callbackData.startsWith('about:')) await handleAboutCallback(update.callback_query, token);
       else if (callbackData.startsWith('nav:')) await handleNavigationCallback(update.callback_query, token);
       else if (callbackData.startsWith('selection:')) await handleSelectionCallback(update.callback_query, token);

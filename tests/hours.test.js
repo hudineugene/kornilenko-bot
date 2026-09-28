@@ -43,7 +43,9 @@ test('a client writing outside office hours is told when to expect an answer', a
   let step = await chat.say('Здравствуйте, есть ли квартиры в Малаге?');
   assert.match(step.last.text, /\n\n🌙 Сейчас нерабочее время — менеджер ответит завтра с 9:00\. Ваше сообщение сохранено\.$/);
 
-  step = await chat.press('contact:lead');
+  await chat.press('contact:lead');
+
+  step = await chat.press('lead:call');
   await chat.say('+34 600 000 000');
   step = await chat.say(bot.text.lead.ru.timeOptions[2]);
   assert.ok(step.last.text.startsWith(bot.text.lead.ru.success + '\n\n🌙 '));

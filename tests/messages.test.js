@@ -23,6 +23,7 @@ test.describe('confirming a message reached the manager', () => {
     const chat = createChat();
     const ru = LEAD.ru;
     await chat.press('contact:lead');
+    await chat.press('lead:call');
     await chat.say('+34 600 111 222');
     const submitted = await chat.say(ru.timeOptions[0]);
     assert.equal(submitted.last.text, ru.success);

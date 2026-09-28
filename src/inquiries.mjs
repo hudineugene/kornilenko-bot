@@ -244,6 +244,7 @@ function createInquiry(user, text, context = {}) {
       name: cleanText(context.lead.name, 120),
       phone: cleanText(context.lead.phone, 80),
       preferredTime: cleanText(context.lead.preferredTime, 160),
+      method: ['call', 'whatsapp', 'telegram'].includes(context.lead.method) ? context.lead.method : 'call',
     } : null,
     selection: context.selection && typeof context.selection === 'object' ? {
       deal: cleanText(context.selection.deal, 200),

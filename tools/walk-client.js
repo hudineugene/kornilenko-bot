@@ -145,10 +145,9 @@ function client(id, name, lang) {
 
   out.push('\n## Анкеты');
   await anna.say('📞 Позвоните мне', 'заявка на звонок');
-  await anna.say('Анна Петрова');
-  await anna.say('+34 600 111 222');
-  await anna.say('Сегодня после 18:00');
-  await anna.say('✅ Отправить заявку');
+  await anna.press('lead:call', 'выбрать звонок');
+  await anna.say('+34 600 111 222', 'номер телефона');
+  await anna.say('Сегодня после 18:00', 'удобное время');
 
   await anna.press('property:viewing:' + rent.id, 'записаться на просмотр');
   const days = anna.keyboard();

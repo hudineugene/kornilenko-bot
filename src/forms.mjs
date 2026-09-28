@@ -251,6 +251,29 @@ function isStaleFormControl(text) {
   return false;
 }
 
+// Способ связи: звонок (по умолчанию), WhatsApp или переписка в Telegram.
+// Для Telegram телефон не нужен — это и есть главный смысл выбора.
+const LEAD_METHODS = ['call', 'whatsapp', 'telegram'];
+const LEAD_METHOD_LABELS = { call: 'звонок', whatsapp: 'WhatsApp', telegram: 'Telegram' };
+
+function leadMethod(value) {
+  return LEAD_METHODS.includes(value) ? value : 'call';
+}
+
+// Экран выбора: показывается только когда телефона ещё нет. Если номер уже
+// известен, звонок — самый короткий путь, и спрашивать незачем.
+function leadMethodKeyboard(language, propertyId) {
+  const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
+  const suffix = propertyId ? ':' + propertyId : '';
+  return {
+    inline_keyboard: [
+      [{ text: copy.methodCall, callback_data: 'lead:call' + suffix }],
+      [{ text: copy.methodWhatsapp, callback_data: 'lead:whatsapp' + suffix }],
+      [{ text: copy.methodTelegram, callback_data: 'lead:telegram' + suffix }],
+    ],
+  };
+}
+
 // Заявка уходит менеджеру и запоминает контакты клиента: в следующий раз
 // звонок можно будет заказать одним нажатием.
 async function submitLead(user, pending, token, language, message, extraRows = []) {
@@ -259,23 +282,30 @@ async function submitLead(user, pending, token, language, message, extraRows = [
     name: cleanText(pending.data && pending.data.name, 120),
     phone: cleanText(pending.data && pending.data.phone, 80),
     preferredTime: cleanText(pending.data && pending.data.preferredTime, 160),
+    method: leadMethod(pending.method),
   };
   const propertyId = cleanText(pending.propertyId, 100);
   user.contactName = lead.name;
-  user.phone = lead.phone;
-  user.preferredContactTime = lead.preferredTime;
+  // Пустой номер не стирает известный: клиент мог выбрать переписку в Telegram.
+  if (lead.phone) user.phone = lead.phone;
+  if (lead.preferredTime) user.preferredContactTime = lead.preferredTime;
   user.pendingAction = null;
   createInquiry(user, [
     'Имя: ' + lead.name,
-    'Телефон: ' + lead.phone,
-    'Удобное время: ' + lead.preferredTime,
-  ].join('\n'), { type: 'lead', propertyId, lead, sourceMessage: message });
+    'Способ связи: ' + LEAD_METHOD_LABELS[lead.method],
+    lead.phone ? 'Телефон: ' + lead.phone : '',
+    lead.preferredTime ? 'Удобное время: ' + lead.preferredTime : '',
+  ].filter(Boolean).join('\n'), { type: 'lead', propertyId, lead, sourceMessage: message });
   saveDataNow();
   const property = propertyId ? data.objects.find((item) => item.id === propertyId) : null;
   const propertyTitle = property ? localizedExact(property.title, language) : '';
-  const success = pending.instant
-    ? copy.instantSuccess.replace('{phone}', lead.phone)
-    : copy.success;
+  const success = lead.method === 'telegram'
+    ? copy.telegramSuccess
+    : lead.method === 'whatsapp'
+      ? copy.whatsappSuccess.replace('{phone}', lead.phone)
+      : pending.instant
+        ? copy.instantSuccess.replace('{phone}', lead.phone)
+        : copy.success;
   await sendMessage(user.chatId, withOffHoursNote([success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), language), token, {
     reply_markup: extraRows.length ? { inline_keyboard: extraRows } : menuKeyboard(language),
   });
@@ -286,14 +316,32 @@ async function startLeadForm(user, token, context = {}) {
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
   const phone = knownLeadPhone(user);
   const name = leadContactName(user);
-  // Телефон уже известен — спрашивать нечего: заявка уходит сразу, а поправить
-  // номер или время можно кнопкой под подтверждением.
-  if (phone) {
+  const propertyId = cleanText(context.propertyId, 100);
+  const method = LEAD_METHODS.includes(context.method) ? context.method : '';
+  // Телефона нет — сначала спросим, как связаться: переписка в Telegram
+  // обходится вообще без номера.
+  if (!phone && !method) {
+    user.pendingAction = null;
+    scheduleSave();
+    await sendMessage(user.chatId, copy.chooseMethod, token, { reply_markup: leadMethodKeyboard(language, propertyId) });
+    return;
+  }
+  // Пишем в Telegram — заявка уходит сразу, ничего спрашивать не нужно.
+  if (method === 'telegram') {
+    const pending = { type: 'lead', step: 'confirm', method, propertyId, data: { name }, createdAt: new Date().toISOString() };
+    user.pendingAction = pending;
+    await submitLead(user, pending, token, language, null);
+    return;
+  }
+  // Телефон уже известен — заявка уходит сразу, а поправить номер или время
+  // можно кнопкой под подтверждением.
+  if (phone && method !== 'whatsapp') {
     const pending = {
       type: 'lead',
       step: 'confirm',
       instant: true,
-      propertyId: cleanText(context.propertyId, 100),
+      method: 'call',
+      propertyId,
       data: { name, phone, preferredTime: cleanText(user.preferredContactTime, 160) },
       createdAt: new Date().toISOString(),
     };
@@ -301,15 +349,29 @@ async function startLeadForm(user, token, context = {}) {
     await submitLead(user, pending, token, language, null, [[{ text: copy.changeDetails, callback_data: 'contact:leadedit' }]]);
     return;
   }
+  if (phone && method === 'whatsapp') {
+    const pending = { type: 'lead', step: 'confirm', method, propertyId, data: { name, phone }, createdAt: new Date().toISOString() };
+    user.pendingAction = pending;
+    await submitLead(user, pending, token, language, null);
+    return;
+  }
   user.pendingAction = {
     type: 'lead',
     step: 'phone',
-    propertyId: cleanText(context.propertyId, 100),
+    method: leadMethod(method),
+    propertyId,
     data: { name },
     createdAt: new Date().toISOString(),
   };
   scheduleSave();
-  await sendMessage(user.chatId, phonePrompt(copy, language), token, { reply_markup: leadFormKeyboard(language, 'phone', user) });
+  const prompt = method === 'whatsapp' ? copy.askWhatsapp : phonePrompt(copy, language);
+  await sendMessage(user.chatId, prompt, token, { reply_markup: leadFormKeyboard(language, 'phone', user) });
+}
+
+// Нажатие на кнопку способа связи.
+async function handleLeadMethodCallback(query, token, user) {
+  const [, method, propertyId] = String(query.data || '').split(':');
+  await startLeadForm(user, token, { propertyId: propertyId || '', method });
 }
 
 // Правка после мгновенной заявки: показываем то, что бот знает, и даём
@@ -371,6 +433,11 @@ async function handleLeadFormMessage(message, user, token) {
     pending.data.phone = phone;
     if (pending.editing === 'phone') {
       await sendLeadReview(user, pending, token, language);
+      return true;
+    }
+    // Для переписки в WhatsApp удобное время не нужно: менеджер просто напишет.
+    if (pending.method === 'whatsapp') {
+      await submitLead(user, pending, token, language, message);
       return true;
     }
     pending.step = 'time';
@@ -1141,6 +1208,7 @@ export {
   sendSelectionReview,
   sendViewingReview,
   showPendingActionStep,
+  handleLeadMethodCallback,
   knownLeadPhone,
   startLeadEdit,
   startLeadForm,

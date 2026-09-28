@@ -135,7 +135,8 @@ test.describe('согласие на обработку телефона', () =>
   test('в вопросе о телефоне сказано зачем и куда смотреть', async () => {
     const chat = createChat();
     await chat.say('/start');
-    const asked = await chat.press('contact:lead');
+    await chat.press('contact:lead');
+    const asked = await chat.press('lead:call');
     assert.ok(asked.last.text.startsWith(bot.text.lead.ru.askPhone), 'сам вопрос не изменился');
     assert.match(asked.last.text, /\/privacy/, 'есть, где посмотреть, что хранится и как удалить');
   });
