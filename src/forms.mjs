@@ -866,14 +866,51 @@ async function handleViewingFormMessage(message, user, token) {
     recordPropertyEvent(property.id, 'viewings');
     saveDataNow();
     if (slotBooking) {
-      await sendMessage(user.chatId, copy.slotBooked, token, { reply_markup: menuKeyboard(language) });
-      await sendViewingConfirmation(inquiry, user, token);
+      // Подтверждение одно: заголовок «Готово» и сразу подробности. Клавиатуру
+      // главного меню возвращаем этим же сообщением, а тем, чьего номера мы не
+      // знаем, добавляем кнопку «Оставить номер».
+      await sendViewingConfirmation(inquiry, user, token, {
+        heading: copy.slotBooked,
+        keyboard: viewingMenuKeyboard(language, user),
+      });
       return true;
     }
     await sendMessage(user.chatId, withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
     return true;
   }
   return false;
+}
+
+// Меню после записи на просмотр: у кого нет телефона — с кнопкой «Оставить
+// номер». Телефон для показа нужен не боту, а менеджеру: в день показа он
+// звонит, а не пишет.
+function viewingMenuKeyboard(language, user) {
+  const menu = menuKeyboard(language);
+  if (knownLeadPhone(user)) return menu;
+  const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
+  return {
+    ...menu,
+    keyboard: [[{ text: copy.sharePhoneForViewing, request_contact: true }], ...menu.keyboard],
+  };
+}
+
+// Клиент прислал номер после записи на просмотр: сохраняем и говорим спасибо.
+async function saveViewingPhone(message, user, token) {
+  const language = user.preferredLanguage || 'ru';
+  const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
+  const phone = validLeadPhone(message.contact && message.contact.phone_number);
+  if (!phone) return false;
+  user.phone = phone;
+  scheduleSave();
+  const viewing = data.inquiries.filter((item) => item.type === 'viewing' && item.userId === user.id).pop();
+  createInquiry(user, 'Телефон для связи в день показа: ' + phone, {
+    type: 'question',
+    propertyId: viewing ? viewing.propertyId : '',
+    sourceMessage: message,
+  });
+  saveDataNow();
+  await sendMessage(user.chatId, copy.phoneForViewingSaved, token, { reply_markup: menuKeyboard(language) });
+  return true;
 }
 
 const SELECTION_STEPS = ['deal', 'type', 'location', 'budget', 'bedrooms'];
@@ -1210,6 +1247,7 @@ export {
   showPendingActionStep,
   handleLeadMethodCallback,
   knownLeadPhone,
+  saveViewingPhone,
   startLeadEdit,
   startLeadForm,
   startSelectionForm,

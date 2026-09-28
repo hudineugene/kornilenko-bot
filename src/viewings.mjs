@@ -188,15 +188,22 @@ function viewingProperty(inquiry) {
 
 // The client's message: property, date, time, address, a map and a way to
 // "My requests".
-async function sendViewingConfirmation(inquiry, user, token = data.config.botToken) {
+async function sendViewingConfirmation(inquiry, user, token = data.config.botToken, options = {}) {
   const language = user.preferredLanguage || inquiry.language || 'ru';
   const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
   const property = viewingProperty(inquiry);
-  const rows = [];
   const map = property ? validHttpUrl(property.mapUrl) : '';
+  const text = viewingDetailsText(inquiry, property, language, options.heading || copy.confirmed, copy.confirmedFooter);
+  // Сразу после записи клиенту важнее вернуть главное меню, чем показать две
+  // кнопки: карта уходит ссылкой в текст, «Мои заявки» названы в подписи.
+  if (options.keyboard) {
+    const withMap = map ? [text, copy.openMap + ': ' + map].join('\n\n') : text;
+    return sendMessage(user.chatId, withMap, token, { reply_markup: options.keyboard });
+  }
+  const rows = [];
   if (map) rows.push([{ text: copy.openMap, url: map }]);
   rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton, callback_data: 'myreq:list' }]);
-  return sendMessage(user.chatId, viewingDetailsText(inquiry, property, language, copy.confirmed, copy.confirmedFooter), token, { reply_markup: { inline_keyboard: rows } });
+  return sendMessage(user.chatId, text, token, { reply_markup: { inline_keyboard: rows } });
 }
 
 // The manager confirms a viewing from the admin chat (the client's own date)

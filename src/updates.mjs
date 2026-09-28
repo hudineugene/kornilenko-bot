@@ -7,7 +7,7 @@ import { recordActivity, recordDaily, recordError, recordPropertyEvent } from '.
 import { leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from './users.mjs';
 import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, isLanguageChangeText, languageFromText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
-import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleLeadMethodCallback, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
+import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleLeadMethodCallback, handleSelectionFormMessage, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, saveViewingPhone, showPendingActionStep, startLeadForm, startSelectionForm, unfinishedActionKeyboard } from './forms.mjs';
 import {
   adminChatFor,
   createInquiry,
@@ -408,6 +408,9 @@ async function handleUpdate(update, token) {
     user.pendingAction = null;
     scheduleSave();
     await sendMainMenu(message.chat.id, user, token);
+    return;
+  }
+  else if (!user.pendingAction && message.contact && await saveViewingPhone(message, user, token)) {
     return;
   }
   else if (user.pendingAction && user.pendingAction.type === 'lead' && (!text || !menuItemForText(text, user.preferredLanguage))) {

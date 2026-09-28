@@ -208,9 +208,11 @@ test.describe('free viewing slots', () => {
     assert.deepEqual(step.last.buttons, ['10:00', '16:00', ru.timeOptions[3], ru.cancel]);
     await chat.say('10:00');
     step = await chat.say(ru.confirm);
-    assert.equal(step.replies[0].text, ru.slotBooked);
-    assert.match(step.replies[1].text, /^✅ Просмотр подтверждён/);
-    assert.ok(step.replies[1].text.includes('🕒 Время: 10:00'));
+    assert.equal(step.replies.length, 1, 'одно подтверждение, а не два');
+    assert.match(step.replies[0].text, new RegExp('^' + ru.slotBooked.replace(/[!]/g, '\\$&')), 'заголовок и подробности в одном сообщении');
+    assert.ok(step.replies[0].text.includes('🕒 Время: 10:00'));
+    assert.deepEqual(step.last.markup.keyboard[0].map((button) => button.text), [ru.sharePhoneForViewing], 'телефона нет — предлагаем оставить номер');
+    assert.ok(step.last.markup.keyboard[0][0].request_contact);
     const [inquiry] = chat.inquiries;
     assert.equal(inquiry.status, 'in_progress');
     assert.deepEqual([inquiry.viewing.confirmedDate, inquiry.viewing.confirmedTime], [dayKey(daysFromNow(1)), '10:00']);
@@ -222,6 +224,32 @@ test.describe('free viewing slots', () => {
     step = await next.press('property:viewing:villa-marbella-01');
     step = await next.say(tomorrowLabel(step.last.buttons));
     assert.deepEqual(step.last.buttons, ['16:00', ru.timeOptions[3], ru.cancel], 'the booked hour is taken');
+  });
+
+  test('a phone left after the booking reaches the manager', async () => {
+    enableSlots();
+    const chat = createChat();
+    let step = await chat.press('property:viewing:villa-marbella-01');
+    step = await chat.say(tomorrowLabel(step.last.buttons));
+    await chat.say('10:00');
+    await chat.say(ru.confirm);
+
+    const shared = await chat.shareContact('34600555444');
+    assert.equal(shared.last.text, ru.phoneForViewingSaved);
+    assert.equal(chat.user.phone, '34600555444', 'номер сохранён в карточке клиента');
+    assert.ok(chat.inquiries.some((inquiry) => inquiry.text.includes('34600555444')), 'менеджер видит номер');
+    assert.deepEqual(shared.last.markup.keyboard[0].map((button) => button.text), [bot.text.menuLabels.ru.objects, bot.text.menuLabels.ru.selection], 'кнопка больше не нужна');
+  });
+
+  test('a client whose phone is known is not asked for it again', async () => {
+    enableSlots();
+    const chat = createChat();
+    chat.user.phone = '+34 600 111 000';
+    let step = await chat.press('property:viewing:villa-marbella-01');
+    step = await chat.say(tomorrowLabel(step.last.buttons));
+    await chat.say('10:00');
+    step = await chat.say(ru.confirm);
+    assert.ok(!step.last.markup.keyboard.flat().some((button) => button.request_contact), 'номер уже есть');
   });
 
   test('a slot taken while the client was deciding is not double-booked', async () => {

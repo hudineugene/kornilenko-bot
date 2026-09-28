@@ -407,7 +407,9 @@ const VIEWING_FORM_TEXT = {
     success: 'Заявка на просмотр отправлена. Менеджер подтвердит дату и время в этом чате.',
     slotTaken: 'Это время только что заняли. Выберите, пожалуйста, другое.',
     slotGone: 'На это время уже нельзя записаться. Выберите, пожалуйста, другое.',
-    slotBooked: '✅ Готово, вы записаны на просмотр! Подробности ниже.',
+    slotBooked: '✅ Готово, вы записаны на просмотр!',
+    sharePhoneForViewing: '📱 Оставить номер для связи в день показа',
+    phoneForViewingSaved: 'Спасибо! Менеджер свяжется по этому номеру в день показа.',
   },
   en: {
     askDate: '📅 When would you like to view this property?',
@@ -430,7 +432,9 @@ const VIEWING_FORM_TEXT = {
     success: 'Your viewing request has been sent. A manager will confirm the date and time in this chat.',
     slotTaken: 'This time has just been taken. Please choose another one.',
     slotGone: 'This time can no longer be booked. Please choose another one.',
-    slotBooked: '✅ Done, your viewing is booked! Details below.',
+    slotBooked: '✅ Done, your viewing is booked!',
+    sharePhoneForViewing: '📱 Share a number for the day of the viewing',
+    phoneForViewingSaved: 'Thank you! An agent will use this number on the day of the viewing.',
   },
   es: {
     askDate: '📅 ¿Cuándo te gustaría visitar este inmueble?',
@@ -453,7 +457,9 @@ const VIEWING_FORM_TEXT = {
     success: 'Tu solicitud de visita ha sido enviada. Un gestor confirmará la fecha y hora en este chat.',
     slotTaken: 'Esta hora se acaba de ocupar. Por favor, elige otra.',
     slotGone: 'Esta hora ya no se puede reservar. Por favor, elige otra.',
-    slotBooked: '✅ ¡Listo, tu visita está reservada! Los detalles, abajo.',
+    slotBooked: '✅ ¡Listo, tu visita está reservada!',
+    sharePhoneForViewing: '📱 Dejar un número para el día de la visita',
+    phoneForViewingSaved: '¡Gracias! Un asesor lo usará el día de la visita.',
   },
 };
 const SELECTION_FORM_TEXT = {
