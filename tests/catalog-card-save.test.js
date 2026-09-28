@@ -9,7 +9,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const realFetch = global.fetch;
-const { bot, property, resetData, cleanup } = require('./helpers/chat');
+const { bot, telegram, property, resetData, cleanup } = require('./helpers/chat');
 const telegramStub = global.fetch;
 global.fetch = (url, init) => (String(url).startsWith('http://127.0.0.1') ? realFetch(url, init) : telegramStub(url, init));
 
@@ -112,6 +112,36 @@ test('клиенту недозаполненный объект всё равн
   assert.equal(bot.propertyReadyForLanguage(record, 'ru'), false, 'без номера и площади карточка не готова');
   const shown = bot.catalogRecords('ru').map((item) => item.id);
   assert.deepEqual(shown, ['ready'], 'в каталоге остаётся только готовая карточка');
+});
+
+test('объект публикуется в канал одним запросом, ссылка помнит источник', async () => {
+  const data = bot.getData();
+  data.bot = { id: 1, username: 'kornilenko_bot', firstName: 'Bot' };
+  data.groups = [{ id: '-1001', title: 'Наш канал', type: 'channel', memberCount: 120, messages: [] }];
+  // Ссылка на карточку требует опознаваемого кода объекта — у 'ready' он
+  // слишком короткий, поэтому берём объект из выгрузки.
+  const record = objectById('from-feed');
+
+  const before = telegram.calls.length;
+  const response = await realFetch(base + '/api/objects/' + record.id + '/channel-post', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ groupId: '-1001', language: 'ru' }),
+  });
+  assert.equal(response.status, 200, await response.text());
+
+  const sent = telegram.calls.slice(before).find((call) => ['sendPhoto', 'sendMessage'].includes(call.method));
+  assert.ok(sent, 'пост ушёл в Telegram');
+  assert.equal(String(sent.body.chat_id), '-1001');
+  assert.equal(sent.method, 'sendPhoto', 'с фотографией объекта');
+  const button = sent.body.reply_markup.inline_keyboard.flat()[0];
+  assert.equal(button.text, '🏠 Смотреть в боте');
+  assert.equal(button.url, 'https://t.me/kornilenko_bot?start=property_from-feed__src_channel', 'ссылка ведёт на карточку и помнит канал');
+
+  // Такая ссылка открывает ту же карточку и записывает источник клиенту.
+  assert.equal(bot.propertyIdFromStartPayload('property_from-feed__src_channel'), 'from-feed');
+  assert.equal(bot.sourceFromStartPayload('property_from-feed__src_channel'), 'channel');
+  assert.equal(bot.propertyIdFromStartPayload('property_from-feed'), 'from-feed', 'прежние ссылки работают');
 });
 
 test('фотографии загружаются один раз на все языки', async () => {

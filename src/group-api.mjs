@@ -9,6 +9,7 @@ import { recordError } from './analytics.mjs';
 import { telegramRequest } from './telegram.mjs';
 import { persistImage } from './media.mjs';
 import { json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
+import { objectCaption, propertyDeepLink, recordImages } from './catalog.mjs';
 import {
   fetchAdministrators,
   upsertGroup,
@@ -55,9 +56,33 @@ function futureDate(value) {
   return new Date(time).toISOString();
 }
 
+// Текст поста — та же подпись, что видит клиент в карточке, плюс кнопка со
+// ссылкой на объект в боте. Метка источника в ссылке показывает, что клиент
+// пришёл из канала.
+function channelPostForProperty(record, language, body = {}) {
+  const images = recordImages(record, language);
+  const text = cleanText(body.text, 4000) || objectCaption(record, language);
+  const buttonText = cleanText(body.buttonText, 64) || CHANNEL_BUTTON_TEXT[language] || CHANNEL_BUTTON_TEXT.ru;
+  return {
+    text,
+    image: images.length ? images[0] : null,
+    buttonText,
+    buttonUrl: propertyDeepLink(record, cleanText(body.source, 40) || 'channel'),
+    rubricId: cleanText(body.rubricId, 60),
+    withoutSignature: body.withoutSignature === true,
+    pin: body.pin === true,
+    notify: body.notify !== false,
+  };
+}
+
+const CHANNEL_BUTTON_TEXT = { ru: '🏠 Смотреть в боте', en: '🏠 View in the bot', es: '🏠 Ver en el bot' };
+
 // Every route here is /api/groups/... and needs an authenticated session.
 async function handleGroupApi(req, res, url) {
-  if (!url.pathname.startsWith('/api/groups') && !url.pathname.startsWith('/api/group-posts') && url.pathname !== '/api/publishing') return false;
+  // Публикация объекта в канал живёт здесь же: ей нужны и канал, и отправка
+  // поста, которые описаны в этом файле.
+  const objectChannelPost = /^\/api\/objects\/[^/]+\/channel-post$/.test(url.pathname);
+  if (!url.pathname.startsWith('/api/groups') && !url.pathname.startsWith('/api/group-posts') && url.pathname !== '/api/publishing' && !objectChannelPost) return false;
   const session = requireAuth(req, res, true);
   if (!session) return true;
 
@@ -144,6 +169,37 @@ async function handleGroupApi(req, res, url) {
     saveDataNow();
     json(res, 200, { ok: true });
     return true;
+  }
+
+  // Объект в канал: подпись, фотография и кнопка с ссылкой на карточку в боте.
+  // Собираем на стороне бота — в панели нет ни файлов фотографий, ни адреса
+  // бота, а текст должен совпадать с тем, что клиент видит в карточке.
+  const channelPostMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/channel-post$/);
+  if (channelPostMatch && req.method === 'POST') {
+    const body = await readJson(req);
+    const record = (data.objects || []).find((item) => item.id === decodeURIComponent(channelPostMatch[1]));
+    if (!record) return json(res, 404, { error: 'Объект не найден' }), true;
+    const group = groupById(cleanText(body.groupId, 60));
+    if (!group) return json(res, 404, { error: 'Канал не найден' }), true;
+    const language = ['ru', 'en', 'es'].includes(body.language) ? body.language : 'ru';
+    const post = channelPostForProperty(record, language, body);
+    if (!post.text && !post.image) return json(res, 400, { error: 'Пост пустой: заполните карточку объекта' }), true;
+    try {
+      if (body.sendAt) {
+        const scheduled = (data.groupPosts || []).filter((item) => item.status === 'scheduled');
+        if (scheduled.length >= MAX_SCHEDULED_POSTS) return json(res, 400, { error: 'Слишком много отложенных публикаций' }), true;
+        const saved = newGroupPost({ ...post, groupId: group.id, sendAt: futureDate(body.sendAt) });
+        data.groupPosts = [...(data.groupPosts || []), saved];
+        saveDataNow();
+        return json(res, 200, { ok: true, post: saved }), true;
+      }
+      const messageId = await postToGroup(group, { ...post, groupId: group.id });
+      saveDataNow();
+      return json(res, 200, { ok: true, messageId }), true;
+    } catch (error) {
+      recordError('Публикация объекта в канал', error);
+      return json(res, 400, { error: 'Не удалось опубликовать: ' + error.message }), true;
+    }
   }
 
   if (!match) return json(res, 404, { error: 'Неизвестный запрос' }), true;

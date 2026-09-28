@@ -167,6 +167,8 @@ function openObjectExtras(id) {
   openDialog({
     title: "Ещё действия",
     body: '<div class="stack"><div class="small muted">' + esc(title) + "</div>" +
+      '<button class="btn" data-channel="1" type="button">➤ Опубликовать в канал</button>' +
+      '<span class="small muted">Пост с фотографией, ценой и кнопкой «Смотреть в боте».</span>' +
       '<div class="row"><button class="btn secondary" data-move="up" type="button">↑ Поднять в списке</button>' +
       '<button class="btn secondary" data-move="down" type="button">↓ Опустить в списке</button></div>' +
       '<button class="btn secondary" data-copy="1" type="button">⧉ Создать копию</button>' +
@@ -175,6 +177,10 @@ function openObjectExtras(id) {
       '<span class="small muted">Карточка исчезнет из каталога бота без возможности вернуть.</span></div>',
     footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
     ready: function (dialog) {
+      dialog.querySelector("[data-channel]").onclick = function () {
+        dialog.closeClean();
+        openChannelPost(id);
+      };
       dialog.querySelectorAll("[data-move]").forEach(function (button) {
         button.onclick = async function () {
           try {
@@ -197,6 +203,76 @@ function openObjectExtras(id) {
           await api("/api/objects/" + encodeURIComponent(id), { method: "DELETE" });
           dialog.closeClean();
           toast("Удалено");
+          await reload();
+        } catch (error) { fail(error); }
+      };
+    },
+  });
+}
+
+// Пост об объекте в канал: текст берём из карточки, чтобы в канале и в боте
+// клиент видел одно и то же, но даём поправить перед отправкой.
+function openChannelPost(id) {
+  var record = (state.objects || []).find(function (item) { return String(item.id) === String(id); });
+  if (!record) return;
+  var channels = (state.groups || []).filter(function (group) { return group.type === "channel"; });
+  if (!channels.length) {
+    return openDialog({
+      title: "Каналов пока нет",
+      body: '<div class="stack"><div>Чтобы публиковать объекты, добавьте канал в разделе «Публикации» и сделайте бота его администратором.</div></div>',
+      footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="goChannels" type="button">Открыть «Публикации»</button>',
+      ready: function (dialog) {
+        dialog.querySelector("#goChannels").onclick = function () { dialog.closeClean(); go("posts", "channel"); };
+      },
+    });
+  }
+  openDialog({
+    title: "Опубликовать в канал",
+    protectChanges: true,
+    body: '<div class="stack">' +
+      '<div class="field"><label for="channelTarget">Канал</label><select id="channelTarget">' + channels.map(function (group) {
+        return '<option value="' + esc(group.id) + '">' + esc(group.title || group.id) + (group.memberCount ? " · " + counted(group.memberCount, "подписчик", "подписчика", "подписчиков") : "") + "</option>";
+      }).join("") + "</select></div>" +
+      '<div class="field"><label for="channelLanguage">Язык поста</label><select id="channelLanguage">' + LANGUAGES.map(function (language) {
+        return '<option value="' + language[0] + '">' + language[1] + "</option>";
+      }).join("") + "</select></div>" +
+      '<div class="field"><label for="channelText">Текст поста</label><textarea id="channelText" class="area-sm" placeholder="Загружаем текст карточки…"></textarea>' +
+      '<div class="hint">По умолчанию — та же подпись, что видит клиент в карточке объекта.</div></div>' +
+      '<div class="grid cols-2"><div class="field"><label for="channelButton">Кнопка</label><input id="channelButton" value="🏠 Смотреть в боте"></div>' +
+      '<div class="field"><label for="channelWhen">Отправить позже</label><input id="channelWhen" type="datetime-local"></div></div>' +
+      '<div class="msg">Кнопка ведёт на карточку этого объекта в боте. По ссылке видно, что клиент пришёл из канала.</div>' +
+      "</div>",
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="channelSend" type="button">Опубликовать</button>',
+    ready: function (dialog) {
+      var text = dialog.querySelector("#channelText");
+      var language = dialog.querySelector("#channelLanguage");
+      // Текст показываем тот же, что стоит в карточке на выбранном языке.
+      function fillText() {
+        var caption = [localized(record.title, language.value), localized(record.city, language.value), localized(record.description, language.value)]
+          .filter(Boolean).join("\n\n");
+        text.value = caption;
+      }
+      fillText();
+      language.onchange = fillText;
+      dialog.querySelector("#channelSend").onclick = async function () {
+        var when = dialog.querySelector("#channelWhen").value;
+        var target = dialog.querySelector("#channelTarget");
+        var where = target.options[target.selectedIndex].textContent;
+        if (!(await confirmDialog(
+          when ? "Запланировать публикацию?" : "Опубликовать в канал?",
+          where + ". " + (when ? "Отправим " + dateTime(zonedDateTimeToIso(when)) + "." : "Пост уйдёт сразу.") + " Изменить опубликованное нельзя, только удалить.",
+          when ? "Запланировать" : "Опубликовать"
+        ))) return;
+        try {
+          await send("/api/objects/" + encodeURIComponent(id) + "/channel-post", "POST", {
+            groupId: target.value,
+            language: language.value,
+            text: text.value,
+            buttonText: dialog.querySelector("#channelButton").value,
+            sendAt: when ? zonedDateTimeToIso(when) : "",
+          });
+          dialog.closeClean();
+          toast(when ? "Публикация запланирована" : "Опубликовано в канале");
           await reload();
         } catch (error) { fail(error); }
       };

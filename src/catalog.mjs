@@ -183,11 +183,15 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
   return rows.length ? { inline_keyboard: rows } : null;
 }
 
-function propertyDeepLink(record) {
+function propertyDeepLink(record, source = '') {
   const username = cleanText(data.bot && data.bot.username, 80).replace(/^@/, '');
   const id = cleanText(record && record.id, 100);
   if (!username || !/^[A-Za-z0-9_]{5,}$/.test(username) || !/^[A-Za-z0-9_-]{8,100}$/.test(id)) return '';
-  return 'https://t.me/' + username + '?start=property_' + id;
+  // Метка источника едет тем же адресом: Telegram отдаёт боту только одно
+  // значение после ?start=, поэтому объект и метку разделяем двумя знаками
+  // подчёркивания.
+  const label = cleanText(source, 40).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  return 'https://t.me/' + username + '?start=property_' + id + (label ? '__src_' + label : '');
 }
 
 function propertyShareUrl(record, language) {
@@ -1533,7 +1537,18 @@ async function sendCatalog(chatId, user, token) {
 }
 
 function propertyIdFromStartPayload(payload) {
-  const match = cleanText(payload, 100).match(/^property_([A-Za-z0-9_-]{8,100})$/);
+  const value = cleanText(payload, 140);
+  // Сначала ссылка с меткой источника: в простом виде «код объекта» захватил бы
+  // и метку — коды объектов тоже бывают с подчёркиваниями.
+  const tagged = value.match(/^property_([A-Za-z0-9_-]{8,100}?)__src_[a-z0-9_-]{1,40}$/);
+  if (tagged) return tagged[1];
+  const plain = value.match(/^property_([A-Za-z0-9_-]{8,100})$/);
+  return plain ? plain[1] : '';
+}
+
+// Метка источника из ссылки на объект: «пришёл из канала», а не «пришёл сам».
+function sourceFromStartPayload(payload) {
+  const match = cleanText(payload, 140).match(/^property_[A-Za-z0-9_-]{8,100}?__src_([a-z0-9_-]{1,40})$/);
   return match ? match[1] : '';
 }
 
@@ -1623,6 +1638,7 @@ export {
   promotionButtons,
   promotionIsActive,
   propertyDeepLink,
+  sourceFromStartPayload,
   propertyIdFromStartPayload,
   propertyReadyForLanguage,
   propertyPublicationIssues,

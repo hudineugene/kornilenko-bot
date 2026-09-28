@@ -20,7 +20,7 @@ import {
   recordBotAnswer,
   serviceMessage,
 } from './inquiries.mjs';
-import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, openPendingStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard } from './catalog.mjs';
+import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, openPendingStartPayload, propertyIdFromStartPayload, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
 import { catalogRequest } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
@@ -238,7 +238,9 @@ async function handleUpdate(update, token) {
   let inquiryAnswer = false;
   const command = text.split(/\s+/)[0].split('@')[0].toLowerCase();
   const commandArgument = cleanText(text.split(/\s+/).slice(1).join(' '), 100);
-  const sourceLabel = command === '/start' ? leadSourceFromPayload(commandArgument) : '';
+  const sourceLabel = command === '/start'
+    ? leadSourceFromPayload(commandArgument) || sourceFromStartPayload(commandArgument)
+    : '';
   if (sourceLabel) {
     // The first link a client came through is kept: it is what brought them.
     if (!user.source) {
@@ -246,7 +248,12 @@ async function handleUpdate(update, token) {
       user.sourceAt = new Date().toISOString();
     }
     scheduleSave();
-  } else if (command === '/start' && commandArgument) {
+  }
+  // Ссылка на объект открывает карточку и тогда, когда несёт метку источника.
+  if (command === '/start' && commandArgument && propertyIdFromStartPayload(commandArgument)) {
+    user.pendingStartPayload = commandArgument;
+    scheduleSave();
+  } else if (command === '/start' && commandArgument && !sourceLabel) {
     user.pendingStartPayload = commandArgument;
     scheduleSave();
   }
