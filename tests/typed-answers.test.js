@@ -108,6 +108,51 @@ test.describe('подбор объекта', () => {
     assert.equal(optionFromText('1', SELECTION.bedroomOptions), SELECTION.bedroomOptions[0]);
   });
 
+  test('обычные слова клиента понятны: «купить», «снять», «квартиру», «виллу»', async () => {
+    // Варианты назывались «Покупка», «Аренда», «Квартира», «Дом или вилла», а
+    // сравнение шло только по началу строки: ни другая форма слова, ни синоним
+    // не проходили, и бот переспрашивал по кругу.
+    const { optionFromText } = await import('../src/forms.mjs');
+    const deal = SELECTION.dealOptions;
+    const type = SELECTION.typeOptions;
+
+    assert.equal(optionFromText('Купить', deal), deal[0], 'купить — это покупка');
+    assert.equal(optionFromText('хочу купить', deal), deal[0]);
+    assert.equal(optionFromText('снять', deal), deal[1], 'снять — это аренда');
+    assert.equal(optionFromText('Сниму на год', deal), deal[1]);
+    assert.equal(optionFromText('квартиру', type), type[0]);
+    assert.equal(optionFromText('ищу квартиру', type), type[0]);
+    assert.equal(optionFromText('виллу', type), type[1]);
+    assert.equal(optionFromText('дом', type), type[1]);
+    assert.equal(optionFromText('участок земли', type), type[2]);
+    assert.equal(optionFromText('магазин', type), type[3]);
+  });
+
+  test('английская и испанская анкеты понимают то же самое', async () => {
+    const { optionFromText } = await import('../src/forms.mjs');
+    const en = bot.text.selection.en;
+    const es = bot.text.selection.es;
+
+    assert.equal(optionFromText('buying', en.dealOptions), en.dealOptions[0]);
+    assert.equal(optionFromText('to rent', en.dealOptions), en.dealOptions[1]);
+    assert.equal(optionFromText('flat', en.typeOptions), en.typeOptions[0]);
+    assert.equal(optionFromText('a villa', en.typeOptions), en.typeOptions[1]);
+    assert.equal(optionFromText('compra', es.dealOptions), es.dealOptions[0]);
+    assert.equal(optionFromText('alquiler', es.dealOptions), es.dealOptions[1]);
+    assert.equal(optionFromText('piso', es.typeOptions), es.typeOptions[0]);
+    // Клиент ответил по-русски в испанской анкете — так тоже бывает.
+    assert.equal(optionFromText('снять', es.dealOptions), es.dealOptions[1]);
+  });
+
+  test('анкета целиком проходится своими словами', async () => {
+    const chat = await startSelection();
+    await chat.say('Купить');
+    assert.equal(chat.user.pendingAction.data.deal, SELECTION.dealOptions[0]);
+    await chat.say('виллу');
+    assert.equal(chat.user.pendingAction.data.type, SELECTION.typeOptions[1]);
+    assert.equal(chat.user.pendingAction.step, 'location');
+  });
+
   test('двусмысленный ответ не угадывается', async () => {
     const { optionFromText } = await import('../src/forms.mjs');
     // «Не» подходит сразу к нескольким вариантам — лучше переспросить.

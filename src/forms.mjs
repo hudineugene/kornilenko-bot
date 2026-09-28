@@ -460,6 +460,39 @@ function cleanAnswer(value) {
   return String(value || '').toLowerCase().replace(/[^\p{L}\p{N}+]+/gu, ' ').trim();
 }
 
+// Слова длиной меньше трёх букв в сравнении не участвуют: «не», «или», «or»
+// есть сразу в нескольких вариантах и только путали бы.
+const MIN_ANSWER_WORD = 3;
+// Общий корень: «квартиру» и «квартира», «alquiler» и «alquilar».
+const SHARED_ROOT_LETTERS = 5;
+
+function closeWords(first, second) {
+  if (first.length < MIN_ANSWER_WORD || second.length < MIN_ANSWER_WORD) return false;
+  if (first === second || first.startsWith(second) || second.startsWith(first)) return true;
+  let shared = 0;
+  while (shared < first.length && shared < second.length && first[shared] === second[shared]) shared += 1;
+  return shared >= SHARED_ROOT_LETTERS;
+}
+
+// Люди отвечают своими словами: «купить» вместо «Покупка», «снять» вместо
+// «Аренда», «piso» вместо «Apartamento». Слева — по какому слову узнаётся сам
+// вариант ответа, справа — начала слов, которыми это пишут от руки. Языки
+// вместе: клиент может ответить по-русски и в английской анкете.
+const ANSWER_SYNONYMS = [
+  { option: /покупк|buy|comprar/i, typed: ['куп', 'покуп', 'приобрет', 'buy', 'purchas', 'compr'] },
+  { option: /аренд|rent|alquilar/i, typed: ['снять', 'сним', 'сдач', 'аренд', 'rent', 'leas', 'alquil'] },
+  { option: /квартир|apartment|apartamento/i, typed: ['квартир', 'студи', 'flat', 'studio', 'apartm', 'apartam', 'pis'] },
+  { option: /вилла|house|casa/i, typed: ['дом', 'вилл', 'коттедж', 'таунхаус', 'hous', 'villa', 'cottage', 'cas', 'chalet', 'adosad'] },
+  { option: /участок|land|terreno/i, typed: ['участ', 'земл', 'сотк', 'land', 'plot', 'terren', 'solar', 'parcel'] },
+  { option: /коммерч|commercial|comercial/i, typed: ['коммерч', 'офис', 'магазин', 'помещен', 'бизнес', 'commerc', 'office', 'shop', 'busines', 'local', 'negoci'] },
+];
+
+function matchingOptions(list, matches) {
+  const found = list.filter(matches);
+  // Подошло больше одного — лучше переспросить, чем угадать неверно.
+  return found.length === 1 ? found[0] : '';
+}
+
 function optionFromText(text, options) {
   const typed = cleanAnswer(text);
   if (!typed) return '';
@@ -475,6 +508,16 @@ function optionFromText(text, options) {
     return (typed.length >= 3 && value.startsWith(typed)) || typed.startsWith(value);
   });
   if (near.length === 1) return near[0];
+  // «Купить» → «Покупка», «снять» → «Аренда», «piso» → «Apartamento».
+  const typedWords = typed.split(' ').filter(Boolean);
+  const bySynonym = matchingOptions(list, (option) => ANSWER_SYNONYMS.some((entry) => entry.option.test(option)
+    && entry.typed.some((stem) => typedWords.some((word) => word.startsWith(stem)))));
+  if (bySynonym) return bySynonym;
+  // «квартиру» → «Квартира», «виллу» → «Дом или вилла»: сравниваем по словам и
+  // по общему корню, а не по началу всей строки.
+  const byWord = matchingOptions(list, (option) => cleanAnswer(option).split(' ')
+    .some((word) => typedWords.some((input) => closeWords(input, word))));
+  if (byWord) return byWord;
   // Ответ одним числом: «2» → «2 спальни», «6» → «4+ спальни».
   const number = /^\d{1,2}$/.test(typed) ? Number(typed) : NaN;
   if (!Number.isFinite(number)) return '';
