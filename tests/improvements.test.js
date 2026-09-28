@@ -916,7 +916,8 @@ test.describe('catalog filter', () => {
     assert.equal(personal.last.text, bot.text.myArea.ru.title + '\n\n' + bot.text.myArea.ru.intro);
     assert.deepEqual(callbacksOf(personal.last.markup), [
       'catalog:favorites:0', 'compare:view', 'saved:view', 'catalog:recent:0', 'myreq:list', 'subs:menu',
-      'privacy:open', 'nav:about', 'nav:help', 'nav:language', 'nav:menu',
+      // «О компании» переехало на экран «Связаться» — здесь только свои дела.
+      'privacy:open', 'nav:help', 'nav:language', 'nav:menu',
     ]);
     assert.ok(personal.last.buttons.includes(MENU.ru.favorites + ' · 1'));
     assert.ok(personal.last.buttons.includes(bot.text.comparison.ru.menuButton + ' · 0'));

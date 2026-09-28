@@ -846,6 +846,21 @@ test.describe('property card', () => {
     assert.match(manager.last.text, /./, 'старая кнопка «Менеджер» открывает связь');
   });
 
+  test('«О компании» лежит на видном месте, а не в личных настройках', async () => {
+    const chat = createChat();
+    const contacts = await chat.say(MENU.ru.contacts);
+    const callbacks = callbacksOf(contacts.last.markup);
+    assert.ok(callbacks.includes('nav:about'), 'рассказ о фирме — там, где решают, доверять ли ей');
+    assert.ok(callbacks.includes('contact:lead') && callbacks.includes('contact:question'), 'связь на месте');
+
+    const personal = await chat.say(MENU.ru.more);
+    assert.ok(!callbacksOf(personal.last.markup).includes('nav:about'), 'из «Моё» убрано');
+    assert.ok(callbacksOf(personal.last.markup).includes('nav:help'), 'справка осталась');
+
+    const about = await chat.press('nav:about');
+    assert.ok(about.last.text.length > 0, 'экран «О компании» открывается');
+  });
+
   test('«Акции» появляются в меню с числом, когда акции есть', async () => {
     resetData((data) => {
       data.promotions.push({

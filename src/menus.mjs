@@ -140,7 +140,9 @@ async function sendMoreMenu(chatId, user, token) {
         [{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton + count(requests), callback_data: 'myreq:list' }],
         [{ text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).menuButton, callback_data: 'subs:menu' }],
         [{ text: (PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).menuButton, callback_data: 'privacy:open' }],
-        [{ text: labels.about, callback_data: 'nav:about' }, { text: labels.help, callback_data: 'nav:help' }],
+        // «О компании» живёт на экране «Связаться» — там, где клиент решает,
+        // довериться ли фирме. Здесь остаются только его собственные дела.
+        [{ text: labels.help, callback_data: 'nav:help' }],
         [{ text: labels.language, callback_data: 'nav:language' }],
         [{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }],
       ],

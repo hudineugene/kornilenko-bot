@@ -96,6 +96,8 @@ async function sendContacts(chatId, user, token) {
   if (map) buttons.push([{ text: '📍 ' + copy.map, url: map }]);
   buttons.push([{ text: copy.request, callback_data: 'contact:lead' }]);
   buttons.push([{ text: copy.question, callback_data: 'contact:question' }]);
+  // «О компании» — там же, где клиент решает, довериться ли фирме.
+  buttons.push([{ text: (MENU_LABELS[language] || MENU_LABELS.ru).about, callback_data: 'nav:about' }]);
   buttons.push([{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }]);
   await sendUiMessage(chatId, user, text, token, {
     ...(entities.length ? { entities } : {}),
