@@ -6,6 +6,9 @@ var inquiryFilter = { status: "waiting", type: "", search: "" };
 // по ним ищет бот. Здесь — на какой запрос и какие беседы он нашёл.
 var conversationSearch = { query: "", ids: {} };
 var selectedInquiry = "";
+// Беседу выбрала панель сама (при обновлении по таймеру), а не человек: как
+// только на экран посмотрит человек, беседа считается прочитанной.
+var selectionWasAuto = false;
 // Беседу помечает прочитанной только человек, который её открыл. Панель сама
 // выбирает первую беседу в списке (и заново при каждой перерисовке) — раньше
 // из-за этого непрочитанные обращения «прочитывались» без участия владельца.
@@ -13,6 +16,7 @@ var conversationOpenedByUser = false;
 function selectConversation(id) {
   selectedInquiry = id;
   conversationOpenedByUser = Boolean(id);
+  selectionWasAuto = false;
 }
 var clientSearch = "";
 var clientStageFilter = "";
@@ -415,7 +419,17 @@ function renderInquiryList(host) {
   if (!rows.length) selectConversation("");
   else if (!selectedGroup) {
     selectedInquiry = rows[0].active.id;
-    conversationOpenedByUser = false;
+    // Человек вошёл в раздел и видит эту беседу — значит прочитал её. А вот при
+    // обновлении по таймеру ничего не помечаем: экран мог быть и не на виду.
+    selectionWasAuto = renderingAuto;
+    conversationOpenedByUser = !renderingAuto;
+  }
+  // Беседу открыла панель во время обновления, а теперь на экран смотрит
+  // человек: раньше она оставалась непрочитанной, пока не щёлкнешь по ней ещё
+  // раз — по уже открытой.
+  if (selectionWasAuto && !renderingAuto) {
+    selectionWasAuto = false;
+    conversationOpenedByUser = true;
   }
   pageAction("✎ Шаблоны ответов", openTemplates, "secondary");
   pageAction("🧹 Очистить", openCleanup, "ghost");

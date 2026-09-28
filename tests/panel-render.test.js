@@ -87,6 +87,8 @@ function fakeDocument() {
   // Открытые диалоги считаем по-настоящему: панель спрашивает
   // document.querySelector('dialog[open]') перед обновлением экрана.
   const openDialogs = new Set();
+  // Обработчики на документе запоминаем: панель слушает возвращение во вкладку.
+  const listeners = new Map();
   const makeDialog = () => {
     const dialog = fakeElement('dialog');
     dialog.showModal = () => { dialog.open = true; openDialogs.add(dialog); };
@@ -113,7 +115,18 @@ function fakeDocument() {
     createElement: (tag) => (String(tag).toLowerCase() === 'dialog' ? makeDialog() : fakeElement(tag)),
     createDocumentFragment: () => fakeElement('fragment'),
     createTextNode: () => fakeElement('text'),
-    addEventListener() {}, removeEventListener() {},
+    addEventListener(type, handler) {
+      if (!listeners.has(String(type))) listeners.set(String(type), []);
+      listeners.get(String(type)).push(handler);
+    },
+    removeEventListener(type, handler) {
+      const list = listeners.get(String(type)) || [];
+      const at = list.indexOf(handler);
+      if (at >= 0) list.splice(at, 1);
+    },
+    __fire(type, event) {
+      (listeners.get(String(type)) || []).slice().forEach((handler) => handler(event || {}));
+    },
     execCommand() { return true; },
     activeElement: body,
     hidden: false,
@@ -513,20 +526,20 @@ test('беседа помечается прочитанной только ко
   });
   const { sandbox, requests } = await panelSandbox();
   const readRequests = () => requests.filter((request) => /\/api\/conversations\/.+\/read/.test(request.url));
+  sandbox.currentView = 'inquiries';
+  sandbox.currentTab = 'inbox';
 
-  // Экран открыт: первую беседу панель выбирает сама, а не человек.
+  // Обновление по таймеру: экран мог быть и не на виду — ничего не помечаем.
   requests.length = 0;
-  await sandbox.VIEWS.inquiries.render(fakeElement('main'), 'inbox');
-  assert.deepEqual(readRequests(), [], 'сама по себе беседа прочитанной не становится');
+  sandbox.renderView({ keepScroll: true, auto: true });
+  assert.deepEqual(readRequests(), [], 'обновление экрана само по себе беседу не помечает');
   assert.equal(sandbox.state.inquiries[0].readAt, '', 'обращение осталось непрочитанным');
 
-  // Перерисовка по таймеру тоже ничего не помечает.
-  await sandbox.VIEWS.inquiries.render(fakeElement('main'), 'inbox');
-  assert.deepEqual(readRequests(), [], 'обновление экрана не помечает беседу');
+  sandbox.renderView({ keepScroll: true, auto: true });
+  assert.deepEqual(readRequests(), [], 'и следующее обновление тоже');
 
-  // Человек нажал на беседу в списке.
-  sandbox.selectConversation('inq-unread');
-  await sandbox.VIEWS.inquiries.render(fakeElement('main'), 'inbox');
+  // Человек вошёл в раздел: панель открыла беседу, человек её видит.
+  sandbox.renderView();
   assert.equal(readRequests().length, 1, 'открытая беседа помечается прочитанной');
   assert.equal(readRequests()[0].method, 'POST');
   assert.ok(sandbox.state.inquiries[0].readAt, 'отметка проставлена и в панели');
@@ -827,4 +840,55 @@ test('поиск по диалогам тоже не оставляет экра
   await new Promise((resolve) => setTimeout(resolve, 300));
   assert.equal(sandbox.pageTouched, false, 'после перерисовки списка экран свободен');
   assert.equal(sandbox.inquiryFilter.search, 'паркинг', 'а поиск остался как набрали');
+});
+
+test('беседа, открытая панелью во время обновления, читается когда человек вернулся', async () => {
+  // Раньше такая беседа оставалась непрочитанной, пока не щёлкнешь по ней ещё
+  // раз — по уже открытой: счётчик непрочитанных не сходился.
+  resetData((data) => {
+    data.config.active = true;
+    data.users['740001'] = { id: '740001', chatId: 740001, firstName: 'Вера', preferredLanguage: 'ru', activity: [], lastSeenAt: new Date().toISOString() };
+    data.inquiries.push({
+      id: 'inq-auto', userId: '740001', chatId: '740001', language: 'ru', type: 'general',
+      text: 'Можно ли с собакой?', status: 'new', pipelineStage: 'new', replies: [], messages: [], readAt: '',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), clientMessageAt: new Date().toISOString(),
+    });
+  });
+  const { sandbox, requests } = await panelSandbox();
+  const readRequests = () => requests.filter((request) => /\/api\/conversations\/.+\/read/.test(request.url));
+  sandbox.currentView = 'inquiries';
+  sandbox.currentTab = 'inbox';
+  requests.length = 0;
+
+  // Обновление по таймеру: панель сама открыла первую беседу.
+  sandbox.renderView({ keepScroll: true, auto: true });
+  assert.equal(sandbox.selectedInquiry, 'inq-auto', 'беседа открыта панелью');
+  assert.deepEqual(readRequests(), [], 'но прочитанной не считается: на экран могли не смотреть');
+
+  // Человек вернулся к экрану.
+  sandbox.renderView();
+  assert.equal(readRequests().length, 1, 'теперь беседа прочитана');
+  assert.ok(sandbox.state.inquiries[0].readAt, 'отметка есть и в панели');
+
+  sandbox.renderView();
+  assert.equal(readRequests().length, 1, 'и только один раз');
+});
+
+test('возвращение во вкладку обновляет данные сразу', async () => {
+  // В скрытой вкладке обновление не идёт вовсе. Раньше после возвращения
+  // приходилось ждать до 45 секунд, чтобы увидеть новые сообщения.
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const document = sandbox.document;
+
+  document.hidden = true;
+  requests.length = 0;
+  document.__fire('visibilitychange');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(requests.filter((request) => request.url.includes('/api/state')), [], 'в скрытой вкладке ничего не спрашиваем');
+
+  document.hidden = false;
+  document.__fire('visibilitychange');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(requests.some((request) => request.url.includes('/api/state')), 'вернулись — спросили данные сразу');
 });

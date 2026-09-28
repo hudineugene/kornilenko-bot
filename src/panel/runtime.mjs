@@ -66,6 +66,10 @@ var currentRouteHash = "", allowNextRoute = false, routePromptOpen = false;
 // значит перерисовка стёрла бы его черновик. pendingRefresh — данные обновились,
 // но экран оставлен как есть, и это видно по полоске.
 var stateVersion = "", pageTouched = false, pendingRefresh = false;
+// Экран рисуется сам (обновление по таймеру) или по действию человека. Разделам
+// это важно: при входе в «Переписку» открытую беседу человек видит и читает, а
+// при обновлении по таймеру экран мог быть и не на виду.
+var renderingAuto = false;
 var VIEWS = {};
 
 function el(id) { return document.getElementById(id); }
@@ -458,7 +462,7 @@ async function refresh() {
   renderNotificationBell();
   if (pageBusy()) return showRefreshHint();
   hideRefreshHint();
-  renderView({ keepScroll: true });
+  renderView({ keepScroll: true, auto: true });
 }
 
 function navItems() {
@@ -576,6 +580,7 @@ async function handleHashChange() {
 function renderView(options) {
   if (!state) return;
   pageTouched = false;
+  renderingAuto = Boolean(options && options.auto);
   var item = navItems().find(function (entry) { return entry.id === currentView; });
   var view = VIEWS[currentView];
   if (!view) return;
@@ -643,6 +648,12 @@ async function startApp() {
 
 function bindShell() {
   window.addEventListener("hashchange", handleHashChange);
+  // Вернулись во вкладку: в скрытой вкладке обновление не идёт, и ждать до 45
+  // секунд незачем — спрашиваем данные сразу.
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden || !appStarted || sessionEnded) return;
+    refresh().catch(function () {});
+  });
   el("menuToggle").onclick = function () {
     var open = !el("nav").classList.contains("open");
     el("nav").classList.toggle("open", open);
