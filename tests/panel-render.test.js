@@ -892,3 +892,53 @@ test('возвращение во вкладку обновляет данные
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.ok(requests.some((request) => request.url.includes('/api/state')), 'вернулись — спросили данные сразу');
 });
+
+// Запись на просмотр: клиент просит своими словами, бот пытается разобрать дату.
+function viewingRequest(patch) {
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('villa-view', 'Вилла с бассейном', 'active'));
+    data.users['750001'] = { id: '750001', chatId: 750001, firstName: 'Артём', preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(3) };
+    data.inquiries.push({
+      id: 'inq-view', userId: '750001', chatId: '750001', language: 'ru', type: 'viewing', propertyId: 'villa-view',
+      text: 'Хочу посмотреть', status: 'new', pipelineStage: 'viewing', replies: [], messages: [],
+      viewing: { date: '', dateText: 'в субботу после обеда', timeText: 'как указано', confirmedAt: '', confirmedDate: '', confirmedTime: '', cancelledAt: '', ...patch },
+      createdAt: minutesAgo(20), updatedAt: minutesAgo(3), clientMessageAt: minutesAgo(3),
+    });
+  });
+}
+
+test('подтверждение просмотра показывает просьбу клиента и не подставляет сегодня', async () => {
+  // Раньше в поле даты стояло сегодняшнее число, даже когда бот дату из просьбы
+  // не разобрал: одно нажатие «Подтвердить и уведомить» — и клиент получал
+  // подтверждение на день, о котором не просил.
+  viewingRequest({});
+  const { sandbox } = await panelSandbox();
+  const item = sandbox.state.inquiries.find((entry) => entry.id === 'inq-view');
+  sandbox.openViewingSchedule(item);
+
+  const dialog = sandbox.document.querySelector('dialog[open]');
+  assert.ok(dialog, 'окно открыто');
+  const html = String(dialog.innerHTML);
+  assert.match(html, /Клиент просил: в субботу после обеда · как указано/, 'видно, о чём просил клиент');
+  assert.match(html, /Дату из просьбы клиента бот не разобрал/, 'и что дату нужно выбрать самому');
+  assert.match(html, /id="viewingScheduleDate"[^>]*value=""/, 'поле даты пустое, а не «сегодня»');
+  dialog.closeClean();
+});
+
+test('когда дата разобрана, она и подставляется', async () => {
+  const soon = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
+  viewingRequest({ date: soon, dateText: 'в эту субботу', timeText: '12:00' });
+  const { sandbox } = await panelSandbox();
+  const item = sandbox.state.inquiries.find((entry) => entry.id === 'inq-view');
+  sandbox.openViewingSchedule(item);
+
+  const dialog = sandbox.document.querySelector('dialog[open]');
+  const html = String(dialog.innerHTML);
+  assert.match(html, new RegExp('id="viewingScheduleDate"[^>]*value="' + soon + '"'), 'дата из просьбы подставлена');
+  assert.match(html, /id="viewingScheduleTime"[^>]*value="12:00"/, 'и время тоже');
+  assert.match(html, /Клиент просил: в эту субботу · 12:00/);
+  assert.doesNotMatch(html, /бот не разобрал/, 'предупреждения нет — разбирать было нечего');
+  dialog.closeClean();
+});

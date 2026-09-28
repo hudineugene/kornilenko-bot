@@ -155,6 +155,7 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .list-item:last-child{border-bottom:0}
 .msg{padding:8px 10px;border-radius:9px;background:var(--surface-soft);border:1px solid var(--line-soft);font-size:13px;white-space:pre-wrap;word-break:break-word}
 .msg.out{background:var(--brand-soft);border-color:#c7d7fe}
+.msg.attention{background:var(--warn-soft);border-color:#fedf89;color:var(--warn)}
 .msg-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:var(--faint);margin-top:5px}
 .msg-meta>span{min-width:0}
 .messenger-toolbar{display:flex;flex-direction:column;gap:9px;margin-bottom:12px}

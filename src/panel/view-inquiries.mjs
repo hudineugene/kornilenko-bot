@@ -925,13 +925,21 @@ function viewingEventHtml(item, today, compact) {
 }
 function openViewingSchedule(item) {
   var viewing = item.viewing || {}, user = userOf(item), property = viewingProperty(item);
-  var currentDate = viewingDateKey(item) || pipelineToday();
+  // Дату не подставляем «сегодняшним числом»: если из просьбы клиента бот её не
+  // разобрал, одно нажатие «Подтвердить» отправляло клиенту сегодняшний день, о
+  // котором он не просил. Пустое поле заставляет выбрать дату осознанно.
+  var currentDate = viewingDateKey(item);
   var currentTime = viewing.confirmedTime || (/^\d{2}:\d{2}$/.test(viewing.timeText || "") ? viewing.timeText : "");
   var moving = Boolean(viewing.confirmedAt);
+  // Своими словами клиента: «в субботу после обеда». Менеджер должен видеть, о
+  // чём просили, а не только поля даты и времени.
+  var requested = [viewing.dateText, viewing.timeText].filter(Boolean).join(" · ");
   openDialog({
     title: moving ? "Перенести просмотр" : "Подтвердить просмотр",
     protectChanges: true,
     body: '<div class="stack"><div class="viewing-dialog-context"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><div><b>' + esc(userName(user)) + '</b><span>' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + '</span></div></div>' +
+      (requested ? '<div class="msg">📝 Клиент просил: ' + esc(requested) + '</div>' : '') +
+      (currentDate ? '' : '<div class="msg attention">Дату из просьбы клиента бот не разобрал — выберите её сами. Клиент получит именно то, что здесь указано.</div>') +
       '<div class="grid cols-2"><div class="field"><label for="viewingScheduleDate">Дата</label><input id="viewingScheduleDate" type="date" min="' + esc(pipelineToday()) + '" value="' + esc(currentDate) + '"></div><div class="field"><label for="viewingScheduleTime">Время</label><input id="viewingScheduleTime" type="time" value="' + esc(currentTime) + '"></div></div>' +
       '<div class="msg">После сохранения клиент получит ' + (moving ? "обновлённые" : "подтверждённые") + ' дату и время в Telegram.</div></div>',
     footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveViewingSchedule" type="button">' + (moving ? "Перенести и уведомить" : "Подтвердить и уведомить") + '</button>',
