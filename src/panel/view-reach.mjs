@@ -411,7 +411,7 @@ function bindRubricPicker(host) {
     var ownPhoto = host.querySelector("#groupImage") && host.querySelector("#groupImage").files.length;
     var longText = ((host.querySelector("#groupText") || {}).value || "").length > 900;
     host.querySelector("#rubricPreview").innerHTML = rubric
-      ? '<img class="thumb thumb-preview" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + '" alt=""> ' +
+      ? '<img class="thumb thumb-preview" loading="lazy" decoding="async" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + '" alt=""> ' +
         (rubric.placement === "top"
           ? "плашка встанет над текстом"
           : rubric.placement === "separate"

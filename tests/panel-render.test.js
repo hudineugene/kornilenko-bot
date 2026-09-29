@@ -3519,3 +3519,65 @@ test('сохранение — два способа: форма с полосо
   // Бот правит шаблон запросом PATCH; панель слала PUT, и правка существующего шаблона отвечала «Не найдено».
   assert.ok(!/reply-templates\/"[^;]*"PUT"/.test(PANEL_HTML), 'шаблон правится тем методом, который принимает бот');
 });
+
+test('быстрый поиск клиента и его заявок: индексы совпадают с обходом списка и обновляются со списком', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.state.users = [{ id: '1', firstName: 'Анна' }, { id: '2', firstName: 'Борис' }];
+  sandbox.state.inquiries = [{ id: 'a', userId: '1' }, { id: 'b', userId: 2 }, { id: 'c', userId: '1' }];
+  assert.equal(sandbox.userById('2').firstName, 'Борис');
+  assert.equal(sandbox.userById(1).firstName, 'Анна', 'код можно спросить и числом');
+  assert.equal(sandbox.userById('999'), null);
+  assert.equal(Array.from(sandbox.inquiriesOfUser('1'), (item) => item.id).join(), 'a,c');
+  assert.equal(Array.from(sandbox.inquiriesOfUser(2), (item) => item.id).join(), 'b');
+  assert.equal(sandbox.inquiriesOfUser('nobody').length, 0);
+  // Копия: сортировка у вызывающего не портит индекс.
+  sandbox.inquiriesOfUser('1').reverse();
+  assert.equal(Array.from(sandbox.inquiriesOfUser('1'), (item) => item.id).join(), 'a,c');
+  // Пришло новое состояние — индекс перестроен.
+  sandbox.state.users = [{ id: '3', firstName: 'Вера' }];
+  sandbox.state.inquiries = [{ id: 'd', userId: '3' }];
+  assert.equal(sandbox.userById('1'), null);
+  assert.equal(sandbox.userById('3').firstName, 'Вера');
+  assert.equal(Array.from(sandbox.inquiriesOfUser('3'), (item) => item.id).join(), 'd');
+  // Добавили клиента в тот же список — длина изменилась, индекс тоже.
+  sandbox.state.users.push({ id: '4', firstName: 'Глеб' });
+  assert.equal(sandbox.userById('4').firstName, 'Глеб');
+});
+
+test('«Диалоги» рисуются порциями по 100; открытый диалог виден всегда; смена фильтра начинает сначала', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const now = Date.now();
+  sandbox.state.users = []; sandbox.state.inquiries = [];
+  for (let index = 0; index < 250; index++) {
+    sandbox.state.users.push({ id: 'u' + index, firstName: 'Клиент' + index });
+    sandbox.state.inquiries.push({ id: 'i' + index, userId: 'u' + index, type: 'general', text: 'Вопрос', status: 'new', replies: [], awaitsReply: true, createdAt: new Date(now - index * 60000).toISOString(), updatedAt: new Date(now - index * 60000).toISOString(), clientMessageAt: new Date(now - index * 60000).toISOString() });
+  }
+  sandbox.inquiryFilter.status = '';
+  const rows = (host) => (String(host.innerHTML).match(/class="conversation-item[ "]/g) || []).length;
+  const host = fakeElement('main');
+  sandbox.renderInquiryList(host);
+  assert.equal(rows(host), 100, 'первая порция — сто');
+  assert.match(String(host.innerHTML), /Показано 100 из 250/);
+  assert.match(String(host.innerHTML), /id="moreConversations"[^>]*>Показать ещё 100</);
+
+  // «Показать ещё» добавляет порцию.
+  host.querySelector('#moreConversations').onclick();
+  assert.equal(rows(host), 200);
+  host.querySelector('#moreConversations').onclick();
+  assert.equal(rows(host), 250, 'третья порция — последние пятьдесят');
+  assert.ok(!/id="moreConversations"/.test(String(host.innerHTML)), 'всё показано — кнопки нет');
+
+  // Смена фильтра возвращает первую порцию.
+  host.querySelector('#inqStatus button').onclick.call({ dataset: { status: '' } });
+  sandbox.conversationsShown = 200;
+  host.querySelectorAll('#inqStatus button')[0].onclick();
+  assert.equal(sandbox.conversationsShown, 100, 'после смены фильтра — снова первая порция');
+
+  // Открытая беседа из хвоста списка остаётся видимой.
+  sandbox.selectConversation('i240', true);
+  sandbox.renderInquiryList(host);
+  assert.equal(rows(host), 101, 'сто строк и открытая беседа');
+  assert.ok(String(host.innerHTML).includes('data-id="i240"'));
+});

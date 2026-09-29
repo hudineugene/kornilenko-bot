@@ -134,7 +134,7 @@ var PIPELINE_STAGES = [
 ];
 
 function userOf(item) {
-  return (state.users || []).find(function (entry) { return entry.id === String(item.userId); }) || { firstName: "Клиент", id: item.userId };
+  return userById(item.userId) || { firstName: "Клиент", id: item.userId };
 }
 function userName(user) {
   return [user.firstName, user.lastName].filter(Boolean).join(" ") || "Без имени";
@@ -534,6 +534,11 @@ function bindTemplatesCard(host, redraw) {
 }
 
 
+// «Диалоги» рисуются порциями: тысяча строк в списке — это полмегабайта разметки, которая
+// перестраивается при каждом обновлении. Открытый диалог всегда виден, даже если он дальше.
+var CONVERSATIONS_PAGE = 100;
+var conversationsShown = CONVERSATIONS_PAGE;
+
 function renderInquiryList(host) {
   screenSettled();
   var allGroups = conversationGroups();
@@ -572,7 +577,10 @@ function renderInquiryList(host) {
     closed: allGroups.filter(function (group) { return group.closed; }).length,
     all: allGroups.length,
   };
-  var conversationItems = rows.map(function (group) {
+  var shownRows = rows.slice(0, conversationsShown);
+  if (selectedGroup && rows.indexOf(selectedGroup) >= 0 && shownRows.indexOf(selectedGroup) < 0) shownRows.push(selectedGroup);
+  var moreRows = rows.length - shownRows.length;
+  var conversationItems = shownRows.map(function (group) {
     var item = group.latest, user = group.user;
     var selected = group.inquiries.some(function (entry) { return entry.id === selectedInquiry; });
     // Последнее сообщение беседы приходит в состоянии отдельно: сама переписка
@@ -610,18 +618,22 @@ function renderInquiryList(host) {
     "</div>" +
     '<div class="messenger-shell' + (selectedInquiry ? " chat-open" : "") + '"><aside class="card conversation-list-panel"><header><div><h3>Диалоги</h3><span class="small muted">Один клиент — одна переписка' + noConversation + '</span></div><span class="chip">' + rows.length + " из " + counts.all + '</span></header><div class="conversation-list">' +
       (conversationItems || '<div class="empty"><b>Диалогов не найдено</b>Измените фильтр или поисковый запрос</div>') +
+      (moreRows > 0 ? '<div class="card-body row"><span class="small muted">Показано ' + num(shownRows.length) + " из " + num(rows.length) + '</span><div class="grow"></div><button class="btn secondary small" id="moreConversations" type="button">Показать ещё ' + num(Math.min(CONVERSATIONS_PAGE, moreRows)) + "</button></div>" : "") +
     '</div></aside><section class="messenger-chat" id="inquiryCard"></section></div>';
   // На телефоне открытый диалог занимает весь экран: заголовок, вкладки и
   // фильтры (около 700 px) скрываются, остаётся «← Диалоги» и сама переписка.
   if (document.body && document.body.classList) document.body.classList.toggle("phone-chat", Boolean(selectedInquiry));
 
   host.querySelectorAll("#inqStatus button").forEach(function (button) {
-    button.onclick = function () { inquiryFilter.status = button.dataset.status; renderInquiryList(host); };
+    button.onclick = function () { inquiryFilter.status = button.dataset.status; conversationsShown = CONVERSATIONS_PAGE; renderInquiryList(host); };
   });
-  bindClientFilterBar(host, function () { renderInquiryList(host); });
+  bindClientFilterBar(host, function () { conversationsShown = CONVERSATIONS_PAGE; renderInquiryList(host); });
+  var moreConversations = host.querySelector("#moreConversations");
+  if (moreConversations) moreConversations.onclick = function () { conversationsShown += CONVERSATIONS_PAGE; renderInquiryList(host); };
   var compact = host.querySelector("#inqStatusCompact");
   if (compact) compact.onchange = function () {
     inquiryFilter.status = compact.value;
+    conversationsShown = CONVERSATIONS_PAGE;
     renderInquiryList(host);
   };
   host.querySelectorAll(".conversation-item[data-id]").forEach(function (row) {
@@ -987,7 +999,7 @@ function renderInquiryCard(host) {
     return;
   }
   var user = userOf(item);
-  var related = (state.inquiries || []).filter(function (entry) { return String(entry.userId) === String(item.userId); }).sort(function (a, b) { return (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0); });
+  var related = inquiriesOfUser(item.userId).sort(function (a, b) { return (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0); });
   var property = item.propertyId ? (state.objects || []).find(function (record) { return record.id === item.propertyId; }) : null;
   var viewing = item.viewing || null;
   var managers = staffNames();
@@ -1500,7 +1512,7 @@ var clientsShown = CLIENTS_PAGE;
 function renderClients(host) {
   screenSettled();
   var rows = (state.users || []).map(function (user) {
-    var inquiries = (state.inquiries || []).filter(function (item) { return String(item.userId) === user.id; });
+    var inquiries = inquiriesOfUser(user.id);
     return { user: user, inquiries: inquiries, latest: clientActiveInquiry(inquiries), active: clientOpenInquiry(inquiries) };
   }).filter(function (row) {
     var user = row.user;
@@ -1537,17 +1549,17 @@ function renderClients(host) {
 }
 
 function openClient(id) {
-  var user = (state.users || []).find(function (entry) { return entry.id === id; });
+  var user = userById(id);
   // Клиента нет в общем состоянии (старше 500-го) или карточка неполная: запрашиваем
   // полную у бота и открываем снова.
   if (!user || user.partial) {
     ensureClientLoaded(id).then(function () {
-      var loaded = (state.users || []).find(function (entry) { return entry.id === id; });
+      var loaded = userById(id);
       if (loaded && !loaded.partial) openClient(id);
     }).catch(fail);
     return;
   }
-  var inquiries = (state.inquiries || []).filter(function (item) { return String(item.userId) === id; }).sort(function (a, b) { return (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0); });
+  var inquiries = inquiriesOfUser(id).sort(function (a, b) { return (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0); });
   var latest = clientActiveInquiry(inquiries);
   var active = clientOpenInquiry(inquiries);
   openDialog({

@@ -661,6 +661,36 @@ function staffNames() {
   return [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
 }
 
+// Индексы «клиент по коду» и «заявки клиента». Раньше каждое место искало обходом всего
+// списка, и при тысячах клиентов список диалогов строился в квадрате от их числа. Индекс
+// строится один раз на состояние: состояние приходит новыми списками (при обновлении и
+// при дозагрузке клиента), и по смене списка или его длины индекс строится заново.
+var lookup = { users: null, usersCount: -1, byId: {}, inquiries: null, inquiriesCount: -1, byUser: {} };
+function userById(id) {
+  var users = (state && state.users) || [];
+  if (lookup.users !== users || lookup.usersCount !== users.length) {
+    lookup.users = users;
+    lookup.usersCount = users.length;
+    lookup.byId = {};
+    users.forEach(function (user) { lookup.byId[String(user.id)] = user; });
+  }
+  return lookup.byId[String(id)] || null;
+}
+// Заявки клиента — копией списка: вызывающие сортируют её у себя.
+function inquiriesOfUser(id) {
+  var inquiries = (state && state.inquiries) || [];
+  if (lookup.inquiries !== inquiries || lookup.inquiriesCount !== inquiries.length) {
+    lookup.inquiries = inquiries;
+    lookup.inquiriesCount = inquiries.length;
+    lookup.byUser = {};
+    inquiries.forEach(function (item) {
+      var key = String(item.userId);
+      (lookup.byUser[key] = lookup.byUser[key] || []).push(item);
+    });
+  }
+  return (lookup.byUser[String(id)] || []).slice();
+}
+
 // Значки разделов — один набор линейных SVG (толщина, скругления и размер общие;
 // цвет берут от текста). Раньше были глифы ◉ ✉ ⌂ ➤ ✎ ⚙ вперемешку с цветным
 // эмодзи 📅: разного размера, веса и цвета, и на разных системах разные.
@@ -919,7 +949,7 @@ function globalSearchActions(query) {
 // Полная карточка клиента. В общем состоянии — 500 последних и «неполные» клиенты
 // из заявок; остальных (и неполных) запрашиваем у бота по одному.
 async function ensureClientLoaded(id) {
-  var known = (state.users || []).find(function (user) { return user.id === id; });
+  var known = userById(id);
   if (known && !known.partial) return true;
   var answer = await api("/api/users/" + encodeURIComponent(id));
   state.users = (state.users || []).filter(function (user) { return user.id !== id; }).concat([answer.user]);
@@ -981,7 +1011,7 @@ function globalSearchOpen(kind, id) {
   globalSearchClose(true);
   if (kind === "action") return PALETTE_ACTIONS[Number(id)] ? PALETTE_ACTIONS[Number(id)].run() : undefined;
   if (kind === "client" || kind === "write") {
-    var known = (state.users || []).find(function (user) { return user.id === id; });
+    var known = userById(id);
     var show = function () {
       if (kind === "client") return openClient(id);
       // «Написать»: последняя заявка клиента открывается в диалогах; без заявок — карточка, где есть поле сообщения.

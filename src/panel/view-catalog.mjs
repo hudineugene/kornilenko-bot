@@ -128,7 +128,7 @@ function renderObjects(host) {
       var images = propertyImages(record, "ru");
       var stats = catalogPropertyStats(record);
       return '<tr data-id="' + esc(record.id) + '">' +
-        "<td>" + (images.length ? '<img class="thumb" src="' + imageUrl("objects", record.id, images[0], "ru") + '" alt="">' : '<span class="thumb"></span>') + "</td>" +
+        "<td>" + (images.length ? '<img class="thumb" loading="lazy" decoding="async" src="' + imageUrl("objects", record.id, images[0], "ru") + '" alt="">' : '<span class="thumb"></span>') + "</td>" +
         '<td class="clickable" data-edit="1"><b>' + esc(localized(record.title, "ru") || "Без названия") + "</b>" +
           (record.reference ? ' <span class="small faint">' + esc(record.reference) + "</span>" : "") +
           (missingLanguages(record).length ? '<br><span class="chip warn" title="' + esc(publicationSummary(record)) + '">не готово: ' + esc(missingLanguages(record).join(", ")) + "</span>" : '<br><span class="chip ok">карточка готова</span>') + "</td>" +
@@ -306,7 +306,7 @@ async function openObjectInsights(id) {
       drawer: true,
       wide: true,
       body: '<div class="object-insights stack"><section class="object-insights-head">' +
-          (image ? '<img src="' + imageUrl("objects", record.id, image) + '" alt="">' : '<span class="object-insights-placeholder">⌂</span>') +
+          (image ? '<img loading="lazy" decoding="async" src="' + imageUrl("objects", record.id, image) + '" alt="">' : '<span class="object-insights-placeholder">⌂</span>') +
           '<div><h2>' + esc(title) + '</h2><div class="small muted">' + esc([record.reference, location].filter(Boolean).join(" · ") || "Без номера и расположения") + '</div><div class="row wrap gap-top"><span class="chip ' + statusKind(record.status) + '">' + esc(statusName(record.status)) + '</span><span class="small faint">данные обновлены ' + (stats.updatedAt ? ago(stats.updatedAt) : "ещё не собирались") + '</span></div></div></section>' +
         '<div class="grid cols-4 object-insight-kpis">' + kpiCard("Видели в каталоге", num(impressions), "показов карточки") + kpiCard("Открыли карточку", num(details), percent(details, impressions) + " от показов") + kpiCard("Заявки", num(inquiries), percent(inquiries, impressions) + " от показов") + kpiCard("Записались на просмотр", num(viewings), percent(viewings, inquiries) + " от заявок") + '</div>' +
         '<section class="card"><header><div><h3>Путь клиента</h3><span class="small muted">События считаются с момента последнего обнуления статистики</span></div></header><div class="card-body"><div class="object-path"><div><b>' + num(impressions) + '</b><span>видели в каталоге</span></div><i>→</i><div><b>' + num(details) + '</b><span>открыли карточку</span></div><i>→</i><div><b>' + num(inquiries) + '</b><span>оставили заявку</span></div><i>→</i><div><b>' + num(viewings) + '</b><span>записались на просмотр</span></div></div><div class="row wrap object-signal-summary"><span class="chip">❤️ Сейчас в избранном: ' + num(summary.favorites) + '</span><span class="chip">⚖️ Сравнивают: ' + num(summary.comparisons) + '</span><span class="chip">Открывали карточку: ' + num(summary.viewed) + '</span><span class="chip">Подходит по запросу: ' + num(summary.matches) + '</span><span class="chip">Галерея: ' + num(stats.galleries) + '</span><span class="chip">Связь с менеджером: ' + num(stats.managerContacts) + '</span></div></div></section>' +
@@ -343,7 +343,7 @@ function imageBlock(kind, record, language) {
   // как необязательный.
   var common = language === "ru";
   var body = '<div class="image-list" data-images="' + language + '">' + images.map(function (image) {
-      return '<span class="media-thumb"><img src="' + imageUrl(kind, record.id, image, language) + '" alt="">' +
+      return '<span class="media-thumb"><img loading="lazy" decoding="async" src="' + imageUrl(kind, record.id, image, language) + '" alt="">' +
         '<button class="media-remove" data-remove="' + esc(image.id) + '" type="button" title="Убрать фото">✕</button></span>';
     }).join("") + "</div>" +
     '<div class="image-upload-row"><label class="btn secondary small">＋ Добавить фото<input type="file" accept="image/jpeg,image/png" multiple data-upload="' + language + '" class="file-hidden"></label>' +
@@ -770,7 +770,7 @@ function renderOffers(host) {
       var images = propertyImages(record, "ru");
       var displayStatus = promotionStatus(record);
       return '<tr data-id="' + esc(record.id) + '">' +
-        "<td>" + (images.length ? '<img class="thumb" src="' + imageUrl("promotions", record.id, images[0], "ru") + '" alt="">' : '<span class="thumb"></span>') + "</td>" +
+        "<td>" + (images.length ? '<img class="thumb" loading="lazy" decoding="async" src="' + imageUrl("promotions", record.id, images[0], "ru") + '" alt="">' : '<span class="thumb"></span>') + "</td>" +
         '<td class="clickable" data-edit="1"><b>' + esc(localized(record.title, "ru") || "Без названия") + '</b><br><span class="small faint">' + esc(String(localized(record.text, "ru")).slice(0, 70)) + "</span></td>" +
         "<td>" + (record.startAt || record.endAt ? esc(dateShort(record.startAt) + " – " + dateShort(record.endAt)) : "без срока") + "</td>" +
         '<td><span class="chip ' + displayStatus.kind + '">' + displayStatus.label + "</span></td>" +
