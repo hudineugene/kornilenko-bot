@@ -146,3 +146,17 @@ test('карточка участка и коммерции без спален,
   const villaText = villa.text;
   assert.match(villaText, /Спальн[а-я]*: 3/, 'у виллы спальни на месте');
 });
+
+test('«Подробнее», открытое не с карточки (после расчёта, похожих, по ссылке), приходит с рядом «Записаться / Связаться»', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('details-x', 'Вилла с описанием', 'active', { priceValue: 300000, currency: 'EUR', area: 120 }));
+  });
+  const chat = createChat();
+  const step = await chat.press('property:details:details-x'); // нажато не под карточкой с фото
+  const sent = step.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id));
+  assert.equal(sent.length, 1);
+  const buttons = sent[0].body.reply_markup.inline_keyboard.flat().map((button) => button.callback_data || button.url);
+  assert.ok(buttons.includes('property:viewing:details-x') && buttons.includes('property:manager:details-x'), 'есть «Записаться» и «Связаться»: ' + buttons.join(', '));
+  assert.ok(buttons.includes('property:return:details-x'), 'и возврат к карточке');
+});

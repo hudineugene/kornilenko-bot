@@ -623,9 +623,17 @@ async function handlePropertyCallback(query, token) {
         // Не получилось изменить карточку — покажем отдельным сообщением.
       }
     }
-    // Длинное описание отдельным сообщением: здесь только то, чего нет на
-    // карточке, и возврат к ней.
+    // Длинное описание отдельным сообщением: то, чего нет на карточке, и возврат к ней. Если карточка
+    // стоит выше (нажали «Подробнее» на ней), кнопки не повторяем. Если «Подробнее» открыто из другого
+    // сообщения — после расчёта, похожих, по ссылке, — карточки рядом нет, и ряд «Записаться / Связаться»
+    // здесь нужен: без него клиент шёл назад ради двух кнопок.
     const rows = [];
+    if (!isCard) {
+      rows.push(record.status === 'active'
+        ? [{ text: mobileButtonText('📅', text.viewing), callback_data: 'property:viewing:' + record.id },
+          { text: mobileButtonText('💬', text.contact), callback_data: 'property:manager:' + record.id }]
+        : [{ text: mobileButtonText('💬', text.contact), callback_data: 'property:manager:' + record.id }]);
+    }
     if (extra.length) rows.push(extra);
     if (links.length) rows.push(links);
     if (trustButtonRow(language)) rows.push(trustButtonRow(language));
