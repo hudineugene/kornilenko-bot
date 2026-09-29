@@ -255,6 +255,22 @@ function naturalCatalogFilter(message, records, language) {
   return null;
 }
 
+// Сколько признаков поиска названо в сообщении (сделка, тип, спальни, город, цена), не
+// решая, хватает ли их для фильтра. По этому числу бот отличает «искал, но фраза не
+// разобралась» от обычного вопроса.
+function searchSignalCount(text, user) {
+  const message = cleanText(text, 300);
+  if (!message) return 0;
+  const language = user.preferredLanguage || 'ru';
+  const records = publishedCatalog(user);
+  const deal = Object.keys(DEAL_TERMS).some((key) => phraseIncluded(message, DEAL_TERMS[key]));
+  const type = Object.keys(TYPE_TERMS).some((key) => phraseIncluded(message, TYPE_TERMS[key]));
+  const place = mentionedPlaces(message, records, language, 'city').length > 0 || mentionedPlaces(message, records, language, 'district').length > 0;
+  const range = parsePriceRange(message);
+  const price = Boolean(range || parseMinPrice(message) || parseMaxPrice(message));
+  return [deal, type, place, price, parseBedrooms(message) > 0].filter(Boolean).length;
+}
+
 // What the message asks for:
 //   { kind: 'property', record, exact }  a property reference
 //   { kind: 'city', city }               a city name by itself
@@ -290,6 +306,7 @@ export {
   parseMinPrice,
   parseMaxPrice,
   parsePriceRange,
+  searchSignalCount,
   placeKey,
   referenceKey,
 };

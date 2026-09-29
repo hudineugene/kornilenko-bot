@@ -1,7 +1,7 @@
 // Обработка входящих обновлений Telegram и цикл опроса.
 
 import { cleanText, delay, fillTemplate } from './util.mjs';
-import { COMMAND_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, MANAGER_CONTACT_TEXT, MENU_LABELS, PROPERTY_ACTION_TEXT } from './texts.mjs';
+import { COMMAND_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, MANAGER_CONTACT_TEXT, MENU_LABELS, PROPERTY_ACTION_TEXT, SEARCH_UNCLEAR_TEXT } from './texts.mjs';
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError, recordPropertyEvent } from './analytics.mjs';
 import { languageWasGuessed, leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from './users.mjs';
@@ -21,7 +21,7 @@ import {
   serviceMessage,
 } from './inquiries.mjs';
 import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, handleCatalogListCallback, handleSelectionWizardCallback, openPendingStartPayload, propertyIdFromStartPayload, sendSelectionWizard, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
-import { catalogRequest } from './search.mjs';
+import { catalogRequest, searchSignalCount } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleGuideCallback, sendGuidePage, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
 import { handleAlertsCallback } from './alerts.mjs';
@@ -251,6 +251,7 @@ async function handleUpdate(update, token) {
   // Сообщение дописано к открытому обращению, и клиенту ничего не отвечали:
   // молчание похоже на потерянное сообщение, поэтому ставим на него реакцию 👀.
   let mergedIntoOpen = false;
+  let searchHint = null;
   const mergedAnswer = (inquiry) => {
     const merged = inquiryWasMerged(inquiry);
     if (merged) mergedIntoOpen = true;
@@ -629,6 +630,14 @@ async function handleUpdate(update, token) {
     inquiryAnswer = true;
   }
 
+  // Клиент с открытой заявкой перечислил условия поиска, а фраза не разобралась: одна реакция 👀
+  // выглядела как «глаз вместо ответа». Отвечаем коротко и зовём в мастер подбора.
+  if (!answer && mergedIntoOpen && searchSignalCount(text, user) >= 2) {
+    const language = user.preferredLanguage || 'ru';
+    answer = SEARCH_UNCLEAR_TEXT[language] || SEARCH_UNCLEAR_TEXT.ru;
+    searchHint = { inline_keyboard: [[{ text: (MENU_LABELS[language] || MENU_LABELS.ru).selection, callback_data: 'selection:start' }]] };
+  }
+
   if (!answer && mergedIntoOpen && message.message_id) {
     try {
       await telegramRequest(token, 'setMessageReaction', { chat_id: message.chat.id, message_id: message.message_id, reaction: [{ type: 'emoji', emoji: '👀' }] });
@@ -641,7 +650,7 @@ async function handleUpdate(update, token) {
     if (inquiryAnswer) answer = withOffHoursNote(answer, user.preferredLanguage);
     try {
       const sent = await sendMessage(message.chat.id, answer, token, {
-        reply_markup: menuKeyboard(user.preferredLanguage),
+        reply_markup: searchHint || menuKeyboard(user.preferredLanguage),
       });
       recordBotAnswer(user, answer, { messageId: sent && sent.message_id });
     } catch (error) {

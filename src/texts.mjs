@@ -275,6 +275,14 @@ const COMPARISON_TEXT = {
     notSpecified: '—',
   },
 };
+// Клиент с открытой заявкой написал условия поиска, но фраза не разобралась: вместо
+// одной реакции 👀 — короткий ответ с кнопкой мастера подбора.
+const SEARCH_UNCLEAR_TEXT = {
+  ru: 'Не совсем понял условия. Выберите их по шагам — это быстро:',
+  en: "I didn't quite get the criteria. Pick them step by step — it's quick:",
+  es: 'No he entendido bien los criterios. Elígelos paso a paso, es rápido:',
+};
+
 const MANAGER_CONTACT_TEXT = {
   ru: { intro: '💬 Выберите удобный способ связи с менеджером.', tapPhone: 'Нажмите на номер, чтобы позвонить.', call: 'Позвонить', whatsapp: 'WhatsApp', telegram: 'Telegram', website: 'Сайт', map: 'Карта', request: '📞 Заказать звонок', question: '❓ Задать вопрос', askQuestion: 'Напишите ваш вопрос. Менеджер ответит в этом чате.', whatsappHello: 'Здравствуйте! Пишу из Telegram-бота, хочу узнать об объектах.', whatsappHelloProperty: 'Здравствуйте! Интересует объект: {property}.', received: 'Спасибо! Вопрос передан менеджеру.', replyHeader: '👨‍💼 Ответ менеджера', cancel: 'Отменить' },
   en: { intro: '💬 Choose a convenient way to contact an agent.', tapPhone: 'Tap a phone number to call.', call: 'Call', whatsapp: 'WhatsApp', telegram: 'Telegram', website: 'Website', map: 'Map', request: '📞 Request a call', question: '❓ Ask a question', askQuestion: 'Send your question. An agent will reply in this chat.', whatsappHello: 'Hello! I am writing from the Telegram bot, I would like to know about your properties.', whatsappHelloProperty: 'Hello! I am interested in the property: {property}.', received: 'Thank you! Your question has been sent to an agent.', replyHeader: '👨‍💼 Agent reply', cancel: 'Cancel' },
@@ -1334,6 +1342,7 @@ export {
   LEGACY_MENU_LABELS,
   MAIN_MENU_TEXT,
   MANAGER_CONTACT_TEXT,
+  SEARCH_UNCLEAR_TEXT,
   CATALOG_SUMMARY_TEXT,
   MENU_HINTS,
   MENU_LABELS,

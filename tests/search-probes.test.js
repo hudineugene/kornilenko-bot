@@ -9,7 +9,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 // Сначала помощник: он направляет данные во временную папку. Импорт src/*.mjs без него читает живой bot-data.json.
-const { cleanup } = require('./helpers/chat');
+const { callbacksOf, createChat, resetData, cleanup } = require('./helpers/chat');
 
 test.after(cleanup);
 
@@ -100,4 +100,16 @@ test('«у моря / near the beach / cerca de la playa» — не неизве
   assert.equal(filter.city, '', 'пляж — не город: фильтр без города');
   // А настоящее незнакомое место по-прежнему не угадывается.
   assert.equal(await parse('3 bed villa near Madrid', 'en'), null, 'незнакомый город — менеджеру');
+});
+
+test('клиент с открытой заявкой перечислил условия, а фраза не разобралась: короткий ответ с «✨ Подбор», а не только 👀', async () => {
+  resetData((data) => { data.config.active = true; });
+  const chat = createChat();
+  await chat.say('Есть ли парковка у виллы?'); // открытая заявка
+  const step = await chat.say('ищу дом в Мадриде до 300 тысяч');
+  assert.match(step.last.text, /Не совсем понял условия/);
+  assert.ok(callbacksOf(step.last.markup).includes('selection:start'), 'кнопка мастера подбора');
+  // Обычная реплика без признаков поиска — по-прежнему тихая реакция, без ответа.
+  const quiet = await chat.say('Спасибо, жду звонка');
+  assert.ok(!/Не совсем понял/.test((quiet.last && quiet.last.text) || ''), 'обычные реплики не задеваем');
 });
