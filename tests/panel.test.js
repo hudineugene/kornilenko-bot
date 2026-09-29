@@ -539,7 +539,7 @@ test('«Скрыть» в списке дел шлёт действие, кот�
 test('состояние заявки — одно на всю панель', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /function inquiryState\(inquiry\)/);
-  assert.match(PANEL_HTML, /text: "Ждёт ответа"/);
+  assert.match(PANEL_HTML, /text: "Ждёт ответа · "/);
   assert.match(PANEL_HTML, /text: "Отвечено"/);
   assert.match(PANEL_HTML, /text: "Закрыт"/);
   assert.ok(!/оставить диалог в работе/.test(PANEL_HTML), 'галочка «оставить диалог в работе» убрана');

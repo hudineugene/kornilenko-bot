@@ -259,6 +259,7 @@ VIEWS.today = {
   render: function (host) {
     var today = startOfToday(), week = startOfWeek();
     var waiting = waitingClients();
+    var overdue = overdueClients();
     var weekDays = lastDays(7);
     var allDeeds = deedList();
     var scoped = scopedDeeds(allDeeds);
@@ -269,7 +270,7 @@ VIEWS.today = {
       // Цифры — одной строкой: ряд из четырёх карточек занимал треть экрана и
       // повторялся на восьми экранах подряд.
       '<div class="today-numbers">' +
-        '<span><b>' + num(waiting) + '</b> ' + plural(waiting, "клиент ждёт", "клиента ждут", "клиентов ждут") + ' ответа</span>' +
+        '<span><b>' + num(waiting) + '</b> ' + plural(waiting, "клиент ждёт", "клиента ждут", "клиентов ждут") + ' ответа' + (overdue ? ' · <span class="late-note">из них просрочено: ' + num(overdue) + '</span>' : '') + '</span>' +
         '<span><b>' + num(unconfirmed) + '</b> ' + plural(unconfirmed, "просмотр", "просмотра", "просмотров") + ' без подтверждения</span>' +
         '<span><b>' + num(inquiriesInRange(week).length) + '</b> ' + plural(inquiriesInRange(week).length, "заявка", "заявки", "заявок") + ' за 7 дней · ' + num(inquiriesInRange(today).length) + ' сегодня</span>' +
         '<span><b>' + num(state.userCount) + '</b> ' + plural(state.userCount, "клиент", "клиента", "клиентов") + ' в базе · +' + usersInRange(week) + ' за неделю</span>' +

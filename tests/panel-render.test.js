@@ -1518,7 +1518,7 @@ test('панель считает «взял в работу без ответа
   const { sandbox } = await panelSandbox();
   const taken = { status: 'in_progress', replies: [], messages: [{ direction: 'in' }], createdAt: new Date().toISOString() };
   assert.equal(sandbox.awaitsReply(taken), true, 'без ответа клиент ждёт, хотя дело в работе');
-  assert.equal(sandbox.inquiryState(taken).text, 'Ждёт ответа');
+  assert.match(sandbox.inquiryState(taken).text, /^Ждёт ответа/);
   assert.equal(sandbox.awaitsReply({ ...taken, viewing: { confirmedAt: new Date().toISOString() } }), false, 'подтверждённый просмотр ответа не ждёт');
   assert.equal(sandbox.awaitsReply({ ...taken, messages: [{ direction: 'out' }] }), false, 'начатое менеджером — тоже');
 });
@@ -1627,6 +1627,53 @@ test('«Состояние бота» на «Сегодня»: здоровье 
   assert.match(html, /Каналы и группы: подключено 1/, 'вышедший из группы бот не считается');
   // Нет данных самопроверки — блока нет, а не пустая рамка.
   assert.equal(String(sandbox.healthHtml(sandbox.healthRows({}))), '');
+});
+
+test('возраст ожидания: цвет и время у «Ждёт ответа», самые давние — первыми, «просрочено» в счётчиках', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const now = Date.now();
+  const waiting = (minutes) => ({ id: 'w', userId: 'u', status: 'new', replies: [], clientMessageAt: new Date(now - minutes * 60000).toISOString(), createdAt: new Date(now - minutes * 60000).toISOString() });
+  sandbox.state.config.reminderHours = 4;
+
+  // Порог — срок напоминания из настроек (4 ч); сутки — отдельная черта.
+  assert.equal(sandbox.waitLevel(waiting(10), now), 'fresh', '10 минут — в норме');
+  assert.equal(sandbox.waitLevel(waiting(3 * 60), now), 'fresh', '3 часа при пороге 4 — ещё в норме');
+  assert.equal(sandbox.waitLevel(waiting(5 * 60), now), 'late', '5 часов — дольше порога');
+  assert.equal(sandbox.waitLevel(waiting(25 * 60), now), 'overdue', 'больше суток — просрочено');
+  assert.equal(sandbox.waitLevel({ ...waiting(600), status: 'closed' }, now), '', 'закрытая — не ждёт');
+  assert.equal(sandbox.waitLevel({ ...waiting(600), replies: [{ createdAt: new Date(now).toISOString() }] }, now), '', 'отвеченная — не ждёт');
+  // Порог не задан («не напоминать») — берём два часа, а не «никогда».
+  sandbox.state.config.reminderHours = 0;
+  assert.equal(sandbox.waitLevel(waiting(150), now), 'late');
+
+  // Как это выглядит: время и цвет.
+  assert.equal(sandbox.waitDuration(5 * 60000), '5 мин');
+  assert.equal(sandbox.waitDuration(3 * 3600000 + 20 * 60000), '3 ч');
+  assert.equal(sandbox.waitDuration(50 * 3600000), '2 дн');
+  assert.equal(sandbox.waitDuration(20000), 'меньше минуты');
+  const fresh = sandbox.inquiryState(waiting(10));
+  assert.match(fresh.text, /^Ждёт ответа · 10 мин$/);
+  assert.equal(fresh.chip, 'warn', 'в норме — не красный');
+  const late = sandbox.inquiryState(waiting(5 * 60));
+  assert.equal(late.chip, 'bad');
+  const overdue = sandbox.inquiryState(waiting(50 * 60));
+  assert.equal(overdue.chip, 'bad overdue', 'просроченное — самое яркое');
+  assert.match(overdue.text, /2 дн/);
+
+  // Список «Ждут ответа»: сначала ждущий дольше всех (Николай, 9 минут), а не самый свежий.
+  sandbox.inquiryFilter.status = 'waiting';
+  const host = fakeElement('main');
+  sandbox.renderInquiryList(host);
+  const list = String(host.innerHTML);
+  assert.ok(list.indexOf('Николай') < list.indexOf('Ольга'), 'дольше всех ждёт Николай — он первый');
+
+  // Счётчики: на «Сегодня» — сколько из ждущих дольше порога.
+  sandbox.state.inquiries.find((item) => item.id === 'inq-nikolay').clientMessageAt = new Date(now - 30 * 3600000).toISOString();
+  const today = fakeElement('main');
+  sandbox.VIEWS.today.render(today);
+  assert.match(String(today.innerHTML), /из них просрочено: 1/, 'на «Сегодня» видно, сколько просрочено');
+  assert.equal(sandbox.overdueClients(), 1);
 });
 
 test('потеря связи панели с ботом: красная полоса на всех экранах, слова вместо «Failed to fetch», сама пропадает', async () => {

@@ -259,6 +259,11 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-item-meta>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conversation-state{margin-left:auto;white-space:nowrap}
 .conversation-state.ok{color:var(--ok)}.conversation-state.warn{color:var(--warn)}.conversation-state.bad{color:var(--bad)}
+/* Дольше суток — самое яркое: жирнее и с точкой-маркером, чтобы отличалось не только цветом. */
+.conversation-state.overdue{font-weight:700}.conversation-state.overdue::before{content:"● "}
+.chip.overdue{background:var(--bad);border-color:var(--bad);color:var(--surface);font-weight:700}
+.late-note{color:var(--bad);font-weight:600}
+.nav-item .count.late{box-shadow:0 0 0 2px var(--bad-line)}
 .messenger-chat{min-width:0}
 .conversation-card{min-height:420px;overflow:hidden}
 .conversation-head{min-height:65px}

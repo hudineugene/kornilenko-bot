@@ -145,6 +145,14 @@ function conversationGroups() {
     group.active = group.inquiries.find(function (item) { return item.id === selectedInquiry; }) || group.inquiries.find(function (item) { return item.status !== "closed"; }) || group.latest;
     group.unread = group.inquiries.filter(inquiryUnread).length;
     group.waiting = group.inquiries.some(awaitsReply);
+    // Как долго ждёт: самая давняя из ждущих заявок и самый строгий уровень.
+    group.waitLevel = "";
+    group.waitAge = 0;
+    group.inquiries.forEach(function (item) {
+      var level = waitLevel(item);
+      if (WAIT_RANK[level] > WAIT_RANK[group.waitLevel]) group.waitLevel = level;
+      if (level) group.waitAge = Math.max(group.waitAge, waitAge(item));
+    });
     group.answered = group.inquiries.some(function (item) { return item.status !== "closed" && !awaitsReply(item) && (item.replies || []).length; });
     group.closed = group.inquiries.every(function (item) { return item.status === "closed"; });
     // Диалог, где клиент только искал объекты сам: отвечать не на что.
@@ -204,7 +212,7 @@ function pipelineCardHtml(row) {
     '<button class="funnel-open" data-inquiry="' + esc(item.id) + '" type="button"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><span class="funnel-person"><b>' + esc(userName(user)) + '</b><small>' + esc(inquiryTypeName(item)) + '</small></span><span class="funnel-arrow">→</span></button>' +
     (property ? '<div class="funnel-property">⌂ ' + esc(localized(property.title, "ru") || property.reference || property.id) + '</div>' : "") +
     '<div class="funnel-signals">' +
-      (row.group.waiting ? '<span class="chip bad">Ждёт ответа</span>' : '<span class="chip ok">Отвечено</span>') +
+      (row.group.waiting ? '<span class="chip ' + WAIT_CHIP[row.group.waitLevel] + '">Ждёт ответа · ' + waitDuration(row.group.waitAge) + '</span>' : '<span class="chip ok">Отвечено</span>') +
       (item.assignee ? '<span class="chip">' + esc(item.assignee) + '</span>' : '<span class="chip warn">без менеджера</span>') +
       (item.followUpDate ? '<span class="chip ' + (due ? "bad" : "") + '">⏱ ' + pipelineDate(item.followUpDate) + (item.followUpTime ? " " + esc(item.followUpTime) : "") + '</span>' : "") +
     '</div><select class="pipeline-stage-select" data-pipeline-stage="' + esc(item.id) + '" aria-label="Этап">' + pipelineStageOptions(row.stage, false) + '</select></article>';
@@ -416,6 +424,8 @@ function renderInquiryList(host) {
   var withoutConversation = Math.max(0, Number(state.userCount || 0) - allGroups.length);
   var noConversation = withoutConversation ? " · в базе ещё " + counted(withoutConversation, "клиент", "клиента", "клиентов") + " без переписки" : "";
   var rows = allGroups.filter(conversationMatches);
+  // «Ждут ответа» — очередь: сверху тот, кто ждёт дольше всех, а не кто написал последним.
+  if (inquiryFilter.status === "waiting") rows.sort(function (a, b) { return b.waitAge - a.waitAge; });
   var selectedGroup = selectedInquiry ? allGroups.find(function (group) {
     return group.inquiries.some(function (item) { return item.id === selectedInquiry; });
   }) : null;
@@ -453,8 +463,8 @@ function renderInquiryList(host) {
     var lastMessage = item.lastMessage;
     var preview = lastMessage ? (lastMessage.text || lastMessage.fileName) : item.text;
     if (lastMessage && lastMessage.direction === "out" && preview) preview = "Вы: " + preview;
-    var stateText = group.waiting ? "Ждёт ответа" : group.closed ? "Закрыт" : group.searchOnly ? "Ответ не нужен" : "Отвечено";
-    var stateClass = group.waiting ? "bad" : group.closed ? "" : "ok";
+    var stateText = group.waiting ? "Ждёт ответа · " + waitDuration(group.waitAge) : group.closed ? "Закрыт" : group.searchOnly ? "Ответ не нужен" : "Отвечено";
+    var stateClass = group.waiting ? (group.waitLevel === "fresh" ? "warn" : group.waitLevel === "overdue" ? "bad overdue" : "bad") : group.closed ? "" : "ok";
     return '<button class="conversation-item' + (selected ? " selected" : "") + (group.unread ? " unread" : "") + '" data-id="' + esc(group.active.id) + '" data-user="' + esc(group.userId) + '" type="button">' +
       '<span class="conversation-avatar">' + esc(initials(user.firstName)) + (group.unread ? '<i></i>' : '') + '</span>' +
       '<span class="conversation-item-body"><span class="conversation-item-top"><b>' + esc(userName(user)) + '</b><time>' + ago(item.clientMessageAt || item.updatedAt || item.createdAt) + '</time></span>' +

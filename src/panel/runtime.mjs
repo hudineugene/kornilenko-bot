@@ -621,7 +621,7 @@ function navIcon(id) {
 
 function navItems() {
   return [
-    { id: "today", icon: navIcon("today"), title: "Сегодня", count: waitingClients() },
+    { id: "today", icon: navIcon("today"), title: "Сегодня", count: waitingClients(), late: overdueClients() },
     { id: "notifications", icon: navIcon("notifications"), title: "Все события", hidden: true },
     { id: "clients", icon: navIcon("clients"), title: "Клиенты", tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
     { id: "viewings", icon: navIcon("viewings"), title: "Просмотры" },
@@ -664,8 +664,51 @@ function inquiryState(inquiry) {
   if (inquiry.status === "closed") return { key: "closed", text: "Закрыт", chip: "" };
   // Клиент искал сам и получил каталог — ответа никто не ждёт.
   if (inquiry.searchLead) return { key: "answered", text: "Ответ не нужен", chip: "" };
-  if (awaitsReply(inquiry)) return { key: "waiting", text: "Ждёт ответа", chip: "bad" };
+  if (awaitsReply(inquiry)) {
+    var level = waitLevel(inquiry);
+    return { key: "waiting", level: level, text: "Ждёт ответа · " + waitDuration(waitAge(inquiry)), chip: WAIT_CHIP[level] || "bad" };
+  }
   return { key: "answered", text: "Отвечено", chip: "ok" };
+}
+
+// Возраст ожидания: «Ждёт ответа» через минуту и через двое суток — не одно и то же.
+// Три уровня: в норме (ещё в пределах срока напоминания из настроек), дольше срока,
+// дольше суток. Срок «не напоминать» (0) не отключает подсветку: берём два часа.
+// Один источник для списка диалогов, воронки, карточки, «Сегодня» и меню.
+var WAIT_CHIP = { fresh: "warn", late: "bad", overdue: "bad overdue" };
+var WAIT_RANK = { "": 0, fresh: 1, late: 2, overdue: 3 };
+var WAIT_DAY_MS = 24 * 3600000;
+
+function waitThresholdMs() {
+  var hours = Number(state && state.config && state.config.reminderHours);
+  return (hours > 0 ? hours : 2) * 3600000;
+}
+// Сколько клиент ждёт, считая от его последнего сообщения.
+function waitAge(inquiry, now) {
+  var since = Date.parse(inquiry && (inquiry.clientMessageAt || inquiry.createdAt) || "") || 0;
+  return since ? Math.max(0, (now || Date.now()) - since) : 0;
+}
+function waitLevel(inquiry, now) {
+  if (!awaitsReply(inquiry)) return "";
+  var age = waitAge(inquiry, now);
+  if (age >= WAIT_DAY_MS) return "overdue";
+  return age >= waitThresholdMs() ? "late" : "fresh";
+}
+function waitDuration(ms) {
+  var minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return "меньше минуты";
+  if (minutes < 60) return minutes + " мин";
+  var hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours + " ч";
+  return Math.floor(hours / 24) + " дн";
+}
+// Сколько клиентов ждут дольше срока (одного клиента с несколькими заявками — один раз).
+function overdueClients() {
+  var clients = {};
+  (state && state.inquiries || []).forEach(function (item) {
+    if (WAIT_RANK[waitLevel(item)] >= WAIT_RANK.late) clients[String(item.userId)] = true;
+  });
+  return Object.keys(clients).length;
 }
 
 function awaitsReply(inquiry) {
@@ -692,7 +735,7 @@ function renderNav() {
     var active = item.id === currentView;
     return '<button class="nav-item' + (active ? " active" : "") + '" data-view="' + item.id + '" type="button">' +
       '<span class="ico">' + item.icon + '</span><span>' + esc(item.title) + '</span>' +
-      (item.count ? '<span class="count">' + num(item.count) + '</span>' : '') + '</button>';
+      (item.count ? '<span class="count' + (item.late ? " late" : "") + '"' + (item.late ? ' title="Из них ' + num(item.late) + ' ждут дольше срока"' : "") + '>' + num(item.count) + '</span>' : '') + '</button>';
   }).join("");
   el("nav").querySelectorAll("[data-view]").forEach(function (button) {
     button.onclick = function () {
