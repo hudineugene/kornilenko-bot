@@ -738,6 +738,53 @@ test('в переписке видно ответы бота, а запись н
   assert.ok(card.querySelector('#confirmViewingInline'), 'подтвердить можно прямо из переписки');
 });
 
+test('«Просмотры» открываются на очереди подтверждения, а в окне время ставится кнопками', async () => {
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push({ id: 'villa-1', title: { ru: 'Вилла у моря' }, status: 'active', images: [], reference: 'REF-1' });
+    data.users['730001'] = { id: '730001', chatId: 730001, firstName: 'Пётр', preferredLanguage: 'ru', activity: [] };
+    data.inquiries.push({
+      id: 'inq-viewing', userId: '730001', chatId: '730001', language: 'ru', type: 'viewing', propertyId: 'villa-1',
+      text: 'Хочу посмотреть виллу', status: 'new', pipelineStage: 'viewing', replies: [], messages: [],
+      viewing: { dateText: 'como indicado', timeText: 'después de comer' },
+      createdAt: minutesAgo(30), updatedAt: minutesAgo(29), clientMessageAt: minutesAgo(30),
+    });
+  });
+  const { sandbox } = await panelSandbox();
+
+  // Есть что подтверждать — экран открывается на очереди, а не на календаре.
+  sandbox.currentView = 'today';
+  sandbox.location.hash = '#/viewings';
+  sandbox.applyRoute();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.viewings.render(host, '');
+  assert.equal(sandbox.viewingMode, 'pending', 'первая вкладка — «Ждут подтверждения»');
+  assert.match(String(host.innerHTML), /viewing-pending-card/, 'и на экране очередь');
+
+  // Человек выбрал календарь — экран его выбор не переопределяет.
+  sandbox.viewingModeChosen = true;
+  sandbox.viewingMode = 'calendar';
+  await sandbox.VIEWS.viewings.render(host, '');
+  assert.equal(sandbox.viewingMode, 'calendar');
+
+  // Очередь пуста — календарь.
+  sandbox.viewingModeChosen = false;
+  sandbox.state.inquiries[0].viewing.confirmedAt = new Date().toISOString();
+  await sandbox.VIEWS.viewings.render(host, '');
+  assert.equal(sandbox.viewingMode, 'calendar', 'без очереди открывается календарь');
+
+  // Окно подтверждения: просьба клиента, кнопки времени, дата не «сегодня».
+  let dialogOptions = null;
+  sandbox.openDialog = (options) => { dialogOptions = options; };
+  sandbox.state.inquiries[0].viewing.confirmedAt = '';
+  sandbox.openViewingSchedule(sandbox.state.inquiries[0]);
+  const body = String(dialogOptions.body).replace(/ /g, ' ');
+  assert.match(body, /Клиент просил: como indicado · después de comer/, 'просьба клиента видна как есть');
+  for (const time of ['10:00', '12:00', '17:00']) assert.match(body, new RegExp('data-quick-time="' + time + '"'), 'кнопка ' + time);
+  assert.match(body, /id="viewingScheduleDate"[^>]*value=""/, 'дата не подставлена «сегодняшним числом»');
+});
+
 test('состояние заявки бот считает сам, руками остаётся только закрыть', async () => {
   twoWaitingConversations();
   const { sandbox, requests } = await panelSandbox();

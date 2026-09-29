@@ -650,6 +650,8 @@ function applyRoute() {
   var parts = (location.hash || "").replace(/^#\//, "").split("/");
   var route = normalizeRoute(parts[0], parts[1]);
   var view = VIEWS[route[0]] ? route[0] : "today";
+  // Каждый заход в «Просмотры» снова начинается с очереди подтверждения.
+  if (view === "viewings" && currentView !== "viewings") viewingModeChosen = false;
   currentView = view;
   currentTab = route[1] || "";
   currentRouteHash = "#/" + view + (currentTab ? "/" + currentTab : "");

@@ -23,6 +23,10 @@ var clientStageFilter = "";
 var pipelineFilter = { search: "", assignee: "" };
 var taskFilter = { scope: "action", search: "", assignee: "" };
 var viewingMode = "calendar";
+// Пока человек сам не выбрал вкладку, «Просмотры» открываются на очереди «Ждут
+// подтверждения», если она не пуста: именно там менеджеру есть что делать.
+var viewingModeChosen = false;
+var VIEWING_QUICK_TIMES = ["10:00", "12:00", "17:00"];
 var viewingWeekOffset = 0;
 var PIPELINE_STAGES = [
   ["new", "Новый", "Первая заявка"],
@@ -1033,7 +1037,7 @@ function openViewingSchedule(item) {
     body: '<div class="stack"><div class="viewing-dialog-context"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><div><b>' + esc(userName(user)) + '</b><span>' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + '</span></div></div>' +
       (requested ? '<div class="msg">📝 Клиент просил: ' + esc(requested) + '</div>' : '') +
       (currentDate ? '' : '<div class="msg attention">Дату из просьбы клиента бот не разобрал — выберите её сами. Клиент получит именно то, что здесь указано.</div>') +
-      '<div class="grid cols-2"><div class="field"><label for="viewingScheduleDate">Дата</label><input id="viewingScheduleDate" type="date" min="' + esc(pipelineToday()) + '" value="' + esc(currentDate) + '"></div><div class="field"><label for="viewingScheduleTime">Время</label><input id="viewingScheduleTime" type="time" value="' + esc(currentTime) + '"></div></div>' +
+      '<div class="grid cols-2"><div class="field"><label for="viewingScheduleDate">Дата</label><input id="viewingScheduleDate" type="date" min="' + esc(pipelineToday()) + '" value="' + esc(currentDate) + '"></div><div class="field"><label for="viewingScheduleTime">Время</label><input id="viewingScheduleTime" type="time" value="' + esc(currentTime) + '"><div class="quick-times">' + VIEWING_QUICK_TIMES.map(function (time) { return '<button class="btn ghost small" type="button" data-quick-time="' + time + '">' + time + '</button>'; }).join("") + '</div></div></div>' +
       '<div class="msg">После сохранения клиент получит ' + (moving ? "обновлённые" : "подтверждённые") + ' дату и время в Telegram.</div></div>',
     footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveViewingSchedule" type="button">' + (moving ? "Перенести и уведомить" : "Подтвердить и уведомить") + '</button>',
     ready: function (dialog) {
@@ -1051,6 +1055,10 @@ function openViewingSchedule(item) {
           await reload();
         } catch (error) { save.disabled = false; fail(error); }
       };
+      // Время одной кнопкой: набирать «12:00» руками ради обычного часа лишнее.
+      dialog.querySelectorAll("[data-quick-time]").forEach(function (button) {
+        button.onclick = function () { timeInput.value = button.dataset.quickTime; };
+      });
       dateInput.focus();
     },
   });
@@ -1077,6 +1085,7 @@ function renderViewings(host) {
   var days = Array.from({ length: 7 }, function (_, index) { return viewingDateAdd(start, index); });
   var calendarRows = active.filter(function (item) { var key = viewingDateKey(item); return key && key >= start && key <= days[6]; }).sort(viewingSort);
   var withoutDate = active.filter(function (item) { return !viewingDateKey(item); });
+  if (!viewingModeChosen) viewingMode = pending.length ? "pending" : "calendar";
   var body = "";
   if (viewingMode === "pending") {
     body = pending.length ? '<div class="viewing-pending-list">' + pending.map(function (item) {
@@ -1097,7 +1106,7 @@ function renderViewings(host) {
       kpiCard("Ждут подтверждения", num(pending.length), pending.length ? "нужно ответить клиентам" : "очередь пуста", pending.length ? "down" : "up") +
       kpiCard("Подтверждено", num(upcoming.filter(function (item) { return item.viewing.confirmedAt; }).length), "предстоящих", "up") +
     '</div><div class="viewing-toolbar"><div class="tabs"><button class="' + (viewingMode === "calendar" ? "active" : "") + '" data-viewing-mode="calendar" type="button">Календарь</button><button class="' + (viewingMode === "pending" ? "active" : "") + '" data-viewing-mode="pending" type="button">Ждут подтверждения <span>' + pending.length + '</span></button><button class="' + (viewingMode === "history" ? "active" : "") + '" data-viewing-mode="history" type="button">История</button></div><span class="small muted">Время: ' + esc(timeZoneName()) + '</span></div>' + body;
-  host.querySelectorAll("[data-viewing-mode]").forEach(function (button) { button.onclick = function () { viewingMode = button.dataset.viewingMode; renderViewings(host); }; });
+  host.querySelectorAll("[data-viewing-mode]").forEach(function (button) { button.onclick = function () { viewingModeChosen = true; viewingMode = button.dataset.viewingMode; renderViewings(host); }; });
   host.querySelectorAll("[data-viewing-week]").forEach(function (button) { button.onclick = function () { viewingWeekOffset += Number(button.dataset.viewingWeek); renderViewings(host); }; });
   var todayButton = host.querySelector("[data-viewing-today]");
   if (todayButton) todayButton.onclick = function () { viewingWeekOffset = 0; renderViewings(host); };
