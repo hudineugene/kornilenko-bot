@@ -296,7 +296,7 @@ test('смена токена бота действительно отправл
   resetData((data) => { data.config.active = true; });
   const { sandbox, requests } = await panelSandbox();
   const host = fakeElement('main');
-  await sandbox.renderConnection(host);
+  await sandbox.renderTelegramConnection(host);
 
   const button = host.querySelector('#saveToken');
   assert.equal(typeof button.onclick, 'function', 'на экране есть кнопка смены токена');
@@ -315,7 +315,7 @@ test('без токена или пароля запрос не уходит', a
   resetData((data) => { data.config.active = true; });
   const { sandbox, requests } = await panelSandbox();
   const host = fakeElement('main');
-  await sandbox.renderConnection(host);
+  await sandbox.renderTelegramConnection(host);
   const button = host.querySelector('#saveToken');
 
   host.querySelector('#setToken').value = '';
@@ -1021,7 +1021,7 @@ test('после смены токена полоса сохранения не 
   resetData((data) => { data.config.active = true; });
   const { sandbox, requests } = await panelSandbox();
   const host = fakeElement('main');
-  await sandbox.renderConnection(host);
+  await sandbox.renderTelegramConnection(host);
 
   // Ввели новый токен и пароль — форма считается изменённой.
   sandbox.watchForm(host, async () => {}, 'Настройки подключения изменены').mark();
@@ -1327,6 +1327,76 @@ test('«Все события»: на карточке два действия �
   sandbox.state.notifications.forEach((item, index) => { if (index === 0) item.handledAt = new Date().toISOString(); });
   await sandbox.VIEWS.notifications.render(handled, '');
   assert.match(String(handled.innerHTML), /data-notification-action="reopen"[^>]*>Вернуть</);
+});
+
+test('технику убрали с рабочих экранов: токен и автозапуск — в «Обслуживании», не в «Команде»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+
+  const team = fakeElement('main');
+  await sandbox.renderConnection(team);
+  const teamHtml = String(team.innerHTML);
+  for (const word of ['setToken', 'BotFather', 'Текущий пароль панели', 'autostartButton', 'Надёжный запуск', 'bot.exe']) {
+    assert.ok(!teamHtml.includes(word), '«Команда» не показывает: ' + word);
+  }
+  assert.ok(teamHtml.includes('setAdminChat') && teamHtml.includes('addManager'), 'зато чат администратора и менеджеры на месте');
+  assert.ok(teamHtml.includes('сохраняются кнопкой в полосе снизу'), 'и подсказка про сохранение');
+
+  // В «Обслуживании» появился экран «Подключение к Telegram» со всем этим.
+  sandbox.serviceScreen = 'telegram';
+  const service = fakeElement('main');
+  sandbox.renderService(service);
+  const nav = String(service.innerHTML);
+  assert.match(nav, /Подключение к Telegram/);
+  assert.match(nav, /Каналы и группы/);
+  const body = fakeElement('main');
+  sandbox.renderTelegramConnection(body);
+  const html = String(body.innerHTML);
+  for (const word of ['setToken', 'setTokenPass', 'autostartButton', 'setActive']) assert.ok(html.includes(word), 'в «Обслуживании» есть ' + word);
+
+  // Переключатель «Бот включён» сохраняется сразу, без полосы сохранения.
+  requests.length = 0;
+  const toggle = body.querySelector('#setActive');
+  toggle.checked = false;
+  await toggle.onchange.call(toggle);
+  const saved = requests.find((request) => request.url.includes('/api/settings') && request.method === 'PUT');
+  assert.ok(saved, 'запрос ушёл');
+  assert.equal(saved.body.active, false);
+});
+
+test('«Пост в канал» — форма поста с выбором канала; ID, права и «опасная зона» — в «Обслуживании»', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.groups.push({ id: '-1001111111111', title: 'Наш канал', type: 'channel', status: 'administrator', memberCount: 120, rights: { can_pin_messages: true } });
+    data.groups.push({ id: '-1002222222222', title: 'Клиенты', type: 'supergroup', status: 'member', memberCount: 8 });
+  });
+  const { sandbox } = await panelSandbox();
+
+  const post = fakeElement('main');
+  sandbox.renderGroups(post, 'post');
+  // Карточка канала рисуется в своём вложенном блоке — смотрим вместе с выбором канала.
+  const postHtml = String(post.innerHTML) + String(post.querySelector('#groupBody').innerHTML);
+  assert.match(postHtml, /id="groupSelect"/, 'канал выбирается сверху формы');
+  assert.match(postHtml, /Канал: Наш канал/);
+  assert.ok(postHtml.indexOf('id="groupSelect"') < postHtml.indexOf('id="groupText"'), 'выбор канала стоит перед текстом поста');
+  assert.match(postHtml, /id="groupSend"/, 'форма поста на месте');
+  assert.match(postHtml, /for="groupImage">＋ Добавить фото</, 'выбор файла — кнопка «＋ Добавить фото», а не голое поле');
+  for (const word of ['Опасная зона', 'Покинуть канал', 'newGroupId', '-1001234567890', 'Права бота', 'Ссылка-приглашение']) {
+    assert.ok(!postHtml.includes(word), 'на экране поста нет: ' + word);
+  }
+
+  // Виды сообщений в списке — по-русски: «бот poll» читалось как обрывок.
+  const withPoll = fakeElement('main');
+  sandbox.state.groups[0].messages = [{ messageId: 7, name: 'Канал', text: 'Опрос', kind: 'poll', fromBot: true, date: new Date().toISOString() }];
+  sandbox.renderGroupCard(withPoll, sandbox.state.groups[0], 'post');
+  assert.match(String(withPoll.innerHTML), /<span class="chip">опрос<\/span>/);
+  assert.ok(!/>poll</.test(String(withPoll.innerHTML)), 'слова poll на экране нет');
+
+  const manage = fakeElement('main');
+  sandbox.renderGroups(manage, 'manage');
+  const manageHtml = String(manage.innerHTML) + String(manage.querySelector('#groupBody').innerHTML);
+  for (const word of ['Опасная зона', 'newGroupId', 'Права бота', 'Ссылка-приглашение']) assert.ok(manageHtml.includes(word), 'в «Обслуживании» есть: ' + word);
+  assert.ok(!manageHtml.includes('id="groupSend"'), 'формы поста там нет');
 });
 
 test('когда все отвечены, ноль везде', async () => {

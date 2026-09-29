@@ -164,7 +164,7 @@ test('«Публикации» — две кнопки, общая очеред�
   // Оформление — кнопкой из формы поста, отдельной вкладки больше нет.
   assert.match(PANEL_HTML, /id="openPostStyle"/);
   assert.match(PANEL_HTML, /function openPostStyleDialog\(\)/);
-  assert.match(PANEL_HTML, /\["broadcast", "Очередь и история"\], \["channel", "Каналы и группы"\]/);
+  assert.match(PANEL_HTML, /\["broadcast", "Очередь и история"\], \["channel", "Пост в канал"\]/);
   assert.ok(!/\["style", "Оформление"\]/.test(PANEL_HTML), 'вкладка «Оформление» убрана');
   assert.ok(!/во вкладке «Оформление постов»/.test(PANEL_HTML), 'подсказки больше не шлют во вкладку');
 });

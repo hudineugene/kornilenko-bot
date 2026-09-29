@@ -20,15 +20,6 @@ function settingsPayload() {
 function renderConnection(host) {
   var config = state.config, bot = state.bot || {};
   host.innerHTML = '<div class="grid cols-2"><div class="stack">' +
-    '<div class="card"><header><h3>Бот</h3></header><div class="card-body stack">' +
-      '<label class="switch"><input type="checkbox" id="setActive"' + (config.active ? " checked" : "") + '><span class="track"></span><span>Бот ' + (config.active ? "включён" : "выключен") + "</span></label>" +
-      '<div class="small muted">' + esc(bot.firstName || "Бот") + (bot.username ? " · @" + esc(bot.username) : "") + " · " + esc(connectionText()) + "</div>" +
-      '<div class="field"><label for="setToken">Новый токен из BotFather</label><input id="setToken" placeholder="оставьте пустым, чтобы не менять" autocomplete="off"></div>' +
-      '<div class="field"><label for="setTokenPass">Текущий пароль панели</label><input id="setTokenPass" type="password" placeholder="нужен для смены токена" autocomplete="current-password"></div>' +
-      '<div class="row wrap"><button class="btn secondary small" id="testToken" type="button">Проверить токен</button>' +
-        '<button class="btn small" id="saveToken" type="button">Сменить токен</button><span id="tokenResult" class="small muted"></span></div>' +
-      '<div class="hint">Токен меняется отдельной кнопкой и только по текущему паролю панели. Остальные настройки этой страницы сохраняются кнопкой в полосе снизу.</div>' +
-    "</div></div>" +
     '<div class="card"><header><h3>Админ-чат в Telegram</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="setAdminChat">Telegram-чат администратора</label><input id="setAdminChat" value="' + esc(config.adminChatId || "") + '" placeholder="узнать: напишите боту /myid"></div>' +
       '<div class="row wrap"><button class="btn secondary small" id="testAdmin" type="button">Отправить тест</button>' +
@@ -43,12 +34,9 @@ function renderConnection(host) {
     '<div class="card-body stack"><div class="field"><label for="adminName">Как зовут главного администратора</label><input id="adminName" value="' + esc(config.adminName || "") + '" placeholder="Администратор"></div>' +
     '<div id="managerList" class="stack"></div>' +
     '<div class="hint">Менеджер открывает бота, отправляет /myid и присылает номер. Заявки приходят всем, отвечает любой.</div>' +
+    '<div class="hint">Настройки чата администратора сохраняются кнопкой в полосе снизу.</div>' +
     '<button class="btn secondary small" id="saveManagers" type="button">Сохранить менеджеров</button></div></div>' +
-    '<div class="card"><header><h3>Надёжный запуск</h3></header><div class="card-body stack">' +
-      '<div class="row"><span class="dot" id="autostartDot"></span><span class="grow" id="autostartText">Проверяем автозапуск…</span></div>' +
-      '<div class="hint">Windows запустит bot.exe после входа в систему и повторит запуск, если программа завершится с ошибкой.</div>' +
-      '<button class="btn secondary small" id="autostartButton" type="button" disabled>Настроить</button>' +
-    '</div></div></div></div>';
+  '</div></div>';
 
   var watcher = watchForm(host.querySelector(".stack"), async function () {
     var adminChatId = host.querySelector("#setAdminChat").value.trim();
@@ -56,7 +44,7 @@ function renderConnection(host) {
       adminChatId: adminChatId,
       notifyMode: host.querySelector("#setNotify").value,
       statusNotices: host.querySelector("#setStatusNotices").checked,
-      active: host.querySelector("#setActive").checked,
+      active: state.config.active,
     });
     // Смена чата администратора отдаёт заявки клиентов в другой Telegram-чат:
     // спрашиваем текущий пароль.
@@ -68,83 +56,8 @@ function renderConnection(host) {
     await send("/api/settings", "PUT", payload);
   }, "Настройки подключения изменены");
 
-  host.querySelector("#saveToken").onclick = async function () {
-    var token = host.querySelector("#setToken").value.trim();
-    var password = host.querySelector("#setTokenPass").value;
-    if (!token) return toast("Введите новый токен", true);
-    if (!password) return toast("Введите текущий пароль панели", true);
-    if (!(await confirmDialog("Сменить токен бота?", "Бот переподключится к Telegram с новым токеном. Прежние ссылки на загруженные фотографии перестанут действовать, бот загрузит их заново.", "Сменить", true))) return;
-    var button = this;
-    button.disabled = true;
-    try {
-      await send("/api/settings", "PUT", Object.assign(settingsPayload(), {
-        token: token,
-        currentPassword: password,
-        adminChatId: host.querySelector("#setAdminChat").value.trim(),
-        notifyMode: host.querySelector("#setNotify").value,
-        statusNotices: host.querySelector("#setStatusNotices").checked,
-        active: host.querySelector("#setActive").checked,
-      }));
-      host.querySelector("#setToken").value = "";
-      host.querySelector("#setTokenPass").value = "";
-      toast("Токен изменён, бот переподключается");
-      await reload();
-    } catch (error) {
-      fail(error);
-    } finally {
-      button.disabled = false;
-    }
-  };
-  host.querySelector("#testToken").onclick = async function () {
-    var token = host.querySelector("#setToken").value.trim();
-    host.querySelector("#tokenResult").textContent = "Проверяем…";
-    try {
-      var result = await send("/api/token-test", "POST", { token: token });
-      host.querySelector("#tokenResult").textContent = "Токен рабочий: " + (result.bot && result.bot.firstName || "бот") + (result.bot && result.bot.username ? " @" + result.bot.username : "");
-    } catch (error) { host.querySelector("#tokenResult").textContent = error.message; }
-  };
   host.querySelector("#testAdmin").onclick = async function () {
     try { await send("/api/admin-notification/test", "POST", { chatId: host.querySelector("#setAdminChat").value.trim() }); toast("Сообщение отправлено в Telegram"); await reload(); } catch (error) { fail(error); }
-  };
-
-  var autostartInfo = null;
-  function showAutostart(info) {
-    autostartInfo = info;
-    var dot = host.querySelector("#autostartDot");
-    var text = host.querySelector("#autostartText");
-    var button = host.querySelector("#autostartButton");
-    if (!info.supported) {
-      dot.className = "dot off";
-      text.textContent = "Доступно в автономном bot.exe на Windows";
-      button.textContent = "Недоступно";
-      button.disabled = true;
-      return;
-    }
-    dot.className = "dot " + (info.enabled ? "on" : "off");
-    text.textContent = info.enabled ? "Автозапуск включён" : "Автозапуск выключен";
-    button.textContent = info.enabled ? "Отключить автозапуск" : "Включить автозапуск";
-    button.className = "btn " + (info.enabled ? "ghost" : "secondary") + " small";
-    button.disabled = false;
-  }
-  api("/api/autostart").then(showAutostart).catch(function (error) {
-    host.querySelector("#autostartText").textContent = error.message;
-  });
-  host.querySelector("#autostartButton").onclick = async function () {
-    if (!autostartInfo || !autostartInfo.supported) return;
-    var enabling = !autostartInfo.enabled;
-    var accepted = await confirmDialog(
-      enabling ? "Включить автозапуск?" : "Отключить автозапуск?",
-      enabling ? "Бот будет запускаться после входа в Windows и восстанавливаться после сбоя." : "После следующего входа в Windows бот сам не запустится.",
-      enabling ? "Включить" : "Отключить",
-      false
-    );
-    if (!accepted) return;
-    var button = host.querySelector("#autostartButton");
-    button.disabled = true;
-    try {
-      showAutostart(await send("/api/autostart", "PUT", { enabled: enabling }));
-      toast(enabling ? "Автозапуск включён" : "Автозапуск отключён");
-    } catch (error) { fail(error); button.disabled = false; }
   };
 
   var managers = (config.managers || []).slice();
@@ -188,6 +101,106 @@ function renderConnection(host) {
       toast("Менеджеры сохранены");
       await reload();
     } catch (error) { fail(error); }
+  };
+}
+
+// «Подключение к Telegram» живёт в «Обслуживании»: токен бота, включение и
+// автозапуск нужны редко, и на рабочем экране «Настройки → Команда» им не место.
+function renderTelegramConnection(host) {
+  var config = state.config, bot = state.bot || {};
+  host.innerHTML = '<div class="grid cols-2"><div class="stack">' +
+    '<div class="card"><header><h3>Бот</h3></header><div class="card-body stack">' +
+      '<label class="switch"><input type="checkbox" id="setActive"' + (config.active ? " checked" : "") + '><span class="track"></span><span>Бот ' + (config.active ? "включён" : "выключен") + "</span></label>" +
+      '<div class="small muted">' + esc(bot.firstName || "Бот") + (bot.username ? " · @" + esc(bot.username) : "") + " · " + esc(connectionText()) + "</div>" +
+      '<div class="field"><label for="setToken">Новый токен из BotFather</label><input id="setToken" placeholder="оставьте пустым, чтобы не менять" autocomplete="off"></div>' +
+      '<div class="field"><label for="setTokenPass">Текущий пароль панели</label><input id="setTokenPass" type="password" placeholder="нужен для смены токена" autocomplete="current-password"></div>' +
+      '<div class="row wrap"><button class="btn secondary small" id="testToken" type="button">Проверить токен</button>' +
+        '<button class="btn small" id="saveToken" type="button">Сменить токен</button><span id="tokenResult" class="small muted"></span></div>' +
+      '<div class="hint">Токен меняется отдельной кнопкой и только по текущему паролю панели.</div>' +
+    "</div></div>" +
+  "</div>" +
+  '<div class="stack">' +
+    '<div class="card"><header><h3>Надёжный запуск</h3></header><div class="card-body stack">' +
+      '<div class="row"><span class="dot" id="autostartDot"></span><span class="grow" id="autostartText">Проверяем автозапуск…</span></div>' +
+      '<div class="hint">Windows запустит bot.exe после входа в систему и повторит запуск, если программа завершится с ошибкой.</div>' +
+      '<button class="btn secondary small" id="autostartButton" type="button" disabled>Настроить</button>' +
+    '</div></div></div></div>';
+
+  // Переключатель включает и выключает бота сразу, отдельной кнопки нет.
+  host.querySelector("#setActive").onchange = async function () {
+    var input = this, on = input.checked;
+    try {
+      await send("/api/settings", "PUT", Object.assign(settingsPayload(), { active: on }));
+      toast(on ? "Бот включён" : "Бот выключен");
+      await reload();
+    } catch (error) { input.checked = !on; fail(error); }
+  };
+  host.querySelector("#saveToken").onclick = async function () {
+    var token = host.querySelector("#setToken").value.trim();
+    var password = host.querySelector("#setTokenPass").value;
+    if (!token) return toast("Введите новый токен", true);
+    if (!password) return toast("Введите текущий пароль панели", true);
+    if (!(await confirmDialog("Сменить токен бота?", "Бот переподключится к Telegram с новым токеном. Прежние ссылки на загруженные фотографии перестанут действовать, бот загрузит их заново.", "Сменить", true))) return;
+    var button = this;
+    button.disabled = true;
+    try {
+      await send("/api/settings", "PUT", Object.assign(settingsPayload(), { token: token, currentPassword: password }));
+      host.querySelector("#setToken").value = "";
+      host.querySelector("#setTokenPass").value = "";
+      toast("Токен изменён, бот переподключается");
+      await reload();
+    } catch (error) {
+      fail(error);
+    } finally {
+      button.disabled = false;
+    }
+  };
+  host.querySelector("#testToken").onclick = async function () {
+    var token = host.querySelector("#setToken").value.trim();
+    host.querySelector("#tokenResult").textContent = "Проверяем…";
+    try {
+      var result = await send("/api/token-test", "POST", { token: token });
+      host.querySelector("#tokenResult").textContent = "Токен рабочий: " + (result.bot && result.bot.firstName || "бот") + (result.bot && result.bot.username ? " @" + result.bot.username : "");
+    } catch (error) { host.querySelector("#tokenResult").textContent = error.message; }
+  };
+  var autostartInfo = null;
+  function showAutostart(info) {
+    autostartInfo = info;
+    var dot = host.querySelector("#autostartDot");
+    var text = host.querySelector("#autostartText");
+    var button = host.querySelector("#autostartButton");
+    if (!info.supported) {
+      dot.className = "dot off";
+      text.textContent = "Доступно в автономном bot.exe на Windows";
+      button.textContent = "Недоступно";
+      button.disabled = true;
+      return;
+    }
+    dot.className = "dot " + (info.enabled ? "on" : "off");
+    text.textContent = info.enabled ? "Автозапуск включён" : "Автозапуск выключен";
+    button.textContent = info.enabled ? "Отключить автозапуск" : "Включить автозапуск";
+    button.className = "btn " + (info.enabled ? "ghost" : "secondary") + " small";
+    button.disabled = false;
+  }
+  api("/api/autostart").then(showAutostart).catch(function (error) {
+    host.querySelector("#autostartText").textContent = error.message;
+  });
+  host.querySelector("#autostartButton").onclick = async function () {
+    if (!autostartInfo || !autostartInfo.supported) return;
+    var enabling = !autostartInfo.enabled;
+    var accepted = await confirmDialog(
+      enabling ? "Включить автозапуск?" : "Отключить автозапуск?",
+      enabling ? "Бот будет запускаться после входа в Windows и восстанавливаться после сбоя." : "После следующего входа в Windows бот сам не запустится.",
+      enabling ? "Включить" : "Отключить",
+      false
+    );
+    if (!accepted) return;
+    var button = host.querySelector("#autostartButton");
+    button.disabled = true;
+    try {
+      showAutostart(await send("/api/autostart", "PUT", { enabled: enabling }));
+      toast(enabling ? "Автозапуск включён" : "Автозапуск отключён");
+    } catch (error) { fail(error); button.disabled = false; }
   };
 }
 
@@ -506,6 +519,8 @@ function renderAccess(host) {
 // «опасную зону» между рабочим временем и напоминаниями.
 var SERVICE_SCREENS = [
   ["data", "Данные и копии", "Резервные копии, восстановление, самопроверка, файлы, журнал ошибок"],
+  ["telegram", "Подключение к Telegram", "Токен бота, включение и надёжный запуск"],
+  ["channels", "Каналы и группы", "Подключение по ID, права бота, ссылки, «опасная зона»"],
   ["access", "Доступ", "Пароль панели и доступ к панели из интернета"],
   ["feed", "Загрузка с сайта", "Обновление каталога по ссылке с вашего сайта"],
   ["interface", "Все подписи бота", "Тексты кнопок и служебных сообщений на трёх языках"],
@@ -521,6 +536,8 @@ function renderService(host) {
     button.onclick = function () { serviceScreen = button.dataset.service; renderService(host); };
   });
   var body = host.querySelector("#serviceBody");
+  if (current === "telegram") return renderTelegramConnection(body);
+  if (current === "channels") return renderGroups(body, "manage");
   if (current === "access") return renderAccess(body);
   if (current === "feed") return renderFeed(body);
   if (current === "interface") return renderInterface(body);

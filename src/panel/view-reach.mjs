@@ -122,29 +122,12 @@ function renderPublications(host) {
   });
 }
 
-// «Пост в канал» с общей страницы: если канал один — сразу к нему, если
-// несколько — спрашиваем, в какой.
+// «Пост в канал» с общей страницы ведёт прямо к форме поста: канал выбирается
+// там же, отдельного вопроса «в какой» больше нет.
 function openChannelComposer() {
-  var channels = (state.groups || []).filter(function (group) { return group.type === "channel"; });
-  if (!channels.length) return go("posts", "channel");
-  if (channels.length === 1) {
-    selectedGroup = channels[0].id;
-    return go("posts", "channel");
-  }
-  openDialog({
-    title: "В какой канал",
-    body: '<div class="stack"><div class="field"><label for="composerChannel">Канал</label><select id="composerChannel">' + channels.map(function (group) {
-      return '<option value="' + esc(group.id) + '">' + esc(group.title || group.id) + "</option>";
-    }).join("") + "</select></div></div>",
-    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="composerGo" type="button">Дальше</button>',
-    ready: function (dialog) {
-      dialog.querySelector("#composerGo").onclick = function () {
-        selectedGroup = dialog.querySelector("#composerChannel").value;
-        dialog.closeClean();
-        go("posts", "channel");
-      };
-    },
-  });
+  var channels = (state.groups || []).filter(function (group) { return group.type === "channel" && ["member", "administrator", "creator"].indexOf(group.status) >= 0; });
+  if (channels.length && !channels.some(function (group) { return group.id === selectedGroup; })) selectedGroup = channels[0].id;
+  go("posts", "channel");
 }
 
 function renderCampaigns(host) {
@@ -353,6 +336,9 @@ function openCampaignEditor(id) {
 function groupRights(group) {
   return group.rights || {};
 }
+// Вид сообщения из Telegram — словами, а не кодом: «бот poll» читалось как обрывок.
+var GROUP_MESSAGE_KINDS = { photo: "фото", video: "видео", poll: "опрос", document: "файл", voice: "голосовое", audio: "аудио", animation: "гиф", sticker: "стикер", location: "место", contact: "контакт", video_note: "кружок", other: "другое" };
+
 function groupCan(group, right) {
   return group.status === "creator" || Boolean(groupRights(group)[right]);
 }
@@ -486,31 +472,54 @@ function bindConnectGroup(host) {
   };
 }
 
-function renderGroups(host) {
+// Два экрана из одних данных. «Пост в канал» (раздел «Публикации») — рабочий:
+// выбор канала и форма поста, ничего лишнего. «Каналы и группы» (в «Обслуживании»)
+// — редкая настройка: подключение по ID, права, ссылки, «опасная зона». Раньше
+// всё было вместе, и человеку, который хотел выложить пост, первой встречалась
+// статистика, а рядом с кнопкой «Отправить» — кнопка «Покинуть канал».
+function renderGroups(host, mode) {
+  mode = mode === "manage" ? "manage" : "post";
   var groups = state.groups || [];
   var active = groups.filter(function (group) { return ["member", "administrator", "creator"].indexOf(group.status) >= 0; });
-  if (!selectedGroup && active.length) selectedGroup = active[0].id;
-  var group = groups.find(function (item) { return item.id === selectedGroup; });
-  if (!groups.length) {
-    host.innerHTML = connectGroupCard(true) +
-      '<div class="card"><div class="empty"><b>Группа пока не подключена</b>' +
-      "Добавьте бота в группу и назначьте администратором — новая группа появится здесь сама.<br>" +
-      "Если бот уже состоит в группе, укажите её ID выше.</div></div>";
-    bindConnectGroup(host);
+  var pool = mode === "post" ? active : groups;
+  var current = pool.find(function (item) { return item.id === selectedGroup; }) || pool[0];
+  if (current) selectedGroup = current.id;
+  if (!pool.length) {
+    if (mode === "manage") {
+      host.innerHTML = connectGroupCard(true) +
+        '<div class="card"><div class="empty"><b>Группа пока не подключена</b>' +
+        "Добавьте бота в группу и назначьте администратором — новая группа появится здесь сама.<br>" +
+        "Если бот уже состоит в группе, укажите её ID выше.</div></div>";
+      bindConnectGroup(host);
+    } else {
+      host.innerHTML = '<div class="card"><div class="empty"><b>Канал ещё не подключён</b>' +
+        "Подключите канал или группу — один раз, в «Настройки → Обслуживание → Каналы и группы».</div>" +
+        '<div class="card-body row"><button class="btn secondary" id="goConnectChannel" type="button">Открыть «Каналы и группы»</button></div></div>';
+      host.querySelector("#goConnectChannel").onclick = function () { serviceScreen = "channels"; go("settings", "service"); };
+    }
     return;
   }
-  pageAction("Обновить", async function () {
-    try { await send("/api/groups/refresh", "POST", {}); await reload(); toast("Обновлено"); } catch (error) { fail(error); }
-  }, "secondary");
-  host.innerHTML = (groups.length > 1 ? '<div class="toolbar"><div class="tabs" id="groupPicker">' + groups.map(function (item) {
-      return '<button type="button" data-group="' + esc(item.id) + '" class="' + (item.id === selectedGroup ? "active" : "") + '">' + esc(item.title || item.id) + "</button>";
-    }).join("") + "</div></div>" : "") + '<div id="groupBody"></div>' +
-    '<div class="gap-top-lg">' + connectGroupCard(false) + "</div>";
-  bindConnectGroup(host);
+  if (mode === "manage") {
+    pageAction("Обновить", async function () {
+      try { await send("/api/groups/refresh", "POST", {}); await reload(); toast("Обновлено"); } catch (error) { fail(error); }
+    }, "secondary");
+  }
+  var picker = mode === "post"
+    ? '<div class="card gap-bottom"><div class="card-body row"><div class="field grow"><label for="groupSelect">Куда публикуем</label><select id="groupSelect">' + pool.map(function (item) {
+        return '<option value="' + esc(item.id) + '"' + (item.id === selectedGroup ? " selected" : "") + ">" + esc((item.type === "channel" ? "Канал: " : "Группа: ") + (item.title || item.id)) + "</option>";
+      }).join("") + "</select></div></div></div>"
+    : (groups.length > 1 ? '<div class="toolbar"><div class="tabs" id="groupPicker">' + groups.map(function (item) {
+        return '<button type="button" data-group="' + esc(item.id) + '" class="' + (item.id === selectedGroup ? "active" : "") + '">' + esc(item.title || item.id) + "</button>";
+      }).join("") + "</div></div>" : "");
+  host.innerHTML = picker + '<div id="groupBody"></div>' +
+    (mode === "manage" ? '<div class="gap-top-lg">' + connectGroupCard(false) + "</div>" : "");
+  if (mode === "manage") bindConnectGroup(host);
+  var select = host.querySelector("#groupSelect");
+  if (select) select.onchange = function () { selectedGroup = select.value; renderGroups(host, mode); };
   host.querySelectorAll("#groupPicker button").forEach(function (button) {
-    button.onclick = function () { selectedGroup = button.dataset.group; renderGroups(host); };
+    button.onclick = function () { selectedGroup = button.dataset.group; renderGroups(host, mode); };
   });
-  renderGroupCard(host.querySelector("#groupBody"), group || groups[0]);
+  renderGroupCard(host.querySelector("#groupBody"), current, mode);
 }
 
 // Очередь отложенных публикаций этой группы: раньше запланированный пост
@@ -528,25 +537,27 @@ function groupPostQueue(group) {
     }).join("") + "</div></div>";
 }
 
-function renderGroupCard(host, group) {
+function renderGroupCard(host, group, mode) {
+  mode = mode === "manage" ? "manage" : mode === "post" ? "post" : "all";
   var admin = group.status === "administrator" || group.status === "creator";
   var pinned = (group.messages || []).find(function (message) { return message.messageId === group.pinnedMessageId; });
+  var showPost = mode !== "manage", showManage = mode !== "post";
   host.innerHTML =
-    '<div class="grid cols-4 gap-bottom">' +
-      kpiCard(membersWord(group), num(group.memberCount), groupKindName(group)) +
-      kpiCard("Права бота", admin ? "администратор" : "участник", admin ? "" : "назначьте администратором", admin ? "up" : "down") +
-      kpiCard("Сообщений видно", num((group.messages || []).length), "из последних 200") +
-      kpiCard("Заявок на вступление", num((group.joinRequests || []).length), (group.joinRequests || []).length ? "ждут решения" : "") +
-    "</div>" +
+    (showManage ? numberStrip([
+      [membersWord(group), num(group.memberCount), "", groupKindName(group)],
+      ["Права бота", admin ? "администратор" : "участник", admin ? "" : "bad", admin ? "" : "Назначьте бота администратором"],
+      ["Сообщений видно", num((group.messages || []).length), "", "Из последних 200"],
+      ["Заявок на вступление", num((group.joinRequests || []).length), (group.joinRequests || []).length ? "bad" : "", "Ждут решения"],
+    ]) : "") +
     (group.lastError ? '<div class="card gap-bottom"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
-    '<div class="split"><div class="stack">' +
+    '<div class="split">' + (showPost ? '<div class="stack">' +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Опубликовать в канале" : "Написать в группу") + '</h3></header><div class="card-body stack">' +
         markupToolbar("groupText") +
         '<textarea id="groupText" placeholder="' + (group.type === "channel" ? "Текст поста от имени канала" : "Текст сообщения от имени бота") + '" class="area-sm"></textarea>' +
         '<div class="hint">Ссылка надписью: <code>[смотреть объекты](https://t.me/…)</code></div>' +
         '<div class="grid cols-2"><div class="field"><label for="groupButtonText">Кнопка (необязательно)</label><input id="groupButtonText" placeholder="Смотреть объекты"></div>' +
         '<div class="field"><label for="groupButtonUrl">Ссылка кнопки</label><input id="groupButtonUrl" placeholder="https://t.me/…"></div></div>' +
-        '<div class="grid cols-2"><div class="field"><label for="groupImage">Фото</label><input id="groupImage" type="file" accept="image/jpeg,image/png"></div>' +
+        '<div class="grid cols-2"><div class="field"><label>Фото</label><div class="reply-attachments"><input class="hidden" id="groupImage" type="file" accept="image/jpeg,image/png"><label class="btn secondary small" for="groupImage">＋ Добавить фото</label><span class="small muted" id="groupImageName">JPG или PNG</span></div></div>' +
         '<div class="field"><label for="groupWhen">Отправить позже</label><input id="groupWhen" type="datetime-local"></div></div>' +
         rubricPicker() +
         signatureNote() +
@@ -565,15 +576,14 @@ function renderGroupCard(host, group) {
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
             '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">бот</span>' : "") +
-            (message.kind !== "text" ? ' <span class="chip">' + esc(message.kind) + "</span>" : "") +
+            (message.kind !== "text" ? ' <span class="chip">' + esc(GROUP_MESSAGE_KINDS[message.kind] || message.kind) + "</span>" : "") +
             '<br><span class="muted small">' + esc(String(message.text || "").slice(0, 120)) + "</span></span>" +
             '<span class="small faint nowrap">' + dateShort(message.date) + "</span>" +
             (groupCan(group, "can_pin_messages") ? '<button class="btn ghost small" data-pin="' + message.messageId + '" title="Закрепить">📌</button>' : "") +
             (groupCan(group, "can_delete_messages") ? '<button class="btn ghost small" data-del="' + message.messageId + '" title="Удалить">✕</button>' : "") + "</div>";
         }).join("") + "</div>" : '<div class="empty"><b>Пока пусто</b>' + (group.type === "channel" ? "Посты появятся здесь после первой публикации." : "Бот видит сообщения группы, если в BotFather выключен privacy mode.") + "</div>") +
       "</div>" +
-    "</div>" +
-    '<div class="stack">' +
+    "</div>" : "") + (showManage ? '<div class="stack">' +
       '<div class="card"><header><h3>' + esc(group.title || "Группа") + "</h3></header><div class=\"card-body stack\">" +
         '<div class="small muted">ID ' + esc(group.id) + (group.username ? " · @" + esc(group.username) : "") + "</div>" +
         (pinned ? '<div class="msg">📌 ' + esc(String(pinned.text || "").slice(0, 160)) + '<div class="msg-meta"><button class="btn ghost small" id="unpin" type="button">Открепить</button></div></div>' : '<div class="small faint">Закреплённого сообщения нет</div>') +
@@ -595,14 +605,15 @@ function renderGroupCard(host, group) {
       '<div class="card"><header><h3>Опасная зона</h3></header><div class="card-body row wrap">' +
         '<button class="btn ghost small" id="unpinAll" type="button">Открепить всё</button>' +
         '<button class="btn danger small" id="leaveGroup" type="button">' + (group.type === "channel" ? "Покинуть канал" : "Выйти из группы") + "</button></div></div>" +
-    "</div></div>";
+    "</div>" : "") + "</div>";
 
   var base = "/api/groups/" + encodeURIComponent(group.id);
   var image = null;
   var previewImage = "";
-  host.querySelector("#groupImage").onchange = function (event) {
+  if (host.querySelector("#groupImage")) host.querySelector("#groupImage").onchange = function (event) {
     var file = event.target.files && event.target.files[0];
     if (!file) return;
+    host.querySelector("#groupImageName").textContent = file.name;
     var reader = new FileReader();
     reader.onload = function () {
       image = reader.result;
@@ -611,8 +622,10 @@ function renderGroupCard(host, group) {
     };
     reader.readAsDataURL(file);
   };
-  bindRubricPicker(host);
-  bindMarkupToolbar(host);
+  if (host.querySelector("#groupText")) {
+    bindRubricPicker(host);
+    bindMarkupToolbar(host);
+  }
 
   // Предпросмотр повторяет правила отправки: подпись, плашка, кнопки.
   function previewState() {
@@ -646,9 +659,9 @@ function renderGroupCard(host, group) {
   }
 
   function updatePreview() {
-    var view = previewState();
     var box = host.querySelector("#postPreview");
     if (!box) return;
+    var view = previewState();
     var plain = [view.body, [view.divider, view.signature].filter(Boolean).join("\n")].filter(Boolean).join("\n\n");
     if (!plain && !view.ownImage && !view.rubric) {
       box.innerHTML = '<span class="tg-note">Наберите текст — здесь появится готовое сообщение.</span>';
@@ -699,9 +712,11 @@ function renderGroupCard(host, group) {
     box.innerHTML = html + (note ? '<span class="tg-note">' + esc(note) + "</span>" : "");
   }
 
-  host.querySelector("#groupText").addEventListener("input", updatePreview);
-  host.querySelector("#groupButtonText").addEventListener("input", updatePreview);
-  host.querySelector("#groupButtonUrl").addEventListener("input", updatePreview);
+  if (host.querySelector("#groupText")) {
+    host.querySelector("#groupText").addEventListener("input", updatePreview);
+    host.querySelector("#groupButtonText").addEventListener("input", updatePreview);
+    host.querySelector("#groupButtonUrl").addEventListener("input", updatePreview);
+  }
   if (host.querySelector("#groupRubric")) host.querySelector("#groupRubric").addEventListener("change", updatePreview);
   if (host.querySelector("#groupNoSignature")) host.querySelector("#groupNoSignature").addEventListener("change", updatePreview);
   updatePreview();
@@ -721,13 +736,13 @@ function renderGroupCard(host, group) {
   }
   var styleButton = host.querySelector("#openPostStyle");
   if (styleButton) styleButton.onclick = openPostStyleDialog;
-  host.querySelector("#groupPreview").onclick = async function () {
+  if (host.querySelector("#groupPreview")) host.querySelector("#groupPreview").onclick = async function () {
     try {
       await send(base + "/post", "POST", Object.assign(postPayload(), { preview: true, sendAt: "" }));
       toast("Отправили вам в Telegram — посмотрите, как встанет плашка");
     } catch (error) { fail(error); }
   };
-  host.querySelector("#groupSend").onclick = async function () {
+  if (host.querySelector("#groupSend")) host.querySelector("#groupSend").onclick = async function () {
     var payload = postPayload();
     // Пост уходит всем подписчикам сразу и правке не подлежит: спрашиваем, куда
     // и когда. Кнопка стоит рядом с «Себе для проверки», промахнуться легко.
@@ -770,7 +785,7 @@ function renderGroupCard(host, group) {
   if (unpin) unpin.onclick = async function () {
     try { await send(base + "/unpin", "POST", { messageId: group.pinnedMessageId }); await reload(); } catch (error) { fail(error); }
   };
-  host.querySelector("#unpinAll").onclick = async function () {
+  if (host.querySelector("#unpinAll")) host.querySelector("#unpinAll").onclick = async function () {
     if (!(await confirmDialog("Открепить все сообщения?", "В группе не останется закреплённых сообщений.", "Открепить", true))) return;
     try { await send(base + "/unpin", "POST", { all: true }); await reload(); } catch (error) { fail(error); }
   };
@@ -792,7 +807,7 @@ function renderGroupCard(host, group) {
       try { await send(base + "/join-requests/" + button.dataset.decline, "POST", { approve: false }); await reload(); } catch (error) { fail(error); }
     };
   });
-  host.querySelector("#makeInvite").onclick = async function () {
+  if (host.querySelector("#makeInvite")) host.querySelector("#makeInvite").onclick = async function () {
     try { var result = await send(base + "/invite-link", "POST", {}); toast("Ссылка готова"); await reload(); } catch (error) { fail(error); }
   };
   var revoke = host.querySelector("#revokeInvite");
@@ -810,7 +825,7 @@ function renderGroupCard(host, group) {
   if (copy) copy.onclick = function () {
     navigator.clipboard.writeText(host.querySelector("#inviteLink").value).then(function () { toast("Скопировано"); });
   };
-  host.querySelector("#loadAdmins").onclick = async function () {
+  if (host.querySelector("#loadAdmins")) host.querySelector("#loadAdmins").onclick = async function () {
     try {
       var result = await api(base + "/admins");
       host.querySelector("#adminsBox").innerHTML = '<div class="list">' + result.admins.map(function (admin) {
@@ -827,7 +842,7 @@ function renderGroupCard(host, group) {
       });
     } catch (error) { fail(error); }
   };
-  host.querySelector("#leaveGroup").onclick = async function () {
+  if (host.querySelector("#leaveGroup")) host.querySelector("#leaveGroup").onclick = async function () {
     if (!(await confirmDialog("Выйти?", "Бот покинет " + groupKindName(group) + ". Вернуть его сможет только администратор.", "Выйти", true))) return;
     try { await send(base + "/leave", "POST", {}); toast("Бот вышел из группы"); await reload(); } catch (error) { fail(error); }
   };
@@ -1085,7 +1100,7 @@ function renderPostStyle(host) {
 VIEWS.posts = {
   subtitle: function () { return "Рассылки клиентам и посты в каналах"; },
   render: function (host, tab) {
-    if (tab === "channel") return renderGroups(host);
+    if (tab === "channel") return renderGroups(host, "post");
     if (tab === "style") return renderPostStyle(host);
     renderPublications(host);
   },
