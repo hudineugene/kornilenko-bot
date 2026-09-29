@@ -82,20 +82,21 @@ function renderNotifications(host) {
       '<button class="' + (notificationFilter === "handled" ? "active" : "") + '" data-notification-filter="handled" type="button">Обработанные</button>' +
       '<button class="' + (notificationFilter === "all" ? "active" : "") + '" data-notification-filter="all" type="button">Все</button></div>' +
       '<select id="notificationKind" aria-label="Тип уведомления"><option value="">Все типы</option>' + kinds.map(function (kind) { return '<option value="' + kind + '"' + (notificationKind === kind ? " selected" : "") + '>' + esc(NOTIFICATION_KINDS[kind].label) + '</option>'; }).join("") + '</select></div>' +
-    '<div class="notification-help"><span>Статус «обработано» убирает карточку из активной очереди, но не изменяет саму заявку, просмотр или рассылку.</span></div>' +
+    '<div class="notification-help"><span>«Скрыть» убирает событие из активной очереди, но не изменяет саму заявку, просмотр или рассылку. Скрытое можно вернуть.</span></div>' +
     '<div class="notification-list">' + (rows.length ? rows.map(function (item) {
       var meta = notificationMeta(item);
       return '<article class="card notification-card ' + esc(item.severity) + (!item.readAt && item.active ? " unread" : "") + '">' +
         '<div class="notification-icon">' + meta.icon + '</div><div class="notification-copy"><div class="notification-card-head"><span class="notification-kind">' + esc(meta.label) + '</span><time>' + esc(ago(item.createdAt)) + '</time>' + notificationStatus(item) + '</div><h3>' + esc(item.title) + '</h3><p>' + esc(item.text) + '</p>' + (!item.active ? '<small>Источник события уже не требует действия.</small>' : "") + '</div>' +
         '<div class="notification-actions">' + (item.route && item.route.view ? '<button class="btn small" data-notification-open="' + esc(item.id) + '" type="button">Открыть</button>' : "") +
-          (!item.readAt && item.active ? '<button class="btn ghost small" data-notification-action="read" data-notification-id="' + esc(item.id) + '" type="button">Прочитано</button>' : item.readAt && item.active && !item.handledAt ? '<button class="btn ghost small" data-notification-action="unread" data-notification-id="' + esc(item.id) + '" type="button">Вернуть в новые</button>' : "") +
-          (item.active && !item.handledAt ? '<button class="btn ghost small" data-notification-action="handle" data-notification-id="' + esc(item.id) + '" type="button">Обработано</button>' : item.active && item.handledAt ? '<button class="btn ghost small" data-notification-action="reopen" data-notification-id="' + esc(item.id) + '" type="button">Вернуть</button>' : "") + '</div></article>';
+          // Два действия на карточку: «Открыть» (открытое считается прочитанным) и «Скрыть».
+          // Раньше было ещё «Прочитано» и «Обработано» — три слова на одно действие.
+          (item.active && !item.handledAt ? '<button class="btn ghost small" data-notification-action="handle" data-notification-id="' + esc(item.id) + '" type="button">Скрыть</button>' : item.active && item.handledAt ? '<button class="btn ghost small" data-notification-action="reopen" data-notification-id="' + esc(item.id) + '" type="button">Вернуть</button>' : "") + '</div></article>';
     }).join("") : '<div class="card"><div class="empty"><b>' + (notificationFilter === "active" ? "Всё под контролем" : "Уведомлений в этой группе нет") + '</b>' + (notificationFilter === "active" ? "Нет событий, которые требуют действия администратора" : "Измените фильтр, чтобы увидеть другие события") + '</div></div>') + '</div>';
 
   host.querySelectorAll("[data-notification-filter]").forEach(function (button) { button.onclick = function () { notificationFilter = button.dataset.notificationFilter; renderView(); }; });
   host.querySelector("#notificationKind").onchange = function (event) { notificationKind = event.target.value; renderView(); };
   host.querySelectorAll("[data-notification-open]").forEach(function (button) { button.onclick = function () { var item = all.find(function (entry) { return entry.id === button.dataset.notificationOpen; }); if (item) openNotification(item, button); }; });
-  host.querySelectorAll("[data-notification-action]").forEach(function (button) { button.onclick = function () { var item = all.find(function (entry) { return entry.id === button.dataset.notificationId; }); if (item) changeNotification(item, button.dataset.notificationAction, button); }; });
+  host.querySelectorAll("[data-notification-action]").forEach(function (button) { button.onclick = function () { var item = all.find(function (entry) { return entry.id === button.dataset.notificationId; }); if (item) changeNotification(item, button.dataset.notificationAction, button, button.dataset.notificationAction === "handle" ? { label: "Вернуть", run: function () { changeNotification(item, "reopen"); } } : undefined); }; });
 }
 
 VIEWS.notifications = {

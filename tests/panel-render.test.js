@@ -1310,6 +1310,25 @@ test('на пяти экранах цифры — одной строкой, а 
   }
 });
 
+test('«Все события»: на карточке два действия — «Открыть» и «Скрыть», без «Прочитано» и «Обработано»', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  sandbox.notificationFilter = 'active';
+  const host = fakeElement('main');
+  await sandbox.VIEWS.notifications.render(host, '');
+  const html = String(host.innerHTML);
+  assert.match(html, /data-notification-open=/, 'есть «Открыть»');
+  assert.match(html, /data-notification-action="handle"[^>]*>Скрыть</, 'и «Скрыть»');
+  assert.ok(!/data-notification-action="(read|unread)"/.test(html), 'кнопок «Прочитано»/«Непрочитано» нет');
+  assert.ok(!/>Прочитано</.test(html) && !/>Обработано</.test(html), 'слов «Прочитано» и «Обработано» на кнопках нет');
+  // Скрытое возвращается.
+  sandbox.notificationFilter = 'handled';
+  const handled = fakeElement('main');
+  sandbox.state.notifications.forEach((item, index) => { if (index === 0) item.handledAt = new Date().toISOString(); });
+  await sandbox.VIEWS.notifications.render(handled, '');
+  assert.match(String(handled.innerHTML), /data-notification-action="reopen"[^>]*>Вернуть</);
+});
+
 test('когда все отвечены, ноль везде', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, state } = await panelSandbox();
