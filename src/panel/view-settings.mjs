@@ -222,7 +222,6 @@ function renderWork(host) {
           return '<option value="' + option[0] + '"' + (Number(hours.replyMinutes || 0) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + '</select><div class="hint">Эту строку клиент видит на экране связи и после заявки. В нерабочее время вместо неё идёт текст ниже. Обещайте только то, что выдерживаете.</div></div>' +
       '<div class="hint">Сообщение, которое клиент видит в нерабочее время, — во вкладке «Тексты бота» → «Контакты и о компании».</div>' +
-      '<button class="btn secondary small" id="saveHours" type="button">Сохранить</button>' +
     "</div></div>" +
     '<div class="card"><header><h3>Свободное время для просмотров</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="slotsOn"' + (slots.enabled ? " checked" : "") + "> предлагать клиенту свободные слоты</label>" +
@@ -232,10 +231,11 @@ function renderWork(host) {
       '<div class="field"><label for="slotTimes">Время показов через запятую</label><input id="slotTimes" value="' + esc((slots.times || []).join(", ")) + '" placeholder="10:00, 12:00, 17:00"></div>' +
       '<div class="row"><div class="field"><label for="slotDays">На сколько дней вперёд</label><input id="slotDays" type="number" min="1" max="30" value="' + esc(slots.daysAhead || 7) + '"></div>' +
       '<div class="field"><label for="slotPer">Записей на одно время</label><input id="slotPer" type="number" min="1" max="10" value="' + esc(slots.perSlot || 1) + '"></div></div>' +
-      '<button class="btn secondary small" id="saveSlots" type="button">Сохранить</button>' +
     "</div></div>" +
     '<div class="card"><header><h3>Калькулятор покупки</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="calcOn"' + (calculator.enabled ? " checked" : "") + "> показывать расчёт расходов в карточке</label>" +
+      // Ставки задаёт бухгалтер, меняются редко: под спойлером, чтобы не занимать экран.
+      '<details class="editor-section rates-details"><summary><b>Ставки налогов и сборов</b><span>ITP, IVA, гербовый сбор</span></summary><div class="editor-section-body stack">' +
       '<div class="grid cols-2">' +
         ["resaleTaxPercent:Налог, вторичка (ITP) %", "newBuildTaxPercent:Налог, новостройка (IVA) %", "businessTaxPercent:Налог, участок и коммерция (IVA) %", "stampDutyPercent:Гербовый сбор (AJD) %", "otherCostsPercent:Прочие расходы %", "downPaymentPercent:Первый взнос %", "interestPercent:Ставка ипотеки %", "years:Срок ипотеки, лет"].map(function (pair) {
           var parts = pair.split(":");
@@ -243,7 +243,7 @@ function renderWork(host) {
         }).join("") +
       "</div>" +
       '<div class="hint">Какую ставку бот применяет: квартира, дом или вилла со статусом «новостройка» либо «строится» — IVA и гербовый сбор; те же объекты в остальных состояниях (включая «новое») — ITP; участок и коммерция — IVA как при продаже от компании, о чём клиент видит приписку. Ставки перед включением калькулятора сверьте с гестором.</div>' +
-      "<button class=\"btn secondary small\" id=\"saveCalc\" type=\"button\">Сохранить</button>" +
+      '</div></details>' +
     "</div></div>" +
     '<div class="card"><header><h3>Напоминания</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="remindHours">Напомнить о заявке без ответа</label><select id="remindHours">' +
@@ -256,50 +256,48 @@ function renderWork(host) {
           return '<option value="' + option[0] + '"' + (Number(state.config.retentionMonths) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + "</select></div>" +
       '<div class="hint">Отсчёт от последней заявки клиента. Раз в сутки бот удаляет данные тех, от кого давно ничего не было, и сообщает об этом. Не удаляются те, кто ждёт ответа, у кого впереди просмотр или стоит напоминание. Срок нужно указать в политике конфиденциальности.</div>' +
-      '<button class="btn secondary small" id="saveReminders" type="button">Сохранить</button>' +
     "</div></div></div>";
 
   bindLanguageTabs(host);
-  host.querySelector("#saveHours").onclick = async function () {
-    try {
-      await send("/api/working-hours", "PUT", {
-        enabled: host.querySelector("#hoursOn").checked,
-        timeZone: host.querySelector("#businessTimeZone").value,
-        from: host.querySelector("#hoursFrom").value,
-        to: host.querySelector("#hoursTo").value,
-        days: Array.from(host.querySelectorAll("[data-day]")).filter(function (box) { return box.checked; }).map(function (box) { return Number(box.dataset.day); }),
-        replyMinutes: host.querySelector("#replyMinutes").value,
-        note: (state.config.workingHours || {}).note || {},
-      });
-      toast("Сохранено"); await reload();
-    } catch (error) { fail(error); }
-  };
-  host.querySelector("#saveSlots").onclick = async function () {
-    try {
-      await send("/api/viewing-slots", "PUT", {
-        enabled: host.querySelector("#slotsOn").checked,
-        days: Array.from(host.querySelectorAll("[data-slotday]")).filter(function (box) { return box.checked; }).map(function (box) { return Number(box.dataset.slotday); }),
-        times: host.querySelector("#slotTimes").value,
-        daysAhead: host.querySelector("#slotDays").value,
-        perSlot: host.querySelector("#slotPer").value,
-      });
-      toast("Сохранено"); await reload();
-    } catch (error) { fail(error); }
-  };
-  host.querySelector("#saveCalc").onclick = async function () {
+  // Одна полоса сохранения на весь экран: раньше под каждой карточкой была своя
+  // кнопка «Сохранить», и правка в одной карточке терялась, если нажать соседнюю.
+  async function saveHours() {
+    await send("/api/working-hours", "PUT", {
+      enabled: host.querySelector("#hoursOn").checked,
+      timeZone: host.querySelector("#businessTimeZone").value,
+      from: host.querySelector("#hoursFrom").value,
+      to: host.querySelector("#hoursTo").value,
+      days: Array.from(host.querySelectorAll("[data-day]")).filter(function (box) { return box.checked; }).map(function (box) { return Number(box.dataset.day); }),
+      replyMinutes: host.querySelector("#replyMinutes").value,
+      note: (state.config.workingHours || {}).note || {},
+    });
+  }
+  async function saveSlots() {
+    await send("/api/viewing-slots", "PUT", {
+      enabled: host.querySelector("#slotsOn").checked,
+      days: Array.from(host.querySelectorAll("[data-slotday]")).filter(function (box) { return box.checked; }).map(function (box) { return Number(box.dataset.slotday); }),
+      times: host.querySelector("#slotTimes").value,
+      daysAhead: host.querySelector("#slotDays").value,
+      perSlot: host.querySelector("#slotPer").value,
+    });
+  }
+  async function saveCalc() {
     var payload = { enabled: host.querySelector("#calcOn").checked };
     host.querySelectorAll("[data-calc]").forEach(function (input) { payload[input.dataset.calc] = input.value; });
-    try { await send("/api/calculator", "PUT", payload); toast("Сохранено"); await reload(); } catch (error) { fail(error); }
-  };
-  host.querySelector("#saveReminders").onclick = async function () {
-    try {
-      await send("/api/settings", "PUT", Object.assign(settingsPayload(), {
-        reminderHours: Number(host.querySelector("#remindHours").value),
-        retentionMonths: Number(host.querySelector("#retentionMonths").value),
-      }));
-      toast("Сохранено"); await reload();
-    } catch (error) { fail(error); }
-  };
+    await send("/api/calculator", "PUT", payload);
+  }
+  async function saveReminders() {
+    await send("/api/settings", "PUT", Object.assign(settingsPayload(), {
+      reminderHours: Number(host.querySelector("#remindHours").value),
+      retentionMonths: Number(host.querySelector("#retentionMonths").value),
+    }));
+  }
+  watchForm(host, async function () {
+    await saveHours();
+    await saveSlots();
+    await saveCalc();
+    await saveReminders();
+  }, "Настройки компании изменены");
 }
 
 function mediaCheckHtml(report) {

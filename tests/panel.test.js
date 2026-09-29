@@ -343,6 +343,12 @@ test('воронка и просмотры: на телефоне вертика
   assert.ok(!/data-stage-button/.test(PANEL_HTML), 'дублирующего ряда кнопок этапов нет');
 });
 
+test('флажки не мельче 18 px', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const style = PANEL_HTML.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
+  assert.match(style, /input\[type=checkbox\],input\[type=radio\]\{width:18px;height:18px;/, 'флажки 18 px, а не 13');
+});
+
 test.describe('стили панели', () => {
   async function css() {
     const { PANEL_HTML } = await import('../src/panel/index.mjs');

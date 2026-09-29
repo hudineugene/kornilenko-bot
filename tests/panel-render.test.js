@@ -1440,6 +1440,29 @@ test('редактор объекта: внизу «Опубликовать» �
   assert.equal(saved.body.status, 'hidden');
 });
 
+test('«Настройки → Компания»: одна полоса сохранения вместо четырёх кнопок, ставки — под спойлером', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  let captured = null;
+  sandbox.watchForm = (root, save, label) => { captured = { save, label }; return { mark() {} }; };
+  const host = fakeElement('main');
+  sandbox.renderWork(host);
+  const html = String(host.innerHTML);
+
+  for (const id of ['saveHours', 'saveSlots', 'saveCalc', 'saveReminders']) assert.ok(!html.includes('id="' + id + '"'), 'кнопки ' + id + ' больше нет');
+  assert.ok(captured, 'весь экран — одна отслеживаемая форма');
+  assert.match(captured.label, /Настройки компании/);
+  assert.match(html, /<details class="editor-section rates-details"><summary><b>Ставки налогов и сборов<\/b>/, 'ставки калькулятора под спойлером');
+  assert.ok(!/rates-details" open/.test(html), 'спойлер закрыт');
+  assert.ok(html.indexOf('id="calcOn"') < html.indexOf('rates-details'), 'выключатель калькулятора — над спойлером');
+
+  // Одна кнопка полосы сохраняет всё: часы, окна для просмотров, калькулятор, напоминания.
+  requests.length = 0;
+  await captured.save();
+  const paths = requests.filter((request) => request.method === 'PUT').map((request) => new URL(request.url, 'http://x').pathname);
+  assert.deepEqual(paths, ['/api/working-hours', '/api/viewing-slots', '/api/calculator', '/api/settings']);
+});
+
 test('когда все отвечены, ноль везде', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, state } = await panelSandbox();
