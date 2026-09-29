@@ -19,7 +19,7 @@ while ($true) {
   $startedAt = Get-Date
   Add-Content -Encoding UTF8 $log ('[' + $startedAt.ToString('s') + '] Запуск: ' + $command)
   Write-Host ('Бот запущен, журнал: ' + $log)
-  # Журнал ведёт сам бот: он пишет в logsot.log и сам переносит разросшийся
+  # Журнал ведёт сам бот: он пишет в logs\bot.log и сам переносит разросшийся
   # файл в bot.log.1. Перенаправлять вывод сюда нельзя — пока окно держит файл
   # открытым, Windows не даёт его ни переименовать, ни укоротить.
   cmd.exe /c $command

@@ -755,9 +755,9 @@ test('вычитка EN/ES: британское написание, «Beach», 
   const { INTERFACE_TEXT_DEFAULTS: texts } = await import('../src/texts.mjs');
   const only = (groups, language) => groups.map((group) => JSON.stringify(texts[group][language])).join('');
   const english = only(['menuLabels', 'propertyActions', 'emptyStates', 'selectionForm', 'catalogFilter', 'myRequests', 'subscriptions'], 'en')
-    .replace(/"(favorites|emptyFavorites)":/g, '"":');
-  assert.ok(!/[Ff]avorites/.test(english), 'в английских текстах «favourites», а не «favorites»');
-  assert.ok(!/catalog/.test(english), '«catalogue», а не «catalog»');
+    .replace(/"(favorites|emptyFavorites|catalog)":/g, '"":');
+  assert.ok(!/\b[Ff]avorites\b/.test(english), 'в английских текстах «favourites», а не «favorites»');
+  assert.ok(!/\bcatalog\b/.test(english), '«catalogue», а не «catalog»');
   assert.equal(texts.menuLabels.en.favorites, '❤️ Favourites');
   assert.equal(texts.propertyActions.en.distanceSeaLabel, 'Beach');
   assert.equal(texts.propertyActions.es.viewing, 'Pedir visita', 'в недвижимости «reservar» — внести резерв');
