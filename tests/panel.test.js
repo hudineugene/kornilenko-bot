@@ -328,6 +328,19 @@ test('экран диалога на телефоне: без обвязки, ш
   assert.match(style, /@media\(min-width:861px\)\{\.menu-toggle\{display:none\}\.conversation-side-details>summary\{display:none\}\}/, 'на компьютере панель раскрыта и без заголовка');
 });
 
+test('воронка и просмотры: на телефоне вертикальные списки, на компьютере колонки по 200 px', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const style = PANEL_HTML.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
+  assert.match(style, /\.funnel-board\{display:grid;grid-template-columns:repeat\(7,minmax\(200px,1fr\)\)/, 'на компьютере колонки воронки — по 200 px');
+  const phone = style.slice(style.indexOf('/* Нижняя панель разделов'));
+  assert.match(phone, /\.funnel-board,\.viewing-calendar\{grid-template-columns:minmax\(0,1fr\);min-width:0\}/, 'на телефоне — один столбец, без ленты в 1500 px');
+  assert.match(phone, /\.funnel-column:has\(\.funnel-empty\)\{display:none\}/, 'пустые этапы места не занимают');
+  assert.match(phone, /\.viewing-day:not\(\.today\):has\(\.viewing-day-empty\)\{display:none\}/, 'дни без просмотров скрыты, сегодняшний остаётся');
+  // Этап карточки воронки меняется списком, а не рядом кнопок.
+  assert.match(PANEL_HTML, /class="pipeline-stage-select"/);
+  assert.ok(!/data-stage-button/.test(PANEL_HTML), 'дублирующего ряда кнопок этапов нет');
+});
+
 test.describe('стили панели', () => {
   async function css() {
     const { PANEL_HTML } = await import('../src/panel/index.mjs');

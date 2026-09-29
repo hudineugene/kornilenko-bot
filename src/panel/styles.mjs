@@ -254,7 +254,8 @@ input[type=checkbox],input[type=radio]{width:auto;accent-color:var(--brand)}
 .funnel-toolbar .search{max-width:460px}
 .funnel-toolbar select{width:auto;min-width:210px}
 .funnel-toolbar>.small{margin-left:auto;white-space:nowrap}
-.funnel-board{display:grid;grid-template-columns:repeat(7,minmax(240px,1fr));gap:10px;min-width:1760px;padding-bottom:8px}
+/* Колонки воронки — по 200 px: семь этапов рядом, без лишней ширины. */
+.funnel-board{display:grid;grid-template-columns:repeat(7,minmax(200px,1fr));gap:10px;min-width:1480px;padding-bottom:8px}
 #viewBody:has(.funnel-board){overflow-x:auto;overscroll-behavior-inline:contain}
 .funnel-column{overflow:hidden;border:1px solid var(--line);border-top:3px solid var(--faint);border-radius:10px;background:var(--surface-soft)}
 .funnel-column.stage-contact{border-top-color:var(--stage-contact)}.funnel-column.stage-selection{border-top-color:var(--stage-selection)}.funnel-column.stage-viewing{border-top-color:var(--stage-lost)}.funnel-column.stage-negotiation{border-top-color:var(--amber)}.funnel-column.stage-won{border-top-color:var(--live)}.funnel-column.stage-lost{border-top-color:var(--muted)}
@@ -598,7 +599,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .funnel-toolbar{align-items:stretch;flex-direction:column}
   .funnel-toolbar .search,.funnel-toolbar select{width:100%;max-width:none;min-width:0}
   .funnel-toolbar>.small{margin-left:0}
-  .funnel-board{grid-template-columns:repeat(7,260px);min-width:1880px}
+  .funnel-board{grid-template-columns:repeat(7,200px);min-width:1480px}
   .task-toolbar{align-items:stretch;flex-direction:column}
   .task-toolbar>.tabs{width:100%}
   .task-controls{width:100%;margin-left:0;flex-direction:column}
@@ -668,6 +669,16 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .conversation-side{margin-top:8px}
   .conversation-side-details:not([open])>summary::after{content:" ⌄"}
   .conversation-side-details[open]>summary::after{content:" ⌃"}
+  /* Воронка и календарь просмотров на телефоне — вертикальные списки, а не
+     горизонтальная лента из семи колонок: этап за этапом, день за днём. Пустые
+     этапы и дни без просмотров не занимают места (сегодняшний остаётся). */
+  .funnel-board,.viewing-calendar{grid-template-columns:minmax(0,1fr);min-width:0}
+  #viewBody:has(.funnel-board){overflow-x:visible}
+  .funnel-column-body{min-height:0}
+  .funnel-column:has(.funnel-empty){display:none}
+  .viewing-calendar-shell{overflow:visible}
+  .viewing-day{min-height:0}
+  .viewing-day:not(.today):has(.viewing-day-empty){display:none}
   /* Кнопки под палец: не ниже 44 px. Мелкие кнопки редактора текста не трогаем. */
   .btn,.btn.small{min-height:44px}
   .markup-bar .btn,.toast-action,.reply-delivery .btn.small{min-height:0}
