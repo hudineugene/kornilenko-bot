@@ -1245,7 +1245,7 @@ test('числа на «Сегодня» и в «Отчётах» сходятс
   const reports = fakeElement('main');
   await sandbox.VIEWS.reports.render(reports, '');
   const html = String(reports.innerHTML).replace(/ /g, ' ');
-  assert.match(html, /Заявок за 30 дней<\/span><span class="value">3</, 'плитка считает заявки списка за 30 дней');
+  assert.match(html, /Заявок за 30 дней: <b>3<\/b>/, 'в строке цифр заявки списка за 30 дней');
   assert.match(html, /Заявки по типам, 30 дней/, 'и «по типам» — в том же окне');
   const typeBars = Array.from(html.slice(html.indexOf('Заявки по типам')).split('Откуда приходят клиенты')[0].matchAll(/<b class="right">(\d+) /g)).map((match) => Number(match[1]));
   assert.equal(typeBars.reduce((sum, value) => sum + value, 0), 3, 'по типам сумма 3, как в плитке: старая заявка не считается');
@@ -1288,6 +1288,26 @@ test('нижняя панель: четыре главных раздела и �
   sandbox.currentView = 'settings';
   sandbox.renderNav();
   assert.match(String(sandbox.document.getElementById('tabbar').innerHTML), /class="tab active" id="tabMore"/);
+});
+
+test('на пяти экранах цифры — одной строкой, а не рядом из четырёх карточек', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const screens = [
+    ['clients', 'tasks', /К выполнению: <b/],
+    ['clients', 'pipeline', /Активные клиенты: <b/],
+    ['viewings', '', /Ждут подтверждения: <b/],
+    ['notifications', '', /Требуют внимания: <b/],
+    ['settings', 'reports', /Всего клиентов: <b/],
+  ];
+  for (const [view, tab, expected] of screens) {
+    const host = fakeElement('main');
+    await sandbox.VIEWS[view].render(host, tab);
+    const html = String(host.innerHTML);
+    assert.match(html, /^<div class="today-numbers">/, view + '/' + tab + ': сверху строка цифр');
+    assert.match(html, expected, view + '/' + tab + ': нужные цифры на месте');
+    assert.ok(!/class="card kpi"/.test(html), view + '/' + tab + ': карточек-плиток нет');
+  }
 });
 
 test('когда все отвечены, ноль везде', async () => {

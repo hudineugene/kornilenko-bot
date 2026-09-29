@@ -71,12 +71,12 @@ function renderNotifications(host) {
     try { await send("/api/admin-notifications/read-all", "POST", {}); toast("Уведомления отмечены прочитанными"); await reload(); } catch (error) { fail(error); }
   }, "secondary");
 
-  host.innerHTML = '<div class="grid cols-4 notification-kpis">' +
-      kpiCard("Активные", num(active.length), active.length ? "требуют решения" : "всё в порядке", active.length ? "down" : "up") +
-      kpiCard("Непрочитанные", num(unread.length), unread.length ? "новые события" : "новых нет") +
-      kpiCard("Срочные", num(urgent.length), urgent.length ? "проверьте сейчас" : "критичных нет", urgent.length ? "down" : "up") +
-      kpiCard("Обработанные", num(handled.length), "сохранены в истории") +
-    '</div><div class="notification-toolbar"><div class="tabs">' +
+  host.innerHTML = numberStrip([
+      ["Требуют внимания", num(active.length), active.length ? "bad" : ""],
+      ["Непрочитанные", num(unread.length)],
+      ["Срочные", num(urgent.length), urgent.length ? "bad" : ""],
+      ["Обработанные", num(handled.length), "", "Сохранены в истории"],
+    ]) + '<div class="notification-toolbar"><div class="tabs">' +
       '<button class="' + (notificationFilter === "active" ? "active" : "") + '" data-notification-filter="active" type="button">Требуют внимания <span>' + active.length + '</span></button>' +
       '<button class="' + (notificationFilter === "unread" ? "active" : "") + '" data-notification-filter="unread" type="button">Непрочитанные <span>' + unread.length + '</span></button>' +
       '<button class="' + (notificationFilter === "handled" ? "active" : "") + '" data-notification-filter="handled" type="button">Обработанные</button>' +

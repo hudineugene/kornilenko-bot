@@ -36,6 +36,15 @@ function viewingList() {
 function unconfirmedViewings() {
   return viewingList().filter(function (item) { return !item.viewing.confirmedAt; });
 }
+// Цифры одной строкой, как на «Сегодня»: ряд из четырёх карточек занимал треть
+// экрана компьютера и целый экран телефона и повторялся на пяти экранах подряд.
+// Каждый элемент: [подпись, число, "bad" — если число требует внимания, подсказка].
+function numberStrip(items) {
+  return '<div class="today-numbers">' + items.map(function (item) {
+    return '<span' + (item[3] ? ' title="' + esc(item[3]) + '"' : '') + '>' + esc(item[0]) + ': <b' + (item[2] === "bad" ? ' class="bad"' : '') + '>' + item[1] + '</b></span>';
+  }).join("") + '</div>';
+}
+
 function kpiCard(label, value, note, noteKind) {
   return '<div class="card kpi"><span class="label">' + esc(label) + '</span><span class="value">' + value + '</span>' +
     (note ? '<span class="delta ' + (noteKind || "") + '">' + note + "</span>" : "") + "</div>";
@@ -284,12 +293,12 @@ VIEWS.reports = {
     var campaigns = (state.broadcasts || []).filter(function (entry) { return entry.sent; });
 
     host.innerHTML =
-      '<div class="grid cols-4 gap-bottom">' +
-        kpiCard("Всего клиентов", num(state.userCount), "+" + usersInRange(week) + " за 7 дней") +
-        kpiCard("Сообщений за 30 дней", num(sumDays(days, "received"))) +
-        kpiCard("Заявок за 30 дней", num(monthInquiries.length)) +
-        kpiCard("Конверсия в заявку", (state.userCount ? Math.round((inquiryUsers / state.userCount) * 100) : 0) + "%", "клиенты, оставившие заявку") +
-      "</div>" +
+      numberStrip([
+        ["Всего клиентов", num(state.userCount), "", "+" + usersInRange(week) + " за 7 дней"],
+        ["Сообщений за 30 дней", num(sumDays(days, "received"))],
+        ["Заявок за 30 дней", num(monthInquiries.length)],
+        ["Конверсия в заявку", (state.userCount ? Math.round((inquiryUsers / state.userCount) * 100) : 0) + "%", "", "клиенты, оставившие заявку"],
+      ]) +
       '<div class="card gap-bottom"><header><h3>Активность за 30 дней</h3></header><div class="card-body">' +
         sparkline(days, "received", "var(--brand)") +
         '<div class="legend"><span><i class="brand-dot"></i>сообщения</span><span>заявок: ' + num(monthInquiries.length) + " · новых клиентов: " + num(usersInRange(monthStart)) + "</span></div>" +

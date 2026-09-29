@@ -248,12 +248,12 @@ function renderPipeline(host) {
   var due = active.filter(function (row) { return row.item.followUpDate && row.item.followUpDate <= today; }).length;
   var waiting = active.filter(function (row) { return row.group.waiting; }).length;
   var unassigned = active.filter(function (row) { return !row.item.assignee; }).length;
-  host.innerHTML = '<div class="grid cols-4 funnel-kpis">' +
-      kpiCard("Активные клиенты", num(active.length), "без «Выиграно» и «Проиграно»") +
-      kpiCard("Ждут ответа", num(waiting), "нужно ответить", waiting ? "down" : "") +
-      kpiCard("Связаться", num(due), "сегодня или просрочено", due ? "down" : "") +
-      kpiCard("Без менеджера", num(unassigned), "нужно назначить", unassigned ? "down" : "") +
-    '</div><div class="funnel-toolbar"><div class="search"><input id="pipelineSearch" placeholder="Найти клиента, объект или сообщение" value="' + esc(pipelineFilter.search) + '"></div><select id="pipelineAssignee"><option value="">Все менеджеры</option><option value="none"' + (pipelineFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (pipelineFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select><span class="small muted">На доске: ' + rows.length + " из " + allRows.length + ' (вместе с завершёнными)</span></div>' +
+  host.innerHTML = numberStrip([
+      ["Активные клиенты", num(active.length), "", "Без «Выиграно» и «Проиграно»"],
+      ["Ждут ответа", num(waiting), waiting ? "bad" : ""],
+      ["Связаться", num(due), due ? "bad" : "", "Сегодня или просрочено"],
+      ["Без менеджера", num(unassigned), unassigned ? "bad" : ""],
+    ]) + '<div class="funnel-toolbar"><div class="search"><input id="pipelineSearch" placeholder="Найти клиента, объект или сообщение" value="' + esc(pipelineFilter.search) + '"></div><select id="pipelineAssignee"><option value="">Все менеджеры</option><option value="none"' + (pipelineFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (pipelineFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select><span class="small muted">На доске: ' + rows.length + " из " + allRows.length + ' (вместе с завершёнными)</span></div>' +
     '<div class="funnel-board">' + PIPELINE_STAGES.map(function (stage) {
       var stageRows = rows.filter(function (row) { return row.stage === stage[0]; });
       return '<section class="funnel-column stage-' + stage[0] + '"><header><div><h3>' + stage[1] + '</h3><span>' + stage[2] + '</span></div><b>' + stageRows.length + '</b></header><div class="funnel-column-body">' + (stageRows.length ? stageRows.map(pipelineCardHtml).join("") : '<div class="funnel-empty">Нет клиентов</div>') + "</div></section>";
@@ -346,12 +346,12 @@ function renderTasks(host) {
     if (a.item.followUpDate && !b.item.followUpDate) return -1;
     return String(a.item.followUpDate || "").localeCompare(String(b.item.followUpDate || "")) || String(a.item.followUpTime || "").localeCompare(String(b.item.followUpTime || ""));
   });
-  host.innerHTML = '<div class="grid cols-4 task-kpis">' +
-      kpiCard("К выполнению", num(counts.action), "сегодня и просроченные", counts.action ? "down" : "up") +
-      kpiCard("Просрочено", num(counts.overdue), counts.overdue ? "требует внимания" : "нет просрочек", counts.overdue ? "down" : "up") +
-      kpiCard("Запланировано", num(counts.future), "на будущие даты") +
-      kpiCard("Без следующего шага", num(counts.none), "активные клиенты без даты", counts.none ? "down" : "") +
-    '</div><div class="task-toolbar"><div class="tabs" id="taskScope">' +
+  host.innerHTML = numberStrip([
+      ["К выполнению", num(counts.action), counts.action ? "bad" : "", "Сегодня и просроченные"],
+      ["Просрочено", num(counts.overdue), counts.overdue ? "bad" : ""],
+      ["Запланировано", num(counts.future), "", "На будущие даты"],
+      ["Без следующего шага", num(counts.none), counts.none ? "bad" : "", "Активные клиенты без даты"],
+    ]) + '<div class="task-toolbar"><div class="tabs" id="taskScope">' +
       [["action", "К выполнению", counts.action], ["overdue", "Просроченные", counts.overdue], ["future", "Будущие", counts.future], ["none", "Без даты", counts.none], ["all", "Все", counts.all]].map(function (entry) { return '<button type="button" data-scope="' + entry[0] + '" class="' + (taskFilter.scope === entry[0] ? "active" : "") + '">' + entry[1] + " · " + entry[2] + "</button>"; }).join("") +
       '</div><div class="task-controls"><div class="search"><input id="taskSearch" placeholder="Найти клиента или задачу" value="' + esc(taskFilter.search) + '"></div><select id="taskAssignee"><option value="">Все менеджеры</option><option value="none"' + (taskFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (taskFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div></div>' +
     '<div class="task-list">' + (rows.length ? rows.map(function (row) { return taskCardHtml(row, row.taskScope); }).join("") : '<div class="card empty"><b>Дел в этой группе нет</b>Можно перейти к другим задачам или открыть воронку</div>') + "</div>";
@@ -1116,12 +1116,12 @@ function renderViewings(host) {
       return '<section class="viewing-day' + (key === today ? " today" : "") + '"><div class="viewing-day-head"><span>' + esc(label.weekday) + '</span><b>' + esc(label.day) + '</b><i>' + items.length + '</i></div><div class="viewing-day-body">' + (items.length ? items.map(function (item) { return viewingEventHtml(item, today, true); }).join("") : '<div class="viewing-day-empty">Нет просмотров</div>') + '</div></section>';
     }).join("") + '</div></div></div>' + (withoutDate.length ? '<div class="card viewing-unscheduled"><header><div><h3>Требуется уточнить дату</h3><div class="small muted">Записи, которые нельзя поставить в календарь автоматически</div></div><span class="chip warn">' + withoutDate.length + '</span></header><div class="viewing-unscheduled-grid">' + withoutDate.map(function (item) { return viewingEventHtml(item, today, false); }).join("") + '</div></div>' : "");
   }
-  host.innerHTML = '<div class="grid cols-4 viewing-kpis">' +
-      kpiCard("Сегодня", num(todayRows.length), "запланировано") +
-      kpiCard("Ближайшие 7 дней", num(nextSeven.length), "активных записей") +
-      kpiCard("Ждут подтверждения", num(pending.length), pending.length ? "нужно ответить клиентам" : "очередь пуста", pending.length ? "down" : "up") +
-      kpiCard("Подтверждено", num(upcoming.filter(function (item) { return item.viewing.confirmedAt; }).length), "предстоящих", "up") +
-    '</div><div class="viewing-toolbar"><div class="tabs"><button class="' + (viewingMode === "calendar" ? "active" : "") + '" data-viewing-mode="calendar" type="button">Календарь</button><button class="' + (viewingMode === "pending" ? "active" : "") + '" data-viewing-mode="pending" type="button">Ждут подтверждения <span>' + pending.length + '</span></button><button class="' + (viewingMode === "history" ? "active" : "") + '" data-viewing-mode="history" type="button">История</button></div><span class="small muted">Время: ' + esc(timeZoneName()) + '</span></div>' + body;
+  host.innerHTML = numberStrip([
+      ["Сегодня", num(todayRows.length)],
+      ["Ближайшие 7 дней", num(nextSeven.length)],
+      ["Ждут подтверждения", num(pending.length), pending.length ? "bad" : "", "Нужно ответить клиентам"],
+      ["Подтверждено", num(upcoming.filter(function (item) { return item.viewing.confirmedAt; }).length), "", "Предстоящих"],
+    ]) + '<div class="viewing-toolbar"><div class="tabs"><button class="' + (viewingMode === "calendar" ? "active" : "") + '" data-viewing-mode="calendar" type="button">Календарь</button><button class="' + (viewingMode === "pending" ? "active" : "") + '" data-viewing-mode="pending" type="button">Ждут подтверждения <span>' + pending.length + '</span></button><button class="' + (viewingMode === "history" ? "active" : "") + '" data-viewing-mode="history" type="button">История</button></div><span class="small muted">Время: ' + esc(timeZoneName()) + '</span></div>' + body;
   host.querySelectorAll("[data-viewing-mode]").forEach(function (button) { button.onclick = function () { viewingModeChosen = true; viewingMode = button.dataset.viewingMode; renderViewings(host); }; });
   host.querySelectorAll("[data-viewing-week]").forEach(function (button) { button.onclick = function () { viewingWeekOffset += Number(button.dataset.viewingWeek); renderViewings(host); }; });
   var todayButton = host.querySelector("[data-viewing-today]");
