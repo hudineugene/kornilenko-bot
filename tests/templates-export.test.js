@@ -237,14 +237,16 @@ test.describe('conversation center', () => {
   });
 
   test('unread dialogs are counted by client and opening a dialog marks all their requests read', async () => {
+    // Непрочитанный диалог — тот, где клиент написал позже, чем менеджер открыл переписку.
+    const unreadClients = (snapshot) => new Set(snapshot.inquiries.filter((item) => (Date.parse(item.clientMessageAt || item.createdAt) || 0) > (Date.parse(item.readAt || '') || 0)).map((item) => String(item.userId))).size;
     let state = await (await call('GET', '/api/state')).json();
-    assert.equal(state.unreadConversationCount, 2);
+    assert.equal(unreadClients(state), 2);
     const response = await call('POST', '/api/conversations/501/read', {});
     assert.equal(response.status, 200);
     const readAt = (await response.json()).readAt;
     assert.equal(bot.getData().inquiries.find((item) => item.id === 'inq-lead').readAt, readAt);
     state = await (await call('GET', '/api/state')).json();
-    assert.equal(state.unreadConversationCount, 1);
+    assert.equal(unreadClients(state), 1);
   });
 
   test('the panel assigns only a configured manager', async () => {

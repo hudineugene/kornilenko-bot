@@ -2122,7 +2122,7 @@ umbers-agree.test.js`*
       130, 1156`) и порции в «Диалогах»; `loading="lazy"` у картинок
       объектов. Для сотен клиентов быстро уже сейчас, нужно при росте за
       1000
-- [ ] Мёртвое: гамбургер и `.nav-menu` (`runtime.mjs:35, 1018, 1033`),
+- [x] *(сделано 30.09: убраны гамбургер (кнопка была скрыта и на телефоне, и на компьютере) и его обработчики, `clientSearch`/`catalogSearch`, поля состояния `unreadConversationCount`, `notificationUnreadCount`, `notificationActiveCount` и `inquiryUnread` на сервере, маршрут `posts/style` ведёт на «Пост в канал», список менеджеров — один `staffNames()` вместо четырёх выражений. «Первые определения» `.funnel-board`/`.viewing-calendar` на проверке оказались основными (остальные — переопределения для узких экранов), их оставил. Тесты счётчиков «непрочитанное» теперь считают по самим данным)* Мёртвое: гамбургер и `.nav-menu` (`runtime.mjs:35, 1018, 1033`),
       `clientSearch` и `catalogSearch`, поля состояния
       `unreadConversationCount`, `notificationUnreadCount`,
       `notificationActiveCount`, маршрут `posts/style`, первые определения

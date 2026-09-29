@@ -312,7 +312,7 @@ test('на телефоне разделы — в нижней панели, а 
   assert.match(style, /\.tabbar,\.more-sheet\{display:none\}/, 'на компьютере панели нет');
   const phone = style.slice(style.indexOf('/* Нижняя панель разделов'));
   assert.match(phone, /@media\(max-width:860px\)\{[\s\S]*\.tabbar\{position:fixed;[^}]*bottom:0/, 'на телефоне — прижата к низу');
-  assert.match(phone, /\.menu-toggle,\.head-nav\{display:none !important\}/, 'гамбургера и выпадающего меню на телефоне нет');
+  assert.match(phone, /\.head-nav\{display:none !important\}/, 'верхнего ряда разделов на телефоне нет: есть нижняя панель');
   assert.match(phone, /\.btn,\.btn\.small\{min-height:44px\}/, 'кнопки не ниже 44 px');
   assert.match(phone, /\.tab\{[^}]*min-height:56px/, 'вкладки панели — крупные');
   // Плашки сохранения и уведомления не прячутся под нижней панелью.
@@ -329,7 +329,7 @@ test('экран диалога на телефоне: без обвязки, ш
   assert.match(phone, /\.phone-chat \.conversation-thread\{flex:1 1 auto;min-height:120px;max-height:none\}/, 'переписка занимает свободное место и прокручивается сама, поле ответа под ней');
   assert.match(phone, /\.conversation-side\{position:fixed;/, 'статус, этап и заметки — выезжающая панель, а не блок под полем ответа');
   assert.match(PANEL_HTML, /<details class="conversation-side-details" open><summary>Статус, этап и заметки<\/summary>/, 'статус, этап и «Сохранить» — в раскрывающемся блоке под полем ответа');
-  assert.match(style, /@media\(min-width:861px\)\{\.menu-toggle\{display:none\}\.conversation-side-details>summary\{display:none\}\}/, 'на компьютере панель раскрыта и без заголовка');
+  assert.match(style, /@media\(min-width:861px\)\{\.conversation-side-details>summary\{display:none\}\}/, 'на компьютере панель раскрыта и без заголовка');
 });
 
 test('воронка и просмотры: на телефоне вертикальные списки, на компьютере колонки по 200 px', async () => {

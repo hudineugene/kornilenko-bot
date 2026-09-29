@@ -1,7 +1,7 @@
 // Каталог: объекты, акции и загрузка объектов с сайта.
 
 const CATALOG_JS = String.raw`
-var catalogSearch = "", catalogStatus = "";
+var catalogStatus = "";
 var LANGUAGES = [["ru", "Русский"], ["en", "English"], ["es", "Español"]];
 var PROPERTY_TYPES = [["apartment", "Квартира"], ["house", "Дом"], ["villa", "Вилла"], ["townhouse", "Таунхаус"], ["land", "Участок"], ["commercial", "Коммерческая"], ["newbuild", "Новостройка"], ["other", "Другое"]];
 var PROPERTY_STATUS = [["active", "Опубликован"], ["reserved", "Забронирован"], ["sold", "Продан"], ["hidden", "Черновик — клиенты не видят"]];
@@ -114,10 +114,7 @@ function catalogPropertyStats(record) {
 }
 function renderObjects(host) {
   var rows = (state.objects || []).filter(function (record) {
-    if (catalogStatus && record.status !== catalogStatus) return false;
-    if (!catalogSearch) return true;
-    var haystack = (localized(record.title, "ru") + " " + (record.reference || "") + " " + localized(record.city, "ru")).toLowerCase();
-    return haystack.indexOf(catalogSearch.toLowerCase()) >= 0;
+    return !catalogStatus || record.status === catalogStatus;
   });
   pageAction("＋ Объект", function () { openRecordEditor("objects", null); });
   pageAction("⇩ Загрузить с сайта", function () { go("catalog", "feed"); }, "secondary");

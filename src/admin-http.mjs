@@ -692,15 +692,6 @@ function sourceReport(now = Date.now()) {
   return Array.from(rows.values()).sort((a, b) => (a.source ? 0 : 1) - (b.source ? 0 : 1) || b.users - a.users || a.source.localeCompare(b.source));
 }
 
-function inquiryUnread(inquiry) {
-  if (!inquiry) return false;
-  const lastIncoming = Math.max(
-    Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0,
-    ...(Array.isArray(inquiry.messages) ? inquiry.messages.filter((message) => message.direction === 'in').map((message) => Date.parse(message.createdAt) || 0) : [0]),
-  );
-  return lastIncoming > (Date.parse(inquiry.readAt || '') || 0);
-}
-
 // Карточка клиента для панели: в переписке участвуют только последние реакции,
 // остальная история действий в панель не уезжает.
 function panelUserView(user) {
@@ -798,7 +789,6 @@ function safeState(session) {
     });
   }
   const users = recent.map(panelUser).concat(mentioned);
-  const unreadUsers = new Set(data.inquiries.filter(inquiryUnread).map((item) => String(item.userId)));
   const notifications = adminNotifications();
   return {
     csrf: session.csrf,
@@ -852,8 +842,6 @@ function safeState(session) {
     buyPlan: data.buyPlan || [],
     errors: data.errors,
     notifications,
-    notificationUnreadCount: notifications.filter((item) => item.active && !item.readAt && !item.handledAt).length,
-    notificationActiveCount: notifications.filter((item) => item.active && !item.handledAt).length,
     languageCounts: languageCounts(),
     // Recipient ids stay on the server; the panel gets the counts.
     broadcasts: data.broadcasts.map(({ processedUserIds, respondedUserIds, inquiryUserIds, unsubscribedUserIds, ...entry }) => ({
@@ -878,7 +866,6 @@ function safeState(session) {
     })),
     replyTemplates: data.replyTemplates || [],
     newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
-    unreadConversationCount: unreadUsers.size,
     // Одно определение «ждут ответа» для всех экранов панели.
     waitingConversationCount: waitingConversationCount(),
     // Время последнего сообщения клиента: по нему панель замечает новое сообщение

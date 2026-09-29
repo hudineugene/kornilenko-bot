@@ -752,14 +752,14 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .viewing-history-date{padding-bottom:0}
   .viewing-history-row .viewing-event{display:flex;align-items:stretch}
 }
-@media(min-width:861px){.menu-toggle{display:none}.conversation-side-details>summary{display:none}}
+@media(min-width:861px){.conversation-side-details>summary{display:none}}
 .conversation-side-details>summary{list-style:none;cursor:pointer;padding:12px 14px;font-weight:600;background:var(--surface-soft);border:1px solid var(--line);border-radius:var(--radius)}
 .conversation-side-details>summary::-webkit-details-marker{display:none}
 .conversation-side-details[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom:0}
 /* Нижняя панель разделов — только на телефоне. */
 .tabbar,.more-sheet{display:none}
 @media(max-width:860px){
-  .menu-toggle,.head-nav{display:none !important}
+  .head-nav{display:none !important}
   /* На телефоне поиск — значок 🔍 в шапке; поле раскрывается под ней. */
   .search-toggle{display:inline-flex}
   .global-search{display:none;position:fixed;left:10px;right:10px;top:calc(var(--header) + 6px);z-index:60;max-width:none;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg)}

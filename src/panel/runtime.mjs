@@ -33,7 +33,6 @@ const PANEL_SHELL = String.raw`
 <div id="app" class="app hidden">
   <div id="linkAlert" class="link-alert hidden" role="alert"><div class="grow"><b>Нет связи с ботом</b><span id="linkAlertText"></span></div><button class="btn secondary small" id="linkAlertRetry" type="button">Проверить сейчас</button></div>
   <header class="app-head" id="appHead">
-    <button class="btn ghost icon menu-toggle" id="menuToggle" type="button" aria-label="Открыть меню" aria-expanded="false">☰</button>
     <div class="app-brand">
       <img src="/admin-assets/sidebar-logo.png" alt="">
       <b>Construcciones Kornilenko<span>панель бота</span></b>
@@ -615,6 +614,13 @@ function waitingClients() {
   return Object.keys(clients).length;
 }
 
+// Люди команды: главный администратор и менеджеры, без пустых имён и повторов. Один
+// список для «Передать», «Мои / Все» и выбора ответственного — раньше он собирался
+// четырьмя одинаковыми выражениями.
+function staffNames() {
+  return [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
+}
+
 // Значки разделов — один набор линейных SVG (толщина, скругления и размер общие;
 // цвет берут от текста). Раньше были глифы ◉ ✉ ⌂ ➤ ✎ ⚙ вперемешку с цветным
 // эмодзи 📅: разного размера, веса и цвета, и на разных системах разные.
@@ -655,7 +661,7 @@ var LEGACY_ROUTES = {
   "stats": ["reports", ""],
   "inquiries": { "": ["clients", "inbox"], "inbox": ["clients", "inbox"], "tasks": ["clients", "tasks"], "pipeline": ["clients", "pipeline"], "viewings": ["viewings", ""], "clients": ["clients", "base"] },
   "catalog": { "": ["objects", "list"], "objects": ["objects", "list"], "offers": ["objects", "offers"], "feed": ["settings", "service"] },
-  "reach": { "": ["posts", "broadcast"], "campaigns": ["posts", "broadcast"], "group": ["posts", "channel"], "style": ["posts", "style"] },
+  "reach": { "": ["posts", "broadcast"], "campaigns": ["posts", "broadcast"], "group": ["posts", "channel"], "style": ["posts", "channel"] },
   "settings": { "reports": ["reports", ""], "connection": ["settings", "service"], "telegram": ["settings", "service"], "work": ["settings", "company"], "data": ["settings", "service"], "access": ["settings", "service"] },
   "texts": { "interface": ["settings", "service"] },
 };
@@ -756,10 +762,6 @@ function renderNav() {
   el("nav").querySelectorAll("[data-view]").forEach(function (button) {
     button.onclick = function () {
       go(button.dataset.view, button.dataset.tab || "");
-      var menu = button.closest("details");
-      if (menu) menu.open = false;
-      el("nav").classList.remove("open");
-      el("menuToggle").setAttribute("aria-expanded", "false");
     };
   });
   renderTabBar();
@@ -1329,11 +1331,6 @@ function bindShell() {
   });
   bindAlerts();
   initGlobalSearch();
-  el("menuToggle").onclick = function () {
-    var open = !el("nav").classList.contains("open");
-    el("nav").classList.toggle("open", open);
-    el("menuToggle").setAttribute("aria-expanded", String(open));
-  };
   // Колокольчик ведёт в «Сегодня»: там тот же список дел, но с кнопками.
   el("notificationBell").onclick = function () { go("today"); };
   // На телефоне текст состояния не помещается: нажатие на точку показывает его.
@@ -1345,11 +1342,6 @@ function bindShell() {
     if (event.target.closest && !event.target.closest("#moreSheet") && !event.target.closest("#tabMore")) {
       el("moreSheet").classList.add("hidden");
       if (el("tabMore")) el("tabMore").setAttribute("aria-expanded", "false");
-    }
-    if (!event.target.closest(".nav-menu")) el("nav").querySelectorAll("details[open]").forEach(function (menu) { menu.open = false; });
-    if (window.innerWidth <= 860 && !event.target.closest("#nav") && !event.target.closest("#menuToggle")) {
-      el("nav").classList.remove("open");
-      el("menuToggle").setAttribute("aria-expanded", "false");
     }
   });
   el("logoutBtn").onclick = async function () {

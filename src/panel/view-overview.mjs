@@ -110,8 +110,7 @@ function rememberTodayScope() {
   } catch (error) {}
 }
 function todayPeople() {
-  var names = [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).filter(Boolean);
-  return names.filter(function (name, index) { return names.indexOf(name) === index; });
+  return staffNames();
 }
 function deedAssignee(item) {
   var id = item.route && item.route.inquiryId;

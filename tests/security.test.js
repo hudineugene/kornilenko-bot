@@ -379,7 +379,8 @@ test.describe('admin API', () => {
     const task = panelState.notifications.find((item) => item.kind === 'task' && item.route.inquiryId === 'i-201');
     assert.ok(message, 'new client message is in the notification center');
     assert.ok(task, 'overdue follow-up is in the notification center');
-    assert.ok(panelState.notificationUnreadCount >= 2);
+    const unreadNotices = (state) => state.notifications.filter((item) => item.active && !item.readAt && !item.handledAt).length;
+    assert.ok(unreadNotices(panelState) >= 2);
 
     const read = await fetchLocal('/api/admin-notifications/' + encodeURIComponent(message.id), { method: 'PATCH', body: JSON.stringify({ action: 'read' }) });
     assert.equal(read.status, 200);
@@ -394,7 +395,7 @@ test.describe('admin API', () => {
 
     assert.equal((await fetchLocal('/api/admin-notifications/read-all', { method: 'POST', body: '{}' })).status, 200);
     panelState = await (await fetchLocal('/api/state')).json();
-    assert.equal(panelState.notificationUnreadCount, 0);
+    assert.equal(unreadNotices(panelState), 0);
   });
 
   test('a user\'s data can be exported', async () => {

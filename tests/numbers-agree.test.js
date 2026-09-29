@@ -94,17 +94,20 @@ test('прочитанный диалог перестаёт быть непро
   const state = () => realFetch(base + '/api/state', { headers }).then((response) => response.json());
   // Уведомлений другого рода (ошибки, задачи) в песочнице может быть сколько угодно — считаем «клиент написал».
   const unreadMessages = (snapshot) => snapshot.notifications.filter((item) => item.id.startsWith('message:') && item.active && !item.readAt && !item.handledAt).length;
+  const unreadNotices = (snapshot) => snapshot.notifications.filter((item) => item.active && !item.readAt && !item.handledAt).length;
+  // Непрочитанный диалог — тот, где клиент написал позже, чем менеджер открыл переписку.
+  const unreadClients = (snapshot) => new Set(snapshot.inquiries.filter((item) => (Date.parse(item.clientMessageAt || item.createdAt) || 0) > (Date.parse(item.readAt || '') || 0)).map((item) => String(item.userId))).size;
   const before = await state();
-  assert.equal(before.unreadConversationCount, 2, 'два диалога не прочитаны');
+  assert.equal(unreadClients(before), 2, 'два диалога не прочитаны');
   assert.equal(unreadMessages(before), 2, 'и два уведомления «клиент написал» не прочитаны');
-  const otherUnread = before.notificationUnreadCount - 2;
+  const otherUnread = unreadNotices(before) - 2;
 
   // Менеджер открыл диалог Ольги (панель отмечает его прочитанным).
   assert.equal((await realFetch(base + '/api/conversations/1/read', { method: 'POST', headers, body: '{}' })).status, 200);
   const after = await state();
-  assert.equal(after.unreadConversationCount, 1, 'в «Клиентах» непрочитан один диалог');
+  assert.equal(unreadClients(after), 1, 'в «Клиентах» непрочитан один диалог');
   assert.equal(unreadMessages(after), 1, 'в уведомлениях — тоже одно, а не два');
-  assert.equal(after.notificationUnreadCount, otherUnread + 1, 'общий счётчик уведомлений убавился на одно');
+  assert.equal(unreadNotices(after), otherUnread + 1, 'общий счётчик уведомлений убавился на одно');
 
   // Дело при этом остаётся: клиент прочитан, но ещё ждёт ответа.
   const olga = after.notifications.find((item) => item.id.startsWith('message:1:'));

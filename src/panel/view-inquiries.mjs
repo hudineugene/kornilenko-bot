@@ -21,7 +21,6 @@ function selectConversation(id, silent) {
   selectionWasAuto = false;
   if (!silent && currentView === "clients" && currentTab === "inbox") pushRoute("clients", "inbox", id);
 }
-var clientSearch = "";
 var clientStageFilter = "";
 var taskFilter = { scope: "action" };
 
@@ -661,7 +660,7 @@ function openInquiryExtras() {
 // в Telegram. Одного клиента — из карточки диалога; всех клиентов человека
 // (отпуск, увольнение) — из «⋯». Бот честно говорит, дошло ли уведомление.
 function transferStaff() {
-  return [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
+  return staffNames();
 }
 
 function transferOptions(names, withNobody) {
@@ -969,7 +968,6 @@ function markConversationRead(userId) {
     if (String(item.userId) === String(userId) && inquiryUnread(item)) { item.readAt = now; unread = true; }
   });
   if (!unread) return;
-  state.unreadConversationCount = Math.max(0, Number(state.unreadConversationCount || 0) - 1);
   renderNav();
   send("/api/conversations/" + encodeURIComponent(userId) + "/read", "POST", {}).catch(function (error) { fail(error); });
 }
@@ -984,7 +982,7 @@ function renderInquiryCard(host) {
   var related = (state.inquiries || []).filter(function (entry) { return String(entry.userId) === String(item.userId); }).sort(function (a, b) { return (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0); });
   var property = item.propertyId ? (state.objects || []).find(function (record) { return record.id === item.propertyId; }) : null;
   var viewing = item.viewing || null;
-  var managers = [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
+  var managers = staffNames();
   var timeline = conversationTimeline(item.userId);
   if (!timeline) {
     // Первый показ этой беседы: просим переписку и перерисовываем, когда придёт.
@@ -1500,9 +1498,7 @@ function renderClients(host) {
     var user = row.user;
     if (clientStageFilter && pipelineStageOf(row.latest) !== clientStageFilter) return false;
     if (!userFilterMatches(user, row.inquiries)) return false;
-    if (!clientSearch) return true;
-    var haystack = (userName(user) + " " + (user.username || "") + " " + (user.phone || "") + " " + (user.id || "")).toLowerCase();
-    return haystack.indexOf(clientSearch.toLowerCase()) >= 0;
+    return true;
   });
   host.innerHTML = clientFilterBar({ search: false, steps: true }) + '<div class="toolbar">' +
       '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) + " из " + num(state.userCount) + " · активных " + num(state.activeUserCount) + '</span><div class="grow"></div><button class="btn secondary small" id="exportClients" type="button" title="Таблица с теми, кого вы видите на экране: для обзвона, отчёта или переноса">⬇ В Excel</button></div>' +
