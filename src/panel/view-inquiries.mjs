@@ -95,7 +95,7 @@ function clientFilterBar(options) {
       names.map(function (name) { return '<option value="' + esc(name) + '"' + (clientFilter.assignee === name ? " selected" : "") + ">" + esc(name) + "</option>"; }).join("") + "</select>" : "") +
     (options.steps ? '<div class="tabs" id="cfSteps">' +
       '<button type="button" data-step="today" class="' + (clientFilter.step === "today" ? "active" : "") + '">Шаг сегодня · ' + counts.today + "</button>" +
-      '<button type="button" data-step="overdue" class="' + (clientFilter.step === "overdue" ? "active" : "") + '">Просрочено · ' + counts.overdue + "</button></div>" : "") +
+      '<button type="button" data-step="overdue" class="' + (clientFilter.step === "overdue" ? "active" : "") + '">Шаг просрочен · ' + counts.overdue + "</button></div>" : "") +
     (clientFilterActive() ? '<button class="btn ghost small" id="cfReset" type="button">Сбросить</button>' : "") +
     (options.note ? '<span class="small muted">' + esc(options.note) + "</span>" : "") +
   "</div>";
@@ -358,7 +358,7 @@ function renderPipeline(host) {
   host.innerHTML = numberStrip([
       ["Активные клиенты", num(active.length), "", "Без «Выиграно» и «Проиграно»"],
       ["Ждут ответа", num(waiting), waiting ? "bad" : ""],
-      ["Связаться", num(due), due ? "bad" : "", "Сегодня или просрочено"],
+      ["Связаться", num(due), due ? "bad" : "", "Шаг на сегодня или уже просрочен"],
     ].concat(canAssign ? [["Без менеджера", num(unassigned), unassigned ? "bad" : ""]] : [])) + clientFilterBar({ search: true, steps: true, note: "На доске: " + rows.length + " из " + allRows.length + " (вместе с завершёнными)" }) +
     '<div class="funnel-board">' + PIPELINE_STAGES.map(function (stage) {
       var stageRows = rows.filter(function (row) { return row.stage === stage[0]; });
@@ -392,7 +392,7 @@ function taskScopeOf(row, today) {
   return "future";
 }
 function taskStatusHtml(scope, item) {
-  if (scope === "overdue") return '<span class="chip bad">Просрочено · ' + pipelineDate(item.followUpDate) + '</span>';
+  if (scope === "overdue") return '<span class="chip bad">Шаг просрочен · ' + pipelineDate(item.followUpDate) + '</span>';
   if (scope === "today") return '<span class="chip warn">Сегодня' + (item.followUpTime ? " · " + esc(item.followUpTime) : "") + '</span>';
   if (scope === "future") return '<span class="chip brand">' + pipelineDate(item.followUpDate) + (item.followUpTime ? " · " + esc(item.followUpTime) : "") + '</span>';
   return '<span class="chip">Дата не назначена</span>';
@@ -447,12 +447,12 @@ function renderTasks(host) {
     return String(a.item.followUpDate || "").localeCompare(String(b.item.followUpDate || "")) || String(a.item.followUpTime || "").localeCompare(String(b.item.followUpTime || ""));
   });
   host.innerHTML = numberStrip([
-      ["К выполнению", num(counts.action), counts.action ? "bad" : "", "Сегодня и просроченные"],
-      ["Просрочено", num(counts.overdue), counts.overdue ? "bad" : ""],
+      ["К выполнению", num(counts.action), counts.action ? "bad" : "", "Шаг на сегодня или уже просрочен"],
+      ["Шаг просрочен", num(counts.overdue), counts.overdue ? "bad" : ""],
       ["Запланировано", num(counts.future), "", "На будущие даты"],
       ["Без следующего шага", num(counts.none), counts.none ? "bad" : "", "Активные клиенты без даты"],
     ]) + '<div class="task-toolbar"><div class="tabs" id="taskScope">' +
-      [["action", "К выполнению", counts.action], ["overdue", "Просроченные", counts.overdue], ["future", "Будущие", counts.future], ["none", "Без даты", counts.none], ["all", "Все", counts.all]].map(function (entry) { return '<button type="button" data-scope="' + entry[0] + '" class="' + (taskFilter.scope === entry[0] ? "active" : "") + '">' + entry[1] + " · " + entry[2] + "</button>"; }).join("") +
+      [["action", "К выполнению", counts.action], ["overdue", "Шаг просрочен", counts.overdue], ["future", "Будущие", counts.future], ["none", "Без даты", counts.none], ["all", "Все", counts.all]].map(function (entry) { return '<button type="button" data-scope="' + entry[0] + '" class="' + (taskFilter.scope === entry[0] ? "active" : "") + '">' + entry[1] + " · " + entry[2] + "</button>"; }).join("") +
       '</div></div>' + clientFilterBar({ search: true, steps: false }) +
     '<div class="task-list">' + (rows.length ? rows.map(function (row) { return taskCardHtml(row, row.taskScope); }).join("") : '<div class="card empty"><b>Дел в этой группе нет</b>Можно перейти к другим задачам или открыть воронку</div>') + "</div>";
   host.querySelectorAll("[data-scope]").forEach(function (button) { button.onclick = function () { taskFilter.scope = button.dataset.scope; renderTasks(host); }; });
@@ -1320,7 +1320,7 @@ function viewingStatus(item, today) {
   var key = viewingDateKey(item);
   if (item.viewing.cancelledAt) return { key: "cancelled", text: "Отменён", chip: "", event: "cancelled" };
   if (item.status === "closed") return { key: "closed", text: "Закрыт", chip: "", event: "cancelled" };
-  if (!item.viewing.confirmedAt) return { key: "pending", text: key && key < today ? "Просрочено" : "Ждёт подтверждения", chip: key && key < today ? "bad" : "warn", event: "pending" };
+  if (!item.viewing.confirmedAt) return { key: "pending", text: key && key < today ? "Дата прошла" : "Ждёт подтверждения", chip: key && key < today ? "bad" : "warn", event: "pending" };
   if (key && key < today) return { key: "past", text: "Проведён", chip: "", event: "past" };
   return { key: "confirmed", text: "Подтверждён", chip: "ok", event: "confirmed" };
 }
@@ -1361,7 +1361,7 @@ function openViewingSchedule(item) {
     protectChanges: true,
     body: '<div class="stack"><div class="viewing-dialog-context"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><div><b>' + esc(userName(user)) + '</b><span>' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + '</span></div></div>' +
       (requested ? '<div class="msg">📝 Клиент просил: ' + esc(requested) + '</div>' : '') +
-      (viewing.online ? '<div class="msg">📹 Клиент выбрал онлайн-показ по видеосвязи: адрес ему не отправится, ссылку на видеосвязь пришлите в переписке.</div>' : '') +
+      (viewing.online ? '<div class="msg">📹 Клиент выбрал онлайн-просмотр по видеосвязи: адрес ему не отправится, ссылку на видеосвязь пришлите в переписке.</div>' : '') +
       (currentDate ? '' : '<div class="msg attention">Дату из просьбы клиента бот не разобрал — выберите её сами. Клиент получит именно то, что здесь указано.</div>') +
       '<div class="grid cols-2"><div class="field"><label for="viewingScheduleDate">Дата</label><input id="viewingScheduleDate" type="date" min="' + esc(pipelineToday()) + '" value="' + esc(currentDate) + '"></div><div class="field"><label for="viewingScheduleTime">Время</label><input id="viewingScheduleTime" type="time" value="' + esc(currentTime) + '"><div class="quick-times">' + VIEWING_QUICK_TIMES.map(function (time) { return '<button class="btn ghost small" type="button" data-quick-time="' + time + '">' + time + '</button>'; }).join("") + '</div></div></div>' +
       '<div class="msg">После сохранения клиент получит ' + (moving ? "обновлённые" : "подтверждённые") + ' дату и время в Telegram.</div></div>',
@@ -1416,7 +1416,7 @@ function renderViewings(host) {
   if (viewingMode === "pending") {
     body = pending.length ? '<div class="viewing-pending-list">' + pending.map(function (item) {
       var key = viewingDateKey(item), requested = key ? viewingDayLabel(key).day + " · " + viewingTimeLabel(item) : (item.viewing.dateText || "Дата требует уточнения") + " · " + viewingTimeLabel(item);
-      return '<div class="card viewing-pending-card"><div><span class="chip ' + (key && key < today ? "bad" : "warn") + '">' + (key && key < today ? "Просрочено" : "Ждёт подтверждения") + '</span><h3>' + esc(userName(userOf(item))) + '</h3><p>' + esc(localized(viewingProperty(item) && viewingProperty(item).title, "ru") || "Объект не найден") + viewingOnlineTag(item) + '</p><small>Запрошено: ' + esc(requested) + '</small></div><div class="viewing-pending-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Открыть заявку</button><button class="btn" data-viewing-schedule="' + esc(item.id) + '" type="button">Подтвердить и уведомить</button></div></div>';
+      return '<div class="card viewing-pending-card"><div><span class="chip ' + (key && key < today ? "bad" : "warn") + '">' + (key && key < today ? "Дата прошла" : "Ждёт подтверждения") + '</span><h3>' + esc(userName(userOf(item))) + '</h3><p>' + esc(localized(viewingProperty(item) && viewingProperty(item).title, "ru") || "Объект не найден") + viewingOnlineTag(item) + '</p><small>Запрошено: ' + esc(requested) + '</small></div><div class="viewing-pending-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Открыть заявку</button><button class="btn" data-viewing-schedule="' + esc(item.id) + '" type="button">Подтвердить и уведомить</button></div></div>';
     }).join("") + '</div>' : '<div class="card"><div class="empty"><b>Все просмотры подтверждены</b>Новых записей, ожидающих ответа менеджера, нет</div></div>';
   } else if (viewingMode === "history") {
     body = viewingHistoryHtml(history, today);
@@ -1635,7 +1635,7 @@ VIEWS.clients = {
 };
 
 VIEWS.viewings = {
-  subtitle: function () { return "Показы объектов: подтверждение, календарь и история"; },
+  subtitle: function () { return "Встречи с клиентами: подтверждение, календарь и история"; },
   render: function (host) { renderViewings(host); },
 };
 `;

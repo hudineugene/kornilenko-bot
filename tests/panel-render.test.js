@@ -1061,7 +1061,7 @@ test('«Просмотры» открываются на очереди подт
   // Онлайн-показ: менеджер видит формат и в очереди, и в окне подтверждения.
   sandbox.state.inquiries[0].viewing.online = true;
   sandbox.openViewingSchedule(sandbox.state.inquiries[0]);
-  assert.match(String(dialogOptions.body), /онлайн-показ по видеосвязи/, 'в окне подтверждения');
+  assert.match(String(dialogOptions.body), /онлайн-просмотр по видеосвязи/, 'в окне подтверждения');
   assert.match(sandbox.viewingOnlineTag(sandbox.state.inquiries[0]), /📹 онлайн/, 'и пометка в очереди');
   assert.equal(sandbox.viewingOnlineTag({ viewing: {} }), '', 'у обычного показа пометки нет');
 });
@@ -1732,7 +1732,7 @@ test('возраст ожидания: цвет и время у «Ждёт от
   sandbox.state.attention.lateClients = 1; // число «дольше срока» приходит от бота, панель его не пересчитывает
   const today = fakeElement('main');
   sandbox.VIEWS.today.render(today);
-  assert.match(String(today.innerHTML), /из них просрочено: 1/, 'на «Сегодня» видно, сколько просрочено');
+  assert.match(String(today.innerHTML), /из них дольше срока: 1/, 'на «Сегодня» видно, сколько ждут дольше срока');
   assert.equal(sandbox.overdueClients(), 1);
 });
 
@@ -2562,8 +2562,8 @@ test('«Клиенты»: один общий фильтр на все виды 
   assert.ok(!/id="cfSearch"/.test((await render('inbox')).html), 'в диалогах поиск — в шапке, второго поля нет');
   const inbox = await render('inbox');
   assert.match(inbox.html, /data-step="today"[^>]*>Шаг сегодня · 1</);
-  assert.match(inbox.html, /data-step="overdue"[^>]*>Просрочено · 1</);
-  assert.ok(!/data-step=/.test((await render('tasks')).html), 'в «Следующих шагах» свои вкладки «Просроченные / К выполнению»: дублей нет');
+  assert.match(inbox.html, /data-step="overdue"[^>]*>Шаг просрочен · 1</);
+  assert.ok(!/data-step=/.test((await render('tasks')).html), 'в «Следующих шагах» свои вкладки «Шаг просрочен / К выполнению»: дублей нет');
 
   // «Просрочено» — общий для всех видов.
   sandbox.clientFilter.step = 'overdue';

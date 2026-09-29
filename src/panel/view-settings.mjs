@@ -216,7 +216,7 @@ function renderWork(host) {
       '<div class="field"><span class="field-label">Дни</span><div class="row wrap">' + WEEKDAYS.map(function (day) {
         return '<label class="check"><input type="checkbox" data-slotday="' + day[0] + '"' + ((slots.days || []).indexOf(day[0]) >= 0 ? " checked" : "") + "> " + day[1] + "</label>";
       }).join("") + "</div></div>" +
-      '<div class="field"><label for="slotTimes">Время показов через запятую</label><input id="slotTimes" value="' + esc((slots.times || []).join(", ")) + '" placeholder="10:00, 12:00, 17:00"></div>' +
+      '<div class="field"><label for="slotTimes">Время просмотров через запятую</label><input id="slotTimes" value="' + esc((slots.times || []).join(", ")) + '" placeholder="10:00, 12:00, 17:00"></div>' +
       '<div class="row"><div class="field"><label for="slotDays">На сколько дней вперёд</label><input id="slotDays" type="number" min="1" max="30" value="' + esc(slots.daysAhead || 7) + '"></div>' +
       '<div class="field"><label for="slotPer">Записей на одно время</label><input id="slotPer" type="number" min="1" max="10" value="' + esc(slots.perSlot || 1) + '"></div></div>' +
     "</div></div>" +

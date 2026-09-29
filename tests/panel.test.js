@@ -172,7 +172,7 @@ test('«Публикации» — две кнопки, общая очеред�
 test('в списке объектов цифры подписаны, а редкие действия — под «⋯»', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   // Колонка «Эффективность»: видно, что за числа.
-  assert.match(PANEL_HTML, /👁 ' \+ counted\(stats\.impressions, "показ", "показа", "показов"\)/);
+  assert.match(PANEL_HTML, /👁 в каталоге: ' \+ num\(stats\.impressions\)/, 'показы карточки в каталоге — «в каталоге», не «показы»');
   assert.match(PANEL_HTML, /📩 ' \+ counted\(stats\.inquiries, "заявка", "заявки", "заявок"\)/);
 
   // Вместо четырёх значков в строке — одно меню.
