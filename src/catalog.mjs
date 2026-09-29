@@ -1,7 +1,7 @@
 // Каталог объектов: карточки, подписи, кнопки, фильтр.
 
 import crypto from 'node:crypto';
-import { cleanText, parseMoneyAmount } from './util.mjs';
+import { cleanText, formatMoney, formatNumber, parseMoneyAmount } from './util.mjs';
 import { imageBytes, imageExists } from './media.mjs';
 import { CATALOG_FILTER_TEXT, COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, MANAGER_CONTACT_TEXT, MENU_LABELS, MY_AREA_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_BADGE_LABELS, PROPERTY_CONDITION_LABELS, PROPERTY_TYPE_LABELS, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
@@ -224,8 +224,7 @@ function propertyShareUrl(record, language) {
 function numericText(value, language = 'ru', allowZero = false) {
   const number = Number(value);
   if (!Number.isFinite(number) || (allowZero ? number < 0 : number <= 0)) return '';
-  const locale = language === 'en' ? 'en-US' : language === 'es' ? 'es-ES' : 'ru-RU';
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(number);
+  return formatNumber(number, language, 2);
 }
 
 const CURRENCY_SYMBOLS = { EUR: '€', USD: '$', GBP: '£' };
@@ -234,15 +233,13 @@ function objectPriceText(record, language) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const priceValue = Number(record.priceValue);
   if (Number.isFinite(priceValue) && priceValue > 0) {
-    const locale = language === 'en' ? 'en-US' : language === 'es' ? 'es-ES' : 'ru-RU';
-    const formatted = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(priceValue);
     const period = record.pricePeriod === 'month'
       ? copy.priceMonth
       : record.pricePeriod === 'week'
         ? copy.priceWeek
         : '';
     const currency = cleanText(record.currency, 10) || 'EUR';
-    return [formatted, CURRENCY_SYMBOLS[currency.toUpperCase()] || currency, period].filter(Boolean).join(' ');
+    return [formatMoney(priceValue, CURRENCY_SYMBOLS[currency.toUpperCase()] || currency, language, 2), period].filter(Boolean).join(' ');
   }
   return localizedExact(record.price, language, 120) || copy.priceOnRequest;
 }
@@ -310,7 +307,7 @@ function pricePerSquareMetre(record, language) {
   const metre = language === 'ru' ? 'м' : 'm';
   const perMetre = Math.round(price / area);
   const symbol = record.currency === 'USD' ? '$' : record.currency === 'GBP' ? '£' : '€';
-  return numericText(perMetre, language) + ' ' + symbol + '/' + metre + '²';
+  return formatMoney(perMetre, symbol, language, 0) + '/' + metre + '²';
 }
 
 function objectCaption(record, language, options = {}) {
@@ -577,8 +574,7 @@ function countedFilterLabel(text, count, selected = false) {
 }
 
 function formattedPriceLimit(value, language) {
-  const locale = language === 'en' ? 'en-US' : language === 'es' ? 'es-ES' : 'ru-RU';
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value) + ' €';
+  return formatMoney(value, '€', language, 0);
 }
 
 function catalogPriceInputKeyboard(language, bound = 'max') {
@@ -1011,7 +1007,7 @@ function catalogListLine(record, language, number) {
   const type = (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[record.propertyType] || '';
   const city = localizedExact(record.city, language, 80);
   const price = objectPriceText(record, language);
-  const bedrooms = Number(record.bedrooms) > 0 ? record.bedrooms + ' ' + (language === 'ru' ? 'сп.' : language === 'es' ? 'dorm.' : 'bd') : '';
+  const bedrooms = Number(record.bedrooms) > 0 ? record.bedrooms + ' ' + (language === 'ru' ? 'сп.' : language === 'es' ? 'dorm.' : 'bed') : '';
   const parts = [type, city, price, bedrooms].filter(Boolean);
   return String(number) + '. ' + parts.join(' · ');
 }

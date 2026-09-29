@@ -419,6 +419,7 @@ test('кнопка «Связаться» узнаётся под всеми п�
   }
   assert.equal(bot.menuItemForText('💬 Связаться', 'ru'), 'contacts', 'нынешняя подпись по-прежнему работает');
   assert.equal(bot.menuItemForText('💬 Manager', 'ru'), '', 'чужой язык не подхватывается случайно');
+  assert.equal(bot.menuItemForText('❤️ Favorites', 'en'), 'favorites', 'прежняя подпись «Favorites» узнаётся после перехода на «Favourites»');
 });
 
 test('an old menu keyboard still opens its sections', async () => {
@@ -737,4 +738,33 @@ test('кнопка связи с менеджером называется од�
   assert.equal(bot.text.menuLabels.ru.contacts, '💬 Связаться');
   assert.equal(bot.text.menuLabels.en.contacts, '💬 Contact us');
   assert.equal(bot.text.menuLabels.es.contacts, '💬 Contactar');
+});
+
+test('цены и числа одного вида на всех экранах: «€250,000», «250.000 €», «250 000 €»', () => {
+  const record = { id: 'fmt-1', status: 'active', propertyType: 'villa', dealType: 'sale', currency: 'EUR', priceValue: 250000, area: 70, title: { ru: 'Вилла', en: 'Villa', es: 'Villa' } };
+  const caption = (language) => bot.objectCaption(record, language).replace(/ | /g, ' ');
+  assert.match(caption('en'), /€250,000 · €3,571\/m²/, 'английский: символ впереди');
+  assert.match(caption('es'), /250\.000 € · 3\.571 €\/m²/, 'испанский: точка и символ после, и у цены за метр тоже');
+  assert.match(caption('ru'), /250 000 € · 3 571 €\/м²/, 'русский: пробел и символ после');
+  const rent = { ...record, dealType: 'rent', pricePeriod: 'month', priceValue: 2000 };
+  assert.match(bot.objectCaption(rent, 'en'), /€2,000 \/ month/);
+  assert.match(bot.objectCaption(rent, 'es').replace(/ /g, ' '), /2\.000 € \/ mes/);
+});
+
+test('вычитка EN/ES: британское написание, «Beach», «Pedir visita», «Avísame», единые «promociones»', async () => {
+  const { INTERFACE_TEXT_DEFAULTS: texts } = await import('../src/texts.mjs');
+  const only = (groups, language) => groups.map((group) => JSON.stringify(texts[group][language])).join('');
+  const english = only(['menuLabels', 'propertyActions', 'emptyStates', 'selectionForm', 'catalogFilter', 'myRequests', 'subscriptions'], 'en')
+    .replace(/"(favorites|emptyFavorites)":/g, '"":');
+  assert.ok(!/[Ff]avorites/.test(english), 'в английских текстах «favourites», а не «favorites»');
+  assert.ok(!/catalog/.test(english), '«catalogue», а не «catalog»');
+  assert.equal(texts.menuLabels.en.favorites, '❤️ Favourites');
+  assert.equal(texts.propertyActions.en.distanceSeaLabel, 'Beach');
+  assert.equal(texts.propertyActions.es.viewing, 'Pedir visita', 'в недвижимости «reservar» — внести резерв');
+  assert.equal(texts.selectionForm.es.wizardNotify, '🔔 Avísame de los nuevos');
+  assert.equal(texts.selectionForm.es.wizardFound, 'Resultados: {count}');
+  assert.equal(texts.selectionForm.en.wizardFound, 'Properties found: {count}');
+  assert.equal(texts.calculator.es.openButton, '🧮 Calculadora de compra e hipoteca');
+  assert.ok(!/Novedades y ofertas/.test(only(['subscriptions'], 'es')), 'одно название рассылки: «Novedades y promociones»');
+  assert.ok(!/[Rr]eservar/.test(only(['propertyActions', 'viewingForm', 'myRequests'], 'es')), 'клиенту не предлагают «reservar» визит');
 });

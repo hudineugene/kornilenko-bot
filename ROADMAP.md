@@ -1409,7 +1409,7 @@
 - [x] Одно имя кнопки везде: «💬 Связаться / Contact us / Contactar» — в
       меню, на карточке и в экране связи (сейчас «Manager», «Contact»,
       «Contact a manager», «Gestor»)
-- [ ] EN/ES вычитка: цена «€250,000», а не «250,000 €»; единый британский
+- [x] EN/ES вычитка: цена «€250,000», а не «250,000 €»; единый британский
       или американский английский (сейчас «catalogue», «Centre»,
       «Favorites»); «To the sea: 150 m» → «Beach: 150 m»; «Matching: 5» →
       «5 properties»; «2 bd» → «2 bed»; ES «Reservar una visita» → «Pedir

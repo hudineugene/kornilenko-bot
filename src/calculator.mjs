@@ -4,6 +4,7 @@
 
 import { CALCULATOR_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
 import { data } from './store.mjs';
+import { formatMoney } from './util.mjs';
 import { normalizeCalculator } from './data-format.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
@@ -73,9 +74,7 @@ function purchaseEstimate(record, settings = calculatorSettings()) {
 }
 
 function money(value, currency, language) {
-  const locale = language === 'en' ? 'en-US' : language === 'es' ? 'es-ES' : 'ru-RU';
-  const amount = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(value));
-  return currency === 'EUR' || !currency ? amount + ' €' : amount + ' ' + currency;
+  return formatMoney(Math.round(value), !currency || currency === 'EUR' ? '€' : currency, language, 0);
 }
 
 function percent(value, language) {

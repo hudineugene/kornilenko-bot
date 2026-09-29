@@ -100,7 +100,27 @@ function dateFromDayKey(key, addDays = 0) {
   return new Date(year, month - 1, day + addDays);
 }
 
+
+// Числа и деньги для клиента — по одному правилу на всех экранах. Английский
+// «€250,000» (символ впереди), испанский «250.000 €» и русский «250 000 €» (символ
+// после). Группировка всегда включена: испанский по умолчанию не отделяет
+// тысячи у четырёхзначных чисел, и «3571 €/m²» стояло рядом с «250.000 €».
+const NUMBER_LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
+
+function formatNumber(value, language = 'ru', maximumFractionDigits = 2) {
+  return new Intl.NumberFormat(NUMBER_LOCALES[language] || NUMBER_LOCALES.ru, { maximumFractionDigits, useGrouping: 'always' }).format(value);
+}
+
+function formatMoney(value, symbol, language = 'ru', maximumFractionDigits = 0) {
+  const amount = formatNumber(value, language, maximumFractionDigits);
+  const sign = String(symbol || '€');
+  if (language === 'en') return /^[A-Za-z]/.test(sign) ? sign + ' ' + amount : sign + amount;
+  return amount + ' ' + sign;
+}
+
 export {
+  formatMoney,
+  formatNumber,
   largestMoneyAmount,
   cleanText,
   clone,
