@@ -13,7 +13,7 @@ import { menuKeyboard } from './menus.mjs';
 import { appendInquiryMessage, awaitingReply, inquiryChats, inquiryTimelineMessage, trimInquiries } from './inquiries.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
-import { json, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
+import { json, panelUserView, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
 import { replyTemplateInput } from './admin-input.mjs';
 import { CLIENT_EXPORT_COLUMNS, INQUIRY_EXPORT_COLUMNS, clientExportRows, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { confirmViewing } from './viewings.mjs';
@@ -155,6 +155,15 @@ async function handleClientsApi(req, res, url) {
   }
 
   const userMatch = url.pathname.match(/^\/api\/users\/([^/]+)$/);
+  // Полная карточка одного клиента: панель просит её, когда нашла человека, которого
+  // нет среди 500 последних в общем состоянии.
+  if (userMatch && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const user = userById(decodeURIComponent(userMatch[1]));
+    if (!user) return json(res, 404, { error: 'Пользователь не найден' });
+    return json(res, 200, { user: panelUserView(user) });
+  }
   if (userMatch && req.method === 'DELETE') {
     const session = requireAuth(req, res, true);
     if (!session) return;
@@ -314,7 +323,22 @@ async function handleClientsApi(req, res, url) {
     const session = requireAuth(req, res);
     if (!session) return;
     const query = cleanText(url.searchParams.get('q'), 100).toLocaleLowerCase('ru-RU');
-    if (query.length < 2) return json(res, 200, { query, inquiryIds: [] });
+    if (query.length < 2) return json(res, 200, { query, inquiryIds: [], clients: [] });
+    // Клиенты — по всей базе, а не только по 500 последним, которые попадают в
+    // панель: клиент, давно не писавший и без заявок, иначе не находился вовсе.
+    const digits = query.replace(/\D/g, '');
+    const handle = query.replace(/^@/, '');
+    const clients = [];
+    for (const user of Object.values(data.users)) {
+      const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.contactName || '';
+      const haystack = [name, user.contactName, user.username, user.note, user.id, user.chatId].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
+      const phoneDigits = String(user.phone || '').replace(/\D/g, '');
+      const hit = haystack.includes(query) || haystack.includes(handle)
+        || (digits.length >= 3 && phoneDigits.includes(digits)) || String(user.phone || '').toLowerCase().includes(query);
+      if (!hit) continue;
+      clients.push({ id: String(user.id), name: name || 'Без имени', username: user.username || '', phone: user.phone || '', lastSeenAt: user.lastSeenAt || '' });
+      if (clients.length >= 8) break;
+    }
     const inquiryIds = [];
     for (const inquiry of data.inquiries) {
       const found = (Array.isArray(inquiry.messages) ? inquiry.messages : []).some((message) => {
@@ -324,7 +348,7 @@ async function handleClientsApi(req, res, url) {
       if (found) inquiryIds.push(inquiry.id);
       if (inquiryIds.length >= CONVERSATION_SEARCH_LIMIT) break;
     }
-    return json(res, 200, { query, inquiryIds });
+    return json(res, 200, { query, inquiryIds, clients });
   }
 
   const conversationReadMatch = url.pathname.match(/^\/api\/conversations\/([^/]+)\/read$/);

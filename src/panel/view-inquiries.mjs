@@ -1397,7 +1397,15 @@ function renderClients(host) {
 
 function openClient(id) {
   var user = (state.users || []).find(function (entry) { return entry.id === id; });
-  if (!user) return;
+  // Клиента нет в общем состоянии (старше 500-го) или карточка неполная: запрашиваем
+  // полную у бота и открываем снова.
+  if (!user || user.partial) {
+    ensureClientLoaded(id).then(function () {
+      var loaded = (state.users || []).find(function (entry) { return entry.id === id; });
+      if (loaded && !loaded.partial) openClient(id);
+    }).catch(fail);
+    return;
+  }
   var inquiries = (state.inquiries || []).filter(function (item) { return String(item.userId) === id; }).sort(function (a, b) { return (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0); });
   var latest = clientActiveInquiry(inquiries);
   var active = clientOpenInquiry(inquiries);

@@ -667,6 +667,15 @@ function inquiryUnread(inquiry) {
   return lastIncoming > (Date.parse(inquiry.readAt || '') || 0);
 }
 
+// Карточка клиента для панели: в переписке участвуют только последние реакции,
+// остальная история действий в панель не уезжает.
+function panelUserView(user) {
+  return {
+    ...user,
+    activity: (Array.isArray(user.activity) ? user.activity : []).filter((item) => item && item.kind === 'reaction').slice(-10),
+  };
+}
+
 // Короткая выжимка последнего сообщения беседы для списка диалогов: целиком
 // переписка в панель не уезжает — она тяжёлая и нужна только для той беседы,
 // которую открыли.
@@ -723,10 +732,7 @@ function safeState(session) {
   // В панель уходит вся карточка клиента, кроме истории действий: из неё нужны
   // только реакции для ленты в «Обзоре». Остальное — лишний вес в каждом
   // обновлении экрана.
-  const panelUser = (user) => ({
-    ...user,
-    activity: (Array.isArray(user.activity) ? user.activity : []).filter((item) => item && item.kind === 'reaction').slice(-10),
-  });
+  const panelUser = panelUserView;
   const recent = Object.values(data.users)
     .sort((a, b) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)))
     .slice(0, 500);
@@ -918,5 +924,6 @@ export {
   securityHeaders,
   sessionKey,
   sessions,
+  panelUserView,
   sourceReport,
 };

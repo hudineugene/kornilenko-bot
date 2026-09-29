@@ -2906,6 +2906,7 @@ test('общий поиск в шапке: клиенты, объекты и с�
   sandbox.openClient = (id) => opened.push(['client', id]);
   sandbox.openRecordEditor = (kind, id) => opened.push(['object', kind, id]);
   sandbox.openInquiry = (id) => opened.push(['message', id]);
+  sandbox.state.users.push({ id: '700002', firstName: 'Тест', activity: [] });
   sandbox.globalSearchOpen('client', '700002');
   sandbox.globalSearchOpen('object', 'find-villa');
   sandbox.globalSearchOpen('message', 'inq-olga');
@@ -2917,6 +2918,64 @@ test('общий поиск в шапке: клиенты, объекты и с�
   sandbox.globalSearchRun('парковка');
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.ok(requests.some((request) => request.url.includes('/api/conversations/search?q=' + encodeURIComponent('парковка'))), 'запрос к поиску по переписке ушёл');
+});
+
+test('Ctrl+K: палитра с действиями, клиенты — по всей базе (не только 500 последних), полная карточка запрашивается отдельно', async () => {
+  twoWaitingConversations();
+  const { sandbox, requests } = await panelSandbox();
+  const box = () => String(sandbox.el('globalResults').innerHTML);
+
+  // Действия ищутся по названию и по словам рядом; пустой запрос — самые частые.
+  const titles = (query) => Array.from(sandbox.globalSearchActions(query)).map((action) => action.title);
+  assert.ok(titles('').length >= 5, 'пустой запрос — список частых действий');
+  assert.deepEqual(titles('нов').filter((title) => /объект/.test(title)), ['Новый объект']);
+  assert.ok(titles('просмотр').includes('Открыть просмотры'));
+  assert.ok(titles('рассыл').includes('Создать рассылку'));
+  assert.deepEqual(titles('zzzz'), []);
+
+  // Горячая клавиша: Ctrl+K и Cmd+K; обычная «k» — нет.
+  sandbox.document.getElementById('globalSearch').value = '';
+  let prevented = 0;
+  const key = (extra) => ({ key: 'k', preventDefault() { prevented += 1; }, ...extra });
+  assert.equal(sandbox.paletteShortcut(key({ ctrlKey: true })), true);
+  assert.equal(sandbox.paletteShortcut(key({ metaKey: true })), true);
+  assert.equal(sandbox.paletteShortcut(key({ key: 'K', ctrlKey: true })), true, 'и заглавная (с включённым Caps Lock)');
+  assert.equal(sandbox.paletteShortcut(key({})), false, 'просто «k» — обычный ввод');
+  assert.equal(prevented, 3, 'браузерный поиск не перехватывает сочетание');
+  assert.match(box(), /Действия/, 'открытая палитра показывает действия');
+  assert.match(box(), /Новый объект/);
+
+  // Действие запускается по выбору.
+  const ran = [];
+  sandbox.go = async (view, tab) => { ran.push(['go', view, tab || '']); return true; };
+  sandbox.openRecordEditor = (kind, id) => ran.push(['editor', kind, id]);
+  await sandbox.globalSearchOpen('action', String(sandbox.PALETTE_ACTIONS.findIndex((action) => action.title === 'Новый объект')));
+  assert.deepEqual(JSON.parse(JSON.stringify(ran)), [['go', 'objects', 'list'], ['editor', 'objects', null]]);
+
+  // Клиент, которого нет среди 500 последних: сервер находит, панель показывает и открывает.
+  const baseFetch = sandbox.fetch;
+  sandbox.fetch = async (url, options) => {
+    const path = String(url);
+    const answer = (payload) => ({ ok: true, status: 200, json: async () => payload, text: async () => JSON.stringify(payload), headers: { get: () => '' } });
+    if (path.includes('/api/conversations/search')) return answer({ query: 'соколова', inquiryIds: [], clients: [{ id: 'old-9', name: 'Ирина Соколова', username: 'irina_sk', phone: '+34 600 111 222', lastSeenAt: '2020-01-01T00:00:00.000Z' }] });
+    if (path.includes('/api/users/old-9')) { requests.push({ url: path, method: 'GET' }); return answer({ user: { id: 'old-9', firstName: 'Ирина', lastName: 'Соколова', username: 'irina_sk', activity: [] } }); }
+    return baseFetch(url, options);
+  };
+  sandbox.document.getElementById('globalSearch').value = 'соколова';
+  sandbox.globalSearchRun('соколова');
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.match(box(), /Ирина Соколова/, 'клиент с сервера — в результатах');
+  assert.match(box(), /data-id="old-9"/);
+  assert.match(box(), /✉ Написать: Ирина Соколова/, 'и действие «Написать клиенту»');
+  assert.ok(!sandbox.state.users.some((user) => user.id === 'old-9'), 'предпосылка: в состоянии его нет');
+
+  const opened = [];
+  sandbox.openClient = (id) => opened.push(id);
+  requests.length = 0;
+  await sandbox.globalSearchOpen('client', 'old-9');
+  assert.ok(requests.some((request) => request.url.includes('/api/users/old-9')), 'полная карточка запрошена');
+  assert.ok(sandbox.state.users.some((user) => user.id === 'old-9' && !user.partial), 'и добавлена в состояние');
+  assert.deepEqual(opened, ['old-9'], 'карточка открылась');
 });
 
 test('старые адреса подключения к Telegram ведут на «Обслуживание → Подключение к Telegram»', async () => {

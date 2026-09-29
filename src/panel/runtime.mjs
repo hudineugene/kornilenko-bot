@@ -40,7 +40,7 @@ const PANEL_SHELL = String.raw`
     </div>
     <nav id="nav" class="head-nav" aria-label="Основная навигация"></nav>
     <div class="global-search" id="globalSearchBox" role="search">
-      <input id="globalSearch" type="search" placeholder="Поиск: клиент, объект, сообщение" autocomplete="off" aria-label="Поиск по клиентам, объектам и сообщениям">
+      <input id="globalSearch" type="search" placeholder="Поиск: клиент, объект, сообщение" title="Поиск и действия (Ctrl+K)" autocomplete="off" aria-label="Поиск по клиентам, объектам и сообщениям">
       <div class="global-results hidden" id="globalResults"></div>
     </div>
     <div class="head-tools">
@@ -809,6 +809,51 @@ function globalSearchMatches(query) {
   return { clients: clients, objects: objects };
 }
 
+// Ctrl+K: то же поле поиска, но с действиями. Без запроса — самые частые действия,
+// с запросом — те, чьё название или слова рядом совпали. Клиентов ищет бот по
+// всей базе (в панель попадают только 500 последних).
+var PALETTE_ACTIONS = [
+  { title: "Новый объект", words: "добавить создать объект каталог", run: async function () { if (await go("objects", "list")) openRecordEditor("objects", null); } },
+  { title: "Создать рассылку", words: "рассылка новости акция", run: async function () { if (await go("posts", "broadcast")) openCampaignEditor(null); } },
+  { title: "Написать в канал", words: "пост канал публикация", run: function () { return go("posts", "channel"); } },
+  { title: "Открыть просмотры", words: "просмотры календарь запись встречи", run: function () { return go("viewings"); } },
+  { title: "Сегодня", words: "главная дела список", run: function () { return go("today"); } },
+  { title: "Диалоги", words: "клиенты переписка сообщения", run: function () { return go("clients", "inbox"); } },
+  { title: "Воронка", words: "клиенты этапы сделки", run: function () { return go("clients", "pipeline"); } },
+  { title: "Отчёт", words: "неделя итоги реклама", run: function () { return go("reports"); } },
+  { title: "Настройки компании", words: "часы работы калькулятор напоминания", run: function () { return go("settings", "company"); } },
+];
+var paletteOpen = false;
+
+function globalSearchActions(query) {
+  var needle = String(query || "").trim().toLowerCase();
+  var all = PALETTE_ACTIONS.map(function (action, index) { return { title: action.title, index: index, hay: (action.title + " " + action.words).toLowerCase() }; });
+  if (!needle) return all.slice(0, 6);
+  return all.filter(function (action) { return action.hay.indexOf(needle) >= 0; }).slice(0, 5);
+}
+
+// Полная карточка клиента. В общем состоянии — 500 последних и «неполные» клиенты
+// из заявок; остальных (и неполных) запрашиваем у бота по одному.
+async function ensureClientLoaded(id) {
+  var known = (state.users || []).find(function (user) { return user.id === id; });
+  if (known && !known.partial) return true;
+  var answer = await api("/api/users/" + encodeURIComponent(id));
+  state.users = (state.users || []).filter(function (user) { return user.id !== id; }).concat([answer.user]);
+  return true;
+}
+
+function paletteShortcut(event) {
+  if (!(event && (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "k")) return false;
+  if (event.preventDefault) event.preventDefault();
+  paletteOpen = true;
+  el("globalSearchBox").classList.add("open");
+  var input = el("globalSearch");
+  if (input.focus) input.focus();
+  if (input.select) input.select();
+  globalSearchRun(input.value);
+  return true;
+}
+
 function globalSearchSection(title, rows) {
   if (!rows.length) return "";
   return '<div class="global-group"><div class="global-title">' + esc(title) + '</div>' + rows.map(function (row) {
@@ -818,13 +863,19 @@ function globalSearchSection(title, rows) {
 
 function globalSearchDraw(query, matches, messages, pending) {
   var box = el("globalResults");
+  var actions = globalSearchActions(query);
+  var writing = (matches.clients || []).slice(0, 3).map(function (user) {
+    return { kind: "write", id: user.id, title: "✉ Написать: " + (user.name || userName(user)), note: "" };
+  });
   var html =
+    globalSearchSection("Действия", actions.map(function (action) { return { kind: "action", id: String(action.index), title: action.title, note: "" }; })) +
     globalSearchSection("Клиенты", matches.clients.map(function (user) {
-      return { kind: "client", id: user.id, title: userName(user), note: [user.username ? "@" + user.username : "", user.phone || ""].filter(Boolean).join(" · ") };
+      return { kind: "client", id: user.id, title: user.name || userName(user), note: [user.username ? "@" + user.username : "", user.phone || ""].filter(Boolean).join(" · ") };
     })) +
     globalSearchSection("Объекты", matches.objects.map(function (record) {
       return { kind: "object", id: record.id, title: localized(record.title, "ru") || record.reference || record.id, note: [record.reference || "", localized(record.city, "ru")].filter(Boolean).join(" · ") };
     })) +
+    globalSearchSection("Написать клиенту", writing) +
     globalSearchSection("Сообщения", messages);
   if (!html) html = '<div class="global-empty">' + (pending ? "Ищем в переписке…" : "Ничего не найдено") + '</div>';
   else if (pending) html += '<div class="global-empty">Ищем в переписке…</div>';
@@ -836,6 +887,7 @@ function globalSearchDraw(query, matches, messages, pending) {
 }
 
 function globalSearchClose(clear) {
+  paletteOpen = false;
   el("globalResults").classList.add("hidden");
   el("globalSearchBox").classList.remove("open");
   if (clear) el("globalSearch").value = "";
@@ -843,7 +895,18 @@ function globalSearchClose(clear) {
 
 function globalSearchOpen(kind, id) {
   globalSearchClose(true);
-  if (kind === "client") return openClient(id);
+  if (kind === "action") return PALETTE_ACTIONS[Number(id)] ? PALETTE_ACTIONS[Number(id)].run() : undefined;
+  if (kind === "client" || kind === "write") {
+    var known = (state.users || []).find(function (user) { return user.id === id; });
+    var show = function () {
+      if (kind === "client") return openClient(id);
+      // «Написать»: последняя заявка клиента открывается в диалогах; без заявок — карточка, где есть поле сообщения.
+      var latest = (state.inquiries || []).filter(function (item) { return String(item.userId) === id; }).sort(function (a, b) { return (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0); })[0];
+      return latest ? openInquiry(latest.id) : openClient(id);
+    };
+    if (known && !known.partial) return show();
+    return ensureClientLoaded(id).then(show).catch(fail);
+  }
   if (kind === "object") return openRecordEditor("objects", id);
   if (kind === "message") return openInquiry(id);
 }
@@ -851,7 +914,11 @@ function globalSearchOpen(kind, id) {
 function globalSearchRun(query) {
   var needle = String(query || "").trim();
   var serial = ++globalSearchSerial;
-  if (needle.length < 2) { el("globalResults").classList.add("hidden"); return; }
+  if (needle.length < 2) {
+    if (!paletteOpen) { el("globalResults").classList.add("hidden"); return; }
+    globalSearchDraw(needle, { clients: [], objects: [] }, [], false);
+    return;
+  }
   var matches = globalSearchMatches(needle);
   globalSearchDraw(needle, matches, [], true);
   api("/api/conversations/search?q=" + encodeURIComponent(needle)).then(function (answer) {
@@ -864,7 +931,13 @@ function globalSearchRun(query) {
       seen[item.userId] = true;
       messages.push({ kind: "message", id: item.id, title: userName(userOf(item)), note: String((item.lastMessage && (item.lastMessage.text || item.lastMessage.fileName)) || item.text || "").replace(/\s+/g, " ").slice(0, 80) });
     });
-    globalSearchDraw(needle, matches, messages.slice(0, 5), false);
+    // Клиенты с сервера: вся база, а не только 500 последних; повторы (уже найденные
+    // в панели) не показываем второй раз.
+    var known = {};
+    matches.clients.forEach(function (user) { known[user.id] = true; });
+    var remote = (answer.clients || []).filter(function (user) { return !known[user.id]; });
+    var merged = { clients: matches.clients.map(function (user) { return { id: user.id, name: userName(user), username: user.username, phone: user.phone }; }).concat(remote).slice(0, 8), objects: matches.objects };
+    globalSearchDraw(needle, merged, messages.slice(0, 5), false);
   }).catch(function () {
     if (serial === globalSearchSerial) globalSearchDraw(needle, matches, [], false);
   });
@@ -884,6 +957,7 @@ function initGlobalSearch() {
     }
   };
   input.onfocus = function () { if (String(input.value || "").trim().length >= 2) globalSearchRun(input.value); };
+  document.addEventListener("keydown", paletteShortcut);
   // На телефоне поле прячется за значком 🔍 и раскрывается под шапкой.
   el("searchToggle").onclick = function () {
     var open = !el("globalSearchBox").classList.contains("open");
