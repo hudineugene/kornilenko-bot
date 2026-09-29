@@ -2730,7 +2730,32 @@ test('«Настройки → Компания»: одна полоса сох�
   requests.length = 0;
   await captured.save();
   const paths = requests.filter((request) => request.method === 'PUT').map((request) => new URL(request.url, 'http://x').pathname);
-  assert.deepEqual(paths, ['/api/working-hours', '/api/viewing-slots', '/api/calculator', '/api/settings']);
+  assert.deepEqual(paths, ['/api/working-hours', '/api/viewing-slots', '/api/calculator', '/api/settings', '/api/engagement']);
+});
+
+test('«Настройки → Компания»: «Сообщения клиентам сами» — дайджест и возврат выключены, видно, кто получит; сохраняются той же полосой', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  let captured = null;
+  sandbox.watchForm = (root, save) => { captured = save; return { mark() {} }; };
+  sandbox.state.engagement = { digest: false, comeback: true, audience: 14, activeObjects: 3 };
+  const host = fakeElement('main');
+  sandbox.renderWork(host);
+  const html = String(host.innerHTML);
+  assert.match(html, /Сообщения клиентам сами/);
+  assert.ok(!/id="digestOn" checked/.test(html) && /id="digestOn"/.test(html), 'дайджест выключен');
+  assert.match(html, /id="comebackOn" checked/, 'возврат включён, как в настройках');
+  assert.match(html, /Получат: 14/, 'видно, сколько клиентов согласились на новости');
+  assert.match(html, /в продаже сейчас 3/, 'и сколько объектов в каталоге');
+  assert.match(html, /живом каталоге/, 'предупреждение: включать на настоящем каталоге');
+
+  host.querySelector('#digestOn').checked = true;
+  host.querySelector('#comebackOn').checked = false;
+  requests.length = 0;
+  await captured();
+  const call = requests.find((request) => request.url === '/api/engagement');
+  assert.equal(call.method, 'PUT');
+  assert.deepEqual(call.body, { digest: true, comeback: false });
 });
 
 test('общий поиск в шапке: клиенты, объекты и сообщения — одним полем', async () => {

@@ -325,8 +325,15 @@ function rememberPriceChange(record, before) {
   }
 }
 
+// Когда объект впервые стал доступен клиентам: по этой дате дайджест находит новые.
+// Прежние объекты без даты новыми не считаются.
+function rememberPublication(record) {
+  if (record.status === 'active' && !record.publishedAt) record.publishedAt = new Date().toISOString();
+}
+
 function queuePropertyAlerts(record, before) {
   rememberPriceChange(record, before);
+  rememberPublication(record);
   if (!configured() || !data.config.active) return 0;
   const deliveries = propertyAlertDeliveries(record, before);
   if (deliveries.length) {

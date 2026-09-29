@@ -17,6 +17,7 @@ import { runTelegramBackup } from './offsite.mjs';
 import { runDailyFeedImport } from './feed-import.mjs';
 import { runDueGroupPosts } from './groups.mjs';
 import { runRetentionCleanup } from './retention.mjs';
+import { runComeback, runWeeklyDigest } from './digest.mjs';
 
 const DIGEST_HOUR = 9;
 
@@ -430,6 +431,8 @@ function runScheduledNotices() {
   runDailyFeedImport().catch((error) => recordError('Загрузка объектов с сайта', error));
   runDueGroupPosts().catch((error) => recordError('Отложенная публикация в группу', error));
   runRetentionCleanup().catch((error) => recordError('Срок хранения данных', error));
+  runWeeklyDigest().catch((error) => recordError('Недельный дайджест', error));
+  runComeback().catch((error) => recordError('Мягкий возврат', error));
 }
 
 export {

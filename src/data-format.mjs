@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 44;
+const DATA_VERSION = 45;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -845,6 +845,14 @@ function normalizeWorkingHours(value) {
   };
 }
 
+// Автоматические сообщения клиентам: недельный дайджест и мягкий возврат. Оба
+// выключены, пока владелец сам не включит: на демо-каталоге слать нечего, а
+// сообщение «ни о чём» отпугивает.
+function normalizeEngagement(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return { digest: source.digest === true, comeback: source.comeback === true };
+}
+
 // «Почему мы»: годы на рынке, число сделок, регистрационные данные, адрес офиса,
 // ссылка на отзывы и до пяти отзывов. Отзыв показывается клиентам, только если
 // владелец подтвердил, что у него есть разрешение автора на публикацию (allowed).
@@ -1081,7 +1089,7 @@ function normalizeLoadedData(parsed) {
         } : null,
         lastInboundMessageId: user.lastInboundMessageId != null && Number.isFinite(Number(user.lastInboundMessageId)) ? Number(user.lastInboundMessageId) : null,
         catalogContext: user.catalogContext && typeof user.catalogContext === 'object' ? {
-          mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison'].includes(user.catalogContext.mode) ? user.catalogContext.mode : 'all',
+          mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison', 'digest'].includes(user.catalogContext.mode) ? user.catalogContext.mode : 'all',
           page: Math.max(0, Number(user.catalogContext.page) || 0),
           propertyId: cleanText(user.catalogContext.propertyId, 100),
         } : { mode: 'all', page: 0, propertyId: '' },
@@ -1230,6 +1238,8 @@ function normalizeLoadedData(parsed) {
           // Прежняя цена: остаётся на карточке зачёркнутой, пока снижение свежее.
           previousPriceValue: Number(record.previousPriceValue) > 0 ? Number(record.previousPriceValue) : 0,
           priceChangedAt: cleanText(record.priceChangedAt, 40),
+          // Когда объект впервые стал доступен клиентам: по нему дайджест находит новые.
+          publishedAt: cleanText(record.publishedAt, 40),
         };
       }) : [],
       promotions: Array.isArray(parsed.promotions) ? parsed.promotions.map((record) => {
@@ -1295,6 +1305,7 @@ function normalizeLoadedData(parsed) {
     normalized.config.timeZone = normalizeTimeZone(normalized.config.timeZone);
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
     normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
+    normalized.config.engagement = normalizeEngagement(normalized.config.engagement);
     normalized.config.viewingSlots = normalizeViewingSlots(normalized.config.viewingSlots);
     normalized.config.telegramBackup = normalizeTelegramBackup(normalized.config.telegramBackup);
     normalized.config.adminName = cleanText(normalized.config.adminName, 60);
@@ -1311,6 +1322,7 @@ function normalizeLoadedData(parsed) {
 
 export {
   CLOCK_TIME_PATTERN,
+  normalizeEngagement,
   MAX_TRUST_REVIEWS,
   normalizeTrust,
   DATA_VERSION,

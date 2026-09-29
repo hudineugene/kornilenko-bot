@@ -104,6 +104,10 @@ function applyPrivateChatStatus(userId, status) {
   return user;
 }
 
+function idList(value) {
+  return Array.isArray(value) ? value.map(String).filter((item, index, all) => item && all.indexOf(item) === index).slice(0, 20) : [];
+}
+
 function normalizeUser(from, chatId, countMessage = true) {
   const id = String(from.id);
   const previous = userById(id) || {};
@@ -140,7 +144,7 @@ function normalizeUser(from, chatId, countMessage = true) {
     lastCallback: previous.lastCallback && typeof previous.lastCallback === 'object' ? previous.lastCallback : null,
     lastInboundMessageId: previous.lastInboundMessageId != null && Number.isFinite(Number(previous.lastInboundMessageId)) ? Number(previous.lastInboundMessageId) : null,
     catalogContext: previous.catalogContext && typeof previous.catalogContext === 'object' ? {
-      mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison'].includes(previous.catalogContext.mode) ? previous.catalogContext.mode : 'all',
+      mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison', 'digest'].includes(previous.catalogContext.mode) ? previous.catalogContext.mode : 'all',
       page: Math.max(0, Number(previous.catalogContext.page) || 0),
       propertyId: cleanText(previous.catalogContext.propertyId, 100),
     } : { mode: 'all', page: 0, propertyId: '' },
@@ -158,6 +162,15 @@ function normalizeUser(from, chatId, countMessage = true) {
       ...(previous.funnel && previous.funnel.details ? { details: cleanText(previous.funnel.details, 40) } : {}),
     },
     // Цель клиента со старта: «купить для жизни» / «инвестиция и аренда» / «пока смотрю».
+    // Дайджест и мягкий возврат: когда слали в последний раз, что показали, отписался ли.
+    digestAt: cleanText(previous.digestAt, 40),
+    digestOptOut: Boolean(previous.digestOptOut),
+    digestNewIds: idList(previous.digestNewIds),
+    digestDropIds: idList(previous.digestDropIds),
+    digestIds: idList(previous.digestIds),
+    comebackIds: idList(previous.comebackIds),
+    comebackAt: cleanText(previous.comebackAt, 40),
+    comebackOptOut: Boolean(previous.comebackOptOut),
     goal: ['live', 'invest', 'browse'].includes(previous.goal) ? previous.goal : '',
     goalAt: cleanText(previous.goalAt, 40),
     goalAskedAt: cleanText(previous.goalAskedAt, 40),

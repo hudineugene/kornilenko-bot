@@ -6,6 +6,7 @@ import { imageBytes, imageExists } from './media.mjs';
 import { CATALOG_FILTER_TEXT, COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, MANAGER_CONTACT_TEXT, MENU_LABELS, MY_AREA_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_BADGE_LABELS, PROPERTY_CONDITION_LABELS, PROPERTY_TYPE_LABELS, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { markFunnel, recordPropertyEvent } from './analytics.mjs';
+import { digestHeading } from './digest-text.mjs';
 import { normalizeUser } from './users.mjs';
 import { knownFileId, rememberFileId, sendMessage, sendPhotoMessage, telegramMultipartRequest, telegramRequest } from './telegram.mjs';
 import { menuKeyboard, sendLanguagePicker } from './menus.mjs';
@@ -733,7 +734,7 @@ function catalogFilterState(user) {
 // "all" is the catalog with the client's filter, "favorites" the saved
 // properties, "matches" what fitted the client's last selection form and
 // "similar" the ranked alternatives to the last property they opened.
-const CATALOG_MODES = ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison'];
+const CATALOG_MODES = ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison', 'digest'];
 const COMPARISON_LIMIT = 3;
 
 function catalogMode(mode) {
@@ -745,6 +746,7 @@ function catalogHeading(mode, language) {
   if (mode === 'matches') return (SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru).matchesHeading;
   if (mode === 'similar') return (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).similarHeading;
   if (mode === 'recent') return (MY_AREA_TEXT[language] || MY_AREA_TEXT.ru).recentHeading;
+  if (mode === 'digest') return digestHeading(language);
   if (mode === 'comparison') return (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).title;
   return (MENU_LABELS[language] || MENU_LABELS.ru).objects;
 }
@@ -853,6 +855,10 @@ function catalogRecords(user, mode = 'all') {
   if (mode === 'similar') {
     const byId = new Map(active.filter((record) => record.status === 'active').map((record) => [record.id, record]));
     return (Array.isArray(user.similarPropertyIds) ? user.similarPropertyIds : []).map((id) => byId.get(String(id))).filter(Boolean);
+  }
+  if (mode === 'digest') {
+    const byId = new Map(active.filter((record) => record.status === 'active').map((record) => [record.id, record]));
+    return (Array.isArray(user.digestIds) ? user.digestIds : []).map((id) => byId.get(String(id))).filter(Boolean);
   }
   if (mode === 'recent') {
     const byId = new Map(active.map((record) => [record.id, record]));

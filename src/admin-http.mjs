@@ -802,6 +802,12 @@ function safeState(session) {
     promotions: data.promotions.map((record) => publicRecord(record, 'promotions')),
     contacts: { ...data.contacts, photo: imageMeta(data.contacts && data.contacts.photo) },
     trust: data.trust,
+    engagement: {
+      ...(data.config.engagement || { digest: false, comeback: false }),
+      // Кто получит: согласились на «Новости и акции», не отписались, язык выбран.
+      audience: Object.values(data.users).filter((user) => user.chatId && !user.blocked && !user.broadcastsOptOut && user.newsConsentAt && user.preferredLanguage).length,
+      activeObjects: data.objects.filter((record) => record.status === 'active').length,
+    },
     guidePages: data.guidePages || [],
     errors: data.errors,
     notifications,

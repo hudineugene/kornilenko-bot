@@ -200,6 +200,7 @@ function renderTelegramConnection(host) {
 
 function renderWork(host) {
   var hours = state.config.workingHours || {}, slots = state.config.viewingSlots || {}, calculator = state.config.calculator || {};
+  var engagement = state.engagement || {};
   host.innerHTML = '<div class="grid cols-2">' +
     '<div class="card"><header><h3>Рабочее время</h3></header><div class="card-body stack" id="hoursCard">' +
       '<label class="check"><input type="checkbox" id="hoursOn"' + (hours.enabled ? " checked" : "") + "> предупреждать клиентов о нерабочем времени</label>" +
@@ -250,6 +251,12 @@ function renderWork(host) {
           return '<option value="' + option[0] + '"' + (Number(state.config.retentionMonths) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + "</select></div>" +
       '<div class="hint">Отсчёт от последней заявки клиента. Раз в сутки бот удаляет данные тех, от кого давно ничего не было, и сообщает об этом. Не удаляются те, кто ждёт ответа, у кого впереди просмотр или стоит напоминание. Срок нужно указать в политике конфиденциальности.</div>' +
+    "</div></div>" +
+    // Автоматические сообщения: выключены, пока сами не включите.
+    '<div class="card"><header><h3>Сообщения клиентам сами</h3></header><div class="card-body stack">' +
+      '<label class="check"><input type="checkbox" id="digestOn"' + (engagement.digest ? " checked" : "") + '> раз в неделю присылать «Что нового»: новые объекты и снижения цен</label>' +
+      '<label class="check"><input type="checkbox" id="comebackOn"' + (engagement.comeback ? " checked" : "") + '> напоминать тем, кто смотрел объекты и замолчал на 5–10 дней, если появилось подходящее</label>' +
+      '<div class="hint">Получат: ' + num(engagement.audience || 0) + ' — те, кто согласился на «Новости и акции». Объектов в продаже сейчас ' + num(engagement.activeObjects || 0) + '. Пустое сообщение не отправляется, чаще раза в неделю дайджест не приходит, возврат — не чаще раза в три недели; каждое выключается одной кнопкой. Включайте на живом каталоге: на демо-объектах слать нечего.</div>' +
     "</div></div></div>";
 
   bindLanguageTabs(host);
@@ -286,11 +293,15 @@ function renderWork(host) {
       retentionMonths: Number(host.querySelector("#retentionMonths").value),
     }));
   }
+  async function saveEngagement() {
+    await send("/api/engagement", "PUT", { digest: host.querySelector("#digestOn").checked, comeback: host.querySelector("#comebackOn").checked });
+  }
   watchForm(host, async function () {
     await saveHours();
     await saveSlots();
     await saveCalc();
     await saveReminders();
+    await saveEngagement();
   }, "Настройки компании изменены");
 }
 

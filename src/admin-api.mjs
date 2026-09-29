@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, delay, hashPassword, localDayKey } from './util.mjs';
-import { MAX_TRUST_REVIEWS, normalizeLoadedData, normalizeTrust } from './data-format.mjs';
+import { MAX_TRUST_REVIEWS, normalizeEngagement, normalizeLoadedData, normalizeTrust } from './data-format.mjs';
 import { backupChunks } from './backup-file.mjs';
 import { dropMissingImages, storedMediaFiles } from './media.mjs';
 import { applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
@@ -491,6 +491,16 @@ async function handleApi(req, res, url) {
     };
     saveDataNow();
     return json(res, 200, { ok: true });
+  }
+
+  // Автоматические сообщения клиентам: включаются владельцем, по умолчанию выключены.
+  if (url.pathname === '/api/engagement' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    data.config.engagement = normalizeEngagement({ ...data.config.engagement, ...(typeof body.digest === 'boolean' ? { digest: body.digest } : {}), ...(typeof body.comeback === 'boolean' ? { comeback: body.comeback } : {}) });
+    saveDataNow();
+    return json(res, 200, { ok: true, engagement: data.config.engagement });
   }
 
   // «Почему мы»: цифры, регистрационные данные, адрес офиса, отзывы. Отзыв без
