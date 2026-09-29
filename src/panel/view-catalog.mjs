@@ -761,29 +761,54 @@ function openRecordEditor(kind, id) {
   });
 }
 
+// Начало текста без обрыва на полуслове: если обрезали — многоточие.
+function shortText(value, limit) {
+  var text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? text.slice(0, limit).replace(/\s+\S*$/, "") + "…" : text;
+}
+
 // --- Акции ------------------------------------------------------------------
 function renderOffers(host) {
   var rows = state.promotions || [];
   pageAction("＋ Акция", function () { openRecordEditor("promotions", null); });
-  host.innerHTML = '<div class="card"><div class="table-wrap"><table><thead><tr><th class="thumb-xs"></th><th>Акция</th><th>Срок</th><th>Показ</th><th></th></tr></thead><tbody>' +
+  host.innerHTML = '<div class="card"><div class="table-wrap"><table><thead><tr><th class="thumb-xs"></th><th>Акция</th><th>Срок</th><th>Статус</th><th></th></tr></thead><tbody>' +
     (rows.length ? rows.map(function (record) {
       var images = propertyImages(record, "ru");
       var displayStatus = promotionStatus(record);
       return '<tr data-id="' + esc(record.id) + '">' +
         "<td>" + (images.length ? '<img class="thumb" loading="lazy" decoding="async" src="' + imageUrl("promotions", record.id, images[0], "ru") + '" alt="">' : '<span class="thumb"></span>') + "</td>" +
-        '<td class="clickable" data-edit="1"><b>' + esc(localized(record.title, "ru") || "Без названия") + '</b><br><span class="small faint">' + esc(String(localized(record.text, "ru")).slice(0, 70)) + "</span></td>" +
+        '<td class="clickable" data-edit="1"><b>' + esc(localized(record.title, "ru") || "Без названия") + '</b><br><span class="small faint">' + esc(shortText(localized(record.text, "ru"), 70)) + "</span></td>" +
         "<td>" + (record.startAt || record.endAt ? esc(dateShort(record.startAt) + " – " + dateShort(record.endAt)) : "без срока") + "</td>" +
         '<td><span class="chip ' + displayStatus.kind + '">' + displayStatus.label + "</span></td>" +
-        '<td class="right"><button class="btn ghost small" data-delete="1">✕</button></td></tr>';
+        '<td class="right nowrap"><button class="btn ghost small" data-more="1" title="Ещё действия" type="button">⋯</button></td></tr>';
     }).join("") : '<tr><td colspan="5"><div class="empty"><b>Акций нет</b>Клиенты видят раздел «Акции» только когда есть действующие</div></td></tr>') +
     "</tbody></table></div></div>";
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     var id = row.dataset.id;
     row.querySelector("[data-edit]").onclick = function () { openRecordEditor("promotions", id); };
-    row.querySelector("[data-delete]").onclick = async function () {
-      if (!(await confirmDialog("Удалить акцию?", "Она исчезнет из раздела «Акции».", "Удалить", true))) return;
-      try { await removeWithUndo("promotions", id, "Акция удалена"); } catch (error) { fail(error); }
-    };
+    row.querySelector("[data-more]").onclick = function () { openOfferExtras(id); };
+  });
+}
+
+// То же «⋯», что у объектов: редкие и опасные действия — не в строке рядом с частыми.
+function openOfferExtras(id) {
+  var record = (state.promotions || []).find(function (item) { return String(item.id) === String(id); });
+  var title = record ? localized(record.title, "ru") || "Без названия" : "Акция";
+  openDialog({
+    title: "Ещё действия",
+    body: '<div class="stack"><div class="small muted">' + esc(title) + "</div>" +
+      '<button class="btn danger-outline" data-delete="1" type="button">Удалить акцию</button>' +
+      '<span class="small muted">Она исчезнет из раздела «Акции». Если передумаете, 15 минут можно нажать «Вернуть».</span></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
+    ready: function (dialog) {
+      dialog.querySelector("[data-delete]").onclick = async function () {
+        if (!(await confirmDialog("Удалить акцию?", "Она исчезнет из раздела «Акции».", "Удалить", true))) return;
+        try {
+          dialog.closeClean();
+          await removeWithUndo("promotions", id, "Акция удалена");
+        } catch (error) { fail(error); }
+      };
+    },
   });
 }
 

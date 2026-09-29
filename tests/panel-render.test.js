@@ -3656,3 +3656,33 @@ test('в списке диалогов автоответ бота подпис�
   assert.match(html, /Вы: Завтра в 12:00 подойдёт\?/);
   assert.ok(!/Вы: Спасибо/.test(html));
 });
+
+test('«Акции»: удаление под «⋯», как у объектов; длинный текст оканчивается многоточием; колонка называется «Статус»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const long = 'Скидка на все виллы первой линии до конца месяца, рассрочка без процентов на два года и подарок каждому покупателю';
+  sandbox.state.promotions = [{ id: 'p1', title: { ru: 'Осенняя акция' }, text: { ru: long }, enabled: true, startAt: '', endAt: '', imagesByLanguage: { ru: [] } }];
+  const host = fakeElement('main');
+  host.querySelector('tr[data-id]').dataset.id = 'p1';
+  sandbox.renderOffers(host);
+  const html = String(host.innerHTML);
+  assert.match(html, /<th>Статус<\/th>/);
+  assert.ok(!/<th>Показ<\/th>/.test(html));
+  assert.match(html, /data-more="1"[^>]*>⋯</, 'кнопка «⋯» в строке');
+  assert.ok(!/data-delete="1">✕/.test(html), 'красного «✕» в строке больше нет');
+  assert.match(html, /…<\/span>/, 'обрезанный текст оканчивается многоточием');
+  assert.ok(!html.includes(long), 'весь длинный текст в строку не попал');
+  assert.equal(sandbox.shortText('Короткий текст', 70), 'Короткий текст', 'короткий — без многоточия');
+
+  // «⋯» открывает окно с удалением.
+  const dialogs = [];
+  sandbox.openDialog = (options) => { const dialog = fakeElement('dialog'); dialog.closeClean = () => {}; dialogs.push({ options, dialog }); if (options.ready) options.ready(dialog); return dialog; };
+  sandbox.confirmDialog = async () => true;
+  sandbox.toast = () => {};
+  host.querySelector('tr[data-id]').querySelector('[data-more]').onclick();
+  assert.match(dialogs[0].options.body, /Удалить акцию/);
+  assert.match(dialogs[0].options.body, /15 минут/);
+  requests.length = 0;
+  await dialogs[0].dialog.querySelector('[data-delete]').onclick();
+  assert.ok(requests.some((request) => request.method === 'DELETE' && request.url.includes('/api/promotions/p1')), 'удаление ушло на бота: ' + JSON.stringify(requests));
+});
