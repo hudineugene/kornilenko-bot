@@ -2,6 +2,7 @@
 
 import http from 'node:http';
 import { ADMIN_ASSETS, LOGIN_ASSETS, PORT } from './config.mjs';
+import { sendPwaAsset } from './pwa.mjs';
 import { runDueBroadcasts } from './broadcasts.mjs';
 import { binaryLoginAsset, hostAllowed, html, json, securityHeaders } from './admin-http.mjs';
 import { handleApi } from './admin-api.mjs';
@@ -21,6 +22,8 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/admin-assets/header.webp' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.header);
     if (url.pathname === '/admin-assets/header-mobile.webp' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.headerMobile);
     if (url.pathname === '/admin-assets/sidebar-logo.png' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.sidebarLogo);
+    if (url.pathname === '/manifest.webmanifest' && req.method === 'GET') return sendPwaAsset(res, 'manifest');
+    if (url.pathname === '/admin-assets/app-icon.svg' && req.method === 'GET') return sendPwaAsset(res, 'icon');
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
     if (url.pathname === '/' && req.method === 'GET') return html(res, PANEL_HTML, req);
     securityHeaders(res);

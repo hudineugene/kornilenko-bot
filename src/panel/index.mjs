@@ -32,6 +32,10 @@ const PANEL_HTML = String.raw`<!doctype html>
 <meta name="robots" content="noindex, nofollow">
 <title>Панель Telegram-бота</title>
 <link rel="icon" href="/login-assets/logo.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#2f56d9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101828" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/admin-assets/sidebar-logo.png">
 <style>${PANEL_CSS}</style>
 </head>
 <body>
