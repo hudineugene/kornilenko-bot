@@ -150,6 +150,23 @@ function planProgress(user) {
   return { done: list.filter((step) => plan.done[step.id]).length, total: list.length, current: currentStepIndex(user) };
 }
 
+// Заявка «помощь по шагу плана» узнаётся по тексту, который создаёт сам бот (helpRequest на любом
+// языке): схема данных не меняется, а в «Мои заявки» она подписана «План · шаг 2: …», а не «Вопрос».
+function parsePlanHelp(text) {
+  for (const copy of Object.values(PLAN_TEXT)) {
+    const [head, tail] = String(copy.helpRequest || '').split('{n}');
+    const [middle] = String(tail || '').split('{title}');
+    const source = String(text || '');
+    if (!head || !source.startsWith(head)) continue;
+    const match = source.slice(head.length).match(/^(\d+)/);
+    if (!match) continue;
+    const rest = source.slice(head.length + match[1].length);
+    if (!rest.startsWith(middle)) continue;
+    return { n: Number(match[1]), title: rest.slice(middle.length).trim() };
+  }
+  return null;
+}
+
 function stepMark(plan, step) {
   return plan.done[step.id] ? '✅' : plan.help[step.id] ? '💬' : '⬜';
 }
@@ -187,7 +204,6 @@ function stepText(user, language, index) {
   const lines = [fill(copy.step, { n: index + 1, total: list.length }) + ': ' + (step.title[language] || step.title.ru), '', step.text[language] || step.text.ru];
   if (plan.done[step.id]) lines.push('', copy.statusDone);
   else if (plan.help[step.id]) lines.push('', copy.statusHelp);
-  lines.push('', copy.disclaimer);
   return lines.join('\n');
 }
 
@@ -372,4 +388,5 @@ export {
   planProgress,
   planReminderDue,
   runPlanReminders,
+  parsePlanHelp,
 };

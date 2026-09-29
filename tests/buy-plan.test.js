@@ -162,6 +162,29 @@ test.describe('у клиента', () => {
     assert.ok(!chat.user.plan.help.lawyer);
   });
 
+  test('оговорка «не юридическая консультация» — один раз в обзоре, а не под каждым из десяти шагов', async () => {
+    const chat = createChat();
+    const overview = await chat.press('plan:open');
+    assert.match(view(overview).text, /не юридическая консультация/, 'в обзоре она есть');
+    for (const index of [0, 4, 9]) {
+      const step = await chat.press('plan:step:' + index);
+      assert.ok(!/юридическая консультация/.test(view(step).text), 'на шаге ' + (index + 1) + ' оговорки нет');
+    }
+  });
+
+  test('«Мои заявки»: помощь по плану подписана «План · шаг N: название», а не безликим «Вопрос»', async () => {
+    const chat = createChat();
+    await chat.press('plan:help:2');
+    const list = await chat.press('myreq:list');
+    assert.match(list.last.text, /📋 План · шаг 3: Независимый юрист/);
+    assert.ok(!/^.*Вопрос/m.test(list.last.text.split('\n').filter((line) => /шаг 3/.test(line)).join('')), 'заголовок не «Вопрос»');
+    // Разбор текста заявки — на всех трёх языках, а обычный вопрос не принимается за план.
+    assert.deepEqual(plan.parsePlanHelp('Клиент просит помощи в плане покупки, шаг 3: Независимый юрист'), { n: 3, title: 'Независимый юрист' });
+    assert.deepEqual(plan.parsePlanHelp('The client asks for help with the buying plan, step 2: Bank account'), { n: 2, title: 'Bank account' });
+    assert.deepEqual(plan.parsePlanHelp('El cliente pide ayuda con el plan de compra, paso 5: Notario'), { n: 5, title: 'Notario' });
+    assert.equal(plan.parsePlanHelp('Есть ли парковка?'), null);
+  });
+
   test('неизвестный шаг и действие не принимаются', async () => {
     const chat = createChat();
     for (const data of ['plan:step:99', 'plan:done:-1', 'plan:step:abc', 'plan:hack:1']) {

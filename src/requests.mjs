@@ -7,11 +7,17 @@ import { normalizeUser } from './users.mjs';
 import { localized, localizedExact, sendUiMessage, shortenedText } from './catalog.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 import { cancelViewing, viewingIsUpcoming, viewingWhen } from './viewings.mjs';
+import { parsePlanHelp } from './plan.mjs';
 
 const MY_REQUESTS_SHOWN = 5;
 const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
 
-function requestTypeLabel(inquiry, copy) {
+const PLAN_STEP_WORD = { ru: 'План · шаг', en: 'Plan · step', es: 'Plan · paso' };
+
+function requestTypeLabel(inquiry, copy, language = 'ru') {
+  // Помощь по шагу плана покупки — «📋 План · шаг 2: Банковский счёт», а не безликий «Вопрос».
+  const planHelp = inquiry.type === 'question' ? parsePlanHelp(inquiry.text) : null;
+  if (planHelp) return '📋 ' + (PLAN_STEP_WORD[language] || PLAN_STEP_WORD.ru) + ' ' + planHelp.n + ': ' + planHelp.title;
   return {
     viewing: copy.typeViewing,
     lead: copy.typeLead,
@@ -54,7 +60,7 @@ function myRequestsView(user) {
   }
   const blocks = requests.map((inquiry) => {
     const title = requestTitle(inquiry, language);
-    const heading = requestTypeLabel(inquiry, copy) + (title ? ' · ' + title : '');
+    const heading = requestTypeLabel(inquiry, copy, language) + (title && !parsePlanHelp(inquiry.text) ? ' · ' + title : '');
     let details;
     if (inquiry.type === 'viewing' && inquiry.viewing) {
       const when = viewingWhen(inquiry, language);
