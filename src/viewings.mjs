@@ -3,7 +3,7 @@
 
 import crypto from 'node:crypto';
 import { cleanText, dateFromDayKey, delay, localDayKey } from './util.mjs';
-import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, normalizeViewing } from './data-format.mjs';
+import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, PIPELINE_STAGES, normalizeViewing } from './data-format.mjs';
 import { INTERACTION_TEXT, MY_REQUESTS_TEXT, PROPERTY_ACTION_TEXT, VIEWING_FORM_TEXT, VIEWING_NOTICE_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
@@ -263,8 +263,12 @@ async function confirmViewingOnce(inquiry, options, token) {
   inquiry.replies = inquiry.replies.slice(-50);
   if (inquiry.status !== 'in_progress') inquiry.status = 'in_progress';
   // Подтверждённый просмотр сам двигает воронку: менеджеру не надо помнить
-  // про отдельный выпадающий список.
-  inquiry.pipelineStage = 'viewing';
+  // про отдельный выпадающий список. Но только вперёд: если менеджер уже
+  // поставил «Переговоры», подтверждение или перенос просмотра этап не
+  // откатывает. А закрытое дело («Выиграно»/«Проиграно») новый просмотр
+  // оживляет — этап становится «Просмотр».
+  const stageIndex = PIPELINE_STAGES.indexOf(inquiry.pipelineStage);
+  if (stageIndex < PIPELINE_STAGES.indexOf('viewing') || stageIndex > PIPELINE_STAGES.indexOf('negotiation')) inquiry.pipelineStage = 'viewing';
   inquiry.updatedAt = new Date().toISOString();
   saveDataNow();
   return inquiry;

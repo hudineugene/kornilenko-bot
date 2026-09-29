@@ -327,6 +327,30 @@ test.describe('fixes after review', () => {
     assert.equal(sentTo(other).length, 0);
   });
 
+  test('подтверждение просмотра двигает этап только вперёд', async () => {
+    // Менеджер уже поставил «Переговоры» — подтверждение или перенос просмотра
+    // не должны вернуть этап на «Просмотр».
+    const advanced = await requestViewing(createChat());
+    advanced.pipelineStage = 'negotiation';
+    await bot.confirmViewing(advanced, { date: dayKey(daysFromNow(3)), time: '12:00', source: 'panel' });
+    assert.equal(advanced.pipelineStage, 'negotiation', 'этап не откатился');
+    await bot.confirmViewing(advanced, { date: dayKey(daysFromNow(4)), time: '17:00', source: 'panel' });
+    assert.equal(advanced.pipelineStage, 'negotiation', 'и при переносе тоже');
+
+    // Ранний этап подтверждение переводит вперёд, как и раньше.
+    const early = await requestViewing(createChat());
+    early.pipelineStage = 'contact';
+    await bot.confirmViewing(early, { date: dayKey(daysFromNow(3)), time: '10:00', source: 'panel' });
+    assert.equal(early.pipelineStage, 'viewing');
+
+    // Закрытое дело новый просмотр оживляет: этап и статус согласованы.
+    const closed = await requestViewing(createChat());
+    closed.pipelineStage = 'lost';
+    closed.status = 'closed';
+    await bot.confirmViewing(closed, { date: dayKey(daysFromNow(3)), time: '10:00', source: 'panel' });
+    assert.deepEqual([closed.pipelineStage, closed.status], ['viewing', 'in_progress']);
+  });
+
   test('a confirmation the client did not receive is not saved', async () => {
     const chat = createChat();
     const inquiry = await requestViewing(chat);
