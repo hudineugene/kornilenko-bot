@@ -31,7 +31,7 @@ const GOAL_TEXT = {
     reply: {
       live: 'Отлично — подберём вариант для жизни. С чего начнём?',
       invest: 'Понятно, смотрим на доходность. Расходы при покупке можно посчитать на карточке объекта («Расчёт покупки»). Начнём с объектов или с расходов и налогов?',
-      browse: 'Хорошо, без спешки. Посмотрите объекты, а если хотите — буду сообщать о новых.',
+      browse: 'Хорошо, без спешки. Посмотрите объекты, а если хотите — буду сообщать о новых: для этого коротко задайте, что вам интересно.',
     },
     labels: { live: 'купить для жизни', invest: 'инвестиция и аренда', browse: 'пока смотрит' },
   },
@@ -51,7 +51,7 @@ const GOAL_TEXT = {
     reply: {
       live: 'Great — let’s find a place to live. Where shall we start?',
       invest: 'Understood, we’ll look at returns. You can work out the purchase costs on a property card (“Purchase estimate”). Start with properties or with costs and taxes?',
-      browse: 'Fine, no rush. Have a look at the properties, and if you like I will tell you about new ones.',
+      browse: 'Fine, no rush. Have a look at the properties, and if you like I will tell you about new ones: just tell me briefly what you are interested in.',
     },
     labels: { live: 'buying to live', invest: 'investment and rental', browse: 'just browsing' },
   },
@@ -71,7 +71,7 @@ const GOAL_TEXT = {
     reply: {
       live: 'Genial: busquemos un lugar para vivir. ¿Por dónde empezamos?',
       invest: 'Entendido, veremos la rentabilidad. Puedes calcular los gastos de compra en la ficha del inmueble («Cálculo de compra»). ¿Empezamos por los inmuebles o por gastos e impuestos?',
-      browse: 'De acuerdo, sin prisa. Echa un vistazo a los inmuebles y, si quieres, te aviso de las novedades.',
+      browse: 'De acuerdo, sin prisa. Echa un vistazo a los inmuebles y, si quieres, te aviso de las novedades: solo cuéntame brevemente qué te interesa.',
     },
     labels: { live: 'comprar para vivir', invest: 'inversión y alquiler', browse: 'solo mirando' },
   },
@@ -101,7 +101,10 @@ function answerMarkup(goal, language) {
     ? [[{ text: copy.selection, callback_data: 'selection:start' }], [{ text: copy.guide, callback_data: 'guide:page:0' }], [{ text: copy.catalog, callback_data: 'catalog:all:0' }]]
     : goal === 'invest'
       ? [[{ text: copy.catalog, callback_data: 'catalog:all:0' }], [{ text: copy.costs, callback_data: 'guide:page:' + GUIDE_COSTS_PAGE }], [{ text: copy.rent, callback_data: 'guide:page:' + GUIDE_RENT_PAGE }]]
-      : [[{ text: copy.catalog, callback_data: 'catalog:all:0' }], [{ text: copy.alerts, callback_data: 'alerts:on' }]];
+      // «Пока смотрю» → «Сообщать о новых»: без сохранённого поиска сообщать нечего, поэтому кнопка ведёт в подбор,
+      // в конце которого «🔔 Сообщать о новых» сохраняет поиск. Раньше она отвечала «уведомления снова включены» —
+      // они и не выключались.
+      : [[{ text: copy.catalog, callback_data: 'catalog:all:0' }], [{ text: copy.alerts, callback_data: 'selection:start' }]];
   return { inline_keyboard: rows };
 }
 

@@ -69,12 +69,13 @@ test('«Инвестиция и аренда»: объекты, расходы �
   assert.deepEqual(callbacksOf(edit.body.reply_markup), ['catalog:all:0', 'guide:page:2', 'guide:page:4']);
 });
 
-test('«Пока смотрю»: объекты и подписка на новые', async () => {
+test('«Пока смотрю»: объекты и «Сообщать о новых», которое ведёт в подбор, а не «уведомления снова включены»', async () => {
   const chat = newcomer();
   await chat.say('/start');
   const step = await chat.press('goal:browse');
   assert.equal(chat.user.goal, 'browse');
-  assert.deepEqual(callbacksOf(step.calls.find((call) => call.method === 'editMessageText').body.reply_markup), ['catalog:all:0', 'alerts:on']);
+  assert.deepEqual(callbacksOf(step.calls.find((call) => call.method === 'editMessageText').body.reply_markup), ['catalog:all:0', 'selection:start']);
+  // Кнопка не отвечает «уведомления и так включены»: без сохранённого поиска сообщать нечего — идём в подбор.
 });
 
 test('на английском и испанском вопрос и ответ — на языке клиента', async () => {
