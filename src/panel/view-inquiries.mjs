@@ -450,7 +450,7 @@ function renderTasks(host) {
       ["К выполнению", num(counts.action), counts.action ? "bad" : "", "Шаг на сегодня или уже просрочен"],
       ["Шаг просрочен", num(counts.overdue), counts.overdue ? "bad" : ""],
       ["Запланировано", num(counts.future), "", "На будущие даты"],
-      ["Без следующего шага", num(counts.none), counts.none ? "bad" : "", "Активные клиенты без даты"],
+      ["Без следующего шага", num(counts.none), counts.none ? "bad" : "", "Клиенты в работе без даты шага"],
     ]) + '<div class="task-toolbar"><div class="tabs" id="taskScope">' +
       [["action", "К выполнению", counts.action], ["overdue", "Шаг просрочен", counts.overdue], ["future", "Будущие", counts.future], ["none", "Без даты", counts.none], ["all", "Все", counts.all]].map(function (entry) { return '<button type="button" data-scope="' + entry[0] + '" class="' + (taskFilter.scope === entry[0] ? "active" : "") + '">' + entry[1] + " · " + entry[2] + "</button>"; }).join("") +
       '</div></div>' + clientFilterBar({ search: true, steps: false }) +
