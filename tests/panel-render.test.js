@@ -3623,3 +3623,22 @@ test('маршруты уведомлений и переходов из код�
   }
   assert.deepEqual(bad, [], 'старые или несуществующие адреса: ' + bad.join('; '));
 });
+
+test('в списке диалогов автоответ бота подписан «Бот:», а ответ менеджера — «Вы:»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const now = new Date().toISOString();
+  sandbox.state.users = [{ id: 'u1', firstName: 'Игорь' }, { id: 'u2', firstName: 'Мария' }];
+  const inquiry = (id, userId, lastMessage) => ({ id, userId, type: 'general', text: 'Вопрос', status: 'new', replies: [], awaitsReply: false, createdAt: now, updatedAt: now, clientMessageAt: now, lastMessage });
+  sandbox.state.inquiries = [
+    inquiry('a', 'u1', { text: 'Спасибо! Сообщение получено', direction: 'out', fromBot: true, createdAt: now }),
+    inquiry('b', 'u2', { text: 'Завтра в 12:00 подойдёт?', direction: 'out', fromBot: false, createdAt: now }),
+  ];
+  sandbox.inquiryFilter.status = '';
+  const host = fakeElement('main');
+  sandbox.renderInquiryList(host);
+  const html = String(host.innerHTML);
+  assert.match(html, /Бот: Спасибо! Сообщение получено/, 'автоответ бота не выдаётся за ответ менеджера');
+  assert.match(html, /Вы: Завтра в 12:00 подойдёт\?/);
+  assert.ok(!/Вы: Спасибо/.test(html));
+});

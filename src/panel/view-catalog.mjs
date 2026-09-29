@@ -182,7 +182,7 @@ function openObjectExtras(id) {
       '<button class="btn secondary" data-copy="1" type="button">⧉ Создать копию</button>' +
       '<span class="small muted">Копия создаётся черновиком — клиенты её не видят, пока не опубликуете.</span>' +
       '<button class="btn danger-outline" data-delete="1" type="button">Удалить объект</button>' +
-      '<span class="small muted">Карточка исчезнет из каталога бота без возможности вернуть.</span></div>',
+      '<span class="small muted">Карточка исчезнет из каталога бота. Если передумаете, 15 минут можно нажать «Вернуть».</span></div>',
     footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
     ready: function (dialog) {
       dialog.querySelector("[data-channel]").onclick = function () {

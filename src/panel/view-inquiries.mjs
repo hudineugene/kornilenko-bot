@@ -588,7 +588,7 @@ function renderInquiryList(host) {
     // сообщение клиента, то есть месяцами одно и то же.
     var lastMessage = item.lastMessage;
     var preview = lastMessage ? (lastMessage.text || lastMessage.fileName) : item.text;
-    if (lastMessage && lastMessage.direction === "out" && preview) preview = "Вы: " + preview;
+    if (lastMessage && lastMessage.direction === "out" && preview) preview = (lastMessage.fromBot ? "Бот: " : "Вы: ") + preview;
     var stateText = group.waiting ? "Ждёт ответа · " + waitDuration(group.waitAge) : group.closed ? "Закрыт" : group.searchOnly ? "Ответ не нужен" : "Отвечено";
     var stateClass = group.waiting ? (group.waitLevel === "fresh" ? "warn" : group.waitLevel === "overdue" ? "bad overdue" : "bad") : group.closed ? "" : "ok";
     return '<button class="conversation-item' + (selected ? " selected" : "") + (group.unread ? " unread" : "") + '" data-id="' + esc(group.active.id) + '" data-user="' + esc(group.userId) + '" type="button">' +

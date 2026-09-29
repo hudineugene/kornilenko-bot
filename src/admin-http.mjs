@@ -715,6 +715,8 @@ function lastMessagePreview(messages) {
     text: cleanText(message.text, PREVIEW_TEXT_LIMIT),
     fileName: cleanText(message.fileName, 120),
     direction: message.direction === 'out' ? 'out' : 'in',
+    // Автоответ бота в списке диалогов не должен выглядеть ответом менеджера.
+    fromBot: message.source === 'bot',
     createdAt: message.createdAt || '',
   };
 }

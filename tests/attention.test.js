@@ -177,3 +177,24 @@ test('состояние отдаёт то же число, что и списо
   const messages = attention().filter((item) => item.kind === 'message');
   assert.equal(messages.length, 2, 'и столько же поводов «новое сообщение»');
 });
+
+test('даты в списке дел человеческие: «завтра», «1 окт», «сегодня в 17:00», а не 2026-10-01', async () => {
+  const { dayLabel } = await import('../src/admin-notifications.mjs');
+  assert.equal(dayLabel('2026-09-29', '2026-09-29'), 'сегодня');
+  assert.equal(dayLabel('2026-09-30', '2026-09-29'), 'завтра');
+  assert.equal(dayLabel('2026-09-28', '2026-09-29'), 'вчера');
+  assert.equal(dayLabel('2026-10-01', '2026-09-29'), '1 окт');
+  assert.equal(dayLabel('2026-12-05', '2026-09-29'), '5 дек');
+  assert.equal(dayLabel('в четверг', '2026-09-29'), 'в четверг', 'свободный текст остаётся как есть');
+  assert.equal(dayLabel('', '2026-09-29'), '');
+
+  const day = (shift) => { const date = new Date(); date.setDate(date.getDate() + shift); return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0'); };
+  waitingClient('880001', ['task-inq']);
+  const inquiry = bot.getData().inquiries.find((item) => item.id === 'task-inq');
+  inquiry.followUpDate = day(-3);
+  inquiry.followUpTime = '17:00';
+  const item = attention().find((entry) => entry.kind === 'task');
+  assert.ok(item && !/\d{4}-\d{2}-\d{2}/.test(item.text), 'в тексте дела нет машинной даты: ' + (item && item.text));
+  assert.match(item.text, /в 17:00/);
+  assert.match(item.id, new RegExp(day(-3)), 'сам код дела не менялся: по нему дело помнит «выполнено»');
+});

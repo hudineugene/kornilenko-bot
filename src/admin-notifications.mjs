@@ -32,6 +32,19 @@ function propertyName(propertyId) {
   return cleanText(title || property.reference || property.id, 180);
 }
 
+// «2026-10-01» в списке дел читается как машинная запись; человеку — «1 окт», «завтра».
+const SHORT_MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+function dayLabel(value, today = localDayKey()) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  if (!match) return String(value || '');
+  const key = match[0];
+  if (key === today) return 'сегодня';
+  const shift = (days) => { const date = new Date(today + 'T12:00:00'); date.setDate(date.getDate() + days); return localDayKey(date); };
+  if (key === shift(1)) return 'завтра';
+  if (key === shift(-1)) return 'вчера';
+  return Number(match[3]) + ' ' + (SHORT_MONTHS[Number(match[2]) - 1] || match[2]);
+}
+
 function route(view, tab = '', inquiryId = '') {
   return { view, tab, inquiryId: cleanText(inquiryId, 100) };
 }
@@ -74,7 +87,7 @@ function currentAdminNotifications() {
       id: 'task:' + inquiry.id + ':' + inquiry.followUpDate + ':' + (inquiry.followUpTime || ''),
       kind: 'task', severity: overdue ? 'bad' : 'warn',
       title: overdue ? 'Просрочен контакт с клиентом' : 'Контакт с клиентом сегодня',
-      text: userName(user) + ' · ' + inquiry.followUpDate + (inquiry.followUpTime ? ' в ' + inquiry.followUpTime : '') + (inquiry.assignee ? ' · ' + inquiry.assignee : ''),
+      text: userName(user) + ' · ' + dayLabel(inquiry.followUpDate, today) + (inquiry.followUpTime ? ' в ' + inquiry.followUpTime : '') + (inquiry.assignee ? ' · ' + inquiry.assignee : ''),
       createdAt: inquiry.updatedAt || inquiry.createdAt || new Date().toISOString(),
       route: route('clients', 'inbox', inquiry.id),
     });
@@ -84,7 +97,7 @@ function currentAdminNotifications() {
     const viewing = inquiry.viewing;
     if (inquiry.type !== 'viewing' || !viewing || inquiry.status === 'closed' || viewing.cancelledAt || viewing.confirmedAt) continue;
     const user = userById(inquiry.userId) || {};
-    const requested = [viewing.date || viewing.dateText, viewing.timeText].filter(Boolean).join(' · ') || 'дата и время требуют уточнения';
+    const requested = [dayLabel(viewing.date, today) || viewing.dateText, viewing.timeText].filter(Boolean).join(' · ') || 'дата и время требуют уточнения';
     items.push({
       id: 'viewing:' + inquiry.id + ':' + cleanText(requested, 180),
       kind: 'viewing', severity: 'warn', title: 'Просмотр ждёт подтверждения',
@@ -288,4 +301,4 @@ function readAllAdminNotifications() {
   saveDataNow();
 }
 
-export { adminNotifications, attentionCounts, currentAdminNotifications, markMessageNotificationsRead, readAllAdminNotifications, updateAdminNotification, waitingConversationCount };
+export { adminNotifications, attentionCounts, dayLabel, currentAdminNotifications, markMessageNotificationsRead, readAllAdminNotifications, updateAdminNotification, waitingConversationCount };

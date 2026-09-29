@@ -155,3 +155,15 @@ test('«ждёт ответа» решает бот и присылает при
   assert.equal(answered.inquiries.find((item) => item.id === 'b1').awaitsReply, false);
   assert.equal(answered.attention.waitingClients, 1, 'остался один ждущий клиент — Ольга');
 });
+
+test('состояние панели отмечает автоответ бота в последнем сообщении: «Бот:», а не «Вы:» в списке диалогов', async () => {
+  const data = bot.getData();
+  const inquiry = data.inquiries.find((item) => item.id === 'a1');
+  inquiry.messages.push({ id: 'bot-1', direction: 'out', kind: 'text', text: 'Спасибо! Сообщение получено', source: 'bot', by: 'бот', createdAt: minutesAgo(1) });
+  inquiry.messages.push({ id: 'human-1', direction: 'out', kind: 'text', text: 'Сейчас отвечу', source: 'panel', by: 'Админ', createdAt: minutesAgo(0) });
+  let state = await (await realFetch(base + '/api/state', { headers })).json();
+  assert.equal(state.inquiries.find((item) => item.id === 'a1').lastMessage.fromBot, false, 'последнее — от менеджера');
+  inquiry.messages.pop();
+  state = await (await realFetch(base + '/api/state', { headers })).json();
+  assert.equal(state.inquiries.find((item) => item.id === 'a1').lastMessage.fromBot, true, 'последнее — автоответ бота');
+});
