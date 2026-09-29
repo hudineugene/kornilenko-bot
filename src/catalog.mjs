@@ -1156,15 +1156,17 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
     const nearby = relaxedCatalogFilter(user);
     const nearbyLine = nearby ? '\n\n' + copy.nearby.replace('{count}', () => (String(nearby.count))).replace('{summary}', () => (nearby.summary)) : '';
     const notify = (SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru).wizardNotify;
+    // Четыре действия вместо семи-восьми: ближайшее (если есть), следить за новыми, написать
+    // менеджеру (WhatsApp рядом), сбросить условия. «Фильтр», «Подбор» и «Главное меню» — на
+    // клавиатуре внизу.
+    const talk = [{ text: '💬 ' + copy.sendToManager, callback_data: 'cfilter:manager' }];
+    const whatsapp = whatsappRow(searchMessage(filterState.summary, language));
+    if (whatsapp) talk.push(...whatsapp);
     await sendUiMessage(chatId, user, copy.empty + '\n\n🔎 ' + filterState.summary + nearbyLine, token, { reply_markup: { inline_keyboard: [
       ...(nearby ? [[{ text: copy.showNearby, callback_data: 'cfilter:nearby' }]] : []),
-      [{ text: copy.button, callback_data: 'cfilter:open' }],
-      [{ text: copy.reset, callback_data: 'cfilter:reset' }],
       [{ text: notify, callback_data: 'saved:save' }],
-      [{ text: '💬 ' + copy.sendToManager, callback_data: 'cfilter:manager' }],
-      ...(whatsappRow(searchMessage(filterState.summary, language)) ? [whatsappRow(searchMessage(filterState.summary, language))] : []),
-      [{ text: labels.selection, callback_data: 'selection:start' }],
-      [{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }],
+      talk,
+      [{ text: copy.reset, callback_data: 'cfilter:reset' }],
     ] } });
     return true;
   }

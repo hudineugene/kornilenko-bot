@@ -743,7 +743,9 @@ test.describe('catalog filter', () => {
     const shown = await chat.press('cfilter:show');
     assert.ok(shown.last.text.startsWith(FILTER.empty));
     // Пустой ответ не тупик: есть «ближайшие» (без типа), слежение за новыми и менеджер.
-    assert.deepEqual(callbacksOf(shown.last.markup), ['cfilter:nearby', 'cfilter:open', 'cfilter:reset', 'saved:save', 'cfilter:manager', 'selection:start', 'nav:menu']);
+    // Четыре действия: ближайшее, следить за новыми, менеджеру, сбросить; «Фильтр», «Подбор» и меню — на клавиатуре.
+    assert.deepEqual(callbacksOf(shown.last.markup), ['cfilter:nearby', 'saved:save', 'cfilter:manager', 'cfilter:reset']);
+    assert.equal(shown.last.markup.inline_keyboard.length, 4, 'четыре ряда');
     assert.match(shown.last.text, /Ближайшие варианты: \d+ — /);
     await chat.press('cfilter:reset');
     assert.equal(chat.user.catalogFilter, null);
