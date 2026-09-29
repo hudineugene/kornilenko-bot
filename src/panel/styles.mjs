@@ -140,6 +140,14 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .switch .track::after{content:"";display:block;width:18px;height:18px;margin:2px;border-radius:50%;background:var(--surface);box-shadow:var(--shadow);transition:transform .15s}
 .switch input:checked+.track{background:var(--live)}
 .switch input:checked+.track::after{transform:translateX(16px)}
+/* «Обслуживание»: шесть разделов сеткой карточек — название, под ним пояснение. */
+.service-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.service-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.service-card b{font-size:var(--fs);font-weight:700}
+.service-card span{color:var(--muted);font-size:var(--fs-sm);line-height:1.35}
+.service-card:hover{border-color:var(--brand)}
+.service-card.active{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand);background:var(--brand-soft)}
+@media (max-width:600px){.service-nav{grid-template-columns:1fr}}
 /* Шаблоны ответа: кнопки в ряд; на телефоне ряд листается вбок. */
 .reply-templates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .template-chip{flex:none;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}

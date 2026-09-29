@@ -408,6 +408,26 @@ test.describe('стили панели', () => {
     }
   });
 
+  test('у каждого класса из разметки есть правило в стилях', async () => {
+    // Раздел «Обслуживание» месяц выглядел как шесть серых кнопок браузера: в
+    // разметке были классы .service-nav и .service-card, а правил для них не
+    // существовало ни одного, и никто этого не замечал.
+    const { PANEL_HTML } = await import('../src/panel/index.mjs');
+    const sheet = await css();
+    const script = PANEL_HTML.match(/<script[^>]*>([\s\S]*?)<\/script>/)[1];
+    const page = PANEL_HTML.replace(/<style[\s\S]*?<\/style>/, '').replace(/<script[\s\S]*?<\/script>/, '');
+    const used = new Set();
+    for (const source of [script, page]) {
+      for (const match of source.matchAll(/class=\\?["']([^"'\\+<>]*)/g)) {
+        for (const name of match[1].split(/\s+/)) if (/^[a-z][a-z0-9-]*$/.test(name)) used.add(name);
+      }
+    }
+    // Классы-метки для скриптов и теста, оформления у них быть не должно.
+    const hooks = new Set(['global-group', 'lang-input', 'object-insights', 'photo-field', 'rates-details', 'stage-']);
+    const unstyled = Array.from(used).filter((name) => !hooks.has(name) && !new RegExp('\\.' + name.replace(/-/g, '\\-') + '(?![a-zA-Z0-9_-])').test(sheet)).sort();
+    assert.deepEqual(unstyled, [], 'в разметке есть классы, для которых нет ни одного правила (если это метка для скрипта — добавьте её в список меток)');
+  });
+
   test('каждая используемая переменная где-то определена', async () => {
     const sheet = await css();
     const defined = new Set(Array.from(sheet.matchAll(/(--[a-z0-9-]+)\s*:/gi)).map((match) => match[1]));
