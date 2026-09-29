@@ -367,7 +367,7 @@ test.describe('Excel export', () => {
     assert.equal(second.F, '+34 611 111 111', 'the phone from the request wins over the profile');
     assert.equal(second.G, 'Анна');
     assert.equal(second.H, 'Утром');
-    assert.equal(second.M, 'перезвонить');
+    assert.equal(second.M, 'Ищет у моря', 'в колонке «Заметка о клиенте» — заметка клиента');
     assert.equal(second.J, 'instagram');
     assert.equal(typeof second.A, 'number', 'dates are real Excel dates');
     assert.ok(Math.abs(second.A - (Date.parse('2026-09-17T08:30:00.000Z') - new Date('2026-09-17T08:30:00.000Z').getTimezoneOffset() * 60000) / 86400000 - 25569) < 1e-6);

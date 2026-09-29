@@ -1104,10 +1104,12 @@ test('«Сохранить» шлёт этап и статус только ко
   assert.ok(!('status' in won), 'статус вместе с этапом не уходит и не откатывает его');
 });
 
-test('сопровождение заявки собрано в одной панели и сохраняется одной кнопкой', async () => {
+test('сопровождение заявки собрано в одной панели: одна заметка, один запрос, форма под наблюдением', async () => {
   twoWaitingConversations();
   const { sandbox, requests } = await panelSandbox();
   sandbox.selectConversation('inq-olga');
+  const watched = [];
+  sandbox.watchForm = (root, save, label) => { watched.push({ root, save, label }); return { mark() {}, check() {} }; };
 
   const host = fakeElement('main');
   const card = host.querySelector('#inquiryCard');
@@ -1115,24 +1117,39 @@ test('сопровождение заявки собрано в одной па�
 
   const side = card.querySelector('.conversation-side');
   assert.ok(side, 'справа от переписки — панель сопровождения');
-  for (const id of ['#inqStatusValue', '#inqPipeline', '#inqAssignee', '#followDate', '#inqNote', '#clientTagsInq', '#clientNoteInq', '#saveInq']) {
+  for (const id of ['#inqStatusValue', '#inqPipeline', '#inqAssignee', '#followDate', '#inqNote', '#clientTagsInq', '#saveInq']) {
     assert.ok(card.querySelector(id), id + ' живёт в этой же панели');
   }
   assert.ok(!String(card.innerHTML).includes('data-status='), 'статус больше не сохраняется отдельной кнопкой');
 
-  // Одно нажатие сохраняет и заявку, и карточку клиента.
+  // Заметка одна — о клиенте: второго поля «по этой заявке» нет.
+  const html = String(card.innerHTML);
+  assert.match(html, /<label for="inqNote">Заметка о клиенте<\/label>/);
+  assert.ok(!html.includes('clientNoteInq'), 'второй заметки нет');
+  assert.ok(!/Заметка по этой заявке|Общая заметка/.test(html));
+
+  // Панель — под наблюдением: несохранённая правка не теряется при уходе со страницы.
+  const form = watched.find((entry) => entry.root === side);
+  assert.ok(form, 'форма сопровождения зарегистрирована в watchForm');
+  assert.match(form.label, /заявке|клиенте/i);
+
+  // Кнопка «Сохранить» в панели и кнопка полосы — одно и то же действие, один запрос.
   card.querySelector('#inqStatusValue').value = 'closed';
   card.querySelector('#inqNote').value = 'перезвонить в среду';
   card.querySelector('#clientTagsInq').value = 'покупка, горячий лид';
-  const before = requests.length;
+  requests.length = 0;
   await card.querySelector('#saveInq').onclick();
-  const saved = requests.slice(before).filter((request) => request.method === 'PATCH');
-  assert.equal(saved.length, 2, 'одна кнопка — один заход: заявка и клиент');
-  const inquiry = saved.find((request) => request.url.includes('/api/inquiries/'));
-  assert.equal(inquiry.body.status, 'closed', 'статус уходит вместе с остальным');
-  assert.equal(inquiry.body.note, 'перезвонить в среду');
-  const client = saved.find((request) => request.url.includes('/api/users/'));
-  assert.deepEqual(client.body.tags, ['покупка', 'горячий лид']);
+  const saved = requests.filter((request) => request.method === 'PATCH');
+  assert.equal(saved.length, 1, 'один запрос вместо двух');
+  assert.ok(saved[0].url.includes('/api/inquiries/'));
+  assert.equal(saved[0].body.status, 'closed', 'статус уходит вместе с остальным');
+  assert.equal(saved[0].body.note, 'перезвонить в среду');
+  assert.deepEqual(saved[0].body.tags, ['покупка', 'горячий лид']);
+  assert.ok(!requests.some((request) => request.url.includes('/api/users/')), 'клиент отдельным запросом не сохраняется');
+
+  requests.length = 0;
+  await form.save();
+  assert.equal(requests.filter((request) => request.method === 'PATCH').length, 1, 'кнопка полосы сохранения — тот же единственный запрос');
 });
 
 test('переписка открывается на последнем сообщении', async () => {

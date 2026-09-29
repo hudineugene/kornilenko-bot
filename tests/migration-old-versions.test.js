@@ -71,12 +71,12 @@ for (const version of [28, 30]) {
 
       assert.deepEqual(Object.keys(loaded.users).sort(), ['1001', '1002'], 'все клиенты на месте');
       const olga = loaded.users['1001'];
-      assert.deepEqual([olga.firstName, olga.preferredLanguage, olga.favorites, olga.tags, olga.note, olga.phone], ['Ольга', 'es', ['villa-1'], ['vip'], 'Ищет у моря', '+34600111222']);
+      assert.deepEqual([olga.firstName, olga.preferredLanguage, olga.favorites, olga.tags, olga.note, olga.phone], ['Ольга', 'es', ['villa-1'], ['vip'], 'Ищет у моря\n\nПо заявке от 01.01: Перезвонить вечером', '+34600111222']); // заметка заявки переехала в заметку клиента
       assert.equal(loaded.users['1002'].newsConsentAt, '2026-01-10T10:00:00.000Z', 'согласие на рассылки не потеряно');
 
       assert.equal(loaded.inquiries.length, 2);
       const first = loaded.inquiries.find((item) => item.id === 'i1');
-      assert.deepEqual([first.status, first.text, first.assignee, first.note, first.propertyId], ['in_progress', 'Позвоните мне', 'Олег', 'Перезвонить вечером', 'villa-1']);
+      assert.deepEqual([first.status, first.text, first.assignee, first.note, first.propertyId], ['in_progress', 'Позвоните мне', 'Олег', '', 'villa-1']);
       assert.ok(first.messages.some((message) => message.direction === 'out' && message.text === 'Добрый день!'), 'ответ менеджера стал сообщением переписки');
       assert.ok(first.messages.some((message) => message.direction === 'in' && message.text === 'Позвоните мне'), 'слова клиента тоже');
       assert.equal(loaded.inquiries.find((item) => item.id === 'i2').status, 'closed', 'закрытое обращение не открылось заново');

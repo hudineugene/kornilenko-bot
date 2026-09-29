@@ -160,6 +160,13 @@ function followUpDue(inquiry, now) {
   return adminMessagesAllowed(now);
 }
 
+// Заметка для напоминания — заметка клиента (одна на человека); у заявки без
+// клиента — её собственная.
+function reminderNote(inquiry) {
+  const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
+  return (user && user.note) || inquiry.note || '';
+}
+
 async function runFollowUpReminders(now = new Date()) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
   if (!adminChatId || !data.config.botToken) return [];
@@ -167,7 +174,7 @@ async function runFollowUpReminders(now = new Date()) {
   const sent = [];
   for (const inquiry of due) {
     const planned = inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + (inquiry.followUpTime ? ' ' + inquiry.followUpTime : '');
-    const delivered = await sendInquiryToAdministrator(inquiry, '📌 Пора связаться с клиентом (' + planned + '): ' + inquiryTypeLabel(inquiry), inquiry.note ? ['', '📝 ' + shortenedText(inquiry.note, 300)] : [], { onlyAssignee: true });
+    const delivered = await sendInquiryToAdministrator(inquiry, '📌 Пора связаться с клиентом (' + planned + '): ' + inquiryTypeLabel(inquiry), reminderNote(inquiry) ? ['', '📝 ' + shortenedText(reminderNote(inquiry), 300)] : [], { onlyAssignee: true });
     if (!delivered) continue;
     inquiry.followUpNotifiedAt = now.toISOString();
     sent.push(inquiry.id);

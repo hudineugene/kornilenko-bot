@@ -313,7 +313,7 @@ function taskCardHtml(row, scope) {
   var stage = PIPELINE_STAGES.find(function (entry) { return entry[0] === row.stage; });
   return '<article class="task-card ' + scope + '"><div class="task-main"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><div class="task-copy"><div class="row wrap"><b>' + esc(userName(user)) + '</b>' + taskStatusHtml(scope, item) + '</div><div class="small muted">' + esc(inquiryTypeName(item)) + (stage ? " · этап: " + esc(stage[1]) : "") + (item.assignee ? " · менеджер: " + esc(item.assignee) : " · менеджер не назначен") + '</div>' +
     (property ? '<div class="task-property">⌂ ' + esc(localized(property.title, "ru") || property.reference || property.id) + '</div>' : "") +
-    (item.note ? '<div class="task-note">' + esc(item.note) + '</div>' : "") +
+    ((user.note || item.note) ? '<div class="task-note">' + esc(user.note || item.note) + '</div>' : "") +
     '</div></div><div class="task-actions"><button class="btn ghost small" data-task-open="' + esc(item.id) + '" type="button">Открыть диалог</button><button class="btn secondary small" data-task-plan="' + esc(item.id) + '" type="button">' + (item.followUpDate ? "Перенести" : "Назначить дату") + '</button>' +
     (item.followUpDate ? '<button class="btn secondary small" data-task-done="' + esc(item.id) + '" type="button">✓ Выполнено</button>' : "") + '</div></article>';
 }
@@ -336,7 +336,7 @@ function renderTasks(host) {
     if (taskFilter.assignee === "none" && row.item.assignee) return false;
     if (taskFilter.assignee && taskFilter.assignee !== "none" && row.item.assignee !== taskFilter.assignee) return false;
     if (!searchText) return true;
-    return [userName(row.user), row.user.username, row.user.phone, row.item.text, row.item.note, row.item.assignee].filter(Boolean).join(" ").toLowerCase().indexOf(searchText) >= 0;
+    return [userName(row.user), row.user.username, row.user.phone, row.item.text, row.user.note, row.item.note, row.item.assignee].filter(Boolean).join(" ").toLowerCase().indexOf(searchText) >= 0;
   }).sort(function (a, b) {
     if (!a.item.followUpDate && b.item.followUpDate) return 1;
     if (a.item.followUpDate && !b.item.followUpDate) return -1;
@@ -851,9 +851,8 @@ function renderInquiryCard(host) {
         '<div class="field"><label for="inqAssignee">Ответственный менеджер</label><div class="row"><select id="inqAssignee" class="grow"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select>' +
           (managers.length > 1 ? '<button class="btn secondary small" id="transferInq" type="button" title="Передать клиента другому менеджеру и сообщить ему в Telegram">Передать…</button>' : "") + '</div></div>' +
         '<div class="row followup-fields"><div class="field grow"><label for="followDate">Следующий шаг</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label for="followTime">Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div>' +
-        '<div class="field"><label for="inqNote">Заметка по этой заявке</label><textarea id="inqNote" placeholder="Что важно сделать по заявке">' + esc(item.note || "") + "</textarea></div>" +
+        '<div class="field"><label for="inqNote">Заметка о клиенте</label><textarea id="inqNote" placeholder="Предпочтения, договорённости, что важно сделать">' + esc(user.note || item.note || "") + "</textarea></div>" +
         '<div class="field"><label for="clientTagsInq">Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div>' +
-        '<div class="field"><label for="clientNoteInq">Общая заметка о клиенте</label><textarea id="clientNoteInq" placeholder="Предпочтения, договорённости и важные детали">' + esc(user.note || "") + "</textarea></div>" +
         '<div class="conversation-save"><button class="btn" id="saveInq" type="button">Сохранить</button><button class="btn ghost small" id="openClientCard" type="button">Карточка клиента</button><button class="btn ghost small" id="inquiryExtras" type="button">⋯ Ещё</button></div>' +
       '</div></details></aside>' +
     "</div></div>";
@@ -1003,25 +1002,31 @@ function renderInquiryCard(host) {
     };
   });
   host.querySelector("#openClientCard").onclick = function () { openClient(String(item.userId)); };
+  // Один запрос: заявка, заметка и теги клиента сохраняются вместе или не
+  // сохраняются совсем. Форма под наблюдением — несохранённая правка не теряется
+  // при уходе со страницы, а кнопка в панели и кнопка полосы сохранения делают одно
+  // и то же.
+  async function saveInquiryPanel() {
+    // Статус и этап шлём, только если человек их изменил: неизменный этап
+    // «Выиграно» вместе со статусом «Открыта» затирал бы одно другим.
+    var patch = {
+      note: host.querySelector("#inqNote").value,
+      tags: host.querySelector("#clientTagsInq").value.split(",").map(function (tag) { return tag.trim(); }).filter(Boolean),
+      followUpDate: host.querySelector("#followDate").value,
+      followUpTime: host.querySelector("#followTime").value,
+      assignee: host.querySelector("#inqAssignee").value,
+    };
+    var wantClosed = host.querySelector("#inqStatusValue").value === "closed";
+    if (wantClosed !== (item.status === "closed")) patch.status = wantClosed ? "closed" : "in_progress";
+    var wantStage = host.querySelector("#inqPipeline").value;
+    if (wantStage !== pipelineStageOf(item)) patch.pipelineStage = wantStage;
+    await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", patch);
+  }
+  var sidePanel = host.querySelector(".conversation-side");
+  if (sidePanel) watchForm(sidePanel, async function () { await saveInquiryPanel(); }, "Есть несохранённые изменения по заявке и клиенту");
   host.querySelector("#saveInq").onclick = async function () {
     try {
-      // Статус и этап шлём, только если человек их изменил: неизменный этап
-      // «Выиграно» вместе со статусом «Открыта» затирал бы одно другим.
-      var patch = {
-        note: host.querySelector("#inqNote").value,
-        followUpDate: host.querySelector("#followDate").value,
-        followUpTime: host.querySelector("#followTime").value,
-        assignee: host.querySelector("#inqAssignee").value,
-      };
-      var wantClosed = host.querySelector("#inqStatusValue").value === "closed";
-      if (wantClosed !== (item.status === "closed")) patch.status = wantClosed ? "closed" : "in_progress";
-      var wantStage = host.querySelector("#inqPipeline").value;
-      if (wantStage !== pipelineStageOf(item)) patch.pipelineStage = wantStage;
-      await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", patch);
-      await send("/api/users/" + encodeURIComponent(user.id), "PATCH", {
-        note: host.querySelector("#clientNoteInq").value,
-        tags: host.querySelector("#clientTagsInq").value.split(",").map(function (tag) { return tag.trim(); }).filter(Boolean),
-      });
+      await saveInquiryPanel();
       toast("Сохранено");
       await reload(true, { keepScroll: true });
     } catch (error) { fail(error); }

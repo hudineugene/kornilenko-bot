@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 46;
+const DATA_VERSION = 47;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -1005,6 +1005,30 @@ function normalizeTrust(value) {
   };
 }
 
+// Одна заметка вместо двух: раньше была «по этой заявке» и «общая о клиенте».
+// Заметки по заявкам переезжают в заметку клиента строкой «По заявке от ДД.ММ: …»
+// (что уже есть в заметке — не повторяем). Не помещается в 2000 знаков — заметка
+// остаётся у заявки: терять написанное нельзя.
+function mergeInquiryNotes(normalized) {
+  const pad = (value) => String(value).padStart(2, '0');
+  for (const inquiry of normalized.inquiries) {
+    const note = cleanText(inquiry.note, 2000);
+    const user = normalized.users[String(inquiry.userId)];
+    if (!note || !user) continue;
+    const existing = cleanText(user.note, 2000);
+    if (existing.includes(note)) {
+      inquiry.note = '';
+      continue;
+    }
+    const created = new Date(inquiry.createdAt);
+    const label = Number.isFinite(created.getTime()) ? ' от ' + pad(created.getDate()) + '.' + pad(created.getMonth() + 1) : '';
+    const merged = (existing ? existing + '\n\n' : '') + 'По заявке' + label + ': ' + note;
+    if (merged.length > 2000) continue;
+    user.note = merged;
+    inquiry.note = '';
+  }
+}
+
 // A viewing request: what the client asked for (date may be unknown, for
 // "at the weekend" or a free-text answer), what the manager confirmed and
 // what the bot already sent about it.
@@ -1396,6 +1420,7 @@ function normalizeLoadedData(parsed) {
     if (storedVersion < 20) migrateSavedSearch(normalized.interfaceText, normalized.config.messages);
     if (storedVersion < 35) migrateShortGreeting(normalized.interfaceText);
     if (storedVersion < 39) migrateStaleTexts(normalized.interfaceText, normalized.config.messages);
+    if (storedVersion < 47) mergeInquiryNotes(normalized);
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
     normalized.lastDiskWarningFor = cleanText(parsed.lastDiskWarningFor, 10);

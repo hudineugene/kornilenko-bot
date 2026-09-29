@@ -506,7 +506,15 @@ async function handleClientsApi(req, res, url) {
       // Этап сам заявку открывает, только если статус не задан явно.
       else if (body.pipelineStage && inquiry.status === 'closed' && body.status == null) inquiry.status = 'in_progress';
     }
-    if (body.note != null) inquiry.note = cleanText(body.note, 2000);
+    // Одна заметка — о клиенте (раньше была ещё «по этой заявке»). Заметка и теги
+    // клиента идут тем же запросом: всё сохраняется вместе или не сохраняется совсем
+    // (все проверки — выше, до первой правки).
+    const owner = userById(inquiry.userId) || userByChatId(inquiry.chatId);
+    if (body.note != null) {
+      if (owner) owner.note = cleanText(body.note, 2000);
+      else inquiry.note = cleanText(body.note, 2000);
+    }
+    if (owner && Array.isArray(body.tags)) owner.tags = body.tags.map((tag) => cleanText(tag, 40)).filter(Boolean).slice(0, 20);
     if (assignee != null) inquiry.assignee = assignee;
     inquiry.updatedAt = new Date().toISOString();
     // Дата сделки: ставится один раз, когда обращение стало «Сделкой», и снимается, если его вернули в работу.
