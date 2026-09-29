@@ -375,6 +375,75 @@ test.describe('selection wizard', () => {
   });
 });
 
+test.describe('мастер подбора: тупик и передача менеджеру', () => {
+  const SELECTION = bot.text.selection.ru;
+  const editedPanel = (step) => step.calls.filter((call) => call.method === 'editMessageText').pop().body;
+
+  test('шаг «Тип» показывает только типы выбранной сделки', async () => {
+    resetData((data) => {
+      data.objects.push(property('sale-villa', 'Вилла на продажу', 'active', { dealType: 'sale', propertyType: 'villa' }));
+      data.objects.push(property('rent-flat', 'Квартира в аренду', 'active', { dealType: 'rent', propertyType: 'apartment' }));
+    });
+    const chat = createChat();
+    await chat.say(MENU.ru.selection);
+    const labels = buttonsOf(editedPanel(await chat.press('sel:deal:sale')).reply_markup);
+    assert.ok(labels.includes('Вилла'), 'вилла продаётся');
+    assert.ok(!labels.includes('Квартира'), 'квартира только в аренде — при «купить» её не предлагаем');
+  });
+
+  test('когда ничего не подходит, дальше не спрашивают тип, бюджет и спальни', async () => {
+    resetData((data) => {
+      data.objects.push(property('sale-only', 'Вилла на продажу', 'active', { dealType: 'sale', propertyType: 'villa' }));
+    });
+    const chat = createChat();
+    await chat.say(MENU.ru.selection);
+    const dead = editedPanel(await chat.press('sel:deal:rent'));
+    assert.match(dead.text, new RegExp(SELECTION.wizardNothing.slice(0, 20)), 'сказано, что ничего нет');
+    const callbacks = callbacksOf(dead.reply_markup);
+    assert.ok(!callbacks.some((value) => /^sel:(type|city|price|bed|skip):/.test(value)), 'новых вопросов нет');
+    assert.ok(callbacks.includes('cfilter:manager') && callbacks.includes('sel:restart:deal'), 'можно передать менеджеру или начать заново');
+
+    const again = editedPanel(await chat.press('sel:restart:deal'));
+    assert.match(again.text, new RegExp(SELECTION.wizardDeal), 'снова первый вопрос');
+    assert.equal(chat.user.catalogFilter, null, 'прежние условия сброшены');
+  });
+
+  test('«Передать менеджеру» отвечает итогом в чате и не оставляет кнопки повтора', async () => {
+    const chat = createChat();
+    await chat.say(MENU.ru.selection);
+    await chat.press('sel:deal:sale');
+    await chat.press('sel:skip:city');
+    await chat.press('sel:skip:budget');
+    await chat.press('sel:skip:bedrooms');
+    await chat.press('sel:skip:done');
+
+    const sent = await chat.press('cfilter:manager');
+    const result = editedPanel(sent);
+    assert.match(result.text, /^✅ Передали менеджеру:/, 'итог виден в самом чате');
+    assert.match(result.text, /Продажа/, 'с тем, что клиент выбрал');
+    assert.match(result.text, /Ответим в этом чате/);
+    assert.ok(!callbacksOf(result.reply_markup).includes('cfilter:manager'), 'повторить нельзя');
+    assert.equal(chat.inquiries.filter((item) => item.type === 'selection').length, 1, 'заявка одна');
+  });
+
+  test('«Показать» из мастера оставляет менеджеру запись о том, что искал клиент', async () => {
+    const chat = createChat();
+    await chat.say(MENU.ru.selection);
+    await chat.press('sel:deal:sale');
+    await chat.press('sel:skip:city');
+    await chat.press('sel:skip:budget');
+    await chat.press('sel:skip:bedrooms');
+    await chat.press('sel:skip:done');
+    assert.equal(chat.inquiries.length, 0, 'пока клиент ничего не показал, записи нет');
+    await chat.press('sel:show');
+    const [record] = chat.inquiries;
+    assert.ok(record, 'запись появилась');
+    assert.equal(record.searchLead, true, 'это «искал сам»: ответа она не требует');
+    assert.match(record.text, /Подбор в боте: .*Продажа/s, 'видно, что выбрал клиент');
+    assert.equal(bot.awaitingReply(record), false, 'в «ждут ответа» она не попадает');
+  });
+});
+
 test.describe('unfinished form reminder', () => {
   const HOUR = 60 * 60 * 1000;
   const MORNING = new Date(2026, 8, 18, 10, 0);

@@ -1369,7 +1369,12 @@ function selectionWizardPanel(user, step) {
   const filter = normalizedCatalogFilter(user.catalogFilter, language);
   const published = publishedCatalog(user);
   const found = applyCatalogFilter(published, filter, language).length;
-  const current = SELECTION_WIZARD_STEPS.includes(step) ? step : 'deal';
+  let current = SELECTION_WIZARD_STEPS.includes(step) ? step : 'deal';
+  // Под выбранные условия ничего нет — дальше не спрашиваем ни тип, ни бюджет,
+  // ни спальни: каждый следующий вопрос только ведёт в тот же тупик. Клиенту
+  // остаётся вернуться на шаг, начать заново или передать запрос менеджеру.
+  const dead = !found && current !== 'deal';
+  if (dead) current = 'done';
   const rows = [];
   const skip = (next) => ({ text: copy.wizardSkip, callback_data: 'sel:skip:' + next });
   const summary = catalogFilterSummary(filter, language);
@@ -1385,13 +1390,15 @@ function selectionWizardPanel(user, step) {
     rows.push([skip('type')]);
   } else if (current === 'type') {
     const labels = PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru;
-    const types = Object.keys(labels).filter((type) => published.some((record) => record.propertyType === type));
+    // Только типы, которые есть при выбранной сделке: «аренда» + «участок» без
+    // единого участка в аренде — заведомо пустой выбор.
+    const types = Object.keys(labels).filter((type) => catalogFacetCount(published, filter, 'type', type, language) > 0);
     for (let index = 0; index < types.length; index += 2) {
       rows.push(types.slice(index, index + 2).map((type) => ({ text: labels[type], callback_data: 'sel:type:' + type })));
     }
     rows.push([skip('city')]);
   } else if (current === 'city') {
-    const cities = catalogCities(published, language).slice(0, 8);
+    const cities = catalogCities(published, language).filter((city) => catalogFacetCount(published, filter, 'city', city, language) > 0).slice(0, 8);
     for (let index = 0; index < cities.length; index += 2) {
       rows.push(cities.slice(index, index + 2).map((city) => ({ text: city, callback_data: 'sel:city:' + cityKey(city) })));
     }
@@ -1399,8 +1406,9 @@ function selectionWizardPanel(user, step) {
   } else if (current === 'budget') {
     const deal = catalogPriceDeal(filter, published) || 'sale';
     const prices = CATALOG_FILTER_PRICES[deal] || [];
-    for (let index = 0; index < prices.length; index += 2) {
-      rows.push(prices.slice(index, index + 2).map((price) => ({
+    const usablePrices = prices.filter((price) => catalogFacetCount(published, filter, 'maxPrice', price, language) > 0);
+    for (let index = 0; index < usablePrices.length; index += 2) {
+      rows.push(usablePrices.slice(index, index + 2).map((price) => ({
         text: (CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru).upTo + ' ' + formattedPriceLimit(price, language),
         callback_data: 'sel:price:' + price,
       })));
@@ -1414,9 +1422,13 @@ function selectionWizardPanel(user, step) {
     if (found) rows.push([{ text: copy.wizardShow.replace('{count}', String(found)), callback_data: 'sel:show' }]);
     rows.push([{ text: copy.wizardNotify, callback_data: 'saved:save' }]);
     rows.push([{ text: copy.wizardManager, callback_data: 'cfilter:manager' }]);
+    if (dead) rows.push([{ text: copy.wizardRestart, callback_data: 'sel:restart:deal' }]);
   }
   if (current !== 'deal') {
-    const previous = SELECTION_WIZARD_STEPS[Math.max(0, SELECTION_WIZARD_STEPS.indexOf(current) - 1)];
+    // Из тупика «Назад» ведёт на последний вопрос, а не на «итог».
+    const previous = dead
+      ? SELECTION_WIZARD_STEPS[Math.max(0, SELECTION_WIZARD_STEPS.indexOf(step) - 1)]
+      : SELECTION_WIZARD_STEPS[Math.max(0, SELECTION_WIZARD_STEPS.indexOf(current) - 1)];
     rows.push([{ text: copy.wizardBack, callback_data: 'sel:back:' + previous }]);
   }
   const question = {
@@ -1460,12 +1472,22 @@ async function handleSelectionWizardCallback(query, token) {
   } else if (action === 'bed') {
     filter.bedrooms = CATALOG_FILTER_BEDROOMS.includes(Number(value)) ? Number(value) : 0;
     step = 'done';
+  } else if (action === 'restart') {
+    // Начать заново: прежние условия сбрасываются.
+    for (const key of Object.keys(filter)) delete filter[key];
+    Object.assign(filter, normalizedCatalogFilter(null, language));
+    step = 'deal';
   } else if (action === 'skip' || action === 'back') {
     step = SELECTION_WIZARD_STEPS.includes(value) ? value : 'deal';
   } else if (action === 'show') {
     user.catalogFilter = catalogFilterActive(filter) ? filter : null;
     scheduleSave();
     await acknowledgeCallback(query, token);
+    // Менеджер видит, что искал клиент, даже если тот больше ничего не нажмёт:
+    // запись «искал сам» в панели, как у поиска обычным сообщением. Ответа она
+    // не требует, а тёплого клиента менеджер не упускает.
+    const shownSummary = catalogFilterSummary(user.catalogFilter, language);
+    if (shownSummary) createInquiry(user, '🔎 Подбор в боте: ' + shownSummary, { type: 'general', searchLead: true });
     await sendCatalogPage(chatId, user, token, 0, 'all');
     return;
   }
@@ -1707,6 +1729,23 @@ async function handleCatalogFilterCallback(query, token) {
     });
     scheduleSave();
     await acknowledgeCallback(query, token, copy.sentToManager);
+    // Ответ виден в самом чате: итог «Передали: … Ответим здесь» вместо одной
+    // всплывашки. Кнопки повтора нет — второе нажатие завело бы вторую заявку.
+    const navigation = NAVIGATION_TEXT[user.preferredLanguage] || NAVIGATION_TEXT.ru;
+    const done = {
+      text: copy.handedOver.replace('{summary}', summary),
+      markup: { inline_keyboard: [[{ text: '🏘 ' + navigation.browse, callback_data: 'catalog:all:0' }], [{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]] },
+    };
+    const editable = query.message && query.message.message_id && typeof query.message.text === 'string' && !Array.isArray(query.message.photo);
+    if (editable) {
+      try {
+        await telegramRequest(token, 'editMessageText', { chat_id: chatId, message_id: query.message.message_id, text: done.text, reply_markup: done.markup });
+        return;
+      } catch {
+        // Не удалось изменить — пришлём итог отдельным сообщением.
+      }
+    }
+    await sendUiMessage(chatId, user, done.text, token, { reply_markup: done.markup });
     return;
   }
   if (action === 'show' || action === 'reset') {
