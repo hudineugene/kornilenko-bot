@@ -60,14 +60,29 @@ function attentionItems() {
     .slice(0, 8);
 }
 
+// «2026-09-29» → «29.09»: подписи под графиком.
+function chartDay(key) {
+  var parts = String(key).split("-");
+  return parts.length === 3 ? parts[2] + "." + parts[1] : String(key);
+}
+
+// График по дням с осями: слева — наибольшее значение и ноль, снизу — даты, а
+// у коротких графиков число стоит над каждым столбцом. Раньше были одни столбики
+// без единой цифры, и по ним нельзя было понять ни сколько, ни когда.
 function sparkline(days, field, color) {
   var values = days.map(function (key) { return dailyValue(key, field); });
   var top = Math.max.apply(null, values.concat([1]));
   // Пустой график выглядит как поломка, поэтому вместо него — строка текста.
   if (!values.some(Boolean)) return '<div class="muted small">За этот период сообщений не было.</div>';
-  return '<div class="spark">' + values.map(function (value, index) {
-    return '<div title="' + esc(days[index].slice(5) + ": " + value) + '"><i style="height:' + Math.round((value / top) * 100) + "%;background:" + color + '"></i></div>';
-  }).join("") + "</div>";
+  var labelled = days.length <= 14;
+  var ticks = labelled
+    ? days.map(function (key) { return chartDay(key); })
+    : [0, Math.round((days.length - 1) / 4), Math.round((days.length - 1) / 2), Math.round(((days.length - 1) * 3) / 4), days.length - 1].map(function (index) { return chartDay(days[index]); });
+  return '<div class="chart"><div class="chart-y"><span>' + num(top) + '</span><span>0</span></div><div class="chart-plot"><div class="spark">' + values.map(function (value, index) {
+    var height = Math.round((value / top) * 100);
+    return '<div title="' + esc(chartDay(days[index]) + ": " + value) + '"><i style="height:' + height + "%;background:" + color + '"></i>' +
+      (labelled && value ? '<b style="bottom:calc(' + height + '% + 2px)">' + num(value) + "</b>" : "") + "</div>";
+  }).join("") + '</div><div class="chart-x' + (labelled ? " even" : "") + '">' + ticks.map(function (label) { return "<span>" + esc(label) + "</span>"; }).join("") + "</div></div></div>";
 }
 
 // Что делать с событием: одна главная кнопка на строку. Клиент ждёт ответа —
@@ -143,7 +158,7 @@ VIEWS.today = {
           "</div>" +
           '<div class="card"><header><h3>Сообщения и заявки, 7 дней</h3></header><div class="card-body">' +
             sparkline(weekDays, "received", "var(--brand)") +
-            '<div class="legend"><span><i class="brand-dot"></i>сообщения от клиентов</span><span>' + num(sumDays(weekDays, "received")) + " сообщений за 7 дней · " + num(inquiriesInRange(week).length) + " " + plural(inquiriesInRange(week).length, "заявка", "заявки", "заявок") + "</span></div>" +
+            '<div class="legend"><span><i class="brand-dot"></i>Столбики — сообщения от клиентов за день</span><span>Всего за 7 дней: <b>' + num(sumDays(weekDays, "received")) + '</b> сообщений, <b>' + num(inquiriesInRange(week).length) + '</b> ' + plural(inquiriesInRange(week).length, "заявка", "заявки", "заявок") + "</span></div>" +
           "</div></div>" +
         "</div>" +
         '<div class="stack">' +
@@ -301,7 +316,7 @@ VIEWS.reports = {
       ]) +
       '<div class="card gap-bottom"><header><h3>Активность за 30 дней</h3></header><div class="card-body">' +
         sparkline(days, "received", "var(--brand)") +
-        '<div class="legend"><span><i class="brand-dot"></i>сообщения</span><span>заявок: ' + num(monthInquiries.length) + " · новых клиентов: " + num(usersInRange(monthStart)) + "</span></div>" +
+        '<div class="legend"><span><i class="brand-dot"></i>Столбики — сообщения от клиентов за день</span><span>Всего за 30 дней: <b>' + num(sumDays(days, "received")) + '</b> сообщений</span><span>Заявок: <b>' + num(monthInquiries.length) + '</b></span><span>Новых клиентов: <b>' + num(usersInRange(monthStart)) + "</b></span></div>" +
       "</div></div>" +
       '<div class="grid cols-2 gap-bottom">' +
         '<div class="card"><header><h3>Заявки по типам, 30 дней</h3></header>' + barList(typeRows, monthInquiries.length) + "</div>" +

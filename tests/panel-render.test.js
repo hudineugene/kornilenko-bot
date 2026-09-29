@@ -1246,7 +1246,8 @@ test('числа на «Сегодня» и в «Отчётах» сходятс
   const typeBars = Array.from(html.slice(html.indexOf('Заявки по типам')).split('Откуда приходят клиенты')[0].matchAll(/<b class="right">(\d+) /g)).map((match) => Number(match[1]));
   assert.equal(typeBars.reduce((sum, value) => sum + value, 0), 3, 'по типам сумма 3, как в плитке: старая заявка не считается');
   assert.ok(!/заявок: 99/.test(html), 'счётчик аналитики на экран не попадает');
-  assert.match(html, /заявок: 3 ·/, 'подпись под графиком — то же число');
+  assert.match(html, /Заявок: <b>3<\/b>/, 'подпись под графиком — то же число');
+  assert.match(html, /Столбики — сообщения от клиентов за день/, 'подпись говорит, что нарисовано');
   assert.ok(sandbox.VIEWS.reports.render.toString().includes('Открыли карточку'), 'колонка «Интерес» названа по смыслу');
 
   const today = fakeElement('main');
@@ -1254,7 +1255,7 @@ test('числа на «Сегодня» и в «Отчётах» сходятс
   const text = String(today.innerHTML).replace(/ /g, ' ');
   assert.match(text, /Сообщения и заявки, 7 дней/, 'график — за 7 дней, как и строка цифр');
   assert.match(text, /<b>2<\/b> заявки за 7 дней/, 'строка цифр: заявок за 7 дней две');
-  assert.match(text, /2 заявки<\/span>/, 'под графиком то же число, а не 99');
+  assert.match(text, /<b>2<\/b> заявки<\/span>/, 'под графиком то же число, а не 99');
 });
 
 test('панель считает «взял в работу без ответа» так же, как бот', async () => {
@@ -1500,6 +1501,30 @@ test('старые адреса подключения к Telegram ведут н
     assert.equal(route.join('/'), 'settings/service', tab);
     assert.equal(sandbox.serviceScreen, 'telegram', tab + ': открывается нужный экран');
   }
+});
+
+test('график: слева наибольшее значение и ноль, снизу даты, над короткими столбцами — числа', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const week = sandbox.lastDays(7);
+  sandbox.state.analytics = { daily: {} };
+  sandbox.state.analytics.daily[week[6]] = { received: 40 };
+  sandbox.state.analytics.daily[week[3]] = { received: 10 };
+  const html = String(sandbox.sparkline(week, 'received', 'var(--brand)'));
+  assert.match(html, /<div class="chart-y"><span>40<\/span><span>0<\/span><\/div>/, 'ось: наибольшее значение и ноль');
+  const label = (key) => key.slice(8, 10) + '.' + key.slice(5, 7);
+  for (const day of week) assert.ok(html.includes('<span>' + label(day) + '</span>'), 'под графиком дата ' + label(day));
+  assert.match(html, /<b style="bottom:calc\(100% \+ 2px\)">40<\/b>/, 'над столбцом — число');
+  assert.match(html, /<b style="bottom:calc\(25% \+ 2px\)">10<\/b>/);
+  assert.ok(!html.includes('>0</b>'), 'над пустыми днями нуля нет');
+
+  // Месячный график: подписи реже, но даты и ось есть.
+  const month = sandbox.lastDays(30);
+  sandbox.state.analytics.daily[month[29]] = { received: 5 };
+  const long = String(sandbox.sparkline(month, 'received', 'var(--brand)'));
+  assert.match(long, /class="chart-x">/, 'у месячного графика подписи не по столбцам');
+  assert.ok(long.includes('<span>' + label(month[0]) + '</span>') && long.includes('<span>' + label(month[29]) + '</span>'), 'первая и последняя даты');
+  assert.ok(!/<b style="bottom/.test(long), 'над 30 столбцами числа не пишем — значения в подсказке');
 });
 
 test('когда все отвечены, ноль везде', async () => {

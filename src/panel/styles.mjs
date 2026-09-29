@@ -157,12 +157,20 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .bar-row{display:grid;grid-template-columns:minmax(90px,1fr) 46px;align-items:center;gap:8px;padding:4px 0;font-size:var(--fs-sm)}
 .bar{height:7px;border-radius:4px;background:var(--brand-soft);overflow:hidden}
 .bar>span{display:block;height:100%;background:var(--brand);border-radius:4px}
-.spark{display:flex;align-items:flex-end;gap:2px;height:74px}
+/* График с осями: наибольшее значение и ноль слева, даты снизу, числа над столбцами. */
+.chart{display:flex;gap:8px;align-items:stretch}
+.chart-y{display:flex;flex-direction:column;justify-content:space-between;padding-top:16px;min-width:26px;color:var(--faint);font-size:var(--fs-xs);text-align:right}
+.chart-plot{flex:1;min-width:0}
+.chart-x{display:flex;justify-content:space-between;margin-top:4px;color:var(--faint);font-size:var(--fs-xs)}
+.chart-x.even span{flex:1;text-align:center}
+.spark div>b{position:absolute;left:-4px;right:-4px;text-align:center;color:var(--muted);font-size:var(--fs-xs);font-weight:600;line-height:1}
+.spark{display:flex;align-items:flex-end;gap:2px;height:90px;padding-top:16px}
 /* Высота столбика задаётся в процентах, поэтому у дорожки должна быть своя
    высота: без неё проценты считались от нуля и график не рисовался никогда. */
 .spark div{flex:1;min-width:3px;height:100%;background:var(--brand-soft);border-radius:3px 3px 0 0;position:relative}
 .spark div>i{position:absolute;inset:auto 0 0 0;background:var(--brand);border-radius:3px 3px 0 0;display:block}
-.legend{display:flex;gap:12px;font-size:var(--fs-sm);color:var(--muted);margin-top:6px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:var(--fs-sm);color:var(--muted);margin-top:8px}
+.legend b{color:var(--text)}
 .legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
 .list{display:flex;flex-direction:column}
 .list-item{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line-soft)}

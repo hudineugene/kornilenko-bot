@@ -603,7 +603,8 @@ test('столбики графика имеют высоту, иначе гра
   assert.ok(shell && /height:\s*\d+px/.test(shell[1]), 'у графика задана своя высота');
   assert.ok(track, 'дорожка столбика описана в стилях');
   assert.match(track[1], /height:\s*100%/, 'дорожка занимает всю высоту графика');
-  assert.match(PANEL_HTML, /<i style="height:' \+ Math\.round\(\(value \/ top\) \* 100\) \+ "%/, 'закрашенная часть считается в процентах от дорожки');
+  assert.match(PANEL_HTML, /var height = Math\.round\(\(value \/ top\) \* 100\)/, 'высота столбца считается в процентах от дорожки');
+  assert.match(PANEL_HTML, /<i style="height:' \+ height \+ "%/, 'закрашенная часть получает эти проценты');
 });
 
 test('в подписях панели один словарь и нет технических слов', async () => {
