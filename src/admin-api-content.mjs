@@ -179,6 +179,8 @@ async function handleContentApi(req, res, url) {
       Object.assign(record, parseContentRecord(await readJson(req), kind, record));
       saveDataNow();
       const alertsQueued = kind === 'objects' ? queuePropertyAlerts(record, before) : 0;
+      // Пометка о снижении цены ставится уже после первой записи — сохраняем её.
+      if (kind === 'objects') saveDataNow();
       return json(res, 200, { ok: true, alertsQueued });
     } catch (error) {
       return json(res, 400, { error: error.message });

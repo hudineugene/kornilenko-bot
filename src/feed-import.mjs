@@ -12,7 +12,7 @@ import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { parseUploadedImage } from './admin-http.mjs';
 import { configured } from './store.mjs';
-import { deliverPropertyAlerts, propertyAlertDeliveries } from './alerts.mjs';
+import { deliverPropertyAlerts, propertyAlertDeliveries, rememberPriceChange } from './alerts.mjs';
 import { propertyReadyForLanguage } from './catalog.mjs';
 
 const MAX_FEED_BYTES = 20 * 1024 * 1024;
@@ -520,6 +520,9 @@ async function runImport(items, options) {
     }
     record.importedAt = now;
     record.updatedAt = now;
+    // Снижение цены из выгрузки тоже остаётся на карточке зачёркнутой старой
+    // ценой — как при правке в панели.
+    rememberPriceChange(record, before);
     deliveries.push(...propertyAlertDeliveries(record, before));
   }
   for (const { record } of plan.unchanged) record.importedAt = now;

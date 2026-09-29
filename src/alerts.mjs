@@ -316,8 +316,10 @@ function rememberPriceChange(record, before) {
     record.priceChangedAt = new Date().toISOString();
     return;
   }
-  // Цена вернулась или выросла — зачёркивать больше нечего.
-  if (!Number.isFinite(newPrice) || newPrice >= oldPrice) {
+  // Цена выросла или пропала — зачёркивать больше нечего. Равная цена не
+  // считается изменением: раньше любое сохранение объекта без правки цены
+  // стирало зачёркнутую старую цену, и снижение исчезало с карточки.
+  if (!Number.isFinite(newPrice) || newPrice > oldPrice) {
     record.previousPriceValue = 0;
     record.priceChangedAt = '';
   }

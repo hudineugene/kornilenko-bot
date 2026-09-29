@@ -1424,6 +1424,22 @@ test('снижение цены видно на карточке, а не тол
   assert.doesNotMatch(bot.objectCaptionHtml(record, 'ru'), /<s>/);
 });
 
+test('сохранение объекта без правки цены не стирает зачёркнутую старую цену', async () => {
+  resetData((data) => {
+    data.objects.push(property('price-03', 'Объект со снижением', 'active', { priceValue: 270000, currency: 'EUR', area: 90 }));
+  });
+  const record = bot.getData().objects.find((item) => item.id === 'price-03');
+  record.priceValue = 250000;
+  bot.queuePropertyAlerts(record, { status: 'active', priceValue: 270000 });
+  assert.equal(record.previousPriceValue, 270000);
+
+  // Владелец поправил описание и сохранил: цена та же.
+  bot.queuePropertyAlerts(record, { status: 'active', priceValue: 250000 });
+  bot.queuePropertyAlerts(record, { status: 'active', priceValue: 250000 });
+  assert.equal(record.previousPriceValue, 270000, 'снижение осталось на карточке');
+  assert.match(bot.objectCaptionHtml(record, 'ru'), /<s>270\s000 €<\/s>/);
+});
+
 test('старое снижение цены перестаёт показываться через месяц', async () => {
   resetData((data) => {
     data.objects.push(property('price-02', 'Давно подешевевшая', 'active', { priceValue: 200000, currency: 'EUR' }));

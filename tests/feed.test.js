@@ -109,6 +109,20 @@ test('a feed that leaves fields out does not overwrite them', async () => {
   assert.deepEqual([record.priceValue, record.dealType, record.pricePeriod, record.currency, record.propertyType], [2200, 'rent', 'month', 'GBP', 'villa']);
 });
 
+test('снижение цены из выгрузки остаётся на карточке зачёркнутой старой ценой', async () => {
+  const data = bot.getData();
+  data.objects.push({ id: 'cheaper', status: 'active', reference: 'C-1', dealType: 'sale', currency: 'EUR', propertyType: 'villa', priceValue: 300000, title: { ru: 'Вилла', en: 'Villa', es: 'Villa' } });
+  await bot.applyImport(bot.readFeed('<root><property><ref>C-1</ref><price>280000</price></property></root>'), { fetcher: imageFetcher, lookup });
+  const record = data.objects.find((item) => item.id === 'cheaper');
+  assert.equal(record.priceValue, 280000);
+  assert.equal(record.previousPriceValue, 300000, 'прежняя цена запомнена');
+  assert.ok(record.priceChangedAt);
+
+  // Следующая загрузка с той же ценой пометку не трогает.
+  await bot.applyImport(bot.readFeed('<root><property><ref>C-1</ref><price>280000</price><beds>3</beds></property></root>'), { fetcher: imageFetcher, lookup });
+  assert.equal(record.previousPriceValue, 300000, 'повторная загрузка без снижения не стирает зачёркнутую цену');
+});
+
 test('a broken file is read quickly; photos from local addresses are refused; one import at a time', async () => {
   const started = Date.now();
   bot.parseXml('<root>' + '<!-- x'.repeat(200000));
