@@ -68,7 +68,7 @@ function publicationRows() {
       kind: "broadcast",
       id: entry.id,
       where: "Клиентам · " + campaignAudienceLabel(entry),
-      text: String(localized(entry.messages, "ru")).slice(0, 70),
+      text: shortText(localized(entry.messages, "ru"), 70),
       at: entry.status === "scheduled" ? entry.scheduledAt : entry.startedAt || entry.updatedAt || entry.createdAt,
       queued: entry.status === "draft" || entry.status === "scheduled",
       status: entry.status,
@@ -84,7 +84,7 @@ function publicationRows() {
       kind: "post",
       id: post.id,
       where: (group && group.type !== "channel" ? "Группа · " : "Канал · ") + (group ? group.title || group.id : post.groupId) + (group && post.threadId > 1 ? " · тема «" + topicLabel(group, post.threadId) + "»" : ""),
-      text: String(post.text || "").slice(0, 70),
+      text: shortText(post.text, 70),
       at: post.sendAt || post.sentAt || post.createdAt,
       queued: post.status === "scheduled",
       status: post.status,
@@ -132,7 +132,9 @@ function renderPublications(host) {
     var open = row.querySelector("[data-open]");
     if (open) open.onclick = function () {
       if (kind === "broadcast") return openCampaignEditor(id);
-      go("posts", "channel");
+      // Пост канала: раньше клик уводил на пустую форму «Пост в канал», не показывая сам пост.
+      var post = rows.find(function (item) { return item.kind === "post" && item.id === id; });
+      if (post) openScheduledPost(post);
     };
     row.querySelector("[data-drop]").onclick = async function () {
       var isBroadcast = kind === "broadcast";
@@ -150,6 +152,28 @@ function renderPublications(host) {
       } catch (error) { fail(error); }
     };
   });
+}
+
+// Отложенный пост: что и куда уйдёт, когда; отменить можно здесь же (с «Вернуть»).
+function openScheduledPost(row) {
+  var post = row.entry || {};
+  openDialog({
+    title: "Отложенный пост",
+    body: '<div class="stack"><div class="small muted">' + esc(row.where) + " · " + (row.status === "scheduled" ? "уйдёт " + esc(dateTime(row.at)) : esc(publicationStatusText(row))) + "</div>" +
+      '<div class="msg" style="white-space:pre-wrap">' + esc(post.text || "без текста") + "</div></div>",
+    footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>' + (row.status === "scheduled" ? '<button class="btn danger-outline" id="cancelScheduledPost" type="button">Отменить публикацию</button>' : ""),
+    ready: function (dialog) {
+      var cancel = dialog.querySelector("#cancelScheduledPost");
+      if (cancel) cancel.onclick = async function () {
+        if (!(await confirmDialog("Отменить публикацию?", "Пост не уйдёт в канал, текст пропадёт.", "Отменить публикацию", true))) return;
+        try { dialog.closeClean(); await cancelPostWithUndo(row.id); } catch (error) { fail(error); }
+      };
+    },
+  });
+}
+
+function publicationStatusText(row) {
+  return { scheduled: "запланирован", sent: "опубликован", cancelled: "отменён", failed: "не ушёл" }[row.status] || row.status;
 }
 
 // «Пост в канал» с общей страницы ведёт прямо к форме поста: канал выбирается

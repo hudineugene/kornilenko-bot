@@ -3686,3 +3686,33 @@ test('«Акции»: удаление под «⋯», как у объекто�
   await dialogs[0].dialog.querySelector('[data-delete]').onclick();
   assert.ok(requests.some((request) => request.method === 'DELETE' && request.url.includes('/api/promotions/p1')), 'удаление ушло на бота: ' + JSON.stringify(requests));
 });
+
+test('очередь публикаций: клик по отложенному посту открывает сам пост с отменой, а не пустую форму', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const when = new Date(Date.now() + 86400000).toISOString();
+  sandbox.state.broadcasts = [];
+  sandbox.state.groups = [{ id: '-100200', title: 'Наш канал', type: 'channel', status: 'administrator' }];
+  sandbox.state.groupPosts = [{ id: 'g1', groupId: '-100200', text: 'Новый объект в Бенидорме: вилла с бассейном', status: 'scheduled', sendAt: when, createdAt: when }];
+  const host = fakeElement('main');
+  const row = host.querySelector('tr[data-id]');
+  row.dataset.id = 'g1';
+  row.dataset.kind = 'post';
+  sandbox.renderPublications(host);
+  const dialogs = [];
+  const routes = [];
+  sandbox.openDialog = (options) => { const dialog = fakeElement('dialog'); dialog.closeClean = () => {}; dialogs.push({ options, dialog }); if (options.ready) options.ready(dialog); return dialog; };
+  sandbox.go = async (view, tab) => { routes.push([view, tab]); return true; };
+  sandbox.confirmDialog = async () => true;
+  sandbox.toast = () => {};
+  row.querySelector('[data-open]').onclick();
+  assert.equal(routes.length, 0, 'на пустую форму «Пост в канал» не уводит');
+  assert.equal(dialogs.length, 1);
+  assert.match(dialogs[0].options.title, /Отложенный пост/);
+  assert.match(dialogs[0].options.body, /Новый объект в Бенидорме: вилла с бассейном/, 'виден текст поста целиком');
+  assert.match(dialogs[0].options.body, /Наш канал/, 'и куда он уйдёт');
+  assert.match(dialogs[0].options.footer, /Отменить публикацию/);
+  requests.length = 0;
+  await dialogs[0].dialog.querySelector('#cancelScheduledPost').onclick();
+  assert.ok(requests.some((request) => request.method === 'DELETE' || /cancel/.test(request.url)), 'отмена ушла на бота: ' + JSON.stringify(requests.map((request) => request.method + ' ' + request.url)));
+});
