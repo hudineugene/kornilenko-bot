@@ -593,7 +593,7 @@ https://github.com/cloudflare/cloudflared/releases, файл
 акций действует сейчас. «🇪🇸 Как купить» — гид по покупке в Испании с кнопкой
 бесплатной консультации. В «👤 Моё» — избранное, сравнение, сохранённый поиск,
 недавно просмотренные, мои заявки, уведомления, мои данные, о компании, помощь и
-смена языка. Кнопки прежних меню, которые остались у клиентов в чате,
+смена языка. Кнопка WhatsApp открывает чат с готовым текстом в поле ввода: с экрана связи — приветствие, с карточки объекта — «Интересует объект: название (номер)» на языке клиента (тексты `whatsappHello` и `whatsappHelloProperty` правятся в «Все подписи бота»). Если владелец вписал в свою ссылку `?text=`, его текст остаётся. Кнопки прежних меню, которые остались у клиентов в чате,
 продолжают работать. Подписи меняются в «Тексты бота → Приветствие и меню»; при
 обновлении данных подписи и тексты, которых администратор не менял, заменены
 новыми, а изменённые им сохранены.
@@ -882,7 +882,7 @@ HTML в описаниях превращается в обычный текст
 `BOT_NO_START=1` и временной папкой данных, поэтому не трогают рабочие данные
 и не обращаются к Telegram (Bot API заменён заглушкой).
 
-Всего 72 файла; каждый начинается с комментария, зачем он нужен. По темам:
+Всего 73 файла; каждый начинается с комментария, зачем он нужен. По темам:
 
 | Тема | Файлы |
 |---|---|
@@ -890,7 +890,7 @@ HTML в описаниях превращается в обычный текст
 | Формы и диалоги клиента | `dialogs`, `typed-answers`, `messages`, `album`, `service-messages`, `queue-loss`, `parallel-updates`, `double-send`, `search-phrases`, `measures`, `my-area`, `comparison`, `saved-search` |
 | Каталог и загрузка с сайта | `catalog-card-save`, `feed`, `feed-ssrf`, `file-id` |
 | Просмотры, напоминания, рабочее время | `viewings`, `reminders`, `hours`, `calculator`, `attention`, `local-days` |
-| Уведомления, рассылки, группы | `subscriptions`, `broadcast-resume`, `scheduled-posts`, `groups`, `group-topics`, `notice-retry`, `consent-retention`, `manager-photo`, `status`, `experience`, `managers`, `admin-chat` |
+| Уведомления, рассылки, группы | `subscriptions`, `broadcast-resume`, `scheduled-posts`, `groups`, `group-topics`, `notice-retry`, `consent-retention`, `manager-photo`, `whatsapp-text`, `status`, `experience`, `managers`, `admin-chat` |
 | Панель | `panel`, `panel-render`, `templates-export`, `conversation-search`, `attachments`, `cleanup-scope` |
 | Безопасность и вход | `security`, `foreign-page`, `login-limits`, `login-protection`, `password-gate`, `password-reset` |
 | Копии и восстановление | `offsite`, `backup-format`, `backup-retention`, `restore-order`, `erase-export`, `privacy` |

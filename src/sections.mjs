@@ -89,7 +89,7 @@ async function sendContacts(chatId, user, token) {
   const buttons = [];
   const site = validHttpUrl(contact.website);
   const map = validHttpUrl(contact.mapUrl);
-  const whatsapp = contact.whatsappEnabled === false ? '' : whatsappContactUrl(contact.whatsapp, phones[0]);
+  const whatsapp = contact.whatsappEnabled === false ? '' : whatsappContactUrl(contact.whatsapp, phones[0], copy.whatsappHello || MANAGER_CONTACT_TEXT.ru.whatsappHello);
   const telegramName = String(contact.telegram || '').replace(/^@/, '');
   const telegram = /^[A-Za-z0-9_]{5,}$/.test(telegramName)
     ? 'https://t.me/' + telegramName
@@ -411,9 +411,18 @@ function browsingMode(user, record) {
   return catalogRecords(user, mode).some((item) => item.id === record.id) ? mode : 'all';
 }
 
-function configuredWhatsappUrl() {
+function configuredWhatsappUrl(message = '') {
   const phone = (String(data.contacts && data.contacts.phone || '').match(/\+?\d[\d\s().-]{5,}\d/) || [])[0] || '';
-  return whatsappContactUrl(data.contacts && data.contacts.whatsapp, phone);
+  return whatsappContactUrl(data.contacts && data.contacts.whatsapp, phone, message);
+}
+
+// «Интересует объект: Вилла (DEMO-001)» — то, что клиент увидит в поле ввода WhatsApp.
+function whatsappPropertyMessage(record, language) {
+  const copy = MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru;
+  const title = localizedExact(record.title, language) || localizedExact(record.title, 'ru') || '';
+  const reference = cleanText(record.reference, 40);
+  const name = title && reference ? title + ' (' + reference + ')' : title || reference || record.id;
+  return (copy.whatsappHelloProperty || MANAGER_CONTACT_TEXT.ru.whatsappHelloProperty).replace('{property}', name);
 }
 
 function propertyManagerMarkup(record, language, returnToCatalog = false) {
@@ -429,7 +438,7 @@ function propertyManagerMarkup(record, language, returnToCatalog = false) {
     rows.push([{ text: '📞 ' + text.interest, callback_data: 'property:interest:' + record.id }]);
   }
   rows.push([{ text: '❓ ' + text.question, callback_data: 'property:question:' + record.id }]);
-  const whatsapp = configuredWhatsappUrl();
+  const whatsapp = configuredWhatsappUrl(whatsappPropertyMessage(record, language));
   if (whatsapp) rows.push([{ text: '🟢 WhatsApp', url: whatsapp }]);
   rows.push([{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:' + (returnToCatalog ? 'return' : 'card') + ':' + record.id }]);
   return { inline_keyboard: rows };

@@ -32,17 +32,25 @@ function validHttpUrl(value) {
   }
 }
 
-function whatsappContactUrl(value, fallbackPhone = '') {
+// Ссылка на чат WhatsApp. С message в поле ввода уже стоит готовый текст:
+// клиент видит, что писать, а менеджер — с чем к нему пришли. Если владелец
+// сам вписал text в свою ссылку, его текст остаётся.
+function whatsappContactUrl(value, fallbackPhone = '', message = '') {
   const raw = cleanText(value, 500);
   const linked = validHttpUrl(raw);
+  const withMessage = (link) => {
+    const text = cleanText(message, 400);
+    if (!text || /[?&]text=/.test(link)) return link;
+    return link + (link.includes('?') ? '&' : '?') + 'text=' + encodeURIComponent(text);
+  };
   if (linked) {
     try {
       const host = new URL(linked).hostname.toLowerCase().replace(/^www\./, '');
-      if (host === 'wa.me' || host === 'api.whatsapp.com' || host.endsWith('.whatsapp.com')) return linked;
+      if (host === 'wa.me' || host === 'api.whatsapp.com' || host.endsWith('.whatsapp.com')) return withMessage(linked);
     } catch {}
   }
   const digits = String(raw || fallbackPhone || '').replace(/\D/g, '');
-  return digits.length >= 7 ? 'https://wa.me/' + digits : '';
+  return digits.length >= 7 ? withMessage('https://wa.me/' + digits) : '';
 }
 
 // Фотографии дома от языка клиента не зависят. Свой набор для языка бывает
