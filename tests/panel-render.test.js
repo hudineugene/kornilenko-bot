@@ -1609,6 +1609,59 @@ test('значки навигации — один набор линейных S
   for (const glyph of ['◉', '✉', '⌂', '➤', '✎', '⚙', '📅']) assert.ok(!shown.includes(glyph), 'старого глифа ' + glyph + ' на экране нет');
 });
 
+test('«Сегодня»: чек-лист «Готовность к запуску» — пункты с кнопками, пока не всё готово; при полной готовности блока нет', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const report = (overrides = {}) => ({
+    checks: [
+      { id: 'token', status: 'ok', detail: 'принят Telegram, связь есть' },
+      { id: 'admin', status: 'warn', detail: 'задан, но проверочное сообщение ещё не приходило' },
+      { id: 'catalog', status: 'warn', detail: 'клиенты видят 1 из 4 объектов' },
+      { id: 'privacy', status: 'warn', detail: 'в тексте остались подстановки в [квадратных скобках]' },
+      { id: 'version', status: 'ok', detail: 'версия 43, копия bot-data-2026-09-29.json' },
+      ...(overrides.checks || []),
+    ],
+  });
+  sandbox.state.contacts = { managerName: '', phone: '', whatsapp: '', telegram: '', email: '', photo: { exists: false } };
+  sandbox.state.config.workingHours = { replyMinutes: 0 };
+  sandbox.state.config.telegramBackup = { enabled: false };
+  sandbox.state.groups = [];
+  sandbox.state.inquiries = [];
+
+  const items = sandbox.readinessItems(report());
+  const byId = Object.fromEntries(items.map((item) => [item.id, item]));
+  assert.equal(items.length, 9);
+  assert.equal(byId.token.ok, true, 'токен принят — пункт зелёный');
+  for (const id of ['admin', 'catalog', 'privacy', 'contacts', 'agent', 'backup', 'channel', 'inquiry']) assert.equal(byId[id].ok, false, id + ' не готов');
+  assert.equal(JSON.stringify(byId.admin.route), JSON.stringify(['settings', 'team']));
+  assert.equal(JSON.stringify(byId.catalog.route), JSON.stringify(['objects', 'list']));
+  assert.equal(JSON.stringify(byId.privacy.route), JSON.stringify(['settings', 'service', 'interface']));
+  assert.equal(JSON.stringify(byId.contacts.route), JSON.stringify(['texts', 'contacts']));
+  assert.equal(JSON.stringify(byId.backup.route), JSON.stringify(['settings', 'service', 'data']));
+
+  // Разметка: прогресс, у каждого неготового — кнопка со своим адресом; готовые — галочкой.
+  const html = sandbox.readinessCard(items);
+  assert.match(html, /Готово 1 из 9/);
+  assert.equal((html.match(/data-ready-go=/g) || []).length, 8, 'кнопка у каждого из восьми неготовых');
+  assert.match(html, /data-ready-go="settings\/service\/interface"/);
+  assert.ok(html.includes('клиенты видят 1 из 4 объектов'), 'причина — словами самопроверки');
+
+  // Всё готово — блок исчезает.
+  Object.assign(sandbox.state.contacts, { managerName: 'Ольга', phone: '+34 600 111 222', photo: { exists: true } });
+  sandbox.state.config.workingHours.replyMinutes = 15;
+  sandbox.state.config.telegramBackup.enabled = true;
+  sandbox.state.groups = [{ id: '-1001', status: 'administrator' }];
+  sandbox.state.inquiries = [{ id: 'i1' }];
+  const ready = sandbox.readinessItems(report({ checks: [
+    { id: 'admin', status: 'ok', detail: 'проверен' }, { id: 'catalog', status: 'ok', detail: 'ок' }, { id: 'privacy', status: 'ok', detail: 'ок' },
+  ] }).checks.length ? { checks: [
+    { id: 'token', status: 'ok', detail: '' }, { id: 'admin', status: 'ok', detail: '' }, { id: 'catalog', status: 'ok', detail: '' },
+    { id: 'privacy', status: 'ok', detail: '' }, { id: 'version', status: 'ok', detail: '' },
+  ] } : null);
+  assert.ok(ready.every((item) => item.ok), 'все пункты готовы');
+  assert.equal(sandbox.readinessCard(ready), '', 'при полной готовности блока нет');
+});
+
 test('предпросмотр приветствия: строка о каталоге считается по настоящему каталогу, а не выдумана', async () => {
   resetData((data) => {
     data.config.active = true;

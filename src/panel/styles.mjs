@@ -118,6 +118,7 @@ tbody tr.selected{background:var(--brand-soft)}
 .btn.danger:hover{background:var(--bad);border-color:var(--bad)}
 /* Опасное действие рядом с обычными — контуром, а не сплошной заливкой. */
 .btn.danger-outline{background:none;border-color:var(--bad-line-strong);color:var(--bad)}
+.readiness{border-color:var(--warn-line)}
 .danger-zone{border-color:var(--bad-line)}
 .danger-zone>header h3{color:var(--bad)}
 .btn.danger-outline:hover{background:var(--bad-soft, rgba(217,45,32,.08))}

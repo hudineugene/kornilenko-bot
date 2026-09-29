@@ -154,6 +154,75 @@ async function runDeed(item, button) {
   return openNotification(item, button);
 }
 
+// --- Готовность к запуску -------------------------------------------------------
+// Пока бот не готов принимать клиентов по-настоящему, на «Сегодня» стоит список
+// того, что осталось сделать: токен, чат для заявок, каталог, политика, контакты,
+// фото и срок ответа, копия данных, канал, первая заявка. У каждого неготового
+// пункта — кнопка, которая ведёт прямо на нужный экран. Проверки берутся из
+// самопроверки бота (/api/self-check), а не считаются заново; как только всё
+// зелёное, блок исчезает.
+var readinessCache = { at: 0, report: null };
+var READINESS_TTL = 20000;
+
+function readinessItems(report) {
+  var checks = {};
+  ((report && report.checks) || []).forEach(function (check) { checks[check.id] = check; });
+  var config = state.config || {}, contacts = state.contacts || {};
+  var items = [];
+  function fromCheck(id, title, route) {
+    var check = checks[id];
+    if (check) items.push({ id: id, title: title, ok: check.status === "ok", detail: check.detail || "", route: route });
+  }
+  fromCheck("token", "Бот подключён к Telegram", ["settings", "service", "telegram"]);
+  fromCheck("admin", "Заявки приходят в ваш Telegram", ["settings", "team"]);
+  fromCheck("catalog", "Клиенты видят каталог", ["objects", "list"]);
+  fromCheck("privacy", "Политика конфиденциальности заполнена", ["settings", "service", "interface"]);
+  var hasChannel = Boolean(contacts.phone || contacts.whatsapp || contacts.telegram || contacts.email);
+  items.push({ id: "contacts", title: "Контакты для связи заполнены", ok: hasChannel, detail: hasChannel ? "" : "Нет ни телефона, ни WhatsApp, ни Telegram, ни почты — клиенту некуда писать", route: ["texts", "contacts"] });
+  var promise = Number(((config.workingHours || {}).replyMinutes) || 0);
+  var agentMissing = [];
+  if (!contacts.managerName) agentMissing.push("имя");
+  if (!(contacts.photo && contacts.photo.exists)) agentMissing.push("фото");
+  if (!promise) agentMissing.push("срок ответа");
+  items.push({ id: "agent", title: "Лицо агента: имя, фото, срок ответа", ok: !agentMissing.length, detail: agentMissing.length ? "Не заполнено: " + agentMissing.join(", ") : "", route: ["texts", "contacts"] });
+  var copyOk = checks.version ? checks.version.status === "ok" : true;
+  var offsite = Boolean((config.telegramBackup || {}).enabled);
+  items.push({ id: "backup", title: "Копия данных сделана и лежит не только на этом компьютере", ok: copyOk && offsite, detail: !copyOk ? (checks.version.detail || "") : offsite ? "" : "Копия в Telegram не включена: все копии лежат на одном диске", route: ["settings", "service", "data"] });
+  var hasGroup = (state.groups || []).some(function (group) { return ["member", "administrator", "creator"].indexOf(group.status) >= 0; });
+  items.push({ id: "channel", title: "Канал или группа подключены", ok: hasGroup, detail: hasGroup ? "" : "Бот пока не состоит ни в одном канале или группе", route: ["settings", "service", "channels"] });
+  var hasInquiry = (state.inquiries || []).length > 0;
+  items.push({ id: "inquiry", title: "Первая заявка проверена", ok: hasInquiry, detail: hasInquiry ? "" : "Напишите боту сами и оставьте заявку — убедитесь, что она дошла", route: ["clients", "inbox"] });
+  return items;
+}
+
+function readinessCard(items) {
+  if (!items.length || items.every(function (item) { return item.ok; })) return "";
+  var done = items.filter(function (item) { return item.ok; }).length;
+  return '<div class="card gap-bottom readiness"><header><h3>Готовность к запуску</h3><div class="actions"><span class="chip ' + (done === items.length - 1 ? "warn" : "brand") + '">Готово ' + done + " из " + items.length + "</span></div></header>" +
+    '<div class="list">' + items.map(function (item) {
+      return '<div class="list-item"><span class="chip ' + (item.ok ? "ok" : "warn") + '">' + (item.ok ? "✓" : "!") + "</span>" +
+        '<span class="grow"><b>' + esc(item.title) + "</b>" + (item.ok || !item.detail ? "" : '<br><span class="muted small">' + esc(item.detail) + "</span>") + "</span>" +
+        (item.ok ? "" : '<button class="btn secondary small" type="button" data-ready-go="' + esc(item.route.join("/")) + '">Настроить</button>') + "</div>";
+    }).join("") + "</div></div>";
+}
+
+async function loadReadiness(host) {
+  var box = host.querySelector("#readiness");
+  if (!box) return;
+  try {
+    if (!readinessCache.report || Date.now() - readinessCache.at > READINESS_TTL) {
+      readinessCache = { at: Date.now(), report: await api("/api/self-check") };
+    }
+    if (!Array.isArray(readinessCache.report.checks)) return;
+    box.innerHTML = readinessCard(readinessItems(readinessCache.report));
+    box.querySelectorAll("[data-ready-go]").forEach(function (button) {
+      button.onclick = function () { var parts = button.dataset.readyGo.split("/"); go(parts[0], parts[1] || "", parts[2] || ""); };
+    });
+  } catch (error) {
+    // Чек-лист — подсказка, а не работа: не вышло — «Сегодня» остаётся как было.
+  }
+}
+
 VIEWS.today = {
   subtitle: function () { return "Что нужно сделать прямо сейчас"; },
   render: function (host) {
@@ -176,6 +245,7 @@ VIEWS.today = {
       '</div>' +
       '<div class="split">' +
         '<div class="stack">' +
+          '<div id="readiness"></div>' +
           '<div class="card"><header><h3>Список дел</h3><div class="actions">' +
             (deeds.length ? '<span class="chip ' + (deeds.some(function (item) { return item.severity === "bad"; }) ? "bad" : "warn") + '">' + num(deeds.length) + '</span>' : '') +
             '<button class="btn ghost small" type="button" data-go="notifications">Все события</button></div></header>' +
@@ -215,6 +285,7 @@ VIEWS.today = {
     host.querySelectorAll("[data-go]").forEach(function (node) {
       node.onclick = function () { go(node.dataset.go, node.dataset.tab || ""); };
     });
+    loadReadiness(host);
     host.querySelectorAll("#deedScope [data-scope]").forEach(function (button) {
       button.onclick = function () { todayScope.mine = button.dataset.scope === "mine"; rememberTodayScope(); VIEWS.today.render(host); };
     });
