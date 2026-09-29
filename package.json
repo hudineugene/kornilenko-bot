@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node bot.js",
     "test": "node --test tests/*.test.js",
-    "bundle": "esbuild src/main.mjs --bundle --platform=node --format=cjs --target=node24 --outfile=dist/bot.bundle.cjs --legal-comments=none --log-level=warning",
+    "bundle": "esbuild src/entry.mjs --bundle --platform=node --format=cjs --target=node24 --outfile=dist/bot.bundle.cjs --legal-comments=none --log-level=warning",
     "build": "powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1"
   },
   "devDependencies": {
