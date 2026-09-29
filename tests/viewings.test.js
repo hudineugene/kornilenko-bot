@@ -577,6 +577,19 @@ test.describe('reminder, feedback and the day\'s list', () => {
     assert.match(photo.body.caption, /Вилла в Эстепоне/);
   });
 
+  test('"not for me" with nothing similar is ONE honest message with the dead-end buttons, not «look at a similar option» plus «nothing similar»', async () => {
+    const chat = createChat();
+    const inquiry = await confirmedViewing(chat);
+    bot.getData().objects = bot.getData().objects.filter((item) => item.id === 'villa-marbella-01');
+    telegram.calls = [];
+    await chat.press('vfb:disliked:' + inquiry.id);
+    const toClient = telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id));
+    assert.equal(toClient.length, 1, 'одно сообщение клиенту: ' + toClient.map((call) => call.body.text).join(' | '));
+    assert.match(toClient[0].body.text, /Похожих вариантов сейчас нет — сообщить, когда появится\?/);
+    assert.ok(!/Посмотрите похожий/.test(toClient[0].body.text));
+    assert.ok(callbacksOf(toClient[0].body.reply_markup).some((data) => data.startsWith('saved:similar:')), 'кнопка «Сообщить, когда появится»');
+  });
+
   test('only the client who was asked can answer', async () => {
     const inquiry = await confirmedViewing(createChat());
     await createChat().press('vfb:liked:' + inquiry.id);

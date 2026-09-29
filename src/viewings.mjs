@@ -618,9 +618,8 @@ async function handleViewingFeedbackCallback(query, token) {
   }
   saveDataNow();
   void notifyAdministratorAction(user, 'Отзыв после просмотра: не подошло', title ? '🏠 ' + title : '', inquiry.id, null, { important: true });
-  await sendMessage(chatId, copy.dislikedReply, token);
-  if (record) await sendSimilarProperty(chatId, user, record, token);
-  else await sendMessage(chatId, (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).noSimilar, token, { reply_markup: menuKeyboard(language) });
+  if (record) await sendSimilarProperty(chatId, user, record, token, { intro: copy.dislikedReply, noSimilarText: copy.dislikedNoSimilar });
+  else await sendMessage(chatId, copy.dislikedNoSimilar, token, { reply_markup: menuKeyboard(language) });
 }
 
 export {

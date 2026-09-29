@@ -462,7 +462,9 @@ function propertyManagerMarkup(record, language, returnToCatalog = false) {
   return { inline_keyboard: rows };
 }
 
-async function sendSimilarProperty(chatId, user, record, token) {
+// options.intro — фраза перед найденными похожими; options.noSimilarText — единственное сообщение, если
+// похожих нет (без вступления: «Посмотрите похожий вариант» и тут же «Похожих нет» противоречили друг другу).
+async function sendSimilarProperty(chatId, user, record, token, options = {}) {
   const language = user.preferredLanguage || 'ru';
   const candidates = data.objects.filter((item) => item.id !== record.id && item.status === 'active' && propertyReadyForLanguage(item, language));
   const ranking = similarPropertyRanking(record, candidates, language);
@@ -478,7 +480,7 @@ async function sendSimilarProperty(chatId, user, record, token) {
     const deadEnd = DEAD_END_TEXT[language] || DEAD_END_TEXT.ru;
     const nearby = nearestByBudget(record, candidates);
     const whatsapp = whatsappRow(whatsappPropertyMessage(record, language));
-    await sendUiMessage(chatId, user, copy.noSimilar, token, { reply_markup: { inline_keyboard: [
+    await sendUiMessage(chatId, user, options.noSimilarText || copy.noSimilar, token, { reply_markup: { inline_keyboard: [
       [{ text: deadEnd.notify, callback_data: 'saved:similar:' + record.id }],
       ...(nearby.length ? [[{ text: deadEnd.budget, callback_data: 'property:nearprice:' + record.id }]] : []),
       [{ text: (MENU_LABELS[language] || MENU_LABELS.ru).contacts, callback_data: 'contact:question' }],
@@ -487,6 +489,7 @@ async function sendSimilarProperty(chatId, user, record, token) {
     ] } });
     return;
   }
+  if (options.intro) await sendMessage(chatId, options.intro, token);
   await sendCatalogPage(chatId, user, token, 0, 'similar');
 }
 
