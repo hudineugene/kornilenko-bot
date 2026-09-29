@@ -472,6 +472,18 @@ function formSignature(root) {
   return parts.join("\u0001");
 }
 
+// Как в панели сохраняется то, что человек правит. Способов два, и они не смешиваются:
+//  1) ФОРМА — поля на экране (или в окне) меняют, и внизу полоса «Сохранить / Отменить»
+//     (watchForm). Пока не нажато, ничего не записано; уйти без сохранения панель не даёт.
+//     Сюда же относятся окна с собственной кнопкой «Сохранить» в подвале: это та же
+//     форма, только в рамке окна.
+//  2) МГНОВЕННОЕ ДЕЙСТВИЕ — переключатель, смена этапа, скрытие, удаление: срабатывает
+//     сразу, а внизу тост с кнопкой «Вернуть» (toast с action; для необратимого —
+//     вопрос перед действием).
+// Отдельно стоят только действия с паролем панели (токен, доступ из интернета, смена
+// пароля, восстановление копии): у них своя проверка, они не «правка полей».
+// Кнопки «Сохранить» посреди страницы у отдельной карточки не заводим: правка в одной
+// карточке терялась, если нажать соседнюю.
 function watchForm(root, save, label) {
   var initial = null;
   var forced = false;
@@ -498,6 +510,29 @@ function watchForm(root, save, label) {
   root.addEventListener("input", check);
   root.addEventListener("change", check);
   return { mark: mark, check: check };
+}
+// «Бот включён» — одно мгновенное действие на всех экранах: на «Сегодня» и в «Подключении».
+// Выключение останавливает бота для всех клиентов — сначала вопрос; включение ничего не
+// ломает. После любого — тост с «Вернуть».
+async function setBotActive(input) {
+  var on = input.checked;
+  if (!on && !(await confirmDialog(
+    "Выключить бота?",
+    "Клиенты перестанут получать ответы: меню, каталог и заявки работать не будут.",
+    "Выключить", true))) {
+    input.checked = true;
+    return;
+  }
+  try {
+    await send("/api/settings", "PUT", Object.assign(settingsPayload(), { active: on }));
+    toast(on ? "Бот включён" : "Бот выключен", false, {
+      label: "Вернуть",
+      run: function () {
+        send("/api/settings", "PUT", Object.assign(settingsPayload(), { active: !on })).then(function () { return reload(); }).catch(fail);
+      },
+    });
+    await reload();
+  } catch (error) { fail(error); input.checked = !on; }
 }
 function clearDirty() { dirtyForm = null; el("savebar").classList.add("hidden"); }
 function isDirty() { return Boolean(dirtyForm); }

@@ -121,14 +121,7 @@ function renderTelegramConnection(host) {
     '</div></div></div></div>';
 
   // Переключатель включает и выключает бота сразу, отдельной кнопки нет.
-  host.querySelector("#setActive").onchange = async function () {
-    var input = this, on = input.checked;
-    try {
-      await send("/api/settings", "PUT", Object.assign(settingsPayload(), { active: on }));
-      toast(on ? "Бот включён" : "Бот выключен");
-      await reload();
-    } catch (error) { input.checked = !on; fail(error); }
-  };
+  host.querySelector("#setActive").onchange = function () { return setBotActive(this); };
   host.querySelector("#saveToken").onclick = async function () {
     var token = host.querySelector("#setToken").value.trim();
     var password = host.querySelector("#setTokenPass").value;
@@ -335,11 +328,10 @@ function renderData(host) {
       '<label class="btn ghost clickable-area">⬆ Восстановить<input type="file" id="restoreFile" accept=".kbz,.json,.gz,.kbk,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
       '<div class="hint">Подходит любая копия, сделанная ботом: скачанная этой кнопкой, из папки <b>backups</b> рядом с ботом или присланная в Telegram (для неё понадобится пароль копии). Ежедневная копия создаётся сама. Перед восстановлением прежние данные бот складывает в ту же папку — вернуться будет куда.</div>' +
     "</div></div>" +
-    '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack">' +
+    '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack"><div class="stack" id="tgBackupForm">' +
       '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> присылать зашифрованную копию раз в неделю</label>" +
       '<div class="field"><label for="tgBackupPass">Пароль шифрования</label><input id="tgBackupPass" type="password" placeholder="' + (backup.passwordSet ? "пароль сохранён" : "минимум 10 символов") + '"></div>' +
-      '<div class="row wrap"><button class="btn secondary small" id="saveTgBackup" type="button">Сохранить</button>' +
-      '<button class="btn ghost small" id="sendTgBackup" type="button">Отправить сейчас</button></div>' +
+      '</div><div class="row wrap"><button class="btn ghost small" id="sendTgBackup" type="button">Отправить сейчас</button></div>' +
       (backup.lastSentAt ? '<div class="small muted">Последняя копия: ' + dateTime(backup.lastSentAt) + "</div>" : "") +
       (backup.lastError ? '<div class="chip bad">' + esc(backup.lastError) + "</div>" : "") +
       '<div class="hint">Файл .kbk можно восстановить здесь же — понадобится этот пароль.</div>' +
@@ -405,12 +397,10 @@ function renderData(host) {
       setTimeout(function () { location.reload(); }, 1200);
     } catch (error) { fail(error); }
   };
-  host.querySelector("#saveTgBackup").onclick = async function () {
-    try {
-      await send("/api/telegram-backup", "PUT", { enabled: host.querySelector("#tgBackupOn").checked, password: host.querySelector("#tgBackupPass").value });
-      toast("Сохранено"); await reload();
-    } catch (error) { fail(error); }
-  };
+  // Поля копии в Telegram — форма: правка попадает в полосу «Сохранить» внизу.
+  watchForm(host.querySelector("#tgBackupForm"), async function () {
+    await send("/api/telegram-backup", "PUT", { enabled: host.querySelector("#tgBackupOn").checked, password: host.querySelector("#tgBackupPass").value });
+  }, "Настройки копии в Telegram изменены");
   host.querySelector("#sendTgBackup").onclick = async function () {
     try { await send("/api/telegram-backup/send", "POST", {}); toast("Копия отправлена в Telegram"); await reload(); } catch (error) { fail(error); }
   };

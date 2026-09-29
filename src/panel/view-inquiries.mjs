@@ -476,31 +476,30 @@ function templatesCardHtml() {
         LANGUAGES.map(function (language) {
           return '<textarea data-field="' + language[0] + '" placeholder="' + language[1] + '">' + esc((template.text || {})[language[0]] || "") + "</textarea>";
         }).join("") +
-        '<div class="row"><button class="btn secondary small" data-save="1" type="button">Сохранить</button><button class="btn ghost small" data-drop="1" type="button">Удалить</button></div>' +
+        '<div class="row"><button class="btn ghost small" data-drop="1" type="button">Удалить</button></div>' +
       "</div></div>";
     }).join("") : '<div class="empty"><b>Шаблонов нет</b>Готовый текст менеджер вставляет в ответ одним нажатием</div>') + "</div></div>";
 }
 
+// Шаблоны — форма: правка любого поля или новый шаблон включает полосу «Сохранить» внизу,
+// которая записывает всё изменённое разом. Раньше у каждого шаблона была своя кнопка, и
+// правка в одном терялась, если нажать соседний.
 function bindTemplatesCard(host, redraw) {
-  function bind() {
+  var list = host.querySelector("#templateList");
+  function cardPayload(card) {
+    var text = {};
+    LANGUAGES.forEach(function (language) { text[language[0]] = card.querySelector('[data-field="' + language[0] + '"]').value; });
+    return { title: card.querySelector('[data-field="title"]').value, text: text };
+  }
+  var initial = {};
+  function remember() {
+    host.querySelectorAll("[data-template]").forEach(function (card) { initial[card.dataset.template] = JSON.stringify(cardPayload(card)); });
+  }
+  function bindDrop() {
     host.querySelectorAll("[data-template]").forEach(function (card) {
       var id = card.dataset.template;
-      var payload = function () {
-        var text = {};
-        LANGUAGES.forEach(function (language) { text[language[0]] = card.querySelector('[data-field="' + language[0] + '"]').value; });
-        return { title: card.querySelector('[data-field="title"]').value, text: text };
-      };
-      card.querySelector("[data-save]").onclick = async function () {
-        try {
-          if (id === "new") await send("/api/reply-templates", "POST", payload());
-          else await send("/api/reply-templates/" + encodeURIComponent(id), "PUT", payload());
-          toast("Сохранено");
-          await reload(false);
-          redraw();
-        } catch (error) { fail(error); }
-      };
       card.querySelector("[data-drop]").onclick = async function () {
-        if (id === "new") return card.closest(".card").remove();
+        if (id === "new") { card.closest(".card").remove(); watcher.check(); return; }
         if (!(await confirmDialog("Удалить шаблон?", "Шаблон исчезнет из списка.", "Удалить", true))) return;
         try {
           await api("/api/reply-templates/" + encodeURIComponent(id), { method: "DELETE" });
@@ -510,18 +509,27 @@ function bindTemplatesCard(host, redraw) {
       };
     });
   }
-  bind();
+  var watcher = watchForm(list, async function () {
+    var cards = Array.prototype.slice.call(host.querySelectorAll("[data-template]"));
+    for (var index = 0; index < cards.length; index++) {
+      var card = cards[index], id = card.dataset.template, body = cardPayload(card);
+      if (id === "new") await send("/api/reply-templates", "POST", body);
+      else if (JSON.stringify(body) !== initial[id]) await send("/api/reply-templates/" + encodeURIComponent(id), "PATCH", body);
+    }
+  }, "Шаблоны ответов изменены");
+  remember();
+  bindDrop();
   host.querySelector("#addTemplate").onclick = function () {
-    var list = host.querySelector("#templateList");
     var empty = list.querySelector(".empty");
     if (empty) empty.remove();
     var card = document.createElement("div");
     card.className = "card flat";
     card.innerHTML = '<div class="card-body stack" data-template="new"><input data-field="title" placeholder="Название шаблона">' +
       LANGUAGES.map(function (language) { return '<textarea data-field="' + language[0] + '" placeholder="' + language[1] + '"></textarea>'; }).join("") +
-      '<div class="row"><button class="btn secondary small" data-save="1" type="button">Сохранить</button><button class="btn ghost small" data-drop="1" type="button">Удалить</button></div></div>';
+      '<div class="row"><button class="btn ghost small" data-drop="1" type="button">Удалить</button></div></div>';
     list.appendChild(card);
-    bind();
+    bindDrop();
+    watcher.mark();
   };
 }
 

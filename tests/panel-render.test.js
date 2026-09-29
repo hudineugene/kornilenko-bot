@@ -3453,3 +3453,69 @@ test('этапы воронки в панели — те же, что у бот�
   const { PIPELINE_STAGES } = await import('../src/data-format.mjs');
   assert.deepEqual(Array.from(sandbox.PIPELINE_STAGES, (stage) => stage[0]), PIPELINE_STAGES, 'подписи — дело панели, набор и порядок — бота');
 });
+
+test('сохранение — два способа: форма с полосой «Сохранить» и мгновенное действие с «Вернуть»; кнопок «Сохранить» посреди страницы нет', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.config.telegramBackup = { enabled: false };
+    data.replyTemplates = [{ id: 't1', title: 'Привет', text: { ru: 'Здравствуйте', en: '', es: '' } }];
+  });
+  const { sandbox, requests } = await panelSandbox();
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+  // Копия в Telegram: поля — форма, «Отправить сейчас» — отдельное действие.
+  const data = fakeElement('main');
+  const form = data.querySelector('#tgBackupForm');
+  const handlers = {};
+  form.addEventListener = (type, handler) => { handlers[type] = handler; };
+  sandbox.renderData(data);
+  assert.ok(!String(data.innerHTML).includes('saveTgBackup'), 'кнопки «Сохранить» у карточки нет');
+  assert.match(String(data.innerHTML), /id="tgBackupForm"/);
+  assert.match(String(data.innerHTML), /id="sendTgBackup"/, 'отправить сейчас — своё действие');
+  await tick();
+  assert.equal(sandbox.isDirty(), false);
+  form.querySelectorAll = () => [{ id: 'tgBackupOn', type: 'checkbox', checked: true, value: 'on' }];
+  handlers.change({});
+  assert.equal(sandbox.isDirty(), true, 'правка поля включила полосу «Сохранить»');
+  requests.length = 0;
+  await sandbox.saveDirty();
+  const put = requests.find((request) => request.url === '/api/telegram-backup' && request.method === 'PUT');
+  assert.ok(put, 'полоса сохраняет копию в Telegram');
+  assert.equal(sandbox.isDirty(), false, 'после сохранения полоса убрана');
+
+  // Шаблоны ответов: одна полоса на все, уходят только изменённые.
+  const rules = fakeElement('main');
+  const card = fakeElement();
+  card.dataset.template = 't1';
+  const fields = {};
+  card.querySelector = (selector) => fields[selector] || (fields[selector] = Object.assign(fakeElement(), { value: selector.includes('title') ? 'Привет' : 'Здравствуйте' }));
+  rules.querySelectorAll = (selector) => selector === '[data-template]' ? [card] : [];
+  const list = rules.querySelector('#templateList');
+  const listHandlers = {};
+  list.addEventListener = (type, handler) => { listHandlers[type] = handler; };
+  const typed = { id: 'title', type: 'text', value: 'Привет' };
+  list.querySelectorAll = () => [typed];
+  sandbox.bindTemplatesCard(rules, () => {});
+  await tick();
+  assert.equal(sandbox.isDirty(), false);
+  typed.value = 'Добрый день';
+  fields['[data-field="title"]'].value = 'Добрый день';
+  listHandlers.input({});
+  assert.equal(sandbox.isDirty(), true, 'правка шаблона включила полосу');
+  requests.length = 0;
+  await sandbox.saveDirty();
+  const templatePut = requests.filter((request) => request.method === 'PATCH' && request.url === '/api/reply-templates/t1');
+  assert.equal(templatePut.length, 1, 'ушёл один запрос — на изменённый шаблон');
+  assert.equal(templatePut[0].body.title, 'Добрый день');
+  assert.ok(!sandbox.templatesCardHtml().includes('data-save'), 'у каждого шаблона своей кнопки «Сохранить» нет');
+  rules.querySelector('#addTemplate').onclick();
+  assert.equal(sandbox.isDirty(), true, 'новый шаблон включает полосу «Сохранить»');
+  sandbox.clearDirty();
+
+  // Разметка: названия и описания группы — форма; кнопки-«Сохранить» на карточках нет.
+  assert.ok(PANEL_HTML.includes('id="groupInfoForm"') && !PANEL_HTML.includes('groupSaveInfo'), 'название и описание группы — форма с полосой');
+  assert.match(PANEL_HTML, /Как в панели сохраняется то, что человек правит/, 'правило записано в коде');
+  // Бот правит шаблон запросом PATCH; панель слала PUT, и правка существующего шаблона отвечала «Не найдено».
+  assert.ok(!/reply-templates\/"[^;]*"PUT"/.test(PANEL_HTML), 'шаблон правится тем методом, который принимает бот');
+});

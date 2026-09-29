@@ -660,9 +660,11 @@ test('действия, которые видят клиенты, спрашив
   assert.match(PANEL_HTML, /Запланировать публикацию\?/, 'и отложенная тоже');
   assert.match(PANEL_HTML, /Отозвать ссылку-приглашение\?/, 'отзыв ссылки спрашивает');
   // Включение бота подтверждения не требует: оно ничего не ломает.
-  const toggle = PANEL_HTML.match(/if \(toggle\) toggle\.onchange = async function \(\) \{([\s\S]*?)\n    \};/);
-  assert.ok(toggle, 'обработчик переключателя найден');
-  assert.match(toggle[1], /!toggle\.checked &&/, 'спрашиваем только при выключении');
+  const toggle = PANEL_HTML.match(/async function setBotActive\(input\) \{([\s\S]*?)\n\}\n/);
+  assert.ok(toggle, 'общий обработчик переключателя найден');
+  assert.match(toggle[1], /!on && !\(await confirmDialog\(/, 'спрашиваем только при выключении');
+  assert.match(toggle[1], /label: "Вернуть"/, 'после — тост с «Вернуть»');
+  assert.equal((PANEL_HTML.match(/setBotActive\(/g) || []).length, 3, 'один обработчик на «Сегодня» и в «Подключении»');
 });
 
 test('панель просит пароль перед изменением доступа из интернета', async () => {
