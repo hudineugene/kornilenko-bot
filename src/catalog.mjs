@@ -5,7 +5,7 @@ import { cleanText, formatMoney, formatNumber, parseMoneyAmount } from './util.m
 import { imageBytes, imageExists } from './media.mjs';
 import { CATALOG_FILTER_TEXT, COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, MANAGER_CONTACT_TEXT, MENU_LABELS, MY_AREA_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_BADGE_LABELS, PROPERTY_CONDITION_LABELS, PROPERTY_TYPE_LABELS, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
-import { recordPropertyEvent } from './analytics.mjs';
+import { markFunnel, recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
 import { knownFileId, rememberFileId, sendMessage, sendPhotoMessage, telegramMultipartRequest, telegramRequest } from './telegram.mjs';
 import { menuKeyboard, sendLanguagePicker } from './menus.mjs';
@@ -1183,6 +1183,7 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
   const safePage = Math.min(Math.max(0, Number(page) || 0), totalPages - 1);
   const record = records[safePage];
   rememberCatalogPosition(user, mode, safePage, record);
+  if (mode === 'all') markFunnel(user, 'catalog');
   const heading = catalogHeading(mode, language);
   await sendPropertyCard(chatId, user, token, record, {
     heading,

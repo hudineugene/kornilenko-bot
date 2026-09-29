@@ -213,6 +213,7 @@ test('on Monday morning the admin gets last week\'s figures, once', async () => 
     '⏳ Сейчас без ответа: 1',
     '🏠 Больше всего обращений: Вилла — 2',
     '📣 Откуда пришли: instagram — 1, без метки — 1',
+    '🔻 Воронка новых клиентов: зашли 2 → заявка 2 → запись 1 → подтверждено 1',
   ].join('\n'));
   assert.equal(adminMessages().length, 1);
   assert.equal(await bot.runWeeklyReport(new Date(2026, 8, 21, 15, 0)), '', 'once');

@@ -52,6 +52,19 @@ function recordPropertyEvent(propertyId, kind) {
   scheduleSave();
 }
 
+// Воронка бота: на клиенте помечается, когда он впервые открыл каталог и впервые
+// нажал «Подробнее». Заявки, записи и подтверждения берутся из самих заявок, а не
+// дублируются здесь. Отметка одна на шаг и не двигается при повторе.
+const FUNNEL_STEPS = ['catalog', 'details'];
+
+function markFunnel(user, step) {
+  if (!user || !FUNNEL_STEPS.includes(step)) return;
+  const funnel = user.funnel && typeof user.funnel === 'object' ? user.funnel : {};
+  if (funnel[step]) return;
+  user.funnel = { ...funnel, [step]: new Date().toISOString() };
+  scheduleSave();
+}
+
 function recordError(area, error) {
   const message = cleanText(error && error.message ? error.message : error, 600) || 'Неизвестная ошибка';
   data.errors.unshift({ id: crypto.randomUUID(), area: cleanText(area, 80), message, createdAt: new Date().toISOString() });
@@ -94,6 +107,8 @@ function recordActivity(user, direction, text, kind = 'message', metadata = {}) 
 
 export {
   ACTIVITY_KEPT,
+  FUNNEL_STEPS,
+  markFunnel,
   propertyAnalytics,
   recordActivity,
   recordDaily,

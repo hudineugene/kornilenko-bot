@@ -237,6 +237,61 @@ function dealTime(inquiry) {
   return inquiry.wonAt || inquiry.updatedAt || inquiry.createdAt;
 }
 
+// Воронка бота для новых клиентов недели: сколько дошли до каждого шага. Каталог
+// и «Подробнее» — по отметкам на клиенте (они собираются с того дня, как появились:
+// trackedFrom), заявки, записи и подтверждения — по самим заявкам.
+const FUNNEL_KEYS = ['joined', 'catalog', 'details', 'inquiry', 'viewing', 'confirmed'];
+
+function funnelRow(users, byUser) {
+  const row = Object.fromEntries(FUNNEL_KEYS.map((key) => [key, 0]));
+  for (const user of users) {
+    const own = byUser.get(String(user.id)) || [];
+    row.joined += 1;
+    if (user.funnel && user.funnel.catalog) row.catalog += 1;
+    if (user.funnel && user.funnel.details) row.details += 1;
+    if (own.length) row.inquiry += 1;
+    if (own.some((inquiry) => inquiry.type === 'viewing')) row.viewing += 1;
+    if (own.some((inquiry) => inquiry.type === 'viewing' && inquiry.viewing && inquiry.viewing.confirmedAt && !inquiry.viewing.cancelledAt)) row.confirmed += 1;
+  }
+  return row;
+}
+
+function botFunnel(users, start) {
+  const byUser = new Map();
+  for (const inquiry of data.inquiries) {
+    if (inquiry.searchLead) continue;
+    const key = String(inquiry.userId);
+    if (!byUser.has(key)) byUser.set(key, []);
+    byUser.get(key).push(inquiry);
+  }
+  const groups = (keyOf) => {
+    const map = new Map();
+    for (const user of users) {
+      const key = keyOf(user);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(user);
+    }
+    return Array.from(map).map(([key, list]) => ({ key, ...funnelRow(list, byUser) })).sort((a, b) => b.joined - a.joined || String(a.key).localeCompare(String(b.key)));
+  };
+  // С какого дня бот вообще помечает каталог и «Подробнее»: раньше отметок нет, и
+  // клиент, пришедший до этого дня, мог открыть каталог, не оставив следа.
+  let earliest = '';
+  for (const user of Object.values(data.users)) {
+    for (const stamp of [user.funnel && user.funnel.catalog, user.funnel && user.funnel.details]) {
+      if (stamp && (!earliest || stamp < earliest)) earliest = stamp;
+    }
+  }
+  const pad = (value) => String(value).padStart(2, '0');
+  const trackedFrom = earliest ? pad(new Date(earliest).getDate()) + '.' + pad(new Date(earliest).getMonth() + 1) : '';
+  return {
+    ...funnelRow(users, byUser),
+    trackedFrom,
+    partial: Boolean(earliest) && new Date(earliest) > start,
+    byLanguage: groups((user) => ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'unknown'),
+    bySource: groups((user) => user.source || 'без метки').slice(0, 5),
+  };
+}
+
 function weeklyReportData(now = new Date(), which = 'last') {
   const thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
   const current = which === 'current';
@@ -285,12 +340,30 @@ function weeklyReportData(now = new Date(), which = 'last') {
     waiting: waitingConversationCount(),
     topProperties,
     sources: Array.from(bySource).sort((a, b) => b[1] - a[1]),
+    funnel: botFunnel(week.users, start),
     broadcasts: {
       count: broadcasts.length,
       sent: broadcasts.reduce((sum, entry) => sum + Number(entry.sent || 0), 0),
       responded: broadcasts.reduce((sum, entry) => sum + (Array.isArray(entry.respondedUserIds) ? entry.respondedUserIds.length : 0), 0),
     },
   };
+}
+
+// Строка воронки: шаги каталога показываем, только если бот их уже считает.
+function funnelTextLines(funnel) {
+  if (!funnel || !funnel.joined) return [];
+  const tracked = Boolean(funnel.trackedFrom);
+  const steps = [
+    'зашли ' + funnel.joined,
+    ...(tracked ? ['каталог ' + funnel.catalog, '«Подробнее» ' + funnel.details] : []),
+    'заявка ' + funnel.inquiry,
+    'запись ' + funnel.viewing,
+    'подтверждено ' + funnel.confirmed,
+  ];
+  return [
+    '🔻 Воронка новых клиентов: ' + steps.join(' → '),
+    ...(tracked && funnel.partial ? ['   каталог и «Подробнее» — с ' + funnel.trackedFrom + ': у пришедших раньше цифры неполные'] : []),
+  ];
 }
 
 function weeklyReportText(report) {
@@ -307,6 +380,7 @@ function weeklyReportText(report) {
     '⏳ Сейчас без ответа: ' + report.waiting,
     ...(report.topProperties.length ? ['🏠 Больше всего обращений: ' + report.topProperties.map((item) => item.name + ' — ' + item.count).join(', ')] : []),
     ...(report.sources.length ? ['📣 Откуда пришли: ' + report.sources.map(([name, count]) => name + ' — ' + count).join(', ')] : []),
+    ...funnelTextLines(report.funnel),
     ...(report.broadcasts.count ? ['✉️ Рассылок: ' + report.broadcasts.count + ', получили ' + report.broadcasts.sent + ', откликнулись ' + report.broadcasts.responded] : []),
   ].join('\n');
 }

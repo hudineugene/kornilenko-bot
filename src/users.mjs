@@ -152,6 +152,11 @@ function normalizeUser(from, chatId, countMessage = true) {
     source: cleanText(previous.source, 40),
     catalogFilter: previous.catalogFilter && typeof previous.catalogFilter === 'object' ? normalizedCatalogFilter(previous.catalogFilter) : null,
     savedSearch: normalizedSavedSearch(previous.savedSearch),
+    // Когда клиент впервые открыл каталог и «Подробнее» — для воронки в отчёте.
+    funnel: {
+      ...(previous.funnel && previous.funnel.catalog ? { catalog: cleanText(previous.funnel.catalog, 40) } : {}),
+      ...(previous.funnel && previous.funnel.details ? { details: cleanText(previous.funnel.details, 40) } : {}),
+    },
     sourceAt: cleanText(previous.sourceAt, 40),
     alertsSent: previous.alertsSent && typeof previous.alertsSent === 'object' && !Array.isArray(previous.alertsSent) ? previous.alertsSent : {},
     // The client turned broadcasts off (the "Unsubscribe" button or settings).

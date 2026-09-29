@@ -503,6 +503,42 @@ function weekTile(label, value, note) {
   return '<div class="week-tile"><span class="week-label">' + esc(label) + '</span><b class="week-value">' + num(value) + "</b>" + (note || "") + "</div>";
 }
 
+// Воронка бота: из новых клиентов недели — сколько дошли до каждого шага. Каталог
+// и «Подробнее» бот стал помечать не сразу, поэтому, если отметки начались позже
+// начала недели, цифры этих двух шагов у пришедших раньше неполные — так и сказано.
+function funnelSteps(funnel) {
+  var tracked = Boolean(funnel.trackedFrom);
+  return [["Зашли", funnel.joined]]
+    .concat(tracked ? [["Открыли каталог", funnel.catalog], ["Нажали «Подробнее»", funnel.details]] : [])
+    .concat([["Оставили заявку", funnel.inquiry], ["Записались на просмотр", funnel.viewing], ["Получили подтверждение", funnel.confirmed]]);
+}
+
+function funnelTable(title, rows, tracked, labelOf) {
+  if (!rows.length) return "";
+  return '<div><div class="week-subtitle">' + esc(title) + '</div><div class="table-wrap"><table class="funnel-table"><thead><tr><th></th><th class="right">Зашли</th>' +
+    (tracked ? '<th class="right">Каталог</th><th class="right">«Подробнее»</th>' : "") +
+    '<th class="right">Заявка</th><th class="right">Запись</th><th class="right">Подтв.</th></tr></thead><tbody>' +
+    rows.map(function (row) {
+      return "<tr><td><b>" + esc(labelOf(row.key)) + '</b></td><td class="right">' + num(row.joined) + "</td>" +
+        (tracked ? '<td class="right">' + num(row.catalog) + '</td><td class="right">' + num(row.details) + "</td>" : "") +
+        '<td class="right">' + num(row.inquiry) + '</td><td class="right">' + num(row.viewing) + '</td><td class="right">' + num(row.confirmed) + "</td></tr>";
+    }).join("") + "</tbody></table></div></div>";
+}
+
+function funnelBlock(funnel) {
+  if (!funnel || !funnel.joined) return "";
+  var tracked = Boolean(funnel.trackedFrom);
+  var languageName = { ru: "Русский", en: "English", es: "Español", unknown: "Язык не выбран" };
+  return '<div class="funnel-report"><div class="week-subtitle">Воронка бота: новые клиенты недели</div>' +
+    barList(funnelSteps(funnel), funnel.joined) +
+    (tracked && funnel.partial ? '<div class="small muted">Каталог и «Подробнее» бот считает с ' + esc(funnel.trackedFrom) + ": у клиентов, пришедших раньше, эти цифры неполные.</div>" : "") +
+    (!tracked ? '<div class="small muted">Открытия каталога и «Подробнее» бот начнёт считать после этого обновления — пока в воронке только то, что видно по заявкам.</div>' : "") +
+    '<div class="grid cols-2">' +
+      funnelTable("По языкам", funnel.byLanguage || [], tracked, function (key) { return languageName[key] || key; }) +
+      funnelTable("По меткам ссылок", funnel.bySource || [], tracked, function (key) { return key; }) +
+    "</div></div>";
+}
+
 function weeklyCard(payload) {
   var report = payload.report;
   var comparedWith = report.which === "current" ? "с тем же отрезком прошлой недели" : "с позапрошлой неделей";
@@ -526,6 +562,7 @@ function weeklyCard(payload) {
           return '<div class="list-item"><span class="grow">' + esc(row.name) + "</span><b>" + num(row.count) + "</b></div>";
         }).join("") + "</div>" : '<div class="empty">Заявок по объектам не было</div>') + "</div>" +
       "</div>" +
+      funnelBlock(report.funnel) +
       (report.broadcasts.count ? '<div class="small muted">✉️ Рассылок: ' + num(report.broadcasts.count) + ", получили " + num(report.broadcasts.sent) + ", откликнулись " + num(report.broadcasts.responded) + "</div>" : "") +
     "</div></div>";
 }

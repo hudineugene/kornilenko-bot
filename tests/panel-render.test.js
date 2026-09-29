@@ -2361,6 +2361,45 @@ test('«Отчёт» — отдельный пункт меню: открыва�
   assert.match(String(today.innerHTML), /id="weekLine"/, 'на «Сегодня» есть место под строку недели');
 });
 
+test('«Отчёт»: воронка бота — шаги от «зашли» до «подтверждено», по языкам и меткам; неполные данные помечены', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const base = {
+    which: 'last', label: '14.09–20.09',
+    users: { count: 10, previous: 8 }, inquiries: { count: 3, previous: 3, byType: [] },
+    viewings: { booked: 1, held: 0 }, deals: { count: 0, previous: 0 }, waiting: 0,
+    topProperties: [], sources: [], broadcasts: { count: 0, sent: 0, responded: 0 },
+  };
+  const funnel = {
+    joined: 10, catalog: 8, details: 5, inquiry: 3, viewing: 2, confirmed: 1, trackedFrom: '10.09', partial: false,
+    byLanguage: [{ key: 'ru', joined: 7, catalog: 6, details: 4, inquiry: 2, viewing: 1, confirmed: 1 }, { key: 'en', joined: 3, catalog: 2, details: 1, inquiry: 1, viewing: 1, confirmed: 0 }],
+    bySource: [{ key: 'instagram', joined: 6, catalog: 5, details: 3, inquiry: 2, viewing: 1, confirmed: 1 }, { key: 'без метки', joined: 4, catalog: 3, details: 2, inquiry: 1, viewing: 1, confirmed: 0 }],
+  };
+  const html = String(sandbox.weeklyCard({ report: { ...base, funnel }, text: '' }));
+  assert.match(html, /Воронка бота/);
+  for (const step of ['Зашли', 'Открыли каталог', 'Нажали «Подробнее»', 'Оставили заявку', 'Записались на просмотр', 'Получили подтверждение']) assert.ok(html.includes(step), 'шаг: ' + step);
+  assert.match(html, /Открыли каталог[\s\S]*?8[\s\S]*?80%/, 'проценты — от «зашли»');
+  assert.match(html, /Русский/);
+  assert.match(html, /English/);
+  assert.match(html, /instagram/);
+  assert.match(html, /без метки/);
+  assert.ok(!/неполные/.test(html), 'полные данные — без пометки');
+
+  // Отметки начались позже начала недели: честно сказано.
+  const partial = String(sandbox.weeklyCard({ report: { ...base, funnel: { ...funnel, trackedFrom: '16.09', partial: true } }, text: '' }));
+  assert.match(partial, /с 16\.09/);
+  assert.match(partial, /неполные/);
+
+  // Отметок нет вовсе: шагов каталога нет, остальное — есть.
+  const untracked = String(sandbox.weeklyCard({ report: { ...base, funnel: { ...funnel, trackedFrom: '', catalog: 0, details: 0 } }, text: '' }));
+  assert.ok(!untracked.includes('Открыли каталог') && !untracked.includes('Нажали «Подробнее»'));
+  assert.match(untracked, /Оставили заявку/);
+
+  // Новых клиентов не было — воронки нет; старый ответ без воронки не ломает страницу.
+  assert.ok(!String(sandbox.weeklyCard({ report: { ...base, funnel: { ...funnel, joined: 0 } }, text: '' })).includes('Воронка бота'));
+  assert.ok(!String(sandbox.weeklyCard({ report: base, text: '' })).includes('Воронка бота'));
+});
+
 test('«Отчёт»: реклама → сделки — одна таблица «источник → клиенты → заявки → просмотры → сделки» и конструктор ссылки рядом', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();

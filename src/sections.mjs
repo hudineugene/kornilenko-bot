@@ -5,7 +5,7 @@ import { defaultData, normalizeGuidePages } from './data-format.mjs';
 import { imageExists } from './media.mjs';
 import { COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LEAD_FORM_TEXT, LANGUAGE_SELECTED, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
-import { recordError, recordPropertyEvent } from './analytics.mjs';
+import { markFunnel, recordError, recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
@@ -569,6 +569,7 @@ async function handlePropertyCallback(query, token) {
   }
   if (actionName === 'details') {
     recordPropertyEvent(record.id, 'details');
+    markFunnel(user, 'details');
     const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
     const interaction = INTERACTION_TEXT[language] || INTERACTION_TEXT.ru;
     const full = objectCaptionHtml(record, language, { full: true });
