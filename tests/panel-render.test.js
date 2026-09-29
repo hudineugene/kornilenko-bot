@@ -3183,6 +3183,61 @@ test('сжатое состояние приходит без токена за�
   assert.equal(asked.length, 1, 'а когда он есть — не запрашивается снова');
 });
 
+test('клавиатура и скринридер: кликабельные строки берутся по Tab и нажимаются Enter/пробелом, вкладки — tablist, окна названы, тост — status', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+
+  // Разметка каркаса: тост и полосы объявляются скринридеру, не перебивая речь.
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /<div id="toast" class="toast hidden" role="status" aria-live="polite">/);
+  assert.match(PANEL_HTML, /<div id="savebar" class="savebar hidden" role="status">/);
+  assert.match(PANEL_HTML, /<div id="refreshHint" class="refresh-hint hidden" role="status">/);
+
+  // Поддельный узел с атрибутами и классами.
+  const node = (classes = [], children = []) => {
+    const attrs = {};
+    return {
+      attrs, children,
+      setAttribute(name, value) { attrs[name] = String(value); },
+      getAttribute(name) { return Object.hasOwn(attrs, name) ? attrs[name] : null; },
+      hasAttribute(name) { return Object.hasOwn(attrs, name); },
+      classList: { contains: (name) => classes.includes(name) },
+      querySelectorAll(selector) { return selector === 'button' ? children : []; },
+      clicked: 0, click() { this.clicked += 1; },
+    };
+  };
+  const row = node(['clickable']);
+  const inputRow = node(['clickable']);
+  inputRow.setAttribute('tabindex', '-1');
+  const first = node(['active']);
+  const second = node();
+  const tabs = node([], [first, second]);
+  const root = { querySelectorAll: (selector) => (selector.includes('tr.clickable') ? [row, inputRow] : selector === '.tabs' ? [tabs] : []) };
+  sandbox.enhanceAccessibility(root);
+  assert.equal(row.getAttribute('tabindex'), '0', 'строка попадает в очередь Tab');
+  assert.equal(row.getAttribute('data-kbd'), '1', 'и помечена для нажатия с клавиатуры');
+  assert.equal(inputRow.getAttribute('tabindex'), '-1', 'уже настроенное не трогаем');
+  assert.equal(tabs.getAttribute('role'), 'tablist');
+  assert.equal(first.getAttribute('role'), 'tab');
+  assert.equal(first.getAttribute('aria-selected'), 'true', 'активная вкладка выбрана');
+  assert.equal(second.getAttribute('aria-selected'), 'false');
+
+  // Enter и пробел на самой строке — нажатие; на другом — нет; вложенная кнопка своё нажатие сохраняет.
+  let prevented = 0;
+  const key = (target, pressed) => ({ key: pressed, target, preventDefault() { prevented += 1; } });
+  assert.equal(sandbox.keyboardActivate(key(row, 'Enter')), true);
+  assert.equal(sandbox.keyboardActivate(key(row, ' ')), true);
+  assert.equal(row.clicked, 2);
+  assert.equal(prevented, 2, 'пробел не прокручивает страницу');
+  assert.equal(sandbox.keyboardActivate(key(row, 'a')), false);
+  assert.equal(sandbox.keyboardActivate(key(node(), 'Enter')), false, 'обычные элементы не трогаем');
+
+  // Окно названо по своему заголовку.
+  const dialog = sandbox.openDialog({ title: 'Ответ клиенту', body: '<p>тело</p>' });
+  assert.match(String(dialog.innerHTML), /<h2 id="dialogTitle\d+">Ответ клиенту<\/h2>/);
+  assert.match(PANEL_HTML, /dialog\.setAttribute\("aria-labelledby", titleId\)/, 'окно связано со своим заголовком');
+});
+
 test('старые адреса подключения к Telegram ведут на «Обслуживание → Подключение к Telegram»', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();

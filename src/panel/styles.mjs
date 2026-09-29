@@ -137,6 +137,7 @@ tbody tr.selected{background:var(--brand-soft)}
 input,textarea,select{width:100%;padding:6px 10px;border:1px solid var(--field-line);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:var(--fs)}
 input:focus,textarea:focus,select:focus{outline:0;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
 button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+[tabindex]:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
 textarea{min-height:76px;resize:vertical;line-height:1.45}
 /* Флажки не мельче 18 px: на телефоне и при работе мышью 13-пиксельный флажок — мишень для промаха. */
 input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-color:var(--brand)}

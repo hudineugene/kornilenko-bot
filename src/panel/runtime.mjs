@@ -61,9 +61,9 @@ const PANEL_SHELL = String.raw`
     <div class="page" id="page"></div>
   </div>
 </div>
-<div id="toast" class="toast hidden"></div>
-<div id="savebar" class="savebar hidden"><span class="grow" id="savebarText">Есть несохранённые изменения</span><button class="btn secondary" id="savebarReset" type="button">Отменить</button><button class="btn" id="savebarSave" type="button">Сохранить</button></div>
-<div id="refreshHint" class="refresh-hint hidden"><span class="grow">Появились новые данные</span><button class="btn secondary" id="refreshHintApply" type="button">Обновить экран</button></div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+<div id="savebar" class="savebar hidden" role="status"><span class="grow" id="savebarText">Есть несохранённые изменения</span><button class="btn secondary" id="savebarReset" type="button">Отменить</button><button class="btn" id="savebarSave" type="button">Сохранить</button></div>
+<div id="refreshHint" class="refresh-hint hidden" role="status"><span class="grow">Появились новые данные</span><button class="btn secondary" id="refreshHintApply" type="button">Обновить экран</button></div>
 <div id="saveAlert" class="save-alert hidden" role="alert"><b>⚠️ Бот не может сохранить данные на диск</b><span id="saveAlertText"></span></div>
 `;
 
@@ -326,7 +326,9 @@ function fail(error) { toast(error && error.message ? error.message : "Не по
 function confirmDialog(title, text, confirmText, danger) {
   return new Promise(function (resolve) {
     var dialog = document.createElement("dialog");
-    dialog.innerHTML = '<div class="dialog-head"><h2>' + esc(title) + '</h2></div><div class="dialog-body"><p class="muted">' + esc(text) + '</p></div>' +
+    var confirmTitleId = "dialogTitle" + (++dialogSerial);
+    dialog.setAttribute("aria-labelledby", confirmTitleId);
+    dialog.innerHTML = '<div class="dialog-head"><h2 id="' + confirmTitleId + '">' + esc(title) + '</h2></div><div class="dialog-body"><p class="muted">' + esc(text) + '</p></div>' +
       '<div class="dialog-foot"><button class="btn secondary" value="cancel">Отмена</button><button class="btn ' + (danger ? "danger" : "") + '" value="ok">' + esc(confirmText || "Подтвердить") + '</button></div>';
     document.body.appendChild(dialog);
     dialog.querySelectorAll("button").forEach(function (button) {
@@ -366,12 +368,16 @@ function askPassword(title, text, label) {
   });
 }
 
+var dialogSerial = 0;
+
 function openDialog(options) {
   var dialog = document.createElement("dialog");
   var dialogDirty = false, closingDialog = false;
+  var titleId = "dialogTitle" + (++dialogSerial);
+  dialog.setAttribute("aria-labelledby", titleId);
   if (options.drawer) dialog.className = "drawer";
   if (options.wide) dialog.classList.add("wide");
-  dialog.innerHTML = '<div class="dialog-head"><h2>' + esc(options.title) + '</h2><div class="grow"></div><button class="btn ghost icon" data-close="1" type="button">✕</button></div>' +
+  dialog.innerHTML = '<div class="dialog-head"><h2 id="' + titleId + '">' + esc(options.title) + '</h2><div class="grow"></div><button class="btn ghost icon" data-close="1" type="button">✕</button></div>' +
     '<div class="dialog-body">' + options.body + '</div>' +
     (options.footer === null ? "" : '<div class="dialog-foot">' + (options.footer || '<button class="btn secondary" data-close="1" type="button">Закрыть</button>') + '</div>');
   document.body.appendChild(dialog);
@@ -803,6 +809,50 @@ function renderTabBar() {
     el("moreSheet").classList.toggle("hidden", !open);
     el("tabMore").setAttribute("aria-expanded", String(open));
   };
+}
+
+// --- Клавиатура и скринридер ------------------------------------------------------
+// Кликабельные строки таблиц встают в очередь Tab и нажимаются Enter или пробелом;
+// группы вкладок объявлены как tablist, активная — aria-selected. Разметку строят
+// десятки функций, поэтому доводим её одним проходом после любой перерисовки экрана.
+function enhanceAccessibility(root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll("tr.clickable").forEach(function (row) {
+    if (row.hasAttribute("tabindex")) return;
+    row.setAttribute("tabindex", "0");
+    row.setAttribute("data-kbd", "1");
+  });
+  root.querySelectorAll(".tabs").forEach(function (tabs) {
+    tabs.setAttribute("role", "tablist");
+    Array.prototype.forEach.call(tabs.querySelectorAll("button"), function (button) {
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-selected", String(button.classList.contains("active")));
+    });
+  });
+}
+
+// Enter и пробел на самой строке — как нажатие мышью; вложенные кнопки и поля своё
+// нажатие сохраняют (цель события — не строка).
+function keyboardActivate(event) {
+  var target = event && event.target;
+  if (!target || !target.getAttribute || target.getAttribute("data-kbd") !== "1") return false;
+  if (event.key !== "Enter" && event.key !== " ") return false;
+  if (event.preventDefault) event.preventDefault();
+  target.click();
+  return true;
+}
+
+function initAccessibility() {
+  document.addEventListener("keydown", keyboardActivate);
+  var page = el("page");
+  if (typeof MutationObserver === "function" && page) {
+    var timer = 0;
+    new MutationObserver(function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () { enhanceAccessibility(page); }, 30);
+    }).observe(page, { childList: true, subtree: true });
+  }
+  enhanceAccessibility(page);
 }
 
 // --- Общий поиск в шапке ----------------------------------------------------
@@ -1331,6 +1381,7 @@ function bindShell() {
   });
   bindAlerts();
   initGlobalSearch();
+  initAccessibility();
   // Колокольчик ведёт в «Сегодня»: там тот же список дел, но с кнопками.
   el("notificationBell").onclick = function () { go("today"); };
   // На телефоне текст состояния не помещается: нажатие на точку показывает его.
