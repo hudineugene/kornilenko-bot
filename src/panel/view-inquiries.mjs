@@ -1056,8 +1056,6 @@ function renderInquiryCard(host) {
       '<div class="side-backdrop"></div>' +
       '<aside class="conversation-side"><button class="btn ghost small side-close" id="sideClose" type="button">✕ Закрыть</button><details class="conversation-side-details" open><summary>Статус, этап и заметки</summary><div class="conversation-side-inner stack">' +
         selectionMatchingPanel(item) +
-        (viewing ? '<div class="msg">📅 ' + esc((viewing.confirmedDate || viewing.dateText || "дата не выбрана") + " · " + (viewing.confirmedTime || viewing.timeText || "")) + (viewing.online ? "<br>📹 онлайн-показ по видеосвязи" : "") + (viewing.confirmedAt ? '<br><span class="small ok-text">просмотр подтверждён</span>' : '<br><span class="small warn-text">нужно подтвердить просмотр</span>') + "</div>" : "") +
-        (viewing && !viewing.cancelledAt ? '<button class="btn secondary small" id="scheduleViewing" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + '</button>' : "") +
         // Статус один: «Ждёт ответа», «Отвечено» или «Закрыт». Первые два бот
         // ставит сам по переписке — руками остаётся только закрыть заявку или
         // открыть её снова. Этап сделки — отдельное необязательное поле ниже.
@@ -1071,7 +1069,8 @@ function renderInquiryCard(host) {
         '<div class="row followup-fields"><div class="field grow"><label for="followDate">Следующий шаг</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label for="followTime">Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div>' +
         '<div class="field"><label for="inqNote">Заметка о клиенте</label><textarea id="inqNote" placeholder="Предпочтения, договорённости, что важно сделать">' + esc(user.note || item.note || "") + "</textarea></div>" +
         '<div class="field"><label for="clientTagsInq">Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div>' +
-        '<div class="conversation-save"><button class="btn" id="saveInq" type="button">Сохранить</button><button class="btn ghost small" id="openClientCard" type="button">Карточка клиента</button><button class="btn ghost small" id="inquiryExtras" type="button">⋯ Ещё</button></div>' +
+        '<div class="conversation-save"><button class="btn" id="saveInq" type="button">Сохранить</button><button class="btn ghost small" id="openClientCard" type="button">Карточка клиента</button></div>' +
+        '<div class="row divided"><button class="btn danger-outline small" id="deleteInq" type="button">Удалить заявку</button><span class="small muted">Переписка в Telegram останется.</span></div>' +
       '</div></details></aside>' +
     "</div></div>";
 
@@ -1262,30 +1261,18 @@ function renderInquiryCard(host) {
       await reload();
     } catch (error) { fail(error); }
   };
-  host.querySelector("#inquiryExtras").onclick = function () {
-    openDialog({
-      title: "Ещё действия по заявке",
-      body: '<div class="stack"><button class="btn danger" id="extraDelete" type="button">Удалить заявку</button>' +
-        '<span class="small muted">Заявка исчезнет из панели. Переписка в Telegram останется.</span></div>',
-      footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
-      ready: function (dialog) {
-        dialog.querySelector("#extraDelete").onclick = async function () {
-          if (!(await confirmDialog("Удалить заявку?", "Она исчезнет из панели. Переписка в Telegram останется.", "Удалить", true))) return;
-          try {
-            await api("/api/inquiries/" + encodeURIComponent(item.id), { method: "DELETE" });
-            dialog.closeClean();
-            selectConversation("");
-            toast("Удалено");
-            await reload();
-          } catch (error) { fail(error); }
-        };
-      },
-    });
+  // Удаление — не меню из одного пункта, а кнопка внизу панели: спрашивает и удаляет.
+  host.querySelector("#deleteInq").onclick = async function () {
+    if (!(await confirmDialog("Удалить заявку?", "Она исчезнет из панели. Переписка в Telegram останется.", "Удалить", true))) return;
+    try {
+      await api("/api/inquiries/" + encodeURIComponent(item.id), { method: "DELETE" });
+      selectConversation("");
+      toast("Удалено");
+      await reload();
+    } catch (error) { fail(error); }
   };
   var transferButton = host.querySelector("#transferInq");
   if (transferButton) transferButton.onclick = function () { return openTransferDialog("one", item); };
-  var scheduleButton = host.querySelector("#scheduleViewing");
-  if (scheduleButton) scheduleButton.onclick = function () { openViewingSchedule(item); };
   var inlineViewing = host.querySelector("#confirmViewingInline");
   if (inlineViewing) inlineViewing.onclick = function () { openViewingSchedule(item); };
 }

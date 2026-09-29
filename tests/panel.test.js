@@ -296,11 +296,13 @@ test('редкие действия убраны под «⋯»', async () => {
   assert.match(PANEL_HTML, /pageAction\("⋯", openInquiryExtras/, 'на экране одна кнопка «⋯» вместо «Очистить»');
   assert.match(PANEL_HTML, /id="extraExport"/);
   assert.match(PANEL_HTML, /id="extraCleanup"/);
-  assert.match(PANEL_HTML, /id="extraDelete"/, 'удаление заявки — тоже под «⋯»');
   // Рядом с поиском и с кнопкой «Сохранить» их больше нет.
   assert.ok(!/id="exportInq"/.test(PANEL_HTML), 'выгрузка ушла из строки фильтров');
-  assert.ok(!/id="deleteInq"/.test(PANEL_HTML), 'удаление ушло из ряда с «Сохранить»');
-  assert.match(PANEL_HTML, /id="inquiryExtras"/);
+  // Удаление заявки — не меню из одного пункта: отдельный блок внизу панели, отделённый чертой от «Сохранить».
+  assert.ok(!/id="extraDelete"/.test(PANEL_HTML));
+  assert.match(PANEL_HTML, /<div class="row divided"><button class="btn danger-outline small" id="deleteInq"/);
+  assert.ok(!/conversation-save"><button class="btn" id="saveInq"[^']*id="deleteInq"/.test(PANEL_HTML), 'не в одном ряду с «Сохранить»');
+  assert.ok(!PANEL_HTML.includes('id="inquiryExtras"') && !PANEL_HTML.includes('id="scheduleViewing"'), 'меню из одного пункта и второй «Подтвердить и уведомить» убраны');
 });
 
 test('на телефоне разделы — в нижней панели, а не за гамбургером; кнопки не ниже 44 px', async () => {
