@@ -20,6 +20,8 @@ import {
   sendUiMessage,
 } from './catalog.mjs';
 import { INTERACTION_TEXT, MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
+import { data } from './store.mjs';
+import { similarSearchFilter } from './dead-end.mjs';
 
 function template(text, values) {
   return Object.entries(values).reduce((result, [key, value]) => result.replaceAll('{' + key + '}', String(value)), String(text || ''));
@@ -120,6 +122,32 @@ async function handleSavedSearchCallback(query, token, notifyAction = null) {
   if (action === 'view') {
     await acknowledge(query, token);
     notify('Открыл сохранённый поиск', savedSearchOf(user) ? catalogFilterSummary(savedSearchOf(user).filter, language) : 'Поиск ещё не сохранён');
+    await sendSavedSearch(chatId, user, token);
+    return;
+  }
+
+  // «Сообщить, когда появится похожий» на пустом экране похожих: поиск по
+  // параметрам карточки, без захода в фильтр каталога. Каталог клиента при этом не
+  // меняется — сохраняется только сам поиск.
+  if (action === 'similar') {
+    const id = String(query.data || '').split(':').slice(2).join(':');
+    const record = data.objects.find((item) => item.id === id && ['active', 'reserved'].includes(item.status));
+    if (!record) {
+      await acknowledge(query, token, (INTERACTION_TEXT[language] || INTERACTION_TEXT.ru).stale);
+      return;
+    }
+    const filter = catalogSearchFilter(similarSearchFilter(record, language));
+    if (!catalogSearchActive(filter)) {
+      await acknowledge(query, token, copy.requiresFilter);
+      return;
+    }
+    const previous = savedSearchOf(user);
+    const now = new Date().toISOString();
+    user.savedSearch = { filter, enabled: true, createdAt: previous && previous.createdAt || now, updatedAt: now };
+    user.propertyAlerts = true;
+    scheduleSave();
+    notify(previous ? 'Обновил сохранённый поиск' : 'Сохранил поиск объектов', catalogFilterSummary(filter, language));
+    await acknowledge(query, token, copy.saved);
     await sendSavedSearch(chatId, user, token);
     return;
   }

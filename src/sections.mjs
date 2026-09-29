@@ -16,6 +16,7 @@ import { calculatorButton } from './calculator.mjs';
 import { CATALOG_MODES, catalogHeading, catalogViewContext, escapeTelegramHtml, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
 import { similarPropertyRanking } from './similar.mjs';
+import { DEAD_END_TEXT, nearestByBudget } from './dead-end.mjs';
 
 async function sendPromotionPage(chatId, user, token, page = 0) {
   const language = user.preferredLanguage || 'ru';
@@ -455,7 +456,13 @@ async function sendSimilarProperty(chatId, user, record, token) {
   if (!ranking.length) {
     const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
     const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
+    // Не тупик: подписаться на похожие одним нажатием и посмотреть ближайшее по
+    // бюджету (если рядом по цене хоть что-то есть).
+    const deadEnd = DEAD_END_TEXT[language] || DEAD_END_TEXT.ru;
+    const nearby = nearestByBudget(record, candidates);
     await sendUiMessage(chatId, user, copy.noSimilar, token, { reply_markup: { inline_keyboard: [
+      [{ text: deadEnd.notify, callback_data: 'saved:similar:' + record.id }],
+      ...(nearby.length ? [[{ text: deadEnd.budget, callback_data: 'property:nearprice:' + record.id }]] : []),
       [{ text: (MENU_LABELS[language] || MENU_LABELS.ru).contacts, callback_data: 'contact:question' }],
       [{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:return:' + record.id }],
     ] } });
@@ -646,6 +653,21 @@ async function handlePropertyCallback(query, token) {
     recordPropertyEvent(record.id, 'similar');
     await acknowledgeCallback(query, token);
     await sendSimilarProperty(chatId, user, record, token);
+    return;
+  }
+  if (actionName === 'nearprice') {
+    await acknowledgeCallback(query, token);
+    const candidates = data.objects.filter((item) => propertyReadyForLanguage(item, language));
+    const nearby = nearestByBudget(record, candidates);
+    if (!nearby.length) {
+      await sendSimilarProperty(chatId, user, record, token);
+      return;
+    }
+    user.similarPropertyIds = nearby.map((item) => item.id);
+    user.similarPropertyDetails = nearby;
+    user.similarPropertySourceId = record.id;
+    scheduleSave();
+    await sendCatalogPage(chatId, user, token, 0, 'similar');
     return;
   }
   if (actionName === 'compare') {
