@@ -952,13 +952,21 @@ function renderView(options) {
   if (!(options && options.keepScroll)) window.scrollTo({ top: 0 });
 }
 
+// Кнопка в шапке экрана. Экран может перерисовать себя (выбрали клиента, сменили
+// фильтр) и позвать pageAction снова, не очищая шапку: кнопка с тем же названием
+// тогда обновляется, а не добавляется второй раз — раньше «Шаблоны ответов» и «⋯»
+// после нескольких переходов по диалогам стояли по четыре пары.
 function pageAction(label, handler, kind) {
-  var button = document.createElement("button");
+  var box = el("pageActions");
+  var button = Array.prototype.filter.call(box.children || [], function (item) { return item.textContent === label; })[0];
+  if (!button) {
+    button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    box.appendChild(button);
+  }
   button.className = "btn " + (kind || "");
-  button.type = "button";
-  button.textContent = label;
   button.onclick = handler;
-  el("pageActions").appendChild(button);
   return button;
 }
 

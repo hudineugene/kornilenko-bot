@@ -697,6 +697,27 @@ test('отвеченная беседа остаётся открытой, а н
   assert.match(String(after.innerHTML), /Ольга/, 'и она по-прежнему видна в списке');
 });
 
+test('кнопки в шапке экрана не плодятся, когда список перерисовывается сам', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const box = sandbox.el('pageActions');
+  box.children.length = 0;
+
+  // «Диалоги» перерисовывают список при каждом выборе клиента и смене фильтра, не
+  // трогая шапку: раньше каждая такая перерисовка дописывала ещё пару кнопок.
+  for (let round = 0; round < 4; round += 1) await sandbox.VIEWS.clients.render(fakeElement('main'), '');
+  assert.deepEqual(box.children.map((button) => button.textContent), ['✎ Шаблоны ответов', '⋯'], 'по одной кнопке, а не по четыре пары');
+
+  // Повторный вызов обновляет обработчик и вид кнопки, а не добавляет вторую.
+  let clicked = '';
+  sandbox.pageAction('Действие', () => { clicked = 'первый'; }, 'secondary');
+  const again = sandbox.pageAction('Действие', () => { clicked = 'второй'; }, 'ghost');
+  assert.equal(box.children.filter((button) => button.textContent === 'Действие').length, 1);
+  again.onclick();
+  assert.equal(clicked, 'второй', 'сработал последний обработчик');
+  assert.match(again.className, /ghost/, 'вид обновлён');
+});
+
 test('шаблоны ответа — кнопками в один ряд, а вставка не стирает набранное', async () => {
   twoWaitingConversations();
   const { sandbox, state } = await panelSandbox();
