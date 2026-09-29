@@ -1475,6 +1475,82 @@ test('группа с темами: в форме поста выбираетс�
   assert.ok(!String(off.innerHTML).includes('createTopic'), 'создавать тему негде');
 });
 
+test('новое сообщение клиента: вкладка мигает и (по желанию) звучит, только когда в неё не смотрят', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const olga = bot.getData().inquiries.find((item) => item.id === 'inq-olga');
+  assert.equal(sandbox.state.latestClientMessageAt, Date.parse(olga.clientMessageAt), 'бот присылает время последнего сообщения клиента');
+
+  let beeps = 0;
+  sandbox.playAlertSound = () => { beeps += 1; };
+  sandbox.alertKit.sound = true;
+  sandbox.alertKit.last = 0;
+  sandbox.document.hidden = false;
+  try {
+    // Первое чтение только запоминает время: старое сообщение новым не считается.
+    assert.equal(sandbox.checkNewClientMessage(), false);
+    assert.equal(sandbox.alertKit.last, sandbox.state.latestClientMessageAt);
+    assert.match(sandbox.document.title, /^\(2\) /, 'в заголовке — сколько клиентов ждут ответа');
+
+    // Пришло новое, а вкладка на виду: человек и так смотрит — не мигаем и не звеним.
+    sandbox.state.latestClientMessageAt += 60000;
+    assert.equal(sandbox.checkNewClientMessage(), false);
+    assert.equal(sandbox.alertKit.flashTimer, 0);
+    assert.equal(beeps, 0);
+
+    // Вкладка скрыта, пришло ещё одно: мигаем и звеним один раз.
+    sandbox.document.hidden = true;
+    sandbox.state.latestClientMessageAt += 60000;
+    assert.equal(sandbox.checkNewClientMessage(), true);
+    assert.ok(sandbox.alertKit.flashTimer, 'заголовок мигает');
+    assert.equal(beeps, 1);
+
+    // То же время повторно — не новое сообщение.
+    assert.equal(sandbox.checkNewClientMessage(), false);
+    assert.equal(beeps, 1);
+
+    // Вернулись во вкладку: мигание прекращается, остаётся счётчик.
+    sandbox.stopTitleFlash();
+    assert.equal(sandbox.alertKit.flashTimer, 0);
+    assert.match(sandbox.document.title, /^\(2\) /);
+
+    // Звук выключен — мигание есть, звона нет.
+    sandbox.alertKit.sound = false;
+    sandbox.state.latestClientMessageAt += 60000;
+    assert.equal(sandbox.checkNewClientMessage(), true);
+    assert.equal(beeps, 1, 'без включённого звука вкладка молчит');
+  } finally {
+    sandbox.stopTitleFlash();
+    sandbox.document.hidden = false;
+  }
+});
+
+test('скрытая вкладка обновляет данные, но не перерисовывает экран, пока в неё не вернутся', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  let renders = 0;
+  sandbox.renderView = () => { renders += 1; };
+  sandbox.stateVersion = 'устаревшая-версия';
+  sandbox.alertKit.last = 1;
+  sandbox.document.hidden = true;
+  try {
+    await sandbox.refresh();
+    assert.equal(renders, 0, 'в скрытой вкладке экран не перерисовывается');
+    assert.equal(sandbox.staleWhileHidden, true, 'но помнится, что он устарел');
+    assert.ok(sandbox.alertKit.last > 1, 'а данные прочитаны: о новом сообщении вкладка узнала');
+
+    // Вернулись: данные уже свежие, экран обновляется сразу.
+    sandbox.document.hidden = false;
+    sandbox.document.__fire('visibilitychange');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(renders, 1, 'при возвращении экран перерисован');
+    assert.equal(sandbox.staleWhileHidden, false);
+  } finally {
+    sandbox.stopTitleFlash();
+    sandbox.document.hidden = false;
+  }
+});
+
 test('«Сегодня»: «Мои / Все» появляется при двух и больше менеджерах и оставляет дела за выбранным человеком', async () => {
   // Один менеджер — переключателя нет: выбирать не из чего.
   twoWaitingConversations();

@@ -44,6 +44,7 @@ const PANEL_SHELL = String.raw`
     </div>
     <div class="head-tools">
       <button class="btn ghost icon search-toggle" id="searchToggle" type="button" aria-label="Поиск">🔍</button>
+      <button class="btn ghost icon" id="soundToggle" type="button" aria-pressed="false" title="Звук о новом сообщении: выключен">🔇</button>
       <button class="notification-bell" id="notificationBell" type="button" aria-label="Открыть уведомления"><span aria-hidden="true">🔔</span><b class="hidden" id="notificationCount">0</b></button>
       <div class="state-line" id="botState"><span class="dot"></span><span id="botStateText">Загрузка…</span></div>
       <button class="btn ghost small" id="logoutBtn" type="button">Выйти</button>
@@ -450,6 +451,7 @@ async function reload(render, options) {
   renderNav();
   renderBotState();
   renderNotificationBell();
+  checkNewClientMessage();
   if (render !== false) {
     // Данные перечитаны по действию человека, экран собирается заново — прежняя
     // форма исчезла вместе с ним, и отметка «есть несохранённые изменения»
@@ -496,6 +498,9 @@ async function refresh() {
   renderNav();
   renderBotState();
   renderNotificationBell();
+  checkNewClientMessage();
+  // Вкладку не смотрят: экран перерисуем, когда в неё вернутся.
+  if (document.hidden) { staleWhileHidden = true; return; }
   if (pageBusy()) return showRefreshHint();
   hideRefreshHint();
   renderView({ keepScroll: true, auto: true });
@@ -605,6 +610,7 @@ function renderNav() {
 // На телефоне разделы — внизу, под большим пальцем: четыре главных и «Ещё».
 // Раньше был гамбургер: любая смена раздела требовала двух нажатий, а список
 // закрывал половину экрана. Остальные разделы и «Выйти» — в листе «Ещё».
+var staleWhileHidden = false;
 var TAB_BAR_VIEWS = ["today", "clients", "viewings", "objects"];
 function renderTabBar() {
   var items = navItems().filter(function (item) { return !item.hidden; });
@@ -739,6 +745,91 @@ function initGlobalSearch() {
     el("globalSearchBox").classList.toggle("open", open);
     if (open) input.focus();
   };
+}
+
+// --- Новое сообщение, пока вкладка не на виду -----------------------------------
+// Вкладку с панелью держат открытой, а смотрят в неё редко. Заголовок вкладки
+// показывает, сколько клиентов ждут ответа, а на новое сообщение вкладка мигает
+// «✉ Новое сообщение» (и по желанию подаёт короткий звук), пока в неё не вернутся.
+// Звук выключен, пока его не включат: неожиданный сигнал на рабочем месте хуже тишины.
+var alertKit = { last: 0, flashTimer: 0, flashOn: false, sound: false, baseTitle: "" };
+(function () {
+  try { alertKit.sound = localStorage.getItem("alert.sound") === "1"; } catch (error) {}
+})();
+
+function alertBaseTitle() {
+  if (!alertKit.baseTitle) alertKit.baseTitle = String(document.title || "Панель Telegram-бота").replace(/^\(\d+\)\s*/, "");
+  return alertKit.baseTitle;
+}
+function titleWithCount() {
+  var waiting = state ? waitingClients() : 0;
+  return (waiting ? "(" + waiting + ") " : "") + alertBaseTitle();
+}
+function stopTitleFlash() {
+  if (alertKit.flashTimer) clearInterval(alertKit.flashTimer);
+  alertKit.flashTimer = 0;
+  alertKit.flashOn = false;
+  document.title = titleWithCount();
+}
+function startTitleFlash() {
+  if (alertKit.flashTimer) return;
+  alertKit.flashTimer = setInterval(function () {
+    alertKit.flashOn = !alertKit.flashOn;
+    document.title = alertKit.flashOn ? "✉ Новое сообщение" : titleWithCount();
+  }, 1200);
+}
+// Короткий двойной сигнал без файла со звуком: браузер сам его синтезирует.
+function playAlertSound() {
+  try {
+    var Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) return;
+    var context = new Context();
+    [0, 0.22].forEach(function (offset) {
+      var tone = context.createOscillator(), volume = context.createGain();
+      tone.frequency.value = 880;
+      volume.gain.setValueAtTime(0.0001, context.currentTime + offset);
+      volume.gain.exponentialRampToValueAtTime(0.12, context.currentTime + offset + 0.02);
+      volume.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + offset + 0.16);
+      tone.connect(volume);
+      volume.connect(context.destination);
+      tone.start(context.currentTime + offset);
+      tone.stop(context.currentTime + offset + 0.18);
+    });
+    setTimeout(function () { try { context.close(); } catch (error) {} }, 800);
+  } catch (error) {}
+}
+function tabIsAway() {
+  return Boolean(document.hidden) || (typeof document.hasFocus === "function" && !document.hasFocus());
+}
+// Вызывается после каждого обновления данных. Первое чтение только запоминает
+// время: старые сообщения новыми не считаются.
+function checkNewClientMessage() {
+  var latest = Number(state && state.latestClientMessageAt) || 0;
+  var previous = alertKit.last;
+  alertKit.last = Math.max(previous, latest);
+  document.title = alertKit.flashTimer && alertKit.flashOn ? "✉ Новое сообщение" : titleWithCount();
+  if (!previous || latest <= previous) return false;
+  if (!tabIsAway()) return false;
+  startTitleFlash();
+  if (alertKit.sound) playAlertSound();
+  return true;
+}
+function renderSoundToggle() {
+  var button = el("soundToggle");
+  button.textContent = alertKit.sound ? "🔊" : "🔇";
+  button.setAttribute("aria-pressed", String(alertKit.sound));
+  button.title = "Звук о новом сообщении: " + (alertKit.sound ? "включён" : "выключен");
+}
+function bindAlerts() {
+  renderSoundToggle();
+  el("soundToggle").onclick = function () {
+    alertKit.sound = !alertKit.sound;
+    try { localStorage.setItem("alert.sound", alertKit.sound ? "1" : "0"); } catch (error) {}
+    renderSoundToggle();
+    // Сигнал при включении — чтобы сразу было слышно, что звук работает.
+    if (alertKit.sound) playAlertSound();
+  };
+  window.addEventListener("focus", stopTitleFlash);
 }
 
 function renderNotificationBell() {
@@ -901,7 +992,8 @@ async function startApp() {
     // окно больше не отменяют обновление целиком: счётчик «Переписки» и
     // колокольчик обновляются всегда, а экран под руками не трогаем — про новые
     // данные скажет полоска сверху.
-    if (document.hidden) return;
+    // Скрытая вкладка тоже спрашивает бота (дёшево: «изменилось ли что-то?»), но
+    // ничего не перерисовывает: так вкладка успевает мигнуть о новом сообщении.
     refresh().catch(function () {});
   }, 45000);
 }
@@ -912,8 +1004,16 @@ function bindShell() {
   // секунд незачем — спрашиваем данные сразу.
   document.addEventListener("visibilitychange", function () {
     if (document.hidden || !appStarted || sessionEnded) return;
-    refresh().catch(function () {});
+    stopTitleFlash();
+    refresh().then(function () {
+      // Пока вкладка была скрыта, данные обновились, а экран нет.
+      if (!staleWhileHidden) return;
+      staleWhileHidden = false;
+      if (pageBusy()) showRefreshHint();
+      else renderView({ keepScroll: true, auto: true });
+    }).catch(function () {});
   });
+  bindAlerts();
   initGlobalSearch();
   el("menuToggle").onclick = function () {
     var open = !el("nav").classList.contains("open");

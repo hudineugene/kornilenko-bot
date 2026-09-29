@@ -819,6 +819,12 @@ function safeState(session) {
     unreadConversationCount: unreadUsers.size,
     // Одно определение «ждут ответа» для всех экранов панели.
     waitingConversationCount: waitingConversationCount(),
+    // Время последнего сообщения клиента: по нему панель замечает новое сообщение
+    // (мигает вкладкой, по желанию — звук), даже когда вкладка не на виду.
+    latestClientMessageAt: data.inquiries.reduce((latest, inquiry) => {
+      const at = Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0;
+      return at > latest ? at : latest;
+    }, 0),
     broadcastOptOutCount: Object.values(data.users).filter((user) => user.broadcastsOptOut && !user.blocked && user.chatId).length,
     // Рассылка уходит только согласившимся: панель показывает, сколько их.
     newsConsentCount: Object.values(data.users).filter((user) => user.newsConsentAt && !user.broadcastsOptOut && !user.blocked && user.chatId).length,
