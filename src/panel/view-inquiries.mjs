@@ -969,7 +969,7 @@ function renderInquiryCard(host) {
     conversationOpenedByUser = false;
     markConversationRead(item.userId);
   }
-  host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><button class="btn ghost small conversation-back" id="backToList" type="button">← Диалоги</button><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions">' + statusChip(item) + "</div></header>" +
+  host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><button class="btn ghost small conversation-back" id="backToList" type="button">← Диалоги</button><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions"><button class="btn secondary small conversation-side-toggle" id="sideToggle" type="button" aria-expanded="false" title="Статус, этап, заметка и следующий шаг">⋯ Сведения</button>' + statusChip(item) + "</div></header>" +
     '<div class="card-body conversation-body conversation-split">' +
       '<div class="conversation-main">' +
       '<div class="conversation-context">' +
@@ -1004,7 +1004,8 @@ function renderInquiryCard(host) {
       // заметка и теги — отдельно, и половина правок терялась.
       // На телефоне панель сворачивается под полем ответа: статус, этап, заметка
       // и «Сохранить» лежат прямо под ним, а не в конце длинной страницы.
-      '<aside class="conversation-side"><details class="conversation-side-details" open><summary>Статус, этап и заметки</summary><div class="conversation-side-inner stack">' +
+      '<div class="side-backdrop"></div>' +
+      '<aside class="conversation-side"><button class="btn ghost small side-close" id="sideClose" type="button">✕ Закрыть</button><details class="conversation-side-details" open><summary>Статус, этап и заметки</summary><div class="conversation-side-inner stack">' +
         selectionMatchingPanel(item) +
         (viewing ? '<div class="msg">📅 ' + esc((viewing.confirmedDate || viewing.dateText || "дата не выбрана") + " · " + (viewing.confirmedTime || viewing.timeText || "")) + (viewing.online ? "<br>📹 онлайн-показ по видеосвязи" : "") + (viewing.confirmedAt ? '<br><span class="small ok-text">просмотр подтверждён</span>' : '<br><span class="small warn-text">нужно подтвердить просмотр</span>') + "</div>" : "") +
         (viewing && !viewing.cancelledAt ? '<button class="btn secondary small" id="scheduleViewing" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + '</button>' : "") +
@@ -1034,14 +1035,25 @@ function renderInquiryCard(host) {
   // покажи её, иначе менеджер остаётся смотреть на список и не понимает, что
   // что-то открылось.
   if (window.innerWidth <= 860) {
-    // Панель заявки на телефоне закрыта, пока не понадобится.
+    // На телефоне диалог — целый экран: переписка прокручивается внутри, поле ответа
+    // стоит под ней, а статус, этап и заметки выезжают панелью «⋯ Сведения». Раньше
+    // они лежали под полем ответа за тысячей пикселей, а страница и переписка
+    // прокручивались одна внутри другой.
     var sideDetails = host.querySelector(".conversation-side-details");
-    if (sideDetails) sideDetails.open = false;
-    // Открыли диалог — сразу конец переписки и поле ответа: последнее сообщение
-    // над полем, без прокрутки через шапку и панель заявки.
-    var replyBox = host.querySelector(".reply-box");
-    if (openedByHuman && replyBox && replyBox.scrollIntoView) replyBox.scrollIntoView({ block: "end" });
+    if (sideDetails) sideDetails.open = true;
   }
+  var conversationBox = host.querySelector(".conversation-card");
+  function setSidePanel(open) {
+    if (conversationBox) conversationBox.classList.toggle("side-open", open);
+    var toggle = host.querySelector("#sideToggle");
+    if (toggle) toggle.setAttribute("aria-expanded", String(open));
+  }
+  var sideToggle = host.querySelector("#sideToggle");
+  if (sideToggle) sideToggle.onclick = function () { setSidePanel(!(conversationBox && conversationBox.classList.contains("side-open"))); };
+  var sideClose = host.querySelector("#sideClose");
+  if (sideClose) sideClose.onclick = function () { setSidePanel(false); };
+  var sideBackdrop = host.querySelector(".side-backdrop");
+  if (sideBackdrop) sideBackdrop.onclick = function () { setSidePanel(false); };
 
   var backToList = host.querySelector("#backToList");
   if (backToList) backToList.onclick = function () {

@@ -1183,17 +1183,16 @@ test('на телефоне список и переписка — разные 
   sandbox.selectConversation('inq-olga');
   await sandbox.VIEWS.clients.render(host, '');
   assert.match(String(host.innerHTML), /messenger-shell chat-open/, 'переписка вместо списка');
-  assert.equal(scrolled.length, 1, 'диалог открыт на поле ответа');
-  assert.equal(scrolled[0].block, 'end');
+  assert.equal(scrolled.length, 0, 'страница к полю ответа не прыгает: переписка прокручивается сама, поле ответа под ней');
   assert.ok(classes.contains('phone-chat'), 'обвязка (заголовок, вкладки, фильтры) на телефоне скрыта');
   const card = host.querySelector('#inquiryCard');
-  assert.equal(card.querySelector('.conversation-side-details').open, false, 'панель заявки свёрнута под полем ответа');
+  assert.equal(card.querySelector('.conversation-side-details').open, true, 'панель заявки раскрыта: на телефоне она выезжает справа по кнопке «⋯ Сведения»');
   assert.match(String(card.innerHTML), /<summary>Статус, этап и заметки<\/summary>/);
   assert.ok(card.querySelector('#backToList'), 'есть возврат к списку');
 
   // Обновление по таймеру экран не дёргает.
   await sandbox.VIEWS.clients.render(host, '');
-  assert.equal(scrolled.length, 1, 'при перерисовке экран не дёргается');
+  assert.equal(scrolled.length, 0, 'при перерисовке экран не дёргается');
 
   // Возврат к списку.
   await card.querySelector('#backToList').onclick();
@@ -3057,6 +3056,39 @@ test('быстрый ответ: очередь «по очереди» начи
   assert.equal(dialogs.length, 1, 'следующий не открылся');
   assert.match(String(dialogs[0].dialog.querySelector('#qrError').textContent), /Не отправлено: Telegram не ответил/);
   assert.equal(dialogs[0].dialog.querySelector('#qrText').value, 'Ответ', 'черновик остался');
+});
+
+test('диалог на телефоне: сведения — выезжающая панель «⋯ Сведения», страница не прыгает к полю ответа', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  sandbox.innerWidth = 375;
+  sandbox.selectConversation('inq-olga');
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  let scrolled = 0;
+  card.querySelector('.reply-box').scrollIntoView = () => { scrolled += 1; };
+  await sandbox.VIEWS.clients.render(host, '');
+  const html = String(card.innerHTML);
+
+  // Кнопка в шапке, крестик в самой панели и подложка.
+  assert.match(html, /id="sideToggle"[^>]*>⋯ Сведения</);
+  assert.match(html, /id="sideClose"/);
+  assert.match(html, /class="side-backdrop"/);
+  assert.ok(html.indexOf('id="sideToggle"') < html.indexOf('conversation-split'), 'кнопка — в шапке диалога, а не под полем ответа');
+
+  // Панель открывается и закрывается: кнопкой, крестиком и подложкой.
+  const cardBox = card.querySelector('.conversation-card');
+  card.querySelector('#sideToggle').onclick();
+  assert.equal(cardBox.classList.contains('side-open'), true, 'открылась');
+  card.querySelector('#sideClose').onclick();
+  assert.equal(cardBox.classList.contains('side-open'), false, 'закрылась крестиком');
+  card.querySelector('#sideToggle').onclick();
+  card.querySelector('.side-backdrop').onclick();
+  assert.equal(cardBox.classList.contains('side-open'), false, 'и нажатием на подложку');
+
+  // Содержимое панели раскрыто (её прячет выезд, а не свёрнутая «шторка»), а страница к полю ответа не прокручивается.
+  assert.equal(card.querySelector('.conversation-side-details').open, true);
+  assert.equal(scrolled, 0, 'прокрутки страницы к полю ответа нет: переписка сама открывается на последнем сообщении');
 });
 
 test('старые адреса подключения к Telegram ведут на «Обслуживание → Подключение к Telegram»', async () => {

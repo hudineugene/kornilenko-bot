@@ -302,6 +302,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-side-inner{background:var(--surface-soft);border:1px solid var(--line);border-radius:var(--radius);padding:var(--sp-3)}
 .conversation-side .conversation-save{display:flex;flex-direction:column;gap:var(--sp-2);align-items:stretch}
 @media (max-width:1100px){.conversation-split{grid-template-columns:minmax(0,1fr)}.conversation-side{position:static}}
+.conversation-side-toggle,.side-close,.side-backdrop{display:none}
 .conversation-thread{display:flex;flex-direction:column;gap:8px;min-height:300px;max-height:min(54vh,620px);overflow:auto;padding:12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--tint);overscroll-behavior:contain}
 .conversation-line{display:flex;justify-content:flex-start}
 .conversation-line.out{justify-content:flex-end}
@@ -785,12 +786,32 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   /* Открытый диалог — целый экран: заголовок, вкладки раздела и фильтры скрыты. */
   .phone-chat .topbar,.phone-chat .page>.toolbar,.phone-chat .messenger-toolbar{display:none}
   .phone-chat .page{padding-top:8px}
+  /* Диалог на телефоне — экран мессенджера: страница не прокручивается, переписка
+     занимает всё свободное место и прокручивается сама, поле ответа — под ней. */
+  .phone-chat .page{padding:0 8px calc(74px + env(safe-area-inset-bottom))}
+  .phone-chat .conversation-card{display:flex;flex-direction:column;height:calc(100dvh - var(--header) - 84px - env(safe-area-inset-bottom));min-height:0}
+  .phone-chat .conversation-card>.conversation-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:8px}
+  .phone-chat .conversation-head{flex:none;flex-wrap:wrap}
+  .phone-chat .conversation-main{flex:1 1 auto;min-height:0}
+  .phone-chat .conversation-thread{flex:1 1 auto;min-height:120px;max-height:none}
+  .phone-chat .conversation-context,.phone-chat .reply-box{flex:none}
+  /* Поле ответа на телефоне — компактное: без заголовка, без пояснений; кнопка во всю ширину. */
+  .phone-chat .reply-box{padding:8px}
+  .phone-chat .reply-box-head{display:none}
+  .phone-chat #replyText{min-height:64px;height:64px}
+  .phone-chat .reply-attachments{margin:4px 0}
+  .phone-chat .reply-file-name,.phone-chat .reply-actions .muted{display:none}
+  .phone-chat .reply-actions .btn{width:100%}
+  .phone-chat .reply-box .conversation-details>summary{padding:6px 10px}
   .conversation-thread{max-height:42vh}
-  /* Прокрутка «к полю ответа» не должна прятать кнопку «Отправить» под нижней панелью. */
-  .reply-box{scroll-margin-bottom:calc(72px + env(safe-area-inset-bottom))}
-  .conversation-side{margin-top:8px}
-  .conversation-side-details:not([open])>summary::after{content:" ⌄"}
-  .conversation-side-details[open]>summary::after{content:" ⌃"}
+  .conversation-side-toggle{display:inline-flex}
+  /* Статус, этап, заметка и следующий шаг — панель, выезжающая справа. */
+  .conversation-side{position:fixed;top:0;right:0;bottom:0;z-index:75;width:min(92vw,400px);margin:0;padding:calc(8px + env(safe-area-inset-top)) 10px calc(84px + env(safe-area-inset-bottom));overflow:auto;background:var(--surface);box-shadow:var(--shadow-lg);transform:translateX(105%);transition:transform .2s ease}
+  .side-open .conversation-side{transform:none}
+  .side-close{display:inline-flex;margin-bottom:6px}
+  .side-backdrop{position:fixed;inset:0;z-index:74;background:rgba(16,24,40,.4)}
+  .side-open .side-backdrop{display:block}
+  .conversation-side-details>summary{display:none}
   /* Воронка и календарь просмотров на телефоне — вертикальные списки, а не
      горизонтальная лента из семи колонок: этап за этапом, день за днём. Пустые
      этапы и дни без просмотров не занимают места (сегодняшний остаётся). */

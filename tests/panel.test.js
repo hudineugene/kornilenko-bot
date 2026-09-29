@@ -319,13 +319,15 @@ test('на телефоне разделы — в нижней панели, а 
   assert.match(phone, /\.savebar,\.refresh-hint\{bottom:calc\(66px/);
 });
 
-test('экран диалога на телефоне: без обвязки, шапка не липнет, панель заявки свёрнута под полем ответа', async () => {
+test('экран диалога на телефоне: без обвязки, шапка не липнет, переписка — экран мессенджера, сведения выезжают панелью', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   const style = PANEL_HTML.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
   const phone = style.slice(style.indexOf('/* Нижняя панель разделов'));
   assert.match(phone, /\.topbar\{position:static\}/, 'шапка страницы на телефоне не липкая: она занимала пятую часть экрана');
   assert.match(phone, /\.phone-chat \.topbar,\.phone-chat \.page>\.toolbar,\.phone-chat \.messenger-toolbar\{display:none\}/, 'у открытого диалога нет заголовка, вкладок и фильтров');
-  assert.match(phone, /\.reply-box\{scroll-margin-bottom:/, 'кнопка «Отправить» не прячется под нижней панелью');
+  assert.match(phone, /\.phone-chat \.conversation-card\{display:flex;flex-direction:column;height:calc\(100dvh /, 'диалог на телефоне — на весь экран: страница не прокручивается');
+  assert.match(phone, /\.phone-chat \.conversation-thread\{flex:1 1 auto;min-height:120px;max-height:none\}/, 'переписка занимает свободное место и прокручивается сама, поле ответа под ней');
+  assert.match(phone, /\.conversation-side\{position:fixed;/, 'статус, этап и заметки — выезжающая панель, а не блок под полем ответа');
   assert.match(PANEL_HTML, /<details class="conversation-side-details" open><summary>Статус, этап и заметки<\/summary>/, 'статус, этап и «Сохранить» — в раскрывающемся блоке под полем ответа');
   assert.match(style, /@media\(min-width:861px\)\{\.menu-toggle\{display:none\}\.conversation-side-details>summary\{display:none\}\}/, 'на компьютере панель раскрыта и без заголовка');
 });
