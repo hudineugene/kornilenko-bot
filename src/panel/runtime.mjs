@@ -536,12 +536,12 @@ var LEGACY_ROUTES = {
   "inquiries": { "": ["clients", "inbox"], "inbox": ["clients", "inbox"], "tasks": ["clients", "tasks"], "pipeline": ["clients", "pipeline"], "viewings": ["viewings", ""], "clients": ["clients", "base"] },
   "catalog": { "": ["objects", "list"], "objects": ["objects", "list"], "offers": ["objects", "offers"], "feed": ["settings", "service"] },
   "reach": { "": ["posts", "broadcast"], "campaigns": ["posts", "broadcast"], "group": ["posts", "channel"], "style": ["posts", "style"] },
-  "settings": { "connection": ["settings", "team"], "work": ["settings", "company"], "data": ["settings", "service"], "access": ["settings", "service"] },
+  "settings": { "connection": ["settings", "service"], "telegram": ["settings", "service"], "work": ["settings", "company"], "data": ["settings", "service"], "access": ["settings", "service"] },
   "texts": { "interface": ["settings", "service"] },
 };
 
 // Какой экран «Обслуживания» открыть, если пришли по старому адресу.
-var LEGACY_SERVICE = { "catalog/feed": "feed", "settings/data": "data", "settings/access": "access", "texts/interface": "interface" };
+var LEGACY_SERVICE = { "settings/connection": "telegram", "settings/telegram": "telegram", "catalog/feed": "feed", "settings/data": "data", "settings/access": "access", "texts/interface": "interface" };
 
 function normalizeRoute(view, tab) {
   var key = String(view || "") + "/" + String(tab || "");

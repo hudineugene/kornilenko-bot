@@ -101,3 +101,46 @@ test('в обзоре время последнего ответа показы�
   assert.match(PANEL_HTML, /stale \? ", последний ответ "/, 'возраст ответа — только при проблеме');
   assert.match(PANEL_HTML, /Date\.now\(\) - contact > 120000/, 'порог — две минуты, как и в отпечатке состояния');
 });
+
+test('пока связь с Telegram рвётся, новые попытки не меняют версию состояния', async () => {
+  // Каждая неудачная попытка увеличивала счётчик и двигала время следующей — и
+  // панель считала данные «новыми», перерисовывалась и качала картинки заново.
+  bot.runtime.status = 'error';
+  bot.runtime.lastError = 'Telegram отклонил токен бота';
+  bot.runtime.consecutiveFailures = 6;
+  bot.runtime.lastErrorAt = new Date(Date.now() - 20000).toISOString();
+  bot.runtime.nextRetryAt = new Date(Date.now() + 30000).toISOString();
+  bot.runtime.lastSuccessfulContactAt = null;
+  const first = await stateVersion();
+
+  bot.runtime.consecutiveFailures = 7;
+  bot.runtime.lastErrorAt = new Date().toISOString();
+  bot.runtime.nextRetryAt = new Date(Date.now() + 60000).toISOString();
+  const again = await stateVersion(first.stateVersion);
+  assert.equal(again.unchanged, true, 'ещё одна неудачная попытка — те же данные');
+
+  // Но переход «работает → сбой» и обратно экран должен увидеть.
+  online();
+  const healthy = await stateVersion(first.stateVersion);
+  assert.notEqual(healthy.unchanged, true, 'связь восстановилась — это новость');
+  bot.runtime.status = 'error';
+  bot.runtime.lastError = 'сбой';
+  bot.runtime.consecutiveFailures = 1;
+  const failing = await stateVersion(healthy.stateVersion);
+  assert.notEqual(failing.unchanged, true, 'связь пропала — это тоже новость');
+  online();
+});
+
+test('картинки панели кешируются: повторный запрос получает «не изменилось»', async () => {
+  const first = await realFetch(base + '/api/media/objects/villa-01', { headers });
+  assert.equal(first.status, 200);
+  const etag = first.headers.get('etag');
+  assert.ok(etag, 'у картинки есть отпечаток');
+  assert.match(first.headers.get('cache-control'), /max-age=\d+/, 'и срок хранения');
+  await first.arrayBuffer();
+  const second = await realFetch(base + '/api/media/objects/villa-01', { headers: { ...headers, 'if-none-match': etag } });
+  assert.equal(second.status, 304, 'тот же файл — браузеру ничего не отправляем');
+  const changed = await realFetch(base + '/api/media/objects/villa-01', { headers: { ...headers, 'if-none-match': '"other"' } });
+  assert.equal(changed.status, 200, 'другой отпечаток — файл отдаётся заново');
+  await changed.arrayBuffer();
+});

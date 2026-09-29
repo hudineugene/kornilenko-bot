@@ -245,9 +245,19 @@ function html(res, content, req = null) {
   return res.end(meta.body);
 }
 
-function binaryImage(res, image) {
+// Картинки панели кешируются: экран перерисовывается по таймеру, и без этого
+// браузер каждый раз заново качал все фотографии объектов. Отпечаток файла
+// позволяет ответить «не изменилось», а короткий срок — подхватить замену.
+function binaryImage(res, image, req = null) {
   const bytes = imageBytes(image);
+  const etag = '"' + crypto.createHash('sha1').update(bytes).digest('hex').slice(0, 24) + '"';
   securityHeaders(res);
+  res.setHeader('cache-control', 'private, max-age=300');
+  res.setHeader('etag', etag);
+  if (req && req.headers['if-none-match'] === etag) {
+    res.writeHead(304);
+    return res.end();
+  }
   res.writeHead(200, {
     'content-type': image.mimeType,
     'content-length': bytes.length,
@@ -675,7 +685,26 @@ function stateFingerprint(state, now = Date.now()) {
   const botRuntime = state && state.runtime ? state.runtime : {};
   const contact = Date.parse(botRuntime.lastSuccessfulContactAt || '');
   const fresh = Number.isFinite(contact) && now - contact <= CONTACT_FRESH_MS;
-  const steady = { ...state, runtime: { ...botRuntime, lastSuccessfulContactAt: fresh ? 'fresh' : botRuntime.lastSuccessfulContactAt || '' } };
+  // Пока связь с Telegram рвётся, при каждой попытке меняются счётчик неудач и
+  // время следующей попытки. Как цифры они экрану не нужны: важно лишь, есть ли
+  // сбой. Иначе панель считала данные «новыми» после каждой попытки, перерисовывалась
+  // и заново грузила все картинки.
+  // Уведомление «нет связи» датируется последней ошибкой, то есть тоже двигается
+  // с каждой попыткой: его время в версию не входит.
+  const notifications = Array.isArray(state && state.notifications)
+    ? state.notifications.map((item) => (item && String(item.id).startsWith('system:connection:') ? { ...item, createdAt: '' } : item))
+    : state && state.notifications;
+  const steady = {
+    ...state,
+    notifications,
+    runtime: {
+      ...botRuntime,
+      lastSuccessfulContactAt: fresh ? 'fresh' : botRuntime.lastSuccessfulContactAt || '',
+      lastErrorAt: botRuntime.lastError ? 'error' : null,
+      consecutiveFailures: Number(botRuntime.consecutiveFailures) > 0 ? 'failing' : 0,
+      nextRetryAt: botRuntime.nextRetryAt ? 'scheduled' : null,
+    },
+  };
   return crypto.createHash('sha256').update(JSON.stringify(steady)).digest('hex').slice(0, 24);
 }
 

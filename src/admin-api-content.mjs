@@ -22,7 +22,7 @@ async function handleContentApi(req, res, url) {
     const rubrics = (data.config.publishing && data.config.publishing.rubrics) || [];
     const rubric = rubrics.find((item) => item.id === decodeURIComponent(rubricMatch[1]));
     if (!rubric || !imageExists(rubric.image)) return json(res, 404, { error: 'Изображение не найдено' });
-    return binaryImage(res, rubric.image);
+    return binaryImage(res, rubric.image, req);
   }
 
   const mediaMatch = url.pathname.match(/^\/api\/media\/(objects|promotions|broadcasts)\/([^/]+)$/);
@@ -38,7 +38,7 @@ async function handleContentApi(req, res, url) {
       : recordImages(record);
     const image = imageId ? searchableImages.find((item) => String(item.id) === imageId) : (record.image || searchableImages[0]);
     if (!imageExists(image)) return json(res, 404, { error: 'Изображение не найдено' });
-    return binaryImage(res, image);
+    return binaryImage(res, image, req);
   }
 
   if ((url.pathname === '/api/objects' || url.pathname === '/api/promotions') && req.method === 'POST') {
@@ -205,7 +205,7 @@ async function handleContentApi(req, res, url) {
     if (!session) return;
     const image = data.welcomeImages[welcomeImageMatch[1]];
     if (!imageExists(image)) return json(res, 404, { error: 'Изображение не загружено' });
-    return binaryImage(res, image);
+    return binaryImage(res, image, req);
   }
 
   if (welcomeImageMatch && req.method === 'POST') {

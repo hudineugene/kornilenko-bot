@@ -1491,6 +1491,17 @@ test('общий поиск в шапке: клиенты, объекты и с�
   assert.ok(requests.some((request) => request.url.includes('/api/conversations/search?q=' + encodeURIComponent('парковка'))), 'запрос к поиску по переписке ушёл');
 });
 
+test('старые адреса подключения к Telegram ведут на «Обслуживание → Подключение к Telegram»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  for (const tab of ['connection', 'telegram']) {
+    sandbox.serviceScreen = 'data';
+    const route = sandbox.normalizeRoute('settings', tab);
+    assert.equal(route.join('/'), 'settings/service', tab);
+    assert.equal(sandbox.serviceScreen, 'telegram', tab + ': открывается нужный экран');
+  }
+});
+
 test('когда все отвечены, ноль везде', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, state } = await panelSandbox();

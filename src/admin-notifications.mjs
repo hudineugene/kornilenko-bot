@@ -155,7 +155,7 @@ function currentAdminNotifications() {
       id: 'system:connection:' + cleanText(runtime.lastError || 'telegram', 120),
       kind: 'system', severity: 'bad', title: 'Нет стабильной связи с Telegram',
       text: cleanText(runtime.lastError || 'Бот пытается восстановить подключение.', 300),
-      createdAt: runtime.lastErrorAt || new Date().toISOString(), route: route('settings', 'connection'),
+      createdAt: runtime.lastErrorAt || new Date().toISOString(), route: route('settings', 'telegram'),
     });
   }
   const latestError = Array.isArray(data.errors) ? data.errors[0] : null;
