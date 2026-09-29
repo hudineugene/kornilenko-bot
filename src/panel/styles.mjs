@@ -12,11 +12,13 @@ html,body{max-width:100%;overflow-x:clip}
   --header:60px;
   /* Шкала размеров текста. Основной — 14 px: прежние 11,5 и 10,5 на телефоне
      читались с трудом, а всего размеров в панели было шестнадцать. */
-  --fs-xs:12px; --fs-sm:13px; --fs:14px; --fs-lg:16px; --fs-xl:20px; --fs-2xl:24px;
+  --fs-xs:13px; --fs-sm:14px; --fs:14px; --fs-lg:16px; --fs-xl:20px; --fs-2xl:24px;
   /* Одна шкала отступов: было 72 разных значения. */
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
 }
 html,body{margin:0;padding:0}
+/* Кнопки берут шрифт страницы: без этого браузер ставил им свои 13,33 px. */
+button{font:inherit}
 body{background:var(--bg);color:var(--text);font:400 var(--fs)/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
 h1,h2,h3,h4{margin:0;font-weight:650;letter-spacing:-.01em}
 h1{font-size:var(--fs-xl)}h2{font-size:var(--fs-lg)}h3{font-size:var(--fs-lg)}

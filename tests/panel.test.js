@@ -357,6 +357,20 @@ test('в шапке — одно поле поиска по клиентам, о
   for (const id of ['inqSearch', 'clientSearch', 'catalogSearch']) assert.ok(!PANEL_HTML.includes('id="' + id + '"'), 'прежнего поля ' + id + ' нет');
 });
 
+test('шрифт: основной текст не мельче 14 px, мелкие подписи — не мельче 13, кнопки берут шрифт страницы', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const style = PANEL_HTML.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
+  const size = (name) => Number((style.match(new RegExp('--' + name + ':\\s*(\\d+(?:\\.\\d+)?)px')) || [])[1]);
+  assert.ok(size('fs') >= 14, 'основной шрифт: ' + size('fs'));
+  assert.ok(size('fs-sm') >= 14, 'вторичный текст, кнопки и вкладки: ' + size('fs-sm'));
+  assert.ok(size('fs-xs') >= 13, 'мелкие подписи: ' + size('fs-xs'));
+  // Прямых значений мельче 13 px в стилях нет.
+  const literals = Array.from(style.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)).map((match) => Number(match[1]));
+  assert.ok(literals.every((value) => value >= 13), 'значения font-size: ' + literals.join(', '));
+  // Без «font:inherit» браузер ставит кнопкам свои 13,33 px.
+  assert.match(style, /(^|\n)button\{font:inherit\}/, 'кнопки наследуют шрифт страницы');
+});
+
 test.describe('стили панели', () => {
   async function css() {
     const { PANEL_HTML } = await import('../src/panel/index.mjs');
