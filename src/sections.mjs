@@ -19,6 +19,7 @@ import { similarPropertyRanking } from './similar.mjs';
 import { DEAD_END_TEXT, nearestByBudget } from './dead-end.mjs';
 import { trustButtonRow } from './trust.mjs';
 import { askGoal } from './goal.mjs';
+import { planGuideRow } from './plan.mjs';
 
 async function sendPromotionPage(chatId, user, token, page = 0) {
   const language = user.preferredLanguage || 'ru';
@@ -214,6 +215,7 @@ async function sendGuidePage(chatId, user, token, index = 0, query = null) {
   if (safeIndex < pages.length - 1) pager.push({ text: '➡️', callback_data: 'guide:page:' + (safeIndex + 1) });
   rows.push(pager);
   rows.push([{ text: navigation.guideConsult, callback_data: 'contact:lead' }]);
+  rows.push(planGuideRow(language));
   const trust = trustButtonRow(language);
   if (trust) rows.push(trust);
   rows.push([{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]);

@@ -43,7 +43,7 @@ test.describe('дайджест', () => {
   test('выключен по умолчанию: ничего не уходит, даже когда есть что показывать', async () => {
     bot.getData().objects.push(fresh('new-1', 'Новая вилла'));
     bot.getData().config.engagement = bot.normalizeLoadedData({}).config.engagement;
-    assert.deepEqual(bot.getData().config.engagement, { digest: false, comeback: false });
+    assert.deepEqual(bot.getData().config.engagement, { digest: false, comeback: false, planReminder: false });
     const chat = createChat();
     telegram.calls = [];
     assert.deepEqual(await digest.runWeeklyDigest(NOW, bot.getData().config.botToken), []);
@@ -278,12 +278,12 @@ test.describe('панель и данные', () => {
 
   test('переключатели сохраняются; состояние знает, сколько клиентов получат и сколько объектов в продаже', async () => {
     await login();
-    bot.getData().config.engagement = { digest: false, comeback: false };
+    bot.getData().config.engagement = { digest: false, comeback: false, planReminder: false };
     bot.getData().objects.push(fresh('a', 'A'), fresh('b', 'B'));
     createChat();
     createChat().user.newsConsentAt = '';
     assert.equal((await realFetch(base + '/api/engagement', { method: 'PUT', headers, body: JSON.stringify({ digest: true }) })).status, 200);
-    assert.deepEqual(bot.getData().config.engagement, { digest: true, comeback: false }, 'второй переключатель не тронут');
+    assert.deepEqual(bot.getData().config.engagement, { digest: true, comeback: false, planReminder: false }, 'второй переключатель не тронут');
     const state = await (await realFetch(base + '/api/state', { headers })).json();
     assert.equal(state.engagement.digest, true);
     assert.equal(state.engagement.audience, 1, 'один согласился на новости');
@@ -293,9 +293,9 @@ test.describe('панель и данные', () => {
   });
 
   test('данные прежних версий получают оба переключателя выключенными; посторонние значения — не «включено»', () => {
-    assert.deepEqual(bot.normalizeLoadedData({ version: 44 }).config.engagement, { digest: false, comeback: false });
-    assert.deepEqual(bot.normalizeLoadedData({ config: { engagement: { digest: 'true', comeback: 1 } } }).config.engagement, { digest: false, comeback: false });
-    assert.deepEqual(bot.normalizeLoadedData({ config: { engagement: { digest: true } } }).config.engagement, { digest: true, comeback: false });
+    assert.deepEqual(bot.normalizeLoadedData({ version: 44 }).config.engagement, { digest: false, comeback: false, planReminder: false });
+    assert.deepEqual(bot.normalizeLoadedData({ config: { engagement: { digest: 'true', comeback: 1 } } }).config.engagement, { digest: false, comeback: false, planReminder: false });
+    assert.deepEqual(bot.normalizeLoadedData({ config: { engagement: { digest: true } } }).config.engagement, { digest: true, comeback: false, planReminder: false });
   });
 
   test('дата публикации ставится один раз, когда объект впервые становится доступен клиентам', async () => {

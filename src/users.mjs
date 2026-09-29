@@ -104,6 +104,22 @@ function applyPrivateChatStatus(userId, status) {
   return user;
 }
 
+// «Мой план покупки»: какие шаги отмечены (по коду шага), о чём просили помощи,
+// когда начали, когда последний раз что-то делали и напоминали ли.
+function normalizedPlan(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const marks = (input) => Object.fromEntries(Object.entries(input && typeof input === 'object' && !Array.isArray(input) ? input : {})
+    .filter(([key, stamp]) => /^[a-z]{2,20}$/.test(key) && typeof stamp === 'string' && stamp).slice(0, 20).map(([key, stamp]) => [key, cleanText(stamp, 40)]));
+  return {
+    startedAt: cleanText(source.startedAt, 40),
+    updatedAt: cleanText(source.updatedAt, 40),
+    remindedAt: cleanText(source.remindedAt, 40),
+    remindOptOut: source.remindOptOut === true,
+    done: marks(source.done),
+    help: marks(source.help),
+  };
+}
+
 function idList(value) {
   return Array.isArray(value) ? value.map(String).filter((item, index, all) => item && all.indexOf(item) === index).slice(0, 20) : [];
 }
@@ -163,6 +179,7 @@ function normalizeUser(from, chatId, countMessage = true) {
     },
     // Цель клиента со старта: «купить для жизни» / «инвестиция и аренда» / «пока смотрю».
     // Дайджест и мягкий возврат: когда слали в последний раз, что показали, отписался ли.
+    plan: normalizedPlan(previous.plan),
     digestAt: cleanText(previous.digestAt, 40),
     digestOptOut: Boolean(previous.digestOptOut),
     digestNewIds: idList(previous.digestNewIds),

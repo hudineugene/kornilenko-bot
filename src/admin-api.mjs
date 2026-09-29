@@ -498,7 +498,7 @@ async function handleApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const body = await readJson(req);
-    data.config.engagement = normalizeEngagement({ ...data.config.engagement, ...(typeof body.digest === 'boolean' ? { digest: body.digest } : {}), ...(typeof body.comeback === 'boolean' ? { comeback: body.comeback } : {}) });
+    data.config.engagement = normalizeEngagement({ ...data.config.engagement, ...(typeof body.digest === 'boolean' ? { digest: body.digest } : {}), ...(typeof body.comeback === 'boolean' ? { comeback: body.comeback } : {}), ...(typeof body.planReminder === 'boolean' ? { planReminder: body.planReminder } : {}) });
     saveDataNow();
     return json(res, 200, { ok: true, engagement: data.config.engagement });
   }

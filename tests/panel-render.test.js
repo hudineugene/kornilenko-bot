@@ -2755,7 +2755,43 @@ test('«Настройки → Компания»: «Сообщения клие
   await captured();
   const call = requests.find((request) => request.url === '/api/engagement');
   assert.equal(call.method, 'PUT');
-  assert.deepEqual(call.body, { digest: true, comeback: false });
+  assert.deepEqual(call.body, { digest: true, comeback: false, planReminder: false });
+});
+
+test('«План покупки»: вкладка, десять шагов с текстами на трёх языках, сохранение; напоминание — в «Компании»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const texts = sandbox.navItems().find((item) => item.id === 'texts');
+  assert.ok(texts.tabs.some((tab) => tab[0] === 'plan' && tab[1] === 'План покупки'), 'вкладка есть');
+  assert.equal(sandbox.state.buyPlan.length, 10, 'бот отдал десять шагов');
+
+  let save = null;
+  sandbox.watchForm = (root, callback) => { save = callback; return { mark() {} }; };
+  const host = fakeElement('main');
+  sandbox.renderBuyPlan(host);
+  const html = String(host.innerHTML);
+  assert.equal((html.match(/data-plan-step="/g) || []).length, 10);
+  assert.match(html, /1\. NIE — номер иностранца/);
+  assert.match(html, /data-plan-title="nie" data-lang="en"/);
+  assert.match(html, /data-plan-text="register" data-lang="es"/);
+  assert.match(html, /не давайте юридических обещаний/, 'предупреждение владельцу');
+
+  host.querySelector('[data-plan-title="nie"][data-lang="ru"]').value = 'Получите NIE';
+  host.querySelector('[data-plan-text="nie"][data-lang="ru"]').value = 'Наш юрист поможет.';
+  requests.length = 0;
+  await save();
+  const call = requests.find((request) => request.url === '/api/buy-plan');
+  assert.equal(call.method, 'PUT');
+  assert.equal(call.body.steps.length, 10);
+  assert.equal(call.body.steps[0].id, 'nie');
+  assert.equal(call.body.steps[0].title.ru, 'Получите NIE');
+  assert.equal(call.body.steps[0].text.ru, 'Наш юрист поможет.');
+
+  // Напоминания о плане — отдельная галочка в «Компании».
+  sandbox.state.engagement = { digest: false, comeback: false, planReminder: true, audience: 0, activeObjects: 0 };
+  const work = fakeElement('main');
+  sandbox.renderWork(work);
+  assert.match(String(work.innerHTML), /id="planReminderOn" checked/);
 });
 
 test('общий поиск в шапке: клиенты, объекты и сообщения — одним полем', async () => {

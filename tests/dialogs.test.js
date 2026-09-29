@@ -892,7 +892,7 @@ test.describe('property card', () => {
     const chat = createChat();
     const personal = await chat.say(MENU.ru.more);
     const rows = personal.last.markup.inline_keyboard;
-    assert.ok(rows.length <= 8, 'строк не больше восьми вместе с возвратом в меню (и строкой «Моя цель»), было одиннадцать');
+    assert.ok(rows.length <= 9, 'строк не больше девяти вместе с возвратом в меню (и строками «Мой план» и «Моя цель»), было одиннадцать');
     const callbacks = callbacksOf(personal.last.markup);
     assert.ok(!callbacks.includes('catalog:recent:0'), 'недавно просмотренные больше не занимают строку');
     assert.ok(!callbacks.includes('saved:view'), 'сохранённый поиск переехал в «Подписки»');

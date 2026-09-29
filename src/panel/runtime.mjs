@@ -628,7 +628,7 @@ function navItems() {
     { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
     { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"]] },
     { id: "reports", icon: navIcon("reports"), title: "Отчёт" },
-    { id: "texts", icon: navIcon("texts"), title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["trust", "Почему мы"], ["sections", "Если раздел пуст"], ["rules", "Автоответы и шаблоны"]] },
+    { id: "texts", icon: navIcon("texts"), title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["trust", "Почему мы"], ["plan", "План покупки"], ["sections", "Если раздел пуст"], ["rules", "Автоответы и шаблоны"]] },
     { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["service", "Обслуживание"]] },
   ];
 }

@@ -1040,7 +1040,7 @@ test.describe('catalog filter', () => {
     // просмотренных больше не занимает строку.
     assert.deepEqual(callbacksOf(personal.last.markup), [
       'catalog:favorites:0', 'compare:view', 'myreq:list', 'subs:menu',
-      'goal:menu', 'privacy:open', 'nav:help', 'nav:language', 'nav:menu',
+      'plan:open', 'goal:menu', 'privacy:open', 'nav:help', 'nav:language', 'nav:menu',
     ]);
     assert.ok(personal.last.buttons.includes(MENU.ru.favorites + ' · 1'));
     assert.ok(personal.last.buttons.includes(bot.text.comparison.ru.menuButton + ' · 0'));

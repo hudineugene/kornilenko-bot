@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 45;
+const DATA_VERSION = 46;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -83,6 +83,115 @@ const DEFAULT_GUIDE_PAGES = [
     },
   },
 ];
+
+// «Мой план покупки»: чек-лист шагов для покупателя из другой страны. Порядок и
+// набор шагов заданы ботом, тексты владелец правит в панели. Формулировки
+// нарочно осторожные («обычно», «часто»): это ориентир, а не юридическая
+// консультация — сроки и суммы зависят от случая.
+const DEFAULT_BUY_PLAN = [
+  {
+    id: 'nie',
+    title: { ru: 'NIE — номер иностранца', en: 'NIE — foreigner number', es: 'NIE — número de extranjero' },
+    text: {
+      ru: 'Он нужен для покупки, банковского счёта и договоров. Обычно оформляется в полиции или консульстве; сроки зависят от места и записи на приём.',
+      en: 'You need it to buy, to open a bank account and to sign contracts. It is usually issued by the police or a consulate; timing depends on the place and appointment availability.',
+      es: 'Hace falta para comprar, abrir una cuenta y firmar contratos. Suele tramitarse en la policía o en un consulado; los plazos dependen del lugar y de las citas disponibles.',
+    },
+  },
+  {
+    id: 'bank',
+    title: { ru: 'Банковский счёт в Испании', en: 'A bank account in Spain', es: 'Cuenta bancaria en España' },
+    text: {
+      ru: 'Через него обычно проходят задаток, налоги и коммунальные платежи. Как правило, нужны NIE, паспорт и подтверждение источника средств.',
+      en: 'Usually the deposit, taxes and utility bills go through it. You typically need the NIE, a passport and proof of where the funds come from.',
+      es: 'Normalmente se usa para la señal, los impuestos y los suministros. Suelen pedir el NIE, el pasaporte y justificar el origen de los fondos.',
+    },
+  },
+  {
+    id: 'lawyer',
+    title: { ru: 'Независимый юрист', en: 'An independent lawyer', es: 'Un abogado independiente' },
+    text: {
+      ru: 'Юрист проверяет документы объекта, долги и обременения, а также договор. Лучше выбрать своего, а не юриста продавца; его услуги обычно оплачиваются отдельно.',
+      en: 'A lawyer checks the property documents, debts and charges, and the contract. It is best to have your own rather than the seller’s; fees are usually paid separately.',
+      es: 'El abogado revisa la documentación, las deudas y cargas, y el contrato. Conviene tener el propio y no el del vendedor; sus honorarios suelen pagarse aparte.',
+    },
+  },
+  {
+    id: 'mortgage',
+    title: { ru: 'Ипотека (если нужна)', en: 'A mortgage (if you need one)', es: 'Hipoteca (si la necesitas)' },
+    text: {
+      ru: 'Нерезидентам банки обычно финансируют часть цены, остальное — собственные средства. Предварительное одобрение помогает понять бюджет до поиска объекта.',
+      en: 'Banks usually finance non-residents for part of the price; the rest is your own funds. A pre-approval helps you understand your budget before you search.',
+      es: 'Los bancos suelen financiar a los no residentes una parte del precio; el resto son fondos propios. Una preaprobación ayuda a conocer el presupuesto antes de buscar.',
+    },
+  },
+  {
+    id: 'search',
+    title: { ru: 'Подбор объектов', en: 'Finding properties', es: 'Búsqueda de inmuebles' },
+    text: {
+      ru: 'Определите бюджет, район и то, что для вас важно; посмотрите варианты в каталоге бота или отправьте заявку на подбор — менеджер поможет сузить выбор.',
+      en: 'Decide your budget, area and priorities; browse the bot’s catalog or send a selection request and an agent will help narrow the choice.',
+      es: 'Define tu presupuesto, zona y prioridades; mira el catálogo del bot o envía una solicitud de búsqueda y un asesor te ayudará a acotar.',
+    },
+  },
+  {
+    id: 'viewing',
+    title: { ru: 'Просмотр', en: 'Viewing', es: 'Visita' },
+    text: {
+      ru: 'Запишитесь на просмотр в боте: лично или онлайн по видеосвязи. Возьмите документ и список вопросов; спросите про расходы на содержание.',
+      en: 'Book a viewing in the bot, in person or online by video. Bring an ID and a list of questions, and ask about running costs.',
+      es: 'Reserva la visita en el bot, en persona o por videollamada. Lleva un documento y tus preguntas, y pregunta por los gastos de mantenimiento.',
+    },
+  },
+  {
+    id: 'reservation',
+    title: { ru: 'Резервация', en: 'Reservation', es: 'Reserva' },
+    text: {
+      ru: 'Когда объект выбран, его обычно резервируют небольшой суммой — он снимается с продажи на оговорённый срок. Условия возврата уточняйте письменно.',
+      en: 'Once you have chosen, the property is usually reserved with a small sum and taken off the market for an agreed period. Confirm the refund terms in writing.',
+      es: 'Al elegir, el inmueble suele reservarse con una pequeña cantidad y se retira del mercado por un plazo acordado. Confirma por escrito las condiciones de devolución.',
+    },
+  },
+  {
+    id: 'contract',
+    title: { ru: 'Контракт с задатком', en: 'Contract with a deposit', es: 'Contrato con señal' },
+    text: {
+      ru: 'Обычно подписывается предварительный договор с задатком (часто около 10% цены). Перед подписью его должен проверить ваш юрист.',
+      en: 'A preliminary contract with a deposit (often around 10% of the price) is usually signed. Your lawyer should review it before you sign.',
+      es: 'Normalmente se firma un contrato de arras con una señal (a menudo en torno al 10% del precio). Tu abogado debe revisarlo antes de firmar.',
+    },
+  },
+  {
+    id: 'notary',
+    title: { ru: 'Нотариус', en: 'The notary', es: 'La notaría' },
+    text: {
+      ru: 'Основной договор подписывается у нотариуса: остаток оплаты, налоги и передача ключей. Приехать можно лично или оформить доверенность.',
+      en: 'The deed is signed at the notary: the remaining payment, taxes and handover of the keys. You can attend in person or use a power of attorney.',
+      es: 'La escritura se firma ante notario: pago del resto, impuestos y entrega de llaves. Puedes acudir en persona o mediante poder.',
+    },
+  },
+  {
+    id: 'register',
+    title: { ru: 'Регистрация и коммунальные услуги', en: 'Registration and utilities', es: 'Inscripción y suministros' },
+    text: {
+      ru: 'После сделки право собственности регистрируют в реестре, а коммунальные услуги и налоги на недвижимость переоформляют на вас. Обычно этим занимается юрист или агент.',
+      en: 'After completion the ownership is registered, and utilities and property taxes are put in your name. A lawyer or agent usually handles this.',
+      es: 'Tras la compra se inscribe la propiedad y se ponen a tu nombre los suministros e impuestos. Normalmente lo gestiona el abogado o la agencia.',
+    },
+  },
+];
+
+function normalizeBuyPlan(value) {
+  const saved = Array.isArray(value) ? value : [];
+  return DEFAULT_BUY_PLAN.map((step) => {
+    const stored = saved.find((item) => item && item.id === step.id) || {};
+    return {
+      id: step.id,
+      title: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText((stored.title || {})[language], 120) || step.title[language]])),
+      text: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText((stored.text || {})[language], 1500) || step.text[language]])),
+    };
+  });
+}
 
 const defaultData = {
   version: DATA_VERSION,
@@ -175,6 +284,7 @@ const defaultData = {
   // доверия. Пока пусто, экран клиентам не показывается; ничего не подставляется.
   trust: { yearsOnMarket: 0, dealsCount: 0, registration: '', officeAddress: '', reviewsUrl: '', reviews: [] },
   guidePages: clone(DEFAULT_GUIDE_PAGES),
+  buyPlan: clone(DEFAULT_BUY_PLAN),
   groups: [],
   groupPosts: [],
   stats: {
@@ -850,7 +960,7 @@ function normalizeWorkingHours(value) {
 // сообщение «ни о чём» отпугивает.
 function normalizeEngagement(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  return { digest: source.digest === true, comeback: source.comeback === true };
+  return { digest: source.digest === true, comeback: source.comeback === true, planReminder: source.planReminder === true };
 }
 
 // «Почему мы»: годы на рынке, число сделок, регистрационные данные, адрес офиса,
@@ -1294,6 +1404,7 @@ function normalizeLoadedData(parsed) {
     normalized.lastWeeklyReportFor = cleanText(parsed.lastWeeklyReportFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
     normalized.guidePages = normalizeGuidePages(parsed.guidePages);
+    normalized.buyPlan = normalizeBuyPlan(parsed.buyPlan);
     normalized.trust = normalizeTrust(parsed.trust);
     normalized.config.publishing = normalizePublishing(normalized.config.publishing);
     normalized.groups = normalizeGroups(parsed.groups);
@@ -1322,6 +1433,8 @@ function normalizeLoadedData(parsed) {
 
 export {
   CLOCK_TIME_PATTERN,
+  DEFAULT_BUY_PLAN,
+  normalizeBuyPlan,
   normalizeEngagement,
   MAX_TRUST_REVIEWS,
   normalizeTrust,

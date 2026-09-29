@@ -2,7 +2,7 @@
 
 import crypto from 'node:crypto';
 import { cleanText, clone } from './util.mjs';
-import { normalizeGuidePages, pruneOrphanPropertyAnalytics } from './data-format.mjs';
+import { normalizeBuyPlan, normalizeGuidePages, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { imageExists } from './media.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordImages } from './catalog.mjs';
@@ -246,6 +246,16 @@ async function handleContentApi(req, res, url) {
     data.guidePages = normalizeGuidePages(Array.isArray(body.pages) ? body.pages : []);
     saveDataNow();
     return json(res, 200, { ok: true, pages: data.guidePages });
+  }
+
+  // «Мой план покупки»: тексты шагов (набор и порядок шагов заданы ботом).
+  if (url.pathname === '/api/buy-plan' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    data.buyPlan = normalizeBuyPlan(Array.isArray(body.steps) ? body.steps : []);
+    saveDataNow();
+    return json(res, 200, { ok: true, steps: data.buyPlan });
   }
 
   return false;

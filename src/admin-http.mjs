@@ -809,6 +809,7 @@ function safeState(session) {
       activeObjects: data.objects.filter((record) => record.status === 'active').length,
     },
     guidePages: data.guidePages || [],
+    buyPlan: data.buyPlan || [],
     errors: data.errors,
     notifications,
     notificationUnreadCount: notifications.filter((item) => item.active && !item.readAt && !item.handledAt).length,

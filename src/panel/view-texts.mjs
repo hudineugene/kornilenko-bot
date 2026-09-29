@@ -597,6 +597,39 @@ async function renderInterface(host) {
   }, "Тексты интерфейса изменены");
 }
 
+// --- «План покупки» -------------------------------------------------------------
+// Десять шагов для покупателя из другой страны (NIE → регистрация). Порядок и набор
+// шагов заданы ботом, владелец правит заголовки и тексты на трёх языках: сроки,
+// платные услуги и свои формулировки. Юридических обещаний в текстах быть не должно.
+function renderBuyPlan(host) {
+  var steps = state.buyPlan || [];
+  host.innerHTML = '<div class="card"><header><h3>План покупки</h3></header><div class="card-body stack" id="planForm">' +
+    '<p class="muted small">Клиент открывает его в «Моё → Мой план покупки» и отмечает шаги «Готово» или «Нужна помощь» — помощь приходит вам заявкой. Ниже — готовые нейтральные формулировки: поправьте их под свои сроки, услуги и условия. Пишите «обычно» и «как правило», не давайте юридических обещаний — на экране у клиента стоит оговорка, что это ориентир, а не консультация. Напоминания тем, кто начал и замолчал, включаются в «Настройки → Компания».</p>' +
+    languageTabs() +
+    steps.map(function (step, index) {
+      return '<details class="editor-section" data-plan-step="' + esc(step.id) + '"' + (index === 0 ? " open" : "") + '><summary><b>' + (index + 1) + ". " + esc(step.title.ru) + "</b></summary>" +
+        '<div class="editor-section-body stack"><div class="field"><label>Заголовок</label>' + LANGUAGES.map(function (language) {
+          return '<input data-plan-title="' + esc(step.id) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc(step.title[language[0]] || "") + '">';
+        }).join("") + "</div>" +
+        '<div class="field"><label>Текст</label>' + LANGUAGES.map(function (language) {
+          return '<textarea data-plan-text="' + esc(step.id) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc(step.text[language[0]] || "") + "</textarea>";
+        }).join("") + "</div></div></details>";
+    }).join("") + "</div></div>";
+  bindLanguageTabs(host);
+  watchForm(host, async function () {
+    await send("/api/buy-plan", "PUT", { steps: steps.map(function (step) {
+      var title = {}, text = {};
+      LANGUAGES.forEach(function (language) {
+        var titleInput = host.querySelector('[data-plan-title="' + step.id + '"][data-lang="' + language[0] + '"]');
+        var textInput = host.querySelector('[data-plan-text="' + step.id + '"][data-lang="' + language[0] + '"]');
+        if (titleInput) title[language[0]] = titleInput.value;
+        if (textInput) text[language[0]] = textInput.value;
+      });
+      return { id: step.id, title: title, text: text };
+    }) });
+  }, "Сохранить «План покупки»");
+}
+
 // --- «Почему мы» -----------------------------------------------------------------
 // Экран доверия для клиентов: цифры, регистрационные данные, адрес офиса, отзывы.
 // Заполняет владелец; ничего не подставляется само. Пока пусто — клиенты экрана не
@@ -701,6 +734,7 @@ VIEWS.texts = {
     if (tab === "contacts") return renderContacts(host);
     if (tab === "rules") return renderRules(host);
     if (tab === "trust") return renderTrust(host);
+    if (tab === "plan") return renderBuyPlan(host);
 
     renderWelcome(host);
   },

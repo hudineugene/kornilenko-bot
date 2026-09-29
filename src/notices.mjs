@@ -18,6 +18,7 @@ import { runDailyFeedImport } from './feed-import.mjs';
 import { runDueGroupPosts } from './groups.mjs';
 import { runRetentionCleanup } from './retention.mjs';
 import { runComeback, runWeeklyDigest } from './digest.mjs';
+import { runPlanReminders } from './plan.mjs';
 
 const DIGEST_HOUR = 9;
 
@@ -433,6 +434,7 @@ function runScheduledNotices() {
   runRetentionCleanup().catch((error) => recordError('Срок хранения данных', error));
   runWeeklyDigest().catch((error) => recordError('Недельный дайджест', error));
   runComeback().catch((error) => recordError('Мягкий возврат', error));
+  runPlanReminders().catch((error) => recordError('Напоминание о плане покупки', error));
 }
 
 export {

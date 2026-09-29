@@ -256,6 +256,7 @@ function renderWork(host) {
     '<div class="card"><header><h3>Сообщения клиентам сами</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="digestOn"' + (engagement.digest ? " checked" : "") + '> раз в неделю присылать «Что нового»: новые объекты и снижения цен</label>' +
       '<label class="check"><input type="checkbox" id="comebackOn"' + (engagement.comeback ? " checked" : "") + '> напоминать тем, кто смотрел объекты и замолчал на 5–10 дней, если появилось подходящее</label>' +
+      '<label class="check"><input type="checkbox" id="planReminderOn"' + (engagement.planReminder ? " checked" : "") + '> напоминать о «Плане покупки» тем, кто его начал и замолчал на неделю (не чаще раза в две недели)</label>' +
       '<div class="hint">Получат: ' + num(engagement.audience || 0) + ' — те, кто согласился на «Новости и акции». Объектов в продаже сейчас ' + num(engagement.activeObjects || 0) + '. Пустое сообщение не отправляется, чаще раза в неделю дайджест не приходит, возврат — не чаще раза в три недели; каждое выключается одной кнопкой. Включайте на живом каталоге: на демо-объектах слать нечего.</div>' +
     "</div></div></div>";
 
@@ -294,7 +295,7 @@ function renderWork(host) {
     }));
   }
   async function saveEngagement() {
-    await send("/api/engagement", "PUT", { digest: host.querySelector("#digestOn").checked, comeback: host.querySelector("#comebackOn").checked });
+    await send("/api/engagement", "PUT", { digest: host.querySelector("#digestOn").checked, comeback: host.querySelector("#comebackOn").checked, planReminder: host.querySelector("#planReminderOn").checked });
   }
   watchForm(host, async function () {
     await saveHours();
