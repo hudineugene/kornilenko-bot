@@ -1244,7 +1244,7 @@ test('статус один: «Ждёт ответа / Отвечено / Зак
   await sandbox.VIEWS.clients.render(view, '');
   const card = String(view.querySelector('#inquiryCard').innerHTML);
   assert.match(card, /<label for="inqStatusValue">Статус<\/label>/);
-  assert.match(card, /Этап сделки <span class="small faint">\(по желанию\)/);
+  assert.match(card, /Этап <span class="small faint">\(по желанию\)/);
   assert.ok(!card.includes('Этап воронки'), 'старая подпись убрана');
 });
 

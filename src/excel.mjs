@@ -175,7 +175,7 @@ const CLIENT_EXPORT_COLUMNS = [
   { title: 'Удобное время', width: 18 },
   { title: 'Язык', width: 6 },
   { title: 'Источник', width: 14 },
-  { title: 'Этап работы', width: 14 },
+  { title: 'Этап', width: 14 },
   { title: 'Следующий шаг', width: 14 },
   { title: 'Обращений', width: 10 },
   { title: 'Последнее обращение', width: 30 },
