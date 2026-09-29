@@ -1226,6 +1226,12 @@ function normalizedInterfaceText(value, strict = false) {
           result[group][language][key] = values.length === fallback.length ? values : clone(fallback);
           continue;
         }
+        // Набор названий (объект) — не текст: правится только в коде, а в
+        // сохранённом виде раньше превращался в строку «[object Object]».
+        if (fallback && typeof fallback === 'object') {
+          result[group][language][key] = clone(fallback);
+          continue;
+        }
         const text = cleanText(source[key], String(fallback).length > 55 || String(fallback).includes('\n') ? 4000 : 80);
         if (strict && !text) throw new Error('Все тексты интерфейса должны быть заполнены');
         result[group][language][key] = text || fallback;
@@ -1235,6 +1241,29 @@ function normalizedInterfaceText(value, strict = false) {
   return result;
 }
 
+// В bot-data.json хранится только то, что отличается от словаря. Раньше
+// сохранялись все тексты целиком, и они перекрывали словарь: после правки
+// формулировок в коде клиент продолжал видеть старые. Пустые группы не пишем.
+function interfaceTextOverrides(effective) {
+  const overrides = {};
+  for (const [group, languages] of Object.entries(INTERFACE_TEXT_DEFAULTS)) {
+    for (const language of ['ru', 'en', 'es']) {
+      for (const [key, fallback] of Object.entries(languages[language])) {
+        const value = effective[group] && effective[group][language] && effective[group][language][key];
+        // Тексты при сохранении обрезаются по краям, поэтому и словарь сравниваем
+        // обрезанным: «Посмотрите этот объект: » с пробелом на конце — не правка.
+        const plain = typeof fallback === 'string' ? cleanText(fallback, fallback.length + 1) : fallback;
+        if (value === undefined || JSON.stringify(value) === JSON.stringify(fallback) || JSON.stringify(value) === JSON.stringify(plain)) continue;
+        overrides[group] = overrides[group] || {};
+        overrides[group][language] = overrides[group][language] || {};
+        overrides[group][language][key] = value;
+      }
+    }
+  }
+  return overrides;
+}
+
+// Кладёт тексты в рабочие словари бота и возвращает то, что надо хранить.
 function applyInterfaceText(value) {
   const next = normalizedInterfaceText(value);
   for (const [group, descriptor] of Object.entries(INTERFACE_TEXT_TARGETS)) {
@@ -1244,8 +1273,7 @@ function applyInterfaceText(value) {
       else descriptor.target[language] = clone(languageValue);
     }
   }
-  return next;
-
+  return interfaceTextOverrides(next);
 }
 
 export {

@@ -68,6 +68,70 @@ test('data from an older version is copied to backups/ before the upgrade, once'
   }
 });
 
+// С версии 39 значения, равные словарю, из сохранённого убираются: смотрим на то,
+// что увидит клиент, то есть на тексты после сложения со словарём.
+const effectiveTexts = (saved) => bot.normalizedInterfaceText(saved.interfaceText);
+
+test('версия 39: сохранённые прежние тексты уступают словарю, а слова владельца остаются', () => {
+  const OWN = 'Напишите нам — ответим сегодня';
+  const saved = bot.normalizeLoadedData({
+    version: 38,
+    config: { messages: {
+      ru: { help: '👋 Чем я могу помочь?\n\n❤️ Избранное — вернуться к сохранённым объектам\n📞 Позвоните мне — менеджер перезвонит', fallback: 'Спасибо' },
+      en: { help: 'Our own help text', fallback: 'Thank you! Your message has been received. A manager will reply in this chat.' },
+      es: { fallback: '¡Gracias! Hemos recibido tu mensaje. Un gestor responderá en este chat.' },
+    } },
+    interfaceText: {
+      // прежние значения по умолчанию, которые бот когда-то записал сам
+      menuLabels: { en: { contacts: '💬 Manager', objects: '🏡 Homes' }, es: { contacts: '💬 Gestor' } },
+      managerContact: {
+        en: { intro: '💬 Choose a convenient way to contact a manager.', received: OWN },
+        es: { intro: '💬 Elige una forma cómoda de contactar con un gestor.' },
+      },
+      // значение, равное нынешнему словарю, и испорченный набор названий
+      calculator: { en: { discuss: '💬 Discuss with an agent' } },
+      callbackForm: { ru: { methodNames: '[object Object]' } },
+    },
+  });
+  const effective = effectiveTexts(saved);
+  assert.equal(effective.menuLabels.en.contacts, '💬 Contact us', 'старая подпись кнопки заменена нынешней');
+  assert.equal(effective.menuLabels.es.contacts, '💬 Contactar');
+  assert.equal(effective.managerContact.en.intro, '💬 Choose a convenient way to contact an agent.', 'agent, а не manager');
+  assert.equal(effective.managerContact.es.intro, '💬 Elige una forma cómoda de contactar con un asesor.', 'asesor, а не gestor');
+  // Своё — остаётся, в том числе рядом с прежним значением в той же группе.
+  assert.equal(effective.menuLabels.en.objects, '🏡 Homes');
+  assert.equal(effective.managerContact.en.received, OWN);
+  assert.deepEqual(saved.interfaceText.menuLabels.en, { objects: '🏡 Homes' }, 'в файле осталось только своё');
+  assert.equal(saved.interfaceText.calculator.en.discuss, undefined, 'равное словарю не хранится');
+  assert.equal(typeof effective.callbackForm.ru.methodNames, 'object', 'испорченное «[object Object]» заменено набором названий');
+
+  // Помощь, описывающая кнопки, которых уже нет, заменена нынешней; своя — нет.
+  assert.match(saved.config.messages.ru.help, /💬 Связаться —/);
+  assert.ok(!saved.config.messages.ru.help.includes('❤️ Избранное —'));
+  assert.equal(saved.config.messages.en.help, 'Our own help text');
+  assert.match(saved.config.messages.en.fallback, /An agent will reply/);
+  assert.match(saved.config.messages.es.fallback, /Un asesor responderá/);
+
+  // Миграция выполняется один раз: свежие данные версии 39 она не трогает.
+  const again = bot.normalizeLoadedData({ version: 39, interfaceText: { menuLabels: { en: { contacts: '💬 Manager' } } } });
+  assert.equal(effectiveTexts(again).menuLabels.en.contacts, '💬 Manager', 'то, что владелец задал после миграции, остаётся');
+});
+
+test('панель хранит только отличия от словаря, поэтому новые формулировки доходят до клиента', async () => {
+  const { applyInterfaceText, normalizedInterfaceText: normalize } = await import('../src/texts.mjs');
+  try {
+    const edited = normalize({});
+    edited.menuLabels.ru.objects = '🏠 Каталог';
+    const stored = applyInterfaceText(edited);
+    assert.deepEqual(stored, { menuLabels: { ru: { objects: '🏠 Каталог' } } }, 'сохраняется одна правка, а не весь набор');
+    // Без правок хранить нечего.
+    assert.deepEqual(applyInterfaceText(normalize({})), {});
+    assert.equal(bot.text.menuLabels.ru.objects, '🏘 Объекты', 'словарь вернулся к своим значениям');
+  } finally {
+    applyInterfaceText({});
+  }
+});
+
 test('version 16 renumbers the saved selection steps, keeping the admin\'s wording', () => {
   const saved = bot.normalizeLoadedData({
     version: 15,
@@ -77,7 +141,7 @@ test('version 16 renumbers the saved selection steps, keeping the admin\'s wordi
       es: { askLocation: '2 de 4. ¿Qué ciudad, zona o ubicación te interesa?' },
     } },
   });
-  const form = saved.interfaceText.selectionForm;
+  const form = effectiveTexts(saved).selectionForm;
   assert.equal(form.ru.askDeal, '1 из 5. Вы рассматриваете покупку или аренду?');
   assert.equal(form.ru.askLocation, '3 из 5. Где хотите жить?');
   assert.equal(form.ru.askBudget, 'Бюджет?', 'a text without a step number is left alone');
@@ -85,7 +149,7 @@ test('version 16 renumbers the saved selection steps, keeping the admin\'s wordi
   assert.equal(form.en.askBudget, '4 of 5. What budget are you considering? You can include the amount and currency.');
   assert.equal(form.es.askLocation, '3 de 5. ¿Qué ciudad, zona o ubicación te interesa?');
   const again = bot.normalizeLoadedData(JSON.parse(JSON.stringify(saved)));
-  assert.equal(again.interfaceText.selectionForm.ru.askLocation, '3 из 5. Где хотите жить?', 'runs once');
+  assert.equal(effectiveTexts(again).selectionForm.ru.askLocation, '3 из 5. Где хотите жить?', 'runs once');
 });
 
 test('version 17 gives the short menu labels and help to texts still at the old defaults', () => {
@@ -101,13 +165,13 @@ test('version 17 gives the short menu labels and help to texts still at the old 
     } },
   });
   assert.deepEqual(
-    ['objects', 'selection', 'contacts', 'request'].map((key) => saved.interfaceText.menuLabels.ru[key]),
+    ['objects', 'selection', 'contacts', 'request'].map((key) => effectiveTexts(saved).menuLabels.ru[key]),
     ['🏘 Объекты', '✨ Подбор', '💬 Связаться', '📞 Позвоните мне'],
   );
-  assert.equal(saved.interfaceText.menuLabels.en.objects, '🏡 Homes', 'a label the administrator changed is kept');
-  assert.equal(saved.interfaceText.menuLabels.en.request, '📞 Call me back');
-  assert.equal(saved.interfaceText.menuLabels.ru.more, '👤 Моё');
-  assert.match(saved.config.messages.ru.help, /📞 Позвоните мне —/);
+  assert.equal(effectiveTexts(saved).menuLabels.en.objects, '🏡 Homes', 'a label the administrator changed is kept');
+  assert.equal(effectiveTexts(saved).menuLabels.en.request, '📞 Call me back');
+  assert.equal(effectiveTexts(saved).menuLabels.ru.more, '👤 Моё');
+  assert.match(saved.config.messages.ru.help, /💬 Связаться —/, 'старая помощь заменена нынешней');
   assert.equal(saved.config.messages.en.help, 'My own help');
 });
 
@@ -126,9 +190,9 @@ test('version 19 introduces comparison without overwriting administrator texts',
     } },
   });
   assert.equal(saved.version, DATA_VERSION);
-  assert.match(saved.interfaceText.myArea.ru.intro, /сравниваемые объекты/);
+  assert.match(effectiveTexts(saved).myArea.ru.intro, /сравниваемые объекты/);
   assert.match(saved.config.messages.ru.help, /избранное, сравнение/);
-  assert.equal(saved.interfaceText.myArea.en.intro, 'My custom personal area');
+  assert.equal(effectiveTexts(saved).myArea.en.intro, 'My custom personal area');
   assert.equal(saved.config.messages.en.help, 'My custom help');
 });
 
@@ -141,9 +205,9 @@ test('version 20 introduces saved search without overwriting administrator texts
     interfaceText: { myArea: { ru: { intro: previousIntro }, en: { intro: 'My own personal area' } } },
   });
   assert.equal(saved.version, DATA_VERSION);
-  assert.match(saved.interfaceText.myArea.ru.intro, /сохранённый поиск/);
-  assert.match(saved.config.messages.ru.help, /сохранённый поиск/);
-  assert.equal(saved.interfaceText.myArea.en.intro, 'My own personal area');
+  assert.match(effectiveTexts(saved).myArea.ru.intro, /сохранённый поиск/);
+  assert.match(saved.config.messages.ru.help, /👤 Моё —/, 'старая помощь заменена нынешней');
+  assert.equal(effectiveTexts(saved).myArea.en.intro, 'My own personal area');
   assert.equal(saved.config.messages.en.help, 'My own help');
 });
 
@@ -395,15 +459,13 @@ test('one-language files are still migrated into Russian texts', () => {
   assert.equal('greeting' in migrated.config, false);
 });
 
-test('text migrations run once, not on every load', () => {
+test('text migrations run once and never rewrite the owner\'s own words', () => {
   const custom = { ru: { greeting: 'Наш агент на связи', help: 'Справка', fallback: 'Ответ' } };
+  // Раньше при переходе со старого формата «агент» молча менялся на «менеджер».
+  // Слова владельца теперь остаются как есть.
   const legacy = bot.normalizeLoadedData({ version: 13, config: { messages: custom } });
-  assert.equal(legacy.config.messages.ru.greeting, 'Наш менеджер на связи');
-  const words = bot.normalizeLoadedData({
-    version: 13,
-    config: { messages: { ru: { greeting: 'Позвоните агенту, агентство и субагент', help: 'Справка', fallback: 'Ответ' } } },
-  });
-  assert.equal(words.config.messages.ru.greeting, 'Позвоните менеджеру, агентство и субагент');
+  assert.equal(legacy.config.messages.ru.greeting, 'Наш агент на связи');
+  assert.equal(legacy.config.messages.ru.help, 'Справка');
   const current = bot.normalizeLoadedData({ version: 14, config: { messages: custom } });
   assert.equal(current.config.messages.ru.greeting, 'Наш агент на связи');
 });

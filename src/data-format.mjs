@@ -3,13 +3,14 @@
 import crypto from 'node:crypto';
 import { cleanText, clone } from './util.mjs';
 import { INTERFACE_TEXT_DEFAULTS } from './texts.mjs';
+import { PREVIOUS_INTERFACE_TEXTS } from './legacy-texts.mjs';
 import { normalizedSimilarPropertyDetails } from './similar.mjs';
 
 // Версия формата данных. Поднимается при каждом изменении набора полей: по ней
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 38;
+const DATA_VERSION = 39;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -94,18 +95,18 @@ const defaultData = {
     messages: {
       ru: {
         greeting: 'Здравствуйте, {first_name}! Рад вас видеть. Чем могу помочь?',
-        help: '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — специальные предложения\n📞 Позвоните мне — менеджер перезвонит в удобное время\n💬 Менеджер — задать вопрос, позвонить или написать в WhatsApp\n👤 Моё — избранное, сравнение, сохранённый поиск, история просмотров, заявки и уведомления\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
+        help: '👋 Чем я могу помочь?\n\n🏘 Объекты — посмотреть недвижимость\n✨ Подбор — рассказать, что вы ищете, и получить подходящие варианты\n💬 Связаться — задать вопрос, заказать звонок или написать в WhatsApp\n👤 Моё — избранное, сравнение, заявки, уведомления и ваши данные\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
         fallback: 'Спасибо! Сообщение получено. Менеджер ответит в этом чате.',
       },
       en: {
         greeting: 'Hello, {first_name}! Glad to see you. How can I help?',
-        help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n❤️ Favorites — return to saved properties\n🔥 Offers — current promotions\n📞 Call me back — a manager will call you at a convenient time\n💬 Manager — ask a question, call or write on WhatsApp\n👤 My space — favorites, comparison, saved search, recently viewed properties, requests and notifications\n\nYou can also send a regular message. A manager will reply in this chat.',
-        fallback: 'Thank you! Your message has been received. A manager will reply in this chat.',
+        help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n💬 Contact us — ask a question, request a call or write on WhatsApp\n👤 My space — saved properties, comparison, requests, notifications and your data\n\nYou can also send a regular message. An agent will reply in this chat.',
+        fallback: 'Thank you! Your message has been received. An agent will reply in this chat.',
       },
       es: {
         greeting: '¡Hola, {first_name}! Me alegra verte. ¿Cómo puedo ayudarte?',
-        help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — ofertas actuales\n📞 Llámame — un gestor te llamará cuando te venga bien\n💬 Gestor — hacer una pregunta, llamar o escribir por WhatsApp\n👤 Mi espacio — favoritos, comparación, búsqueda guardada, inmuebles vistos, solicitudes y avisos\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
-        fallback: '¡Gracias! Hemos recibido tu mensaje. Un gestor responderá en este chat.',
+        help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n💬 Contactar — hacer una pregunta, pedir una llamada o escribir por WhatsApp\n👤 Mi espacio — inmuebles guardados, comparación, solicitudes, avisos y tus datos\n\nTambién puedes enviar un mensaje normal. Un asesor responderá en este chat.',
+        fallback: '¡Gracias! Hemos recibido tu mensaje. Un asesor responderá en este chat.',
       },
     },
     menu: {
@@ -245,28 +246,6 @@ function normalizeLocalizedField(value, maximum) {
   return { ru: legacy, en: legacy, es: legacy };
 }
 
-function managerTerminology(value, language) {
-  let text = String(value || '');
-  if (language === 'en') {
-    text = text.replace(/\ban agent\b/gi, (match) => match[0] === 'A' ? 'A manager' : 'a manager');
-    text = text.replace(/\bagent\b/gi, (match) => match[0] === 'A' ? 'Manager' : 'manager');
-  } else if (language === 'es') {
-    text = text.replace(/\bun agente\b/gi, (match) => match[0] === 'U' ? 'Un gestor' : 'un gestor');
-    text = text.replace(/\bagente\b/gi, (match) => match[0] === 'A' ? 'Gestor' : 'gestor');
-  } else {
-    // \b does not treat Cyrillic letters as word characters, hence the
-    // explicit Unicode-aware boundaries.
-    const word = (stem) => new RegExp(String.raw`(?<![\p{L}\p{N}_])` + stem + String.raw`(?![\p{L}\p{N}_])`, 'gu');
-    text = text
-      .replace(word('Агент'), 'Менеджер')
-      .replace(word('агент'), 'менеджер')
-      .replace(word('агента'), 'менеджера')
-      .replace(word('агенту'), 'менеджеру')
-      .replace(word('агентом'), 'менеджером');
-  }
-  return text;
-}
-
 // One-time upgrade of texts that still equal defaults from older versions.
 function migrateDefaultTexts(messages) {
   if (messages.ru.help === 'Отправьте сообщение, и я постараюсь подобрать ответ.' || messages.ru.help.startsWith('Отправьте сообщение, и я постараюсь подобрать ответ. Чтобы сменить язык')) {
@@ -290,6 +269,48 @@ function migrateDefaultTexts(messages) {
   if (messages.ru.fallback === 'Спасибо за сообщение! Я передал его администратору.') messages.ru.fallback = defaultData.config.messages.ru.fallback;
   if (messages.en.fallback === 'Thank you for your message! I have passed it on to the administrator.') messages.en.fallback = defaultData.config.messages.en.fallback;
   if (messages.es.fallback === '¡Gracias por tu mensaje! Se lo he enviado al administrador.') messages.es.fallback = defaultData.config.messages.es.fallback;
+}
+
+// Версия 39. До неё панель и бот записывали в bot-data.json все тексты
+// интерфейса целиком, вместе с теми, что владелец не менял. Сохранённое
+// перекрывало словарь: после правки формулировок клиент продолжал видеть
+// старые («gestor», «manager», кнопки, которых уже нет). Теперь из сохранённого
+// убираем строки, равные прежним или нынешним значениям по умолчанию; всё,
+// что владелец написал сам, остаётся. Прежняя подмена «агент → менеджер» при
+// загрузке (managerTerminology) убрана — она перекрывала словарь так же.
+const OBSOLETE_HELP_LINES = {
+  ru: ['❤️ Избранное —', '📞 Позвоните мне —', '🔥 Акции —'],
+  en: ['❤️ Favorites —', '📞 Call me back —', '🔥 Offers —'],
+  es: ['❤️ Favoritos —', '📞 Llámame —', '🔥 Promociones —'],
+};
+const OBSOLETE_FALLBACKS = {
+  en: ['Thank you! Your message has been received. A manager will reply in this chat.', 'Thank you for your message! I have passed it on to the administrator.'],
+  es: ['¡Gracias! Hemos recibido tu mensaje. Un gestor responderá en este chat.', '¡Gracias por tu mensaje! Se lo he enviado al administrador.'],
+};
+function migrateStaleTexts(interfaceText, messages) {
+  const same = (first, second) => JSON.stringify(first) === JSON.stringify(second);
+  for (const [group, languages] of Object.entries(INTERFACE_TEXT_DEFAULTS)) {
+    for (const language of ['ru', 'en', 'es']) {
+      const stored = interfaceText && interfaceText[group] && interfaceText[group][language];
+      if (!stored || typeof stored !== 'object') continue;
+      const previous = (PREVIOUS_INTERFACE_TEXTS[group] && PREVIOUS_INTERFACE_TEXTS[group][language]) || {};
+      for (const [key, fallback] of Object.entries(languages[language])) {
+        if (!Object.hasOwn(stored, key)) continue;
+        const value = stored[key];
+        // Сохранённое равно нынешнему значению, прежнему значению по умолчанию
+        // или испорчено («[object Object]» вместо набора названий).
+        const spoiled = fallback && typeof fallback === 'object' && !Array.isArray(fallback) && typeof value === 'string';
+        if (same(value, fallback) || (previous[key] || []).some((old) => same(old, value)) || spoiled) delete stored[key];
+      }
+    }
+  }
+  for (const language of ['ru', 'en', 'es']) {
+    const current = messages[language];
+    if (!current) continue;
+    const help = String(current.help || '');
+    if (OBSOLETE_HELP_LINES[language].some((line) => help.includes(line))) current.help = defaultData.config.messages[language].help;
+    if (language !== 'ru' && OBSOLETE_FALLBACKS[language].includes(String(current.fallback || ''))) current.fallback = defaultData.config.messages[language].fallback;
+  }
 }
 
 // Version 16 added "property type" as step 2 of the selection form. Saved
@@ -893,11 +914,6 @@ function normalizeLoadedData(parsed) {
         ...defaultData.config.messages[language],
         ...(parsedMessages[language] || {}),
       };
-      if (legacyFormat) {
-        messages[language].greeting = managerTerminology(messages[language].greeting, language);
-        messages[language].help = managerTerminology(messages[language].help, language);
-        messages[language].fallback = managerTerminology(messages[language].fallback, language);
-      }
       menu[language] = {
         ...defaultData.config.menu[language],
         ...(parsedMenu[language] || {}),
@@ -1145,6 +1161,7 @@ function normalizeLoadedData(parsed) {
     if (storedVersion < 19) migrateComparison(normalized.interfaceText, normalized.config.messages);
     if (storedVersion < 20) migrateSavedSearch(normalized.interfaceText, normalized.config.messages);
     if (storedVersion < 35) migrateShortGreeting(normalized.interfaceText);
+    if (storedVersion < 39) migrateStaleTexts(normalized.interfaceText, normalized.config.messages);
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
     normalized.lastDiskWarningFor = cleanText(parsed.lastDiskWarningFor, 10);
@@ -1193,7 +1210,6 @@ export {
   TIME_ZONES,
   defaultData,
   legacyConfigRemoved,
-  managerTerminology,
   migrateDefaultTexts,
   migrateSelectionSteps,
   migrateShortMenu,
