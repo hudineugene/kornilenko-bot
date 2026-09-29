@@ -1558,3 +1558,54 @@ test('слово «Испания» или «es» не меняет язык к�
     assert.equal(chat.user.preferredLanguage, 'ru', word + ' — не выбор языка');
   }
 });
+
+test('нажатие на текущий номер «n / m» в галерее не шлёт дубль и не сбрасывает file_id', async () => {
+  resetData((data) => {
+    const home = property('gal-same-01', 'Дом с фото', 'active', {});
+    home.imagesByLanguage.ru.push({ ...home.imagesByLanguage.ru[0], id: 'gal-same-01-extra' });
+    data.objects.push(home);
+  });
+  const chat = createChat();
+  await chat.say(bot.text.menuLabels.ru.objects);
+  await chat.press('property:gallery:gal-same-01', { card: true });
+  const record = bot.getData().objects.find((item) => item.id === 'gal-same-01');
+  const image = record.imagesByLanguage.ru[0];
+  image.telegramFileId = 'known-file-id';
+
+  const working = global.fetch;
+  // Telegram отвечает на правку, которая ничего не меняет: «message is not modified».
+  global.fetch = async (url, init) => {
+    if (/\/editMessage/.test(String(url))) {
+      telegram.calls.push({ method: String(url).split('/').pop(), body: init && typeof init.body === 'string' ? JSON.parse(init.body) : {} });
+      return new Response(JSON.stringify({ ok: false, error_code: 400, description: 'Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message' }), { status: 400 });
+    }
+    return working(url, init);
+  };
+  try {
+    const before = telegram.calls.length;
+    await chat.press('property:photo:0:gal-same-01', { card: true });
+    const calls = telegram.calls.slice(before);
+    assert.equal(calls.some((call) => ['sendPhoto', 'sendMessage', 'sendMediaGroup'].includes(call.method) && String(call.body.chat_id) === String(chat.id)), false, 'дубль карточки не пришёл');
+    assert.equal(image.telegramFileId, 'known-file-id', 'кэш file_id не сброшен');
+  } finally {
+    global.fetch = working;
+  }
+});
+
+test('«message is not modified» — не сбой для любой правки сообщения, но другие ошибки остаются ошибками', async () => {
+  const working = global.fetch;
+  const answer = (description) => async () => new Response(JSON.stringify({ ok: false, error_code: 400, description }), { status: 400 });
+  try {
+    global.fetch = answer('Bad Request: message is not modified: exactly the same');
+    for (const method of ['editMessageText', 'editMessageCaption', 'editMessageReplyMarkup', 'editMessageMedia']) {
+      assert.equal(await bot.telegramRequest(TOKEN, method, { chat_id: 1, message_id: 2 }), true, method + ' — уже в нужном виде');
+    }
+    // Отправка нового сообщения с таким текстом ошибки — по-прежнему ошибка.
+    await assert.rejects(bot.telegramRequest(TOKEN, 'sendMessage', { chat_id: 1, text: 'x' }));
+    // И другая ошибка правки — тоже: сообщение удалено или слишком старое.
+    global.fetch = answer('Bad Request: message to edit not found');
+    await assert.rejects(bot.telegramRequest(TOKEN, 'editMessageText', { chat_id: 1, message_id: 2, text: 'x' }));
+  } finally {
+    global.fetch = working;
+  }
+});

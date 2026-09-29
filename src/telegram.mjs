@@ -102,6 +102,10 @@ async function telegramCall(token, method, init, { signal, timeoutMs }) {
       if (signal && signal.aborted) throw signal.reason;
       continue;
     }
+    // «message is not modified»: сообщение уже выглядит так, как мы просим
+    // (нажали на текущий номер «2 / 5», повторно на ту же кнопку). Это не сбой:
+    // раньше ошибка сбрасывала кэш file_id и заставляла присылать дубль карточки.
+    if (String(method).startsWith('editMessage') && /message is not modified/i.test(String(body && body.description || ''))) return true;
     throw normalizeTelegramError(
       new Error((body && body.description) || 'Telegram API error'),
       response.status,
