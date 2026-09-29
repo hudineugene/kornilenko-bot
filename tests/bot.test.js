@@ -707,3 +707,18 @@ test.describe('admin API', () => {
     assert.equal(status, 421);
   });
 });
+
+test('версия 39: приветствие EN/ES из четырёх абзацев заменено коротким, своё — остаётся', () => {
+  const pitchEn = '🏗️ Welcome to Construcciones Kornilenko! 👋\n\n🏡 We specialize in building cottages and private homes, creating modern, reliable, and comfortable spaces for everyday living.\n\nIn this bot, you can explore our services, learn more about our company, and quickly get in touch with our team.\n\n🤝 Quality construction. Responsible work. Homes made for living.';
+  const pitchEs = '¡Bienvenido a Construcciones Kornilenko! 👋\n\n🏡 Nos especializamos en la construcción de chalets y viviendas unifamiliares, creando espacios modernos, fiables y confortables para vivir.\n\nEn este bot puedes conocer nuestros servicios, obtener más información sobre la empresa y contactar rápidamente con nuestro equipo.\n\n🤝 Construimos con calidad. Trabajamos con responsabilidad. Creamos hogares para vivir.';
+  const saved = bot.normalizeLoadedData({
+    version: 38,
+    config: { messages: { ru: { greeting: 'Здравствуйте, {first_name}!' }, en: { greeting: pitchEn }, es: { greeting: pitchEs } } },
+  });
+  assert.match(saved.config.messages.en.greeting, /^Hello, \{first_name\}!/);
+  assert.match(saved.config.messages.es.greeting, /^¡Hola, \{first_name\}!/);
+  assert.ok(saved.config.messages.en.greeting.length < 80 && saved.config.messages.es.greeting.length < 80, 'короткое, как русское');
+
+  const own = bot.normalizeLoadedData({ version: 38, config: { messages: { en: { greeting: 'Welcome, {first_name}! We build homes in Finestrat.' } } } });
+  assert.equal(own.config.messages.en.greeting, 'Welcome, {first_name}! We build homes in Finestrat.', 'приветствие, написанное владельцем иначе, не трогаем');
+});

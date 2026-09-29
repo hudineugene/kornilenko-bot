@@ -283,6 +283,15 @@ const OBSOLETE_HELP_LINES = {
   en: ['❤️ Favorites —', '📞 Call me back —', '🔥 Offers —'],
   es: ['❤️ Favoritos —', '📞 Llámame —', '🔥 Promociones —'],
 };
+// Приветствие на английском и испанском было презентацией компании из четырёх
+// абзацев (350–400 знаков), а русское — короткое. Презентация живёт в «О
+// компании» (menu.*.about), приветствию она не нужна: клиент видит её вместе с
+// подсказкой и сводкой каталога, и первый экран не помещается. Заменяем только
+// эти два известных текста; приветствие, написанное иначе, остаётся.
+const OBSOLETE_GREETINGS = {
+  en: '🏗️ Welcome to Construcciones Kornilenko! 👋\n\n🏡 We specialize in building cottages and private homes, creating modern, reliable, and comfortable spaces for everyday living.\n\nIn this bot, you can explore our services, learn more about our company, and quickly get in touch with our team.\n\n🤝 Quality construction. Responsible work. Homes made for living.',
+  es: '¡Bienvenido a Construcciones Kornilenko! 👋\n\n🏡 Nos especializamos en la construcción de chalets y viviendas unifamiliares, creando espacios modernos, fiables y confortables para vivir.\n\nEn este bot puedes conocer nuestros servicios, obtener más información sobre la empresa y contactar rápidamente con nuestro equipo.\n\n🤝 Construimos con calidad. Trabajamos con responsabilidad. Creamos hogares para vivir.',
+};
 const OBSOLETE_FALLBACKS = {
   en: ['Thank you! Your message has been received. A manager will reply in this chat.', 'Thank you for your message! I have passed it on to the administrator.'],
   es: ['¡Gracias! Hemos recibido tu mensaje. Un gestor responderá en este chat.', '¡Gracias por tu mensaje! Se lo he enviado al administrador.'],
@@ -309,6 +318,7 @@ function migrateStaleTexts(interfaceText, messages) {
     if (!current) continue;
     const help = String(current.help || '');
     if (OBSOLETE_HELP_LINES[language].some((line) => help.includes(line))) current.help = defaultData.config.messages[language].help;
+    if (language !== 'ru' && OBSOLETE_GREETINGS[language] === String(current.greeting || '')) current.greeting = defaultData.config.messages[language].greeting;
     if (language !== 'ru' && OBSOLETE_FALLBACKS[language].includes(String(current.fallback || ''))) current.fallback = defaultData.config.messages[language].fallback;
   }
 }
