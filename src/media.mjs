@@ -57,6 +57,7 @@ function imageHasTransparency(image) {
 function forEachStoredImage(root, callback) {
   if (!root || typeof root !== 'object') return;
   for (const language of ['ru', 'en', 'es']) callback(root.welcomeImages && root.welcomeImages[language]);
+  callback(root.contacts && root.contacts.photo);
   // Плашки рубрик лежат в настройках, а отложенные посты — своим списком:
   // без них уборка ничейных файлов удалила бы их картинки.
   const publishing = root.config && root.config.publishing;
@@ -96,6 +97,7 @@ function dropMissingImages(root) {
   for (const language of ['ru', 'en', 'es']) {
     if (root.welcomeImages && root.welcomeImages[language] && !keep(root.welcomeImages[language])) root.welcomeImages[language] = null;
   }
+  if (root.contacts && root.contacts.photo && !keep(root.contacts.photo)) root.contacts.photo = null;
   for (const key of ['objects', 'promotions', 'broadcasts']) {
     for (const record of Array.isArray(root[key]) ? root[key] : []) {
       if (!record || typeof record !== 'object') continue;

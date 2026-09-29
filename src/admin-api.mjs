@@ -466,7 +466,19 @@ async function handleApi(req, res, url) {
     if (mapUrl && !validHttpUrl(mapUrl)) return json(res, 400, { error: 'Ссылка на карту должна начинаться с http:// или https://' });
     if (whatsapp && !whatsappContactUrl(whatsapp)) return json(res, 400, { error: 'Укажите номер WhatsApp с кодом страны или ссылку wa.me' });
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, 400, { error: 'Проверьте адрес электронной почты' });
+    // Фото меняется только если панель прислала новое или просьбу убрать;
+    // без этого каждое сохранение контактов стирало бы фото.
+    let photo = data.contacts && data.contacts.photo ? data.contacts.photo : null;
+    if (body.photo && body.photo.remove) photo = null;
+    else if (body.photo && body.photo.dataUrl) {
+      try {
+        photo = parseUploadedImage(body.photo.dataUrl, body.photo.name || 'manager.jpg');
+      } catch (error) {
+        return json(res, 400, { error: error.message });
+      }
+    }
     data.contacts = {
+      photo,
       managerName: cleanText(body.managerName, 160),
       phone: cleanText(body.phone, 80),
       whatsapp,

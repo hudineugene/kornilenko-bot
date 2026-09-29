@@ -1475,6 +1475,45 @@ test('группа с темами: в форме поста выбираетс�
   assert.ok(!String(off.innerHTML).includes('createTopic'), 'создавать тему негде');
 });
 
+test('контакты: фото менеджера с миниатюрой и «Убрать»; без срока ответа — напоминание', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.contacts.managerName = 'Ольга';
+    data.contacts.photo = { id: 'mgr', mimeType: 'image/png', name: 'olga.png', size: 10, dataBase64: Buffer.from('x').toString('base64'), updatedAt: '2026-09-29T10:00:00.000Z' };
+  });
+  const { sandbox, requests } = await panelSandbox();
+  let save = null;
+  sandbox.watchForm = (root, callback) => { save = callback; return { mark() {} }; };
+
+  const host = fakeElement('main');
+  sandbox.renderContacts(host);
+  const html = String(host.innerHTML);
+  assert.match(html, /id="contactPhoto" accept="image\/jpeg,image\/png"/, 'есть выбор файла');
+  assert.match(html, /src="\/api\/images\/contacts\/photo\?rev=/, 'миниатюра загруженного фото');
+  assert.match(html, /class="btn ghost small" id="contactPhotoDrop"/, 'кнопка «Убрать фото» видна, когда фото есть');
+  assert.match(html, /«Обычно отвечаем за …» не задано/, 'нет срока ответа — владельцу напоминают');
+
+  // Сохранение без изменения фото не шлёт «убрать».
+  requests.length = 0;
+  await save();
+  const kept = requests.find((request) => request.url === '/api/contacts');
+  assert.equal(kept.body.photo, null, 'фото не трогали — панель ничего о нём не присылает');
+
+  // «Убрать фото» уходит в запросе.
+  host.querySelector('#contactPhotoDrop').onclick();
+  requests.length = 0;
+  await save();
+  assert.deepEqual(requests.find((request) => request.url === '/api/contacts').body.photo, { remove: true });
+
+  // Срок ответа задан — напоминания нет; фото нет — так и сказано.
+  sandbox.state.config.workingHours.replyMinutes = 15;
+  sandbox.state.contacts.photo = { exists: false };
+  const second = fakeElement('main');
+  sandbox.renderContacts(second);
+  assert.ok(!String(second.innerHTML).includes('не задано'), 'срок задан — напоминания нет');
+  assert.match(String(second.innerHTML), /Фото не загружено/);
+});
+
 test('редактор объекта: внизу «Опубликовать» и «Сохранить как черновик»; опубликованный — «Сохранить», «Снять», «В канал»', async () => {
   resetData((data) => {
     data.config.active = true;

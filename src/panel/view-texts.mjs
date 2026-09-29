@@ -201,6 +201,10 @@ function contactScreenLabel(key, fallback) {
 
 function renderContacts(host) {
   var contacts = state.contacts || {};
+  // Новое фото (или просьба убрать) ждёт нажатия «Сохранить», как и остальные поля.
+  var pendingPhoto = null;
+  var photo = contacts.photo && contacts.photo.exists ? contacts.photo : null;
+  var replyMinutes = Number(((state.config || {}).workingHours || {}).replyMinutes || 0);
   var hours = (state.config || {}).workingHours || {};
   var phones = String(contacts.phone || "").match(/\+?\d[\d\s().-]{5,}\d/g) || [];
   var whatsappAvailable = contacts.whatsappEnabled !== false && Boolean(contacts.whatsapp || phones[0]);
@@ -209,6 +213,12 @@ function renderContacts(host) {
   phones.forEach(function (phone) { previewLines.push("☎️ " + phone); });
   if (contacts.email) previewLines.push("✉️ " + contacts.email);
   host.innerHTML = '<div class="split"><div class="card"><header><h3>Менеджер и каналы связи</h3></header><div class="card-body stack" id="contactsForm">' +
+      '<div class="field"><label>Фото менеджера</label><div class="row wrap" id="contactPhotoRow">' +
+        '<span id="contactPhotoThumb">' + (photo ? '<img class="thumb thumb-md" src="/api/images/contacts/photo?rev=' + encodeURIComponent(photo.updatedAt || "") + '" alt="">' : '<span class="muted small">Фото не загружено</span>') + "</span>" +
+        '<input type="file" id="contactPhoto" accept="image/jpeg,image/png">' +
+        '<button class="btn ghost small' + (photo ? "" : " hidden") + '" id="contactPhotoDrop" type="button">Убрать фото</button></div>' +
+        '<div class="hint">Клиент увидит фото с именем над экраном «Связаться». Покупателю из другой страны важно понять, с кем он говорит. Квадратное фото лица работает лучше всего.</div></div>' +
+      (replyMinutes ? "" : '<div class="msg">⏱ Клиент не видит, за сколько вы отвечаете: «Обычно отвечаем за …» не задано. Укажите в «Настройки → Компания → Рабочее время».</div>') +
       '<div class="grid cols-2">' +
         '<div class="field"><label for="cName">Имя менеджера или отдела</label><input id="cName" value="' + esc(contacts.managerName || "") + '"></div>' +
         '<div class="field"><label for="cPhone">Телефон</label><input id="cPhone" value="' + esc(contacts.phone || "") + '" placeholder="+34 600 000 000"></div>' +
@@ -244,14 +254,37 @@ function renderContacts(host) {
       }).join("") + '<div class="hint">{next} подставит ближайшее рабочее время. Сами часы работы — в «Настройках».</div></div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Так увидит клиент</h3></header><div class="card-body stack">' +
-      '<div class="msg">' + esc(previewLines.filter(Boolean).join("\n\n")) + "</div>" +
+      (photo ? '<div class="msg"><img class="thumb thumb-md" src="/api/images/contacts/photo?rev=' + encodeURIComponent(photo.updatedAt || "") + '" alt=""><br>👨‍💼 ' + esc(contacts.managerName || "") + "</div>" : "") +
+      '<div class="msg">' + esc(previewLines.filter(Boolean).filter(function (line) { return !(photo && contacts.managerName && line === "👨‍💼 " + contacts.managerName); }).join("\n\n")) + "</div>" +
       '<div class="row wrap">' + [whatsappAvailable ? "🟢 WhatsApp" : "", contacts.telegram ? "✈️ Telegram" : "", contacts.website ? "🌐 Сайт" : "", contacts.mapUrl ? "📍 Карта" : "", contactScreenLabel("request", "📞 Заказать звонок"), contactScreenLabel("question", "❓ Задать вопрос"), "ℹ️ О компании", "🏠 Главное меню"].filter(Boolean).map(function (label) {
         return '<span class="chip brand">' + esc(label) + "</span>";
       }).join("") + "</div>" +
     "</div></div></div>";
   bindLanguageTabs(host);
-  watchForm(host, async function () {
+  var contactsWatcher = null;
+  var photoInput = host.querySelector("#contactPhoto");
+  if (photoInput) photoInput.onchange = function () {
+    var file = photoInput.files && photoInput.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      pendingPhoto = { dataUrl: reader.result, name: file.name };
+      host.querySelector("#contactPhotoThumb").innerHTML = '<img class="thumb thumb-md" src="' + reader.result + '" alt="">';
+      host.querySelector("#contactPhotoDrop").classList.remove("hidden");
+      if (contactsWatcher) contactsWatcher.mark();
+    };
+    reader.readAsDataURL(file);
+  };
+  var photoDrop = host.querySelector("#contactPhotoDrop");
+  if (photoDrop) photoDrop.onclick = function () {
+    pendingPhoto = { remove: true };
+    host.querySelector("#contactPhotoThumb").innerHTML = '<span class="muted small">Фото будет убрано</span>';
+    photoDrop.classList.add("hidden");
+    if (contactsWatcher) contactsWatcher.mark();
+  };
+  contactsWatcher = watchForm(host, async function () {
     await send("/api/contacts", "PUT", {
+      photo: pendingPhoto,
       managerName: host.querySelector("#cName").value,
       phone: host.querySelector("#cPhone").value,
       whatsapp: host.querySelector("#cWhatsapp").value,

@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 40;
+const DATA_VERSION = 41;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -166,6 +166,8 @@ const defaultData = {
     email: '',
     website: '',
     mapUrl: '',
+    // Фото менеджера: клиент видит его над экраном «Связаться».
+    photo: null,
     text: { ru: '', en: '', es: '' },
   },
   interfaceText: {},
@@ -1167,6 +1169,7 @@ function normalizeLoadedData(parsed) {
       contacts: {
         ...defaultData.contacts,
         ...(parsed.contacts || {}),
+        photo: parsed.contacts && parsed.contacts.photo && typeof parsed.contacts.photo === 'object' ? parsed.contacts.photo : null,
         text: { ...defaultData.contacts.text, ...((parsed.contacts && parsed.contacts.text) || {}) },
       },
       interfaceText: parsed.interfaceText && typeof parsed.interfaceText === 'object' && !Array.isArray(parsed.interfaceText)

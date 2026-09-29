@@ -116,7 +116,7 @@ npm-зависимости не нужны; для сборки нужен то�
   равно восстанавливаются, а панель пишет, сколько фото нужно загрузить
   заново. В файл резервной копии из панели ключ копии не попадает.
 
-`DATA_VERSION` в `src\data-format.mjs` — версия формата данных (сейчас 40). Миграции,
+`DATA_VERSION` в `src\data-format.mjs` — версия формата данных (сейчас 41). Миграции,
 которые меняют сохранённые данные, выполняются один раз — только для файлов
 более старой версии. Новую миграцию закрывайте условием по
 `storedVersion` (см. `normalizeLoadedData`) и увеличивайте `DATA_VERSION`,
@@ -589,7 +589,7 @@ https://github.com/cloudflare/cloudflared/releases, файл
 | 💬 Связаться | 🔥 Акции · N |
 | 🇪🇸 Как купить | 👤 Моё |
 
-«💬 Связаться» открывает способы связи с менеджером. Число у «🔥 Акции» — сколько
+«💬 Связаться» открывает способы связи с менеджером. Если в «Тексты бота → Контакты» загружено фото менеджера, оно стоит над экраном с именем; там же видно, задан ли срок ответа («Обычно отвечаем за …», его выбирают в «Настройки → Компания»). Число у «🔥 Акции» — сколько
 акций действует сейчас. «🇪🇸 Как купить» — гид по покупке в Испании с кнопкой
 бесплатной консультации. В «👤 Моё» — избранное, сравнение, сохранённый поиск,
 недавно просмотренные, мои заявки, уведомления, мои данные, о компании, помощь и
@@ -882,7 +882,7 @@ HTML в описаниях превращается в обычный текст
 `BOT_NO_START=1` и временной папкой данных, поэтому не трогают рабочие данные
 и не обращаются к Telegram (Bot API заменён заглушкой).
 
-Всего 71 файл; каждый начинается с комментария, зачем он нужен. По темам:
+Всего 72 файла; каждый начинается с комментария, зачем он нужен. По темам:
 
 | Тема | Файлы |
 |---|---|
@@ -890,7 +890,7 @@ HTML в описаниях превращается в обычный текст
 | Формы и диалоги клиента | `dialogs`, `typed-answers`, `messages`, `album`, `service-messages`, `queue-loss`, `parallel-updates`, `double-send`, `search-phrases`, `measures`, `my-area`, `comparison`, `saved-search` |
 | Каталог и загрузка с сайта | `catalog-card-save`, `feed`, `feed-ssrf`, `file-id` |
 | Просмотры, напоминания, рабочее время | `viewings`, `reminders`, `hours`, `calculator`, `attention`, `local-days` |
-| Уведомления, рассылки, группы | `subscriptions`, `broadcast-resume`, `scheduled-posts`, `groups`, `group-topics`, `notice-retry`, `consent-retention`, `status`, `experience`, `managers`, `admin-chat` |
+| Уведомления, рассылки, группы | `subscriptions`, `broadcast-resume`, `scheduled-posts`, `groups`, `group-topics`, `notice-retry`, `consent-retention`, `manager-photo`, `status`, `experience`, `managers`, `admin-chat` |
 | Панель | `panel`, `panel-render`, `templates-export`, `conversation-search`, `attachments`, `cleanup-scope` |
 | Безопасность и вход | `security`, `foreign-page`, `login-limits`, `login-protection`, `password-gate`, `password-reset` |
 | Копии и восстановление | `offsite`, `backup-format`, `backup-retention`, `restore-order`, `erase-export`, `privacy` |

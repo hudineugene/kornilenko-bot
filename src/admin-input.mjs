@@ -93,6 +93,7 @@ function validateBackupStructure(backup) {
 function validateBackupPayload(backup) {
   validateBackupStructure(backup);
   for (const language of ['ru', 'en', 'es']) validateStoredImage(backup.welcomeImages && backup.welcomeImages[language], 'приветствие ' + language);
+  validateStoredImage(backup.contacts && backup.contacts.photo, 'фото менеджера');
   for (const key of ['objects', 'promotions', 'broadcasts']) {
     for (const record of backup[key] || []) {
       validateStoredImage(record && record.image, key);

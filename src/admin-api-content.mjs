@@ -199,6 +199,14 @@ async function handleContentApi(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  if (url.pathname === '/api/images/contacts/photo' && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const image = data.contacts && data.contacts.photo;
+    if (!imageExists(image)) return json(res, 404, { error: 'Фото не загружено' });
+    return binaryImage(res, image, req);
+  }
+
   const welcomeImageMatch = url.pathname.match(/^\/api\/images\/(ru|en|es)\/welcome$/);
   if (welcomeImageMatch && req.method === 'GET') {
     const session = requireAuth(req, res);

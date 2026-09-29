@@ -788,7 +788,7 @@ function safeState(session) {
     analytics: data.analytics,
     objects: data.objects.map((record) => publicRecord(record, 'objects')),
     promotions: data.promotions.map((record) => publicRecord(record, 'promotions')),
-    contacts: data.contacts,
+    contacts: { ...data.contacts, photo: imageMeta(data.contacts && data.contacts.photo) },
     guidePages: data.guidePages || [],
     errors: data.errors,
     notifications,

@@ -5,7 +5,7 @@ import { defaultData, normalizeGuidePages } from './data-format.mjs';
 import { imageExists } from './media.mjs';
 import { COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LEAD_FORM_TEXT, LANGUAGE_SELECTED, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
-import { recordPropertyEvent } from './analytics.mjs';
+import { recordError, recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { languageMessages, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
@@ -13,7 +13,7 @@ import { knownLeadPhone, startLeadEdit, startLeadForm, startViewingForm } from '
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { replyPromise, withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
-import { CATALOG_MODES, catalogHeading, catalogViewContext, escapeTelegramHtml, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { CATALOG_MODES, catalogHeading, catalogViewContext, escapeTelegramHtml, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
 import { similarPropertyRanking } from './similar.mjs';
 
@@ -64,7 +64,11 @@ async function sendContacts(chatId, user, token) {
   const lines = [localizedExact(contact.text, language, 3200) || copy.intro];
   const managerName = cleanText(contact.managerName, 160);
   const email = cleanText(contact.email, 254);
-  if (managerName) lines.push('👨‍💼 ' + managerName);
+  // Лицо агента: покупателю из-за границы важно увидеть, с кем он говорит. Фото
+  // идёт отдельным сообщением над экраном (правки текста экрана его не трогают)
+  // и убирается вместе с ним. Имя тогда стоит под фото и в тексте не повторяется.
+  const photoMessageId = await sendManagerPhoto(chatId, user, contact, managerName, token);
+  if (managerName && !photoMessageId) lines.push('👨‍💼 ' + managerName);
   if (phones.length) lines.push(copy.tapPhone);
   for (const phone of phones) lines.push('☎️ ' + cleanText(phone, 80));
   if (email) lines.push('✉️ ' + email);
@@ -106,10 +110,29 @@ async function sendContacts(chatId, user, token) {
   if (map) closing.push({ text: '📍 ' + copy.map, url: map });
   closing.push({ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' });
   buttons.push(closing);
-  await sendUiMessage(chatId, user, text, token, {
+  const sent = await sendUiMessage(chatId, user, text, token, {
     ...(entities.length ? { entities } : {}),
     reply_markup: { inline_keyboard: buttons },
   });
+  if (photoMessageId && sent && Number.isFinite(Number(sent.message_id))) {
+    user.uiMessageIds = [photoMessageId, Number(sent.message_id)];
+    scheduleSave();
+  }
+}
+
+// Фото менеджера над экраном связи. Не вышло отправить — экран всё равно
+// показывается, только без фото.
+async function sendManagerPhoto(chatId, user, contact, managerName, token) {
+  if (!imageExists(contact.photo)) return 0;
+  await clearUiMessages(chatId, user, token);
+  try {
+    const sent = await sendPhotoMessage(chatId, contact.photo, managerName ? '👨‍💼 ' + managerName : '', token, null);
+    const id = sent && Number(sent.message_id);
+    return Number.isFinite(id) ? id : 0;
+  } catch (error) {
+    recordError('Фото менеджера', error);
+    return 0;
+  }
 }
 
 // Всплывающая подсказка на кнопке заказа звонка: клиент сразу видит, на какой
