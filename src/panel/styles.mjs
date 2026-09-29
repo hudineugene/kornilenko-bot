@@ -94,7 +94,10 @@ a:hover{text-decoration:underline}
 .page{padding:var(--sp-4) var(--sp-5) 96px;max-width:1560px;width:100%;margin:0 auto}
 
 /* --- Карточки и таблицы ----------------------------------------------------- */
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+/* Карточка — одна поверхность для всех: обычная, карточка воронки, дела. Цветная кромка слева
+   у тех, кто её несёт, — от переменной --flag (модификаторы только задают цвет). */
+.card,.funnel-card,.task-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.task-card,.viewing-card{border-left:4px solid var(--flag,var(--line))}
 .card>header{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--line-soft)}
 .card>header .actions{margin-left:auto;display:flex;gap:var(--sp-2)}
 .card-body{padding:var(--sp-4)}
@@ -292,8 +295,8 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-context-title{margin-top:var(--sp-1);font-weight:600}
 .conversation-context .property-link{width:auto;min-width:240px}
 /* Карточка просмотра в переписке: дата, состояние и одно действие. */
-.viewing-card{display:flex;flex-direction:column;gap:var(--sp-2);align-items:flex-start;padding:var(--sp-3);border:1px solid var(--warn);border-left-width:4px;border-radius:var(--radius);background:var(--surface-soft)}
-.viewing-card.confirmed{border-color:var(--ok)}
+.viewing-card{--flag:var(--warn);display:flex;flex-direction:column;gap:var(--sp-2);align-items:flex-start;padding:var(--sp-3);border-top:1px solid var(--flag);border-right:1px solid var(--flag);border-bottom:1px solid var(--flag);border-radius:var(--radius);background:var(--surface-soft)}
+.viewing-card.confirmed{--flag:var(--ok)}
 .viewing-card-head{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;width:100%}
 .viewing-card-when{font-size:var(--fs-lg);font-weight:600}
 /* Экран клиента: переписка слева, сопровождение справа. На узком экране одно
@@ -364,7 +367,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .funnel-column>header span{display:block;margin-top:0px;color:var(--muted);font-size:var(--fs-xs)}
 .funnel-column>header>b{display:inline-flex;align-items:center;justify-content:center;min-width:23px;height:23px;padding:0 var(--sp-2);border-radius:var(--radius);background:var(--surface-soft);color:var(--muted);font-size:var(--fs-sm)}
 .funnel-column-body{display:flex;flex-direction:column;gap:var(--sp-2);min-height:180px;padding:var(--sp-2)}
-.funnel-card{padding:var(--sp-2);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow)}
+.funnel-card{padding:var(--sp-2)}
 .funnel-card.due{border-color:var(--bad-line);box-shadow:inset 3px 0 var(--bad)}
 .funnel-open{width:100%;display:flex;align-items:center;gap:var(--sp-2);padding:0;border:0;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
 .funnel-open:hover .funnel-person b{color:var(--brand)}
@@ -384,8 +387,8 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .task-controls .search{width:270px}
 .task-controls select{width:auto;min-width:190px}
 .task-list{display:flex;flex-direction:column;gap:var(--sp-2)}
-.task-card{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow)}
-.task-card.overdue{border-left-color:var(--bad)}.task-card.today{border-left-color:var(--warn)}.task-card.future{border-left-color:var(--brand)}.task-card.none{border-left-color:var(--muted)}
+.task-card{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4)}
+.task-card.overdue{--flag:var(--bad)}.task-card.today{--flag:var(--warn)}.task-card.future{--flag:var(--brand)}.task-card.none{--flag:var(--muted)}
 .task-main{display:flex;align-items:flex-start;gap:var(--sp-3);min-width:0;flex:1}
 .task-copy{min-width:0;flex:1}
 .task-copy>.small{margin-top:2px}
@@ -536,10 +539,15 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 code{padding:0px var(--sp-1);border-radius:var(--radius-sm);background:var(--surface-soft);border:1px solid var(--line);font-size:var(--fs-sm)}
 
 /* --- Панель сохранения, тосты, диалоги -------------------------------------- */
-.savebar{position:fixed;left:20px;right:20px;bottom:16px;z-index:var(--z-bar);display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-radius:var(--radius);background:var(--text);color:var(--surface);box-shadow:var(--shadow-lg)}
+/* Полосы и тост — одна основа: строка с отступами, скруглением и тенью; закреплённые — поверх страницы.
+   У каждой свой цвет и место (снизу — сохранить и обновить, сверху — беда, справа снизу — тост). */
+.savebar,.refresh-hint,.save-alert,.link-alert{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);font-size:var(--fs-sm)}
+.savebar,.refresh-hint,.save-alert,.toast{position:fixed;border-radius:var(--radius);box-shadow:var(--shadow-lg)}
+.savebar,.refresh-hint{left:20px;right:20px;bottom:16px;z-index:var(--z-bar)}
+.refresh-hint{z-index:calc(var(--z-bar) - 1);background:var(--surface);border:1px solid var(--line)}
+.savebar{background:var(--text);color:var(--surface)}
 .savebar .btn.secondary{background:transparent;color:var(--surface);border-color:color-mix(in srgb, var(--surface) 30%, transparent)}
 .savebar .btn.secondary:hover{background:color-mix(in srgb, var(--surface) 14%, transparent)}
-.refresh-hint{position:fixed;left:20px;right:20px;bottom:16px;z-index:calc(var(--z-bar) - 1);display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);border-radius:var(--radius);background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-lg)}
 .gap-bottom{margin-bottom:var(--sp-3)}
 .gap-top{margin-top:var(--sp-2)}
 .gap-top-sm{margin-top:var(--sp-1)}
@@ -597,13 +605,14 @@ code{padding:0px var(--sp-1);border-radius:var(--radius-sm);background:var(--sur
 @media (max-width:860px){.deed{flex-wrap:wrap}.deed-actions{width:100%;justify-content:flex-end}}
 /* Панель не достаёт до бота: красная полоса над шапкой, на любом экране; когда страницу
    прокрутили, о том же говорит точка состояния в шапке. */
-.link-alert{position:relative;z-index:var(--z-toast);display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);background:var(--bad);color:var(--surface);font-size:var(--fs-sm)}
+.link-alert{position:relative;z-index:var(--z-toast);background:var(--bad);color:var(--surface)}
 .link-alert>div{display:flex;flex-direction:column;gap:2px;min-width:0}
 .link-alert b{font-size:var(--fs-sm)}
-.save-alert{position:fixed;left:20px;right:20px;top:14px;z-index:var(--z-bar);display:flex;flex-direction:column;gap:2px;padding:var(--sp-3) var(--sp-4);border-radius:var(--radius);background:var(--bad-soft);border:1px solid var(--bad);color:var(--bad);box-shadow:var(--shadow-lg);font-size:var(--fs-sm)}
+/* Выше шапки: раньше лежала под ней, и главное предупреждение — «данные не сохраняются» — не было видно. */
+.save-alert{top:14px;left:20px;right:20px;z-index:var(--z-toast);flex-direction:column;align-items:stretch;gap:2px;background:var(--bad-soft);border:1px solid var(--bad);color:var(--bad)}
 .save-alert b{font-size:var(--fs-sm)}
 @media (max-width:860px){.save-alert{left:10px;right:10px;top:8px}}
-.toast{position:fixed;right:18px;bottom:18px;z-index:var(--z-toast);padding:var(--sp-3) var(--sp-4);border-radius:var(--radius);background:var(--text);color:var(--surface);box-shadow:var(--shadow-lg);max-width:380px}
+.toast{right:18px;bottom:18px;z-index:var(--z-toast);padding:var(--sp-3) var(--sp-4);background:var(--text);color:var(--surface);max-width:380px}
 .toast.bad{background:var(--bad)}
 .quick-times{display:flex;gap:var(--sp-2);margin-top:var(--sp-2)}
 .toast-action{margin-left:var(--sp-2);padding:2px var(--sp-3);border:1px solid rgba(255,255,255,.55);border-radius:var(--radius-sm);background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer}

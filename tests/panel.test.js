@@ -724,6 +724,8 @@ test('набор токенов оформления: 22 цвета, четыр�
   assert.deepEqual(offScale, [], 'отступы вне шкалы: ' + offScale.join(', '));
   const radii = Array.from(PANEL_CSS.matchAll(/border-radius:([^;}]*)/g)).map((match) => match[1]);
   assert.ok(radii.every((value) => /^(var\(--radius(-sm)?\)|50%|0|999px)( |$)/.test(value) || /^(var\(--radius(-sm)?\)|0)( (var\(--radius(-sm)?\)|0)){1,3}$/.test(value)), 'радиусы вне шкалы: ' + radii.filter((value) => !/var\(--radius/.test(value) && !/^(50%|0|999px)$/.test(value)).join(', '));
+  // Предупреждение «данные не сохраняются» лежит выше шапки, а не под ней.
+  assert.match(PANEL_CSS, /\.save-alert\{[^}]*z-index:var\(--z-toast\)/, 'полоса о сбое записи выше шапки');
   // Слои — только токены (кроме 4 у липкой подписи языка внутри формы).
   const layers = Array.from(PANEL_CSS.matchAll(/z-index:([^;}]*)/g)).map((match) => match[1]).filter((value) => !/var\(--z-|calc\(var\(--z-/.test(value));
   assert.deepEqual(layers, ['4'], 'слои вне шкалы: ' + layers.join(', '));
