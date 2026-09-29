@@ -298,11 +298,24 @@ function loadInterfaceText(force) {
 
 // action — необязательная кнопка в самом уведомлении: {label, run}. Так после
 // «Скрыть» остаётся возможность вернуть дело, пока уведомление на экране.
-function toast(text, bad, action) {
+function toast(text, bad, action, sticky) {
   var box = el("toast");
   box.textContent = text;
   box.classList.toggle("bad", Boolean(bad));
   box.classList.remove("hidden");
+  // Сбой (fail) не убираем по таймеру: «Не удалось создать копию: …» не успеть дочитать. Он
+  // висит, пока его не закроют (✕) или пока не придёт следующее сообщение. Обычные
+  // подсказки «Введите пароль» уходят сами.
+  if (bad && sticky) {
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "toast-action";
+    close.setAttribute("aria-label", "Закрыть");
+    close.textContent = "✕";
+    close.onclick = function () { box.classList.add("hidden"); };
+    box.appendChild(document.createTextNode(" "));
+    box.appendChild(close);
+  }
   if (action && action.label) {
     var button = document.createElement("button");
     button.type = "button";
@@ -316,9 +329,18 @@ function toast(text, bad, action) {
     box.appendChild(button);
   }
   clearTimeout(box._timer);
-  box._timer = setTimeout(function () { box.classList.add("hidden"); }, action ? 8000 : 3600);
+  if (!(bad && sticky)) box._timer = setTimeout(function () { box.classList.add("hidden"); }, action ? 8000 : 3600);
 }
-function fail(error) { toast(error && error.message ? error.message : "Не получилось", true); }
+function fail(error) { toast(error && error.message ? error.message : "Не получилось", true, undefined, true); }
+
+// Экран не смог загрузить своё — говорим правду и даём «Повторить», как в переписке. Голый
+// красный чип без кнопки оставлял человека перезагружать страницу.
+function showLoadFailure(host, error, retry) {
+  host.innerHTML = '<div class="card"><div class="empty"><b>Не удалось загрузить</b>' + esc(error && error.message ? error.message : "Нет связи с ботом") +
+    '<div><button class="btn secondary small" id="retryLoad" type="button">Повторить</button></div></div></div>';
+  var button = host.querySelector("#retryLoad");
+  if (button) button.onclick = function () { retry(); };
+}
 
 // Диалоги: подтверждение и произвольная форма.
 function confirmDialog(title, text, confirmText, danger) {

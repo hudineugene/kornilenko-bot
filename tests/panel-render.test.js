@@ -3739,3 +3739,39 @@ test('журнал ошибок: подряд идущие одинаковые 
   assert.match(html, /последняя /);
   assert.equal((html.match(/Не удалось создать копию/g) || []).length, 1, 'сообщение показано один раз');
 });
+
+test('сбой не пропадает сам: тост ошибки держится до «✕»; экран, не загрузивший тексты, предлагает «Повторить»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const box = sandbox.el('toast');
+
+  // Обычная подсказка уходит сама, сбой — нет и с крестиком.
+  box._timer = undefined;
+  sandbox.toast('Введите пароль', true);
+  assert.ok(box._timer !== undefined, 'подсказка убирается по таймеру');
+  box._timer = undefined;
+  box.children.length = 0;
+  sandbox.fail(new Error('Не удалось создать копию: диск занят'));
+  assert.equal(box._timer, undefined, 'сбой таймером не убирается');
+  assert.equal(box.classList.contains('hidden'), false);
+  const close = box.children.find((child) => child.textContent === '✕');
+  assert.ok(close, 'у сбоя есть «✕»');
+  close.onclick();
+  assert.equal(box.classList.contains('hidden'), true, '«✕» закрывает');
+  // Успех с «Вернуть» по-прежнему уходит сам.
+  box._timer = undefined;
+  sandbox.toast('Готово', false, { label: 'Вернуть', run() {} });
+  assert.ok(box._timer !== undefined);
+
+  // Экран текстов бота при сбое загрузки: причина и «Повторить».
+  let attempts = 0;
+  sandbox.loadInterfaceText = async () => { attempts += 1; throw new Error('Нет связи с ботом'); };
+  const host = fakeElement('main');
+  await sandbox.renderInterface(host);
+  assert.equal(attempts, 1);
+  assert.match(String(host.innerHTML), /Не удалось загрузить/);
+  assert.match(String(host.innerHTML), /Нет связи с ботом/);
+  assert.match(String(host.innerHTML), /id="retryLoad"/);
+  await host.querySelector('#retryLoad').onclick();
+  assert.equal(attempts, 2, '«Повторить» пробует загрузить снова');
+});

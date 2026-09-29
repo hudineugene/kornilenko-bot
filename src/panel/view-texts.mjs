@@ -36,7 +36,7 @@ async function renderWelcome(host) {
   try {
     await loadInterfaceText();
   } catch (error) {
-    host.innerHTML = '<div class="card"><div class="card-body"><div class="chip bad">' + esc(error.message) + "</div></div></div>";
+    showLoadFailure(host, error, function () { renderWelcome(host); });
     return;
   }
   var messages = state.config.messages || {};
@@ -537,7 +537,7 @@ async function renderInterface(host) {
   try {
     texts = await loadInterfaceText();
   } catch (error) {
-    host.innerHTML = '<div class="card"><div class="card-body"><div class="chip bad">' + esc(error.message) + "</div></div></div>";
+    showLoadFailure(host, error, function () { renderInterface(host); });
     return;
   }
   host.innerHTML = '<div class="toolbar"><div class="search"><input id="textSearch" placeholder="Найти текст"></div>' +
