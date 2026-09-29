@@ -1609,6 +1609,28 @@ test('значки навигации — один набор линейных S
   for (const glyph of ['◉', '✉', '⌂', '➤', '✎', '⚙', '📅']) assert.ok(!shown.includes(glyph), 'старого глифа ' + glyph + ' на экране нет');
 });
 
+test('предпросмотр приветствия: строка о каталоге считается по настоящему каталогу, а не выдумана', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    const city = (ru, en) => ({ ru, en, es: en });
+    const ready = (id, cityName, extra = {}) => property(id, 'Объект ' + id, 'active', { city: cityName, ...extra });
+    data.objects.push(ready('p1', city('Альтея', 'Altea')), ready('p2', city('Кальпе', 'Calpe')), ready('p3', city('Альтея', 'Altea'), { status: 'reserved' }));
+    data.objects.push(property('draft', 'Черновик', 'hidden', { city: city('Москва', 'Moscow') }));
+  });
+  const { sandbox } = await panelSandbox();
+  await sandbox.loadInterfaceText();
+  const line = (language) => sandbox.catalogPreviewLine(language);
+  // Три объекта видны клиентам (в продаже и забронированный), два города; скрытый не считается.
+  assert.equal(line('ru'), 'Сейчас в каталоге: 3 объекта — Альтея, Кальпе');
+  assert.match(line('en'), /In the catalogue right now: 3 properties — Altea, Calpe/);
+  assert.ok(!line('ru').includes('12'), 'выдуманных двенадцати объектов больше нет');
+  assert.ok(!line('ru').includes('Москва'), 'скрытый объект в строку не попал');
+
+  // Пустой каталог — та же фраза, что видит клиент.
+  sandbox.state.objects = [];
+  assert.match(line('ru'), /Каталог пополняется/);
+});
+
 test('числа на экранах не спорят: «Сообщений» у клиента, «им можно писать» и «рассылки получат», клиенты без переписки', async () => {
   twoWaitingConversations();
   resetData((data) => {

@@ -89,3 +89,35 @@ test('состояние панели: у каждого обращения ес
   assert.equal(partial.partial, true);
   assert.equal(partial.messages, 7, 'у неполной карточки число сообщений не теряется');
 });
+
+test('прочитанный диалог перестаёт быть непрочитанным и в уведомлениях: счётчики «Непрочитанные» не расходятся', async () => {
+  const state = () => realFetch(base + '/api/state', { headers }).then((response) => response.json());
+  // Уведомлений другого рода (ошибки, задачи) в песочнице может быть сколько угодно — считаем «клиент написал».
+  const unreadMessages = (snapshot) => snapshot.notifications.filter((item) => item.id.startsWith('message:') && item.active && !item.readAt && !item.handledAt).length;
+  const before = await state();
+  assert.equal(before.unreadConversationCount, 2, 'два диалога не прочитаны');
+  assert.equal(unreadMessages(before), 2, 'и два уведомления «клиент написал» не прочитаны');
+  const otherUnread = before.notificationUnreadCount - 2;
+
+  // Менеджер открыл диалог Ольги (панель отмечает его прочитанным).
+  assert.equal((await realFetch(base + '/api/conversations/1/read', { method: 'POST', headers, body: '{}' })).status, 200);
+  const after = await state();
+  assert.equal(after.unreadConversationCount, 1, 'в «Клиентах» непрочитан один диалог');
+  assert.equal(unreadMessages(after), 1, 'в уведомлениях — тоже одно, а не два');
+  assert.equal(after.notificationUnreadCount, otherUnread + 1, 'общий счётчик уведомлений убавился на одно');
+
+  // Дело при этом остаётся: клиент прочитан, но ещё ждёт ответа.
+  const olga = after.notifications.find((item) => item.id.startsWith('message:1:'));
+  assert.ok(olga, 'уведомление про Ольгу на месте');
+  assert.equal(olga.active, true, 'дело не закрыто: ответа нет');
+  assert.ok(olga.readAt, 'но отмечено прочитанным');
+  assert.equal(after.waitingConversationCount, 2, 'оба клиента по-прежнему ждут ответа');
+
+  // Новое сообщение от Ольги снова делает уведомление непрочитанным (новый номер события).
+  const inquiry = bot.getData().inquiries.find((item) => item.id === 'a1');
+  inquiry.messages.push({ id: 'a1-3', direction: 'in', kind: 'text', text: 'Алло?', createdAt: new Date().toISOString() });
+  inquiry.clientMessageAt = new Date().toISOString();
+  inquiry.updatedAt = inquiry.clientMessageAt;
+  const again = await state();
+  assert.equal(unreadMessages(again), 2, 'новое сообщение — снова непрочитанное');
+});

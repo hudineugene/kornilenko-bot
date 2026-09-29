@@ -1,5 +1,6 @@
 // API панели: клиенты, обращения, переписка и шаблоны ответов.
 
+import { markMessageNotificationsRead } from './admin-notifications.mjs';
 import crypto from 'node:crypto';
 import { cleanText, localDayKey } from './util.mjs';
 import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAGES } from './data-format.mjs';
@@ -335,6 +336,7 @@ async function handleClientsApi(req, res, url) {
     if (!inquiries.length) return json(res, 404, { error: 'Диалог не найден' });
     const now = new Date().toISOString();
     for (const inquiry of inquiries) inquiry.readAt = now;
+    markMessageNotificationsRead(userId);
     saveDataNow();
     return json(res, 200, { ok: true, readAt: now });
   }

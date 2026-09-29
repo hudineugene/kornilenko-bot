@@ -232,6 +232,26 @@ function updateAdminNotification(id, action) {
   return stored;
 }
 
+// Менеджер открыл диалог клиента: его сообщения прочитаны и в уведомлениях тоже.
+// Дело «клиент написал» при этом остаётся в списке (клиент ждёт ответа), но больше
+// не считается непрочитанным — иначе «Непрочитанные» в «Клиентах» и в уведомлениях
+// расходились: в одном месте прочитано, в другом висит.
+function markMessageNotificationsRead(userId) {
+  const prefix = 'message:' + String(userId) + ':';
+  const now = new Date().toISOString();
+  let changed = false;
+  for (const item of currentAdminNotifications()) {
+    if (!item.id.startsWith(prefix)) continue;
+    const stored = (data.adminNotificationStates || {})[item.id] || {};
+    if (stored.readAt) continue;
+    data.adminNotificationStates = data.adminNotificationStates || {};
+    data.adminNotificationStates[item.id] = { ...stored, readAt: now, snapshot: notificationSnapshot(item) };
+    changed = true;
+  }
+  if (changed) pruneNotificationStates();
+  return changed;
+}
+
 function readAllAdminNotifications() {
   const now = new Date().toISOString();
   data.adminNotificationStates = data.adminNotificationStates || {};
@@ -243,4 +263,4 @@ function readAllAdminNotifications() {
   saveDataNow();
 }
 
-export { adminNotifications, currentAdminNotifications, readAllAdminNotifications, updateAdminNotification, waitingConversationCount };
+export { adminNotifications, currentAdminNotifications, markMessageNotificationsRead, readAllAdminNotifications, updateAdminNotification, waitingConversationCount };

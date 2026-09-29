@@ -5,6 +5,28 @@ const TEXTS_JS = String.raw`
 var interfaceGroupOpen = "";
 
 // --- Приветствие --------------------------------------------------------------
+// Строка о каталоге в приветствии — та же, что бот покажет клиенту: считается по
+// настоящему каталогу (в продаже и забронированные, готовые на этом языке), а не
+// выдумана в предпросмотре. Тексты берутся из словаря бота, поэтому правка формулировки
+// в «Все подписи бота» видна и здесь.
+function catalogPreviewLine(language) {
+  var groups = interfaceTexts().catalogSummary || {};
+  var copy = groups[language] || groups.ru;
+  if (!copy || !copy.line) return "";
+  var records = (state.objects || []).filter(function (record) {
+    var issues = record.publicationIssues && record.publicationIssues[language];
+    return ["active", "reserved"].indexOf(record.status) >= 0 && (!Array.isArray(issues) || !issues.length);
+  });
+  if (!records.length) return copy.empty || "";
+  var cities = [];
+  records.forEach(function (record) {
+    var city = localized(record.city, language);
+    if (city && cities.indexOf(city) < 0 && cities.length < 3) cities.push(city);
+  });
+  var word = plural(records.length, copy.one, copy.few, copy.many);
+  return copy.line.replace("{count}", function () { return records.length + " " + word; }).replace("{cities}", function () { return cities.join(", "); });
+}
+
 var EXAMPLE_QUERY = { ru: "Альтеа, 3 спальни, до 350 000 €", en: "Altea, 3 bedrooms, up to €350,000", es: "Altea, 3 dormitorios, hasta 350.000 €" };
 
 async function renderWelcome(host) {
@@ -59,17 +81,12 @@ async function renderWelcome(host) {
     "</div></div>" +
     '<aside class="editor-preview-panel"><div class="editor-preview-head"><b>Как это выглядит у клиента</b><span id="welcomePreviewLanguage">Русский</span></div>' +
       '<div class="tg-preview" id="welcomePreview"></div>' +
-      '<div class="tg-note gap-top">Имя показано как пример — бот подставит имя каждого клиента. Строку о каталоге бот считает сам.</div>' +
+      '<div class="tg-note gap-top">Имя показано как пример — бот подставит имя каждого клиента. Строка о каталоге посчитана по вашему каталогу; бот обновляет её сам.</div>' +
     "</aside></div>";
 
   bindLanguageTabs(host);
   var pendingImages = {};
   var exampleNames = { ru: "Анна", en: "Anna", es: "Ana" };
-  var exampleCatalog = {
-    ru: "Сейчас в каталоге: 12 объектов — Бенидорм, Альтеа, Кальпе",
-    en: "In the catalogue right now: 12 properties — Benidorm, Altea, Calpe",
-    es: "Ahora en el catálogo: 12 inmuebles — Benidorm, Altea, Calpe",
-  };
   // Предпросмотр перерисовывается на каждый ввод: владелец видит ровно то,
   // что придёт клиенту, — картинку, текст и клавиатуру меню.
   function languageValue(selector, language) {
@@ -92,7 +109,7 @@ async function renderWelcome(host) {
     var imageUrl = pending && pending.dataUrl
       ? pending.dataUrl
       : pending && pending.remove ? "" : stored.exists ? "/api/images/" + language + "/welcome?rev=" + encodeURIComponent(stored.updatedAt || "") : "";
-    var text = [greeting, exampleCatalog[language] || exampleCatalog.ru, hint].filter(Boolean).join("\n\n");
+    var text = [greeting, catalogPreviewLine(language), hint].filter(Boolean).join("\n\n");
     var buttons = MENU_FIELDS.filter(function (field) { return field[0] !== "placeholder"; })
       .map(function (field) { return languageValue('[data-menu="' + field[0] + '"]', language); })
       .filter(Boolean);
