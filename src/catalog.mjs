@@ -292,11 +292,13 @@ function propertySpecRows(record, language, options = {}) {
   const plotArea = numericText(record.plotArea, language);
   const distanceSea = numericText(record.distanceSea, language);
   const fact = (icon, label, value) => (compact ? icon + ' ' + value : icon + ' ' + shortenedText(label, 22) + ': ' + value);
-  if (bedrooms) facts.push(fact('🛏', copy.bedroomsLabel, bedrooms));
-  if (bathrooms) facts.push(fact('🚿', copy.bathroomsLabel, bathrooms));
+  // Спальни, санузлы и этаж — у жилья; у участка и коммерции их нет, даже если в карточке стоит 0.
+  const residential = RESIDENTIAL_PROPERTY_TYPES.has(cleanText(record.propertyType, 40));
+  if (residential && bedrooms) facts.push(fact('🛏', copy.bedroomsLabel, bedrooms));
+  if (residential && bathrooms) facts.push(fact('🚿', copy.bathroomsLabel, bathrooms));
   if (area) facts.push(fact('📐', copy.areaLabel, area + ' ' + metre + '²'));
   if (plotArea) facts.push(fact('🌿', copy.plotAreaLabel, plotArea + ' ' + metre + '²'));
-  if (record.floor || record.floors) {
+  if (residential && (record.floor || record.floors)) {
     const floorValue = [cleanText(record.floor, 20), cleanText(record.floors, 20)].filter(Boolean).join('/');
     facts.push(fact('🏢', copy.floor, floorValue));
   }

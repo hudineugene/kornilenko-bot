@@ -130,3 +130,19 @@ test('бюджет можно задать первым, до «Продажа /
   assert.equal(chat.user.catalogFilter.deal, 'sale', 'выбор бюджета ставит «Продажа»');
   assert.equal(chat.user.catalogFilter.maxPrice, 400000);
 });
+
+test('карточка участка и коммерции без спален, санузлов и этажа, даже если в данных стоит 0; у жилья они на месте', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('land-1', 'Участок под виллу', 'active', { propertyType: 'land', plotArea: 1000, area: null, bedrooms: 0, bathrooms: 0, floor: '2', distanceSea: 200, priceValue: 200000, currency: 'EUR' }));
+    data.objects.push(property('villa-1', 'Вилла с бассейном', 'active', { propertyType: 'villa', area: 180, bedrooms: 3, bathrooms: 2, floor: '2', priceValue: 500000, currency: 'EUR' }));
+  });
+  const chat = createChat();
+  const land = await chat.press('property:details:land-1');
+  const landText = land.text;
+  assert.ok(landText.length > 0, 'карточка участка открылась');
+  assert.ok(!/Спальн|Bedrooms|Dormitorios|🛏|🚿|🏢/.test(landText), 'у участка нет жилых строк: ' + landText);
+  const villa = await chat.press('property:details:villa-1');
+  const villaText = villa.text;
+  assert.match(villaText, /Спальн[а-я]*: 3/, 'у виллы спальни на месте');
+});
