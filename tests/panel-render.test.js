@@ -1077,21 +1077,17 @@ test('фильтр в «Переписке» не замораживает эк�
   assert.notEqual(page.innerHTML, 'ЧЕРНОВИК НА ЭКРАНЕ', 'новые данные появились на экране сами');
 });
 
-test('поиск по диалогам тоже не оставляет экран занятым', async () => {
-  resetData((data) => { data.config.active = true; });
+test('на диалогах, в базе клиентов и в списке объектов своего поиска нет — он один, в шапке', async () => {
+  twoWaitingConversations();
   const { sandbox } = await panelSandbox();
-  sandbox.currentView = 'clients';
-  sandbox.currentTab = 'inbox';
-  sandbox.renderView();
-
-  const body = sandbox.document.getElementById('viewBody');
-  const search = body.querySelector('#inqSearch');
-  sandbox.pageTouched = true;
-  search.value = 'паркинг';
-  search.oninput();
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  assert.equal(sandbox.pageTouched, false, 'после перерисовки списка экран свободен');
-  assert.equal(sandbox.inquiryFilter.search, 'паркинг', 'а поиск остался как набрали');
+  const screens = [['clients', 'inbox'], ['clients', 'base'], ['objects', 'list']];
+  for (const [view, tab] of screens) {
+    const host = fakeElement('main');
+    await sandbox.VIEWS[view].render(host, tab);
+    const html = String(host.innerHTML);
+    assert.ok(!/id="(inqSearch|clientSearch|catalogSearch)"/.test(html), view + '/' + tab + ': своего поля поиска нет');
+  }
+  assert.match(String(sandbox.document.getElementById('globalSearchBox').innerHTML || 'есть'), /./, 'общее поле на месте');
 });
 
 test('панель не открывает беседу сама даже во время обновления', async () => {
@@ -1461,6 +1457,38 @@ test('«Настройки → Компания»: одна полоса сох�
   await captured.save();
   const paths = requests.filter((request) => request.method === 'PUT').map((request) => new URL(request.url, 'http://x').pathname);
   assert.deepEqual(paths, ['/api/working-hours', '/api/viewing-slots', '/api/calculator', '/api/settings']);
+});
+
+test('общий поиск в шапке: клиенты, объекты и сообщения — одним полем', async () => {
+  twoWaitingConversations();
+  bot.getData().objects.push({ id: 'find-villa', status: 'active', reference: 'REF-77', title: { ru: 'Вилла у моря', en: 'Sea villa', es: 'Villa' }, city: { ru: 'Альтеа', en: 'Altea', es: 'Altea' }, images: [] });
+  const { sandbox, requests } = await panelSandbox();
+  // Объекты из поддельной страницы — из другого «мира»: сравниваем через JSON.
+  const found = (query) => JSON.parse(JSON.stringify(sandbox.globalSearchMatches(query)));
+
+  assert.deepEqual(found('о'), { clients: [], objects: [] }, 'одна буква — слишком мало');
+  assert.ok(found('оль').clients.some((user) => /Ольга/.test(user.firstName)), 'клиент находится по имени');
+  assert.deepEqual(found('ref-77').objects.map((record) => record.id), ['find-villa'], 'объект — по номеру');
+  assert.deepEqual(found('altea').objects.map((record) => record.id), ['find-villa'], 'и по городу на другом языке');
+  assert.deepEqual(found('sea v').objects.map((record) => record.id), ['find-villa'], 'и по названию на английском');
+  assert.deepEqual(found('zzzz'), { clients: [], objects: [] });
+
+  // Выбор результата открывает нужное окно.
+  const opened = [];
+  sandbox.openClient = (id) => opened.push(['client', id]);
+  sandbox.openRecordEditor = (kind, id) => opened.push(['object', kind, id]);
+  sandbox.openInquiry = (id) => opened.push(['message', id]);
+  sandbox.globalSearchOpen('client', '700002');
+  sandbox.globalSearchOpen('object', 'find-villa');
+  sandbox.globalSearchOpen('message', 'inq-olga');
+  assert.equal(JSON.stringify(opened), JSON.stringify([['client', '700002'], ['object', 'objects', 'find-villa'], ['message', 'inq-olga']]));
+
+  // Сообщения ищет бот по всей переписке: поле шлёт запрос и рисует ответ.
+  requests.length = 0;
+  sandbox.document.getElementById('globalSearch').value = 'парковка';
+  sandbox.globalSearchRun('парковка');
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.ok(requests.some((request) => request.url.includes('/api/conversations/search?q=' + encodeURIComponent('парковка'))), 'запрос к поиску по переписке ушёл');
 });
 
 test('когда все отвечены, ноль везде', async () => {

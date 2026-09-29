@@ -482,9 +482,6 @@ function renderInquiryList(host) {
   }).join("");
   host.innerHTML =
     '<div class="messenger-toolbar">' +
-      '<div class="messenger-controls">' +
-        '<div class="search"><input id="inqSearch" placeholder="Поиск по клиентам и сообщениям" value="' + esc(inquiryFilter.search) + '"></div>' +
-      '</div>' +
       // На телефоне вкладки не помещаются: тот же выбор одной строкой.
       '<select class="messenger-filter-compact" id="inqStatusCompact">' +
         [["unread", "Непрочитанные", counts.unread], ["waiting", "Ждут ответа", counts.waiting],
@@ -510,17 +507,6 @@ function renderInquiryList(host) {
   host.querySelectorAll("#inqStatus button").forEach(function (button) {
     button.onclick = function () { inquiryFilter.status = button.dataset.status; renderInquiryList(host); };
   });
-  var search = host.querySelector("#inqSearch");
-  search.oninput = function () {
-    inquiryFilter.search = search.value.trim();
-    clearTimeout(search._timer);
-    search._timer = setTimeout(function () {
-      renderInquiryList(host);
-      var next = host.querySelector("#inqSearch");
-      if (next) next.focus();
-      searchConversations(host, inquiryFilter.search);
-    }, 250);
-  };
   var compact = host.querySelector("#inqStatusCompact");
   if (compact) compact.onchange = function () {
     inquiryFilter.status = compact.value;
@@ -1193,7 +1179,7 @@ function renderClients(host) {
     var haystack = (userName(user) + " " + (user.username || "") + " " + (user.phone || "") + " " + (user.id || "")).toLowerCase();
     return haystack.indexOf(clientSearch.toLowerCase()) >= 0;
   });
-  host.innerHTML = '<div class="toolbar"><div class="search"><input id="clientSearch" placeholder="Имя, телефон, @username" value="' + esc(clientSearch) + '"></div>' +
+  host.innerHTML = '<div class="toolbar">' +
       '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) + " из " + num(state.userCount) + " · активных " + num(state.activeUserCount) + "</span></div>" +
     '<div class="card"><div class="table-wrap"><table><thead><tr><th>Клиент</th><th>Источник и язык</th><th>Этап работы</th><th>Следующий шаг</th><th class="right">Последняя активность</th></tr></thead><tbody>' +
     (rows.length ? rows.slice(0, clientsShown).map(function (row) {
@@ -1211,13 +1197,6 @@ function renderClients(host) {
       ? '<div class="card-body row"><span class="small faint">Показаны первые ' + num(clientsShown) + " из " + num(rows.length) + '</span><div class="grow"></div><button class="btn secondary small" id="moreClients" type="button">Показать ещё ' + num(Math.min(CLIENTS_PAGE, rows.length - clientsShown)) + "</button></div>"
       : "") +
     "</div>";
-  var search = host.querySelector("#clientSearch");
-  search.oninput = function () {
-    clientSearch = search.value.trim();
-    clientsShown = CLIENTS_PAGE;
-    clearTimeout(search._timer);
-    search._timer = setTimeout(function () { renderClients(host); host.querySelector("#clientSearch").focus(); }, 250);
-  };
   var moreClients = host.querySelector("#moreClients");
   if (moreClients) moreClients.onclick = function () { clientsShown += CLIENTS_PAGE; renderClients(host); };
   host.querySelector("#clientStage").onchange = function (event) { clientStageFilter = event.target.value; clientsShown = CLIENTS_PAGE; renderClients(host); };

@@ -349,6 +349,14 @@ test('флажки не мельче 18 px', async () => {
   assert.match(style, /input\[type=checkbox\],input\[type=radio\]\{width:18px;height:18px;/, 'флажки 18 px, а не 13');
 });
 
+test('в шапке — одно поле поиска по клиентам, объектам и сообщениям, на телефоне за значком 🔍', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /id="globalSearch" type="search" placeholder="Поиск: клиент, объект, сообщение"/);
+  assert.match(PANEL_HTML, /id="searchToggle"[^>]*>🔍</, 'значок поиска для телефона');
+  assert.match(PANEL_HTML, /\/api\/conversations\/search\?q=/, 'сообщения ищет бот по всей переписке');
+  for (const id of ['inqSearch', 'clientSearch', 'catalogSearch']) assert.ok(!PANEL_HTML.includes('id="' + id + '"'), 'прежнего поля ' + id + ' нет');
+});
+
 test.describe('стили панели', () => {
   async function css() {
     const { PANEL_HTML } = await import('../src/panel/index.mjs');

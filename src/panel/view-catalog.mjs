@@ -104,7 +104,7 @@ function renderObjects(host) {
   });
   pageAction("＋ Объект", function () { openRecordEditor("objects", null); });
   pageAction("⇩ Загрузить с сайта", function () { go("catalog", "feed"); }, "secondary");
-  host.innerHTML = '<div class="toolbar"><div class="search"><input id="catalogSearch" placeholder="Название, номер, город" value="' + esc(catalogSearch) + '"></div>' +
+  host.innerHTML = '<div class="toolbar">' +
       '<select id="catalogStatus" class="field-sm"><option value="">Все статусы</option>' + PROPERTY_STATUS.map(function (item) {
         return '<option value="' + item[0] + '"' + (catalogStatus === item[0] ? " selected" : "") + ">" + item[1] + "</option>";
       }).join("") + "</select>" +
@@ -131,12 +131,6 @@ function renderObjects(host) {
     }).join("") : '<tr><td colspan="8"><div class="empty"><b>Объектов нет</b>Добавьте первый или загрузите выгрузку с сайта</div></td></tr>') +
     "</tbody></table></div></div>";
 
-  var search = host.querySelector("#catalogSearch");
-  search.oninput = function () {
-    catalogSearch = search.value.trim();
-    clearTimeout(search._timer);
-    search._timer = setTimeout(function () { renderView(); }, 250);
-  };
   host.querySelector("#catalogStatus").onchange = function (event) { catalogStatus = event.target.value; renderView(); };
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     var id = row.dataset.id;

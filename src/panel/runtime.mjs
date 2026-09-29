@@ -38,7 +38,12 @@ const PANEL_SHELL = String.raw`
       <b>Construcciones Kornilenko<span>панель бота</span></b>
     </div>
     <nav id="nav" class="head-nav" aria-label="Основная навигация"></nav>
+    <div class="global-search" id="globalSearchBox" role="search">
+      <input id="globalSearch" type="search" placeholder="Поиск: клиент, объект, сообщение" autocomplete="off" aria-label="Поиск по клиентам, объектам и сообщениям">
+      <div class="global-results hidden" id="globalResults"></div>
+    </div>
     <div class="head-tools">
+      <button class="btn ghost icon search-toggle" id="searchToggle" type="button" aria-label="Поиск">🔍</button>
       <button class="notification-bell" id="notificationBell" type="button" aria-label="Открыть уведомления"><span aria-hidden="true">🔔</span><b class="hidden" id="notificationCount">0</b></button>
       <div class="state-line" id="botState"><span class="dot"></span><span id="botStateText">Загрузка…</span></div>
       <button class="btn ghost small" id="logoutBtn" type="button">Выйти</button>
@@ -634,6 +639,108 @@ function renderTabBar() {
   };
 }
 
+// --- Общий поиск в шапке ----------------------------------------------------
+// Одно поле вместо трёх на разных экранах: клиенты (имя, @username, телефон),
+// объекты (название, номер, город) и сообщения (по всей переписке — этим
+// занимается бот, у панели её нет). Результат открывается сразу.
+var globalSearchTimer = 0, globalSearchSerial = 0;
+
+function globalSearchMatches(query) {
+  var needle = String(query || "").trim().toLowerCase();
+  if (needle.length < 2) return { clients: [], objects: [] };
+  var clients = (state.users || []).filter(function (user) {
+    return (userName(user) + " " + (user.username || "") + " " + (user.phone || "") + " " + (user.id || "")).toLowerCase().indexOf(needle) >= 0;
+  }).slice(0, 5);
+  var objects = (state.objects || []).filter(function (record) {
+    var words = ["ru", "en", "es"].map(function (code) { return localized(record.title, code) + " " + localized(record.city, code); }).join(" ");
+    return (words + " " + (record.reference || "") + " " + (record.id || "")).toLowerCase().indexOf(needle) >= 0;
+  }).slice(0, 5);
+  return { clients: clients, objects: objects };
+}
+
+function globalSearchSection(title, rows) {
+  if (!rows.length) return "";
+  return '<div class="global-group"><div class="global-title">' + esc(title) + '</div>' + rows.map(function (row) {
+    return '<button class="global-item" type="button" data-kind="' + row.kind + '" data-id="' + esc(row.id) + '"><b>' + esc(row.title) + '</b><span>' + esc(row.note || "") + '</span></button>';
+  }).join("") + '</div>';
+}
+
+function globalSearchDraw(query, matches, messages, pending) {
+  var box = el("globalResults");
+  var html =
+    globalSearchSection("Клиенты", matches.clients.map(function (user) {
+      return { kind: "client", id: user.id, title: userName(user), note: [user.username ? "@" + user.username : "", user.phone || ""].filter(Boolean).join(" · ") };
+    })) +
+    globalSearchSection("Объекты", matches.objects.map(function (record) {
+      return { kind: "object", id: record.id, title: localized(record.title, "ru") || record.reference || record.id, note: [record.reference || "", localized(record.city, "ru")].filter(Boolean).join(" · ") };
+    })) +
+    globalSearchSection("Сообщения", messages);
+  if (!html) html = '<div class="global-empty">' + (pending ? "Ищем в переписке…" : "Ничего не найдено") + '</div>';
+  else if (pending) html += '<div class="global-empty">Ищем в переписке…</div>';
+  box.innerHTML = html;
+  box.classList.remove("hidden");
+  box.querySelectorAll("[data-kind]").forEach(function (button) {
+    button.onclick = function () { globalSearchOpen(button.dataset.kind, button.dataset.id); };
+  });
+}
+
+function globalSearchClose(clear) {
+  el("globalResults").classList.add("hidden");
+  el("globalSearchBox").classList.remove("open");
+  if (clear) el("globalSearch").value = "";
+}
+
+function globalSearchOpen(kind, id) {
+  globalSearchClose(true);
+  if (kind === "client") return openClient(id);
+  if (kind === "object") return openRecordEditor("objects", id);
+  if (kind === "message") return openInquiry(id);
+}
+
+function globalSearchRun(query) {
+  var needle = String(query || "").trim();
+  var serial = ++globalSearchSerial;
+  if (needle.length < 2) { el("globalResults").classList.add("hidden"); return; }
+  var matches = globalSearchMatches(needle);
+  globalSearchDraw(needle, matches, [], true);
+  api("/api/conversations/search?q=" + encodeURIComponent(needle)).then(function (answer) {
+    if (serial !== globalSearchSerial) return;
+    var seen = {};
+    var messages = [];
+    (answer.inquiryIds || []).forEach(function (inquiryId) {
+      var item = (state.inquiries || []).find(function (entry) { return entry.id === inquiryId; });
+      if (!item || seen[item.userId]) return;
+      seen[item.userId] = true;
+      messages.push({ kind: "message", id: item.id, title: userName(userOf(item)), note: String((item.lastMessage && (item.lastMessage.text || item.lastMessage.fileName)) || item.text || "").replace(/\s+/g, " ").slice(0, 80) });
+    });
+    globalSearchDraw(needle, matches, messages.slice(0, 5), false);
+  }).catch(function () {
+    if (serial === globalSearchSerial) globalSearchDraw(needle, matches, [], false);
+  });
+}
+
+function initGlobalSearch() {
+  var input = el("globalSearch");
+  input.oninput = function () {
+    clearTimeout(globalSearchTimer);
+    globalSearchTimer = setTimeout(function () { globalSearchRun(input.value); }, 250);
+  };
+  input.onkeydown = function (event) {
+    if (event.key === "Escape") return globalSearchClose(true);
+    if (event.key === "Enter") {
+      var first = el("globalResults").querySelector("[data-kind]");
+      if (first) globalSearchOpen(first.dataset.kind, first.dataset.id);
+    }
+  };
+  input.onfocus = function () { if (String(input.value || "").trim().length >= 2) globalSearchRun(input.value); };
+  // На телефоне поле прячется за значком 🔍 и раскрывается под шапкой.
+  el("searchToggle").onclick = function () {
+    var open = !el("globalSearchBox").classList.contains("open");
+    el("globalSearchBox").classList.toggle("open", open);
+    if (open) input.focus();
+  };
+}
+
 function renderNotificationBell() {
   var button = el("notificationBell"), badge = el("notificationCount");
   // Колокольчик считает то же, что и «Список дел»: нерешённые дела, а не только непрочитанные.
@@ -673,6 +780,8 @@ function renderBotState() {
   el("botStateText").innerHTML = !active
     ? "Бот выключен"
     : bad ? "Связь с Telegram потеряна" : "Бот работает" + (state.newInquiryCount ? ' · <b>' + num(state.newInquiryCount) + "</b> новых" : "");
+  // Когда шапка тесная, текст состояния прячется, остаётся точка — а слова в подсказке.
+  el("botState").title = el("botStateText").textContent || "";
 }
 
 async function go(view, tab) {
@@ -805,6 +914,7 @@ function bindShell() {
     if (document.hidden || !appStarted || sessionEnded) return;
     refresh().catch(function () {});
   });
+  initGlobalSearch();
   el("menuToggle").onclick = function () {
     var open = !el("nav").classList.contains("open");
     el("nav").classList.toggle("open", open);
@@ -813,6 +923,9 @@ function bindShell() {
   // Колокольчик ведёт в «Сегодня»: там тот же список дел, но с кнопками.
   el("notificationBell").onclick = function () { go("today"); };
   document.addEventListener("click", function (event) {
+    if (event.target.closest && !event.target.closest("#globalSearchBox") && !event.target.closest("#searchToggle")) {
+      el("globalResults").classList.add("hidden");
+    }
     if (event.target.closest && !event.target.closest("#moreSheet") && !event.target.closest("#tabMore")) {
       el("moreSheet").classList.add("hidden");
       if (el("tabMore")) el("tabMore").setAttribute("aria-expanded", "false");

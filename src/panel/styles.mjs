@@ -47,6 +47,18 @@ a:hover{text-decoration:underline}
 .app-brand b{font-size:var(--fs-sm);line-height:1.12;white-space:nowrap}
 .app-brand span{display:block;font-size:var(--fs-xs);color:var(--faint);font-weight:400}
 .head-nav{display:flex;align-items:center;gap:2px;min-width:0}
+/* Общий поиск: одно поле в шапке. */
+.global-search{position:relative;flex:1 1 200px;min-width:140px;max-width:320px}
+.global-search input{width:100%;padding:7px 12px;border-radius:9px;background:var(--surface-soft);font-size:var(--fs-sm)}
+.global-results{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:70;max-height:70vh;overflow:auto;min-width:300px;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg)}
+.global-title{padding:6px 10px 2px;color:var(--faint);font-size:var(--fs-xs);font-weight:700;text-transform:uppercase}
+.global-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;padding:8px 10px;border:0;border-radius:8px;background:none;font:inherit;text-align:left;cursor:pointer}
+.global-item:hover,.global-item:focus{background:var(--brand-soft)}
+.global-item span{color:var(--muted);font-size:var(--fs-xs)}
+.global-empty{padding:12px 10px;color:var(--muted);font-size:var(--fs-sm)}
+.search-toggle{display:none}
+/* Поиск должен помещаться: на средней ширине текст состояния бота уступает ему место. */
+@media(max-width:1500px) and (min-width:861px){.head-tools #botStateText{display:none}.global-search{flex-basis:260px}}
 .nav-item{display:flex;align-items:center;gap:6px;padding:6px 8px;border:0;background:none;border-radius:8px;color:var(--text);font:inherit;font-size:var(--fs-sm);text-align:left;cursor:pointer;white-space:nowrap}
 .nav-item:hover{background:var(--surface-soft)}
 .nav-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
@@ -648,6 +660,11 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
 .tabbar,.more-sheet{display:none}
 @media(max-width:860px){
   .menu-toggle,.head-nav{display:none !important}
+  /* На телефоне поиск — значок 🔍 в шапке; поле раскрывается под ней. */
+  .search-toggle{display:inline-flex}
+  .global-search{display:none;position:fixed;left:10px;right:10px;top:calc(var(--header) + 6px);z-index:60;max-width:none;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg)}
+  .global-search.open{display:block}
+  .global-results{position:static;margin-top:6px;box-shadow:none;border:0;min-width:0;max-height:60vh}
   .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:55;display:flex;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -2px 10px rgba(16,24,40,.06);padding-bottom:env(safe-area-inset-bottom)}
   .tab{position:relative;flex:1 1 0;min-width:0;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 2px;border:0;background:none;color:var(--muted);font:inherit;font-size:var(--fs-xs);cursor:pointer}
   .tab-ico{font-size:20px;line-height:1}
