@@ -85,11 +85,31 @@ function forgetPhotoSent(entry, user) {
 // Карточка объекта в рассылке: та же фотография и те же кнопки, что в
 // каталоге, — клиент может посмотреть подробности и записаться, не уходя из
 // сообщения. Текст рассылки идёт первой строкой подписи.
+// Подпись к фото ограничена 1024 знаками. Резать по «голому» индексу нельзя:
+// эмодзи в Telegram занимает два знака (суррогатную пару), и разрезанная
+// пополам пара превращается в «�». Режем по границе слова и не оставляем
+// висящих «клеящих» символов.
+const CAPTION_LIMIT = 1024;
+function fitCaption(text, limit = CAPTION_LIMIT) {
+  const value = String(text || '');
+  if (value.length <= limit) return value;
+  let end = limit - 1;
+  const last = value.charCodeAt(end - 1);
+  if (last >= 0xD800 && last <= 0xDBFF) end -= 1;
+  let slice = value.slice(0, end);
+  const boundary = Math.max(slice.lastIndexOf('\n'), slice.lastIndexOf(' '));
+  if (boundary > end - 200) slice = slice.slice(0, boundary);
+  return slice.replace(/[\s‍️]+$/u, '') + '…';
+}
+
 async function deliverPropertyCard(user, entry, record, token) {
   const language = user.preferredLanguage || 'ru';
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const intro = fillTemplate(localized(entry.messages, language), user);
-  const caption = [intro, objectCaption(record, language)].filter(Boolean).join('\n\n').slice(0, 1024);
+  // Если всё не помещается, сокращаем вступление рассылки, а не описание объекта.
+  const card = objectCaption(record, language);
+  const introRoom = CAPTION_LIMIT - card.length - 2;
+  const caption = fitCaption([introRoom >= 20 ? fitCaption(intro, introRoom) : '', card].filter(Boolean).join('\n\n'));
   const unsubscribe = { text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).unsubscribe, callback_data: 'subs:news:off:bc' };
   const rows = [];
   if (record.status === 'active') rows.push([{ text: '📅 ' + copy.viewing, callback_data: 'property:viewing:' + record.id }]);
@@ -107,7 +127,9 @@ async function deliverBroadcast(user, entry, token = data.config.botToken) {
   // получит пустую карточку.
   if (entry.sendAsCard && entry.propertyId) {
     const record = data.objects.find((item) => item.id === entry.propertyId);
-    if (record && propertyReadyForLanguage(record, language)) return deliverPropertyCard(user, entry, record, token);
+    // Скрытый, проданный или снятый объект карточкой не рассылаем: картинка
+    // ушла бы, а «Подробнее» ответило бы «устарело». Уходит обычный текст.
+    if (record && ['active', 'reserved'].includes(record.status) && propertyReadyForLanguage(record, language)) return deliverPropertyCard(user, entry, record, token);
   }
   const text = fillTemplate(localized(entry.messages, language), user);
   const url = validHttpUrl(entry.buttonUrl);

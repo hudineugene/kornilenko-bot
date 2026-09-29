@@ -185,6 +185,48 @@ test('рассылка уходит карточкой объекта: фото 
   assert.ok(callbacks.includes('subs:news:off:bc'), 'и отписка на месте');
 });
 
+function cardBroadcast(id, intro, status = 'active') {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('villa-card', 'Вилла с видом', status));
+    data.users['830001'] = {
+      id: '830001', chatId: 830001, firstName: 'Ольга', preferredLanguage: 'ru',
+      activity: [], favorites: ['villa-card'], newsConsentAt: new Date().toISOString(),
+    };
+    data.broadcasts.push({
+      id, status: 'queued', messages: { ru: intro, en: '', es: '' },
+      languages: [], tags: [], pipelineStages: [], sources: [],
+      propertyId: 'villa-card', propertySignal: 'favorite', sendAsCard: true,
+      buttonText: { ru: '', en: '', es: '' }, buttonUrl: '', image: null,
+      processedUserIds: [], respondedUserIds: [], inquiryUserIds: [], unsubscribedUserIds: [], photoOnlyUserIds: [],
+      failures: [], sent: 0, failed: 0, total: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+  });
+  telegram.calls = [];
+  return bot.runBroadcast(bot.getData().broadcasts.find((item) => item.id === id));
+}
+
+test('рассылка карточкой не уходит по проданному или скрытому объекту', async () => {
+  for (const status of ['sold', 'hidden']) {
+    await cardBroadcast('bc-' + status, 'Появился объект для вас', status);
+    assert.equal(telegram.calls.some((call) => call.method === 'sendPhoto'), false, status + ': картинка с мёртвым «Подробнее» не уходит');
+    const text = telegram.calls.find((call) => call.method === 'sendMessage' && String(call.body.chat_id) === '830001');
+    assert.ok(text, status + ': клиент получил обычный текст рассылки');
+    assert.match(text.body.text, /Появился объект для вас/);
+  }
+});
+
+test('длинная подпись рассылки не режет эмодзи пополам и не съедает описание объекта', async () => {
+  // Вступление из эмодзи: граница в 1024 знака приходится на середину пары.
+  await cardBroadcast('bc-long', '🏡'.repeat(700));
+  const card = telegram.calls.find((call) => call.method === 'sendPhoto');
+  assert.ok(card, 'карточка ушла');
+  const caption = card.body.caption;
+  assert.ok(caption.length <= 1024, 'подпись помещается в лимит Telegram: ' + caption.length);
+  assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(caption), 'нет разрезанной суррогатной пары');
+  assert.match(caption, /Вилла с видом/, 'сократилось вступление, а не карточка объекта');
+});
+
 test.describe('рассылка при сбое связи', () => {
   // Подменяем Telegram: первые получатели проходят, затем связь «падает».
   function failAfter(count, error) {
