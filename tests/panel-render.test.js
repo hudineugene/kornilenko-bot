@@ -2461,6 +2461,40 @@ test('передача клиента: «Передать…» появляет�
   assert.ok(!/id="transferInq"/.test(String(lonelyCard.innerHTML)), 'один человек в команде — «Передать…» не нужна');
 });
 
+test('воронка без шума: «без менеджера» — только когда есть кому назначить, «Отвечено» не значком, этап в списке карточки не повторяет колонку', async () => {
+  twoWaitingConversations();
+  bot.getData().config.managers = [];
+  const { sandbox } = await panelSandbox();
+  // Клиентка Ольга уже отвечена: значок «Отвечено» — норма, а не повод для значка.
+  const olga = sandbox.state.inquiries.find((item) => item.id === 'inq-olga');
+  olga.replies = [{ id: 'r', text: 'Ответ', createdAt: new Date(Date.now() + 60000).toISOString() }];
+  const board = async () => {
+    const host = fakeElement('main');
+    await sandbox.VIEWS.clients.render(host, 'pipeline');
+    return String(host.innerHTML);
+  };
+
+  // Один человек в команде: назначать некому, «без менеджера» — пустой шум.
+  let html = await board();
+  assert.ok(!/без менеджера<\/span>/.test(html), 'значка «без менеджера» на карточках нет');
+  assert.ok(!/Без менеджера/.test(html), 'и в цифрах, и в фильтре — тоже');
+  assert.ok(!/class="chip ok">Отвечено</.test(html), 'значка «Отвечено» нет: это обычное состояние');
+  assert.match(html, /Ждёт ответа/, 'а то, что требует внимания, — на месте');
+
+  // Этап в списке карточки: «Перенести в…» и остальные этапы, без текущего (он уже назван колонкой).
+  const card = html.slice(html.indexOf('<article class="funnel-card'), html.indexOf('</article>'));
+  assert.match(card, /<option value="" selected>Перенести в…<\/option>/);
+  assert.ok(!/<option value="new"/.test(card), 'текущий этап в списке не повторяется');
+  assert.match(card, /<option value="contact">/);
+  assert.ok((card.match(/class="chip/g) || []).length <= 3, 'не больше трёх значков на карточку');
+
+  // Команда из двух и больше: пометка возвращается — её можно исправить.
+  sandbox.state.config.managers = [{ id: 'm1', name: 'Мария', chatId: '1', verifiedAt: '' }];
+  html = await board();
+  assert.match(html, /<span class="chip warn">без менеджера<\/span>/);
+  assert.match(html, /Без менеджера/);
+});
+
 test('«База клиентов»: кнопка «В Excel» выгружает тех, кто на экране', async () => {
   resetData((data) => {
     data.config.active = true;

@@ -197,6 +197,13 @@ function pipelineDate(value) {
   var parts = String(value || "").split("-");
   return parts.length === 3 ? parts[2] + "." + parts[1] : "";
 }
+// Список этапов на карточке воронки: «Перенести в…» и остальные этапы. Текущий
+// не повторяем — карточка уже стоит в его колонке.
+function pipelineMoveOptions(current) {
+  return '<option value="" selected>Перенести в…</option>' + PIPELINE_STAGES.filter(function (stage) { return stage[0] !== current; }).map(function (stage) {
+    return '<option value="' + stage[0] + '">' + stage[1] + "</option>";
+  }).join("");
+}
 function pipelineOpportunityRows() {
   return conversationGroups().map(function (group) {
     var item = group.active, stage = pipelineStageOf(item);
@@ -212,10 +219,12 @@ function pipelineCardHtml(row) {
     '<button class="funnel-open" data-inquiry="' + esc(item.id) + '" type="button"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><span class="funnel-person"><b>' + esc(userName(user)) + '</b><small>' + esc(inquiryTypeName(item)) + '</small></span><span class="funnel-arrow">→</span></button>' +
     (property ? '<div class="funnel-property">⌂ ' + esc(localized(property.title, "ru") || property.reference || property.id) + '</div>' : "") +
     '<div class="funnel-signals">' +
-      (row.group.waiting ? '<span class="chip ' + WAIT_CHIP[row.group.waitLevel] + '">Ждёт ответа · ' + waitDuration(row.group.waitAge) + '</span>' : '<span class="chip ok">Отвечено</span>') +
-      (item.assignee ? '<span class="chip">' + esc(item.assignee) + '</span>' : '<span class="chip warn">без менеджера</span>') +
+      // Значок — только то, что требует внимания: «Отвечено» — обычное состояние, а
+      // «без менеджера» имеет смысл, когда в команде есть кому назначить.
+      (row.group.waiting ? '<span class="chip ' + WAIT_CHIP[row.group.waitLevel] + '">Ждёт ответа · ' + waitDuration(row.group.waitAge) + '</span>' : "") +
+      (item.assignee ? '<span class="chip">' + esc(item.assignee) + '</span>' : transferStaff().length > 1 ? '<span class="chip warn">без менеджера</span>' : "") +
       (item.followUpDate ? '<span class="chip ' + (due ? "bad" : "") + '">⏱ ' + pipelineDate(item.followUpDate) + (item.followUpTime ? " " + esc(item.followUpTime) : "") + '</span>' : "") +
-    '</div><select class="pipeline-stage-select" data-pipeline-stage="' + esc(item.id) + '" aria-label="Этап">' + pipelineStageOptions(row.stage, false) + '</select></article>';
+    '</div><select class="pipeline-stage-select" data-pipeline-stage="' + esc(item.id) + '" aria-label="Перенести на другой этап">' + pipelineMoveOptions(row.stage) + '</select></article>';
 }
 function renderPipeline(host) {
   screenSettled();
@@ -234,12 +243,12 @@ function renderPipeline(host) {
   var due = active.filter(function (row) { return row.item.followUpDate && row.item.followUpDate <= today; }).length;
   var waiting = active.filter(function (row) { return row.group.waiting; }).length;
   var unassigned = active.filter(function (row) { return !row.item.assignee; }).length;
+  var canAssign = transferStaff().length > 1;
   host.innerHTML = numberStrip([
       ["Активные клиенты", num(active.length), "", "Без «Выиграно» и «Проиграно»"],
       ["Ждут ответа", num(waiting), waiting ? "bad" : ""],
       ["Связаться", num(due), due ? "bad" : "", "Сегодня или просрочено"],
-      ["Без менеджера", num(unassigned), unassigned ? "bad" : ""],
-    ]) + '<div class="funnel-toolbar"><div class="search"><input id="pipelineSearch" placeholder="Найти клиента, объект или сообщение" value="' + esc(pipelineFilter.search) + '"></div><select id="pipelineAssignee"><option value="">Все менеджеры</option><option value="none"' + (pipelineFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (pipelineFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select><span class="small muted">На доске: ' + rows.length + " из " + allRows.length + ' (вместе с завершёнными)</span></div>' +
+    ].concat(canAssign ? [["Без менеджера", num(unassigned), unassigned ? "bad" : ""]] : [])) + '<div class="funnel-toolbar"><div class="search"><input id="pipelineSearch" placeholder="Найти клиента, объект или сообщение" value="' + esc(pipelineFilter.search) + '"></div><select id="pipelineAssignee"><option value="">Все менеджеры</option>' + (canAssign ? '<option value="none"' + (pipelineFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' : "") + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (pipelineFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select><span class="small muted">На доске: ' + rows.length + " из " + allRows.length + ' (вместе с завершёнными)</span></div>' +
     '<div class="funnel-board">' + PIPELINE_STAGES.map(function (stage) {
       var stageRows = rows.filter(function (row) { return row.stage === stage[0]; });
       return '<section class="funnel-column stage-' + stage[0] + '"><header><div><h3>' + stage[1] + '</h3><span>' + stage[2] + '</span></div><b>' + stageRows.length + '</b></header><div class="funnel-column-body">' + (stageRows.length ? stageRows.map(pipelineCardHtml).join("") : '<div class="funnel-empty">Нет клиентов</div>') + "</div></section>";
@@ -256,6 +265,7 @@ function renderPipeline(host) {
   });
   host.querySelectorAll("[data-pipeline-stage]").forEach(function (select) {
     select.onchange = async function () {
+      if (!select.value) return;
       select.disabled = true;
       try {
         await send("/api/inquiries/" + encodeURIComponent(select.dataset.pipelineStage), "PATCH", { pipelineStage: select.value });
