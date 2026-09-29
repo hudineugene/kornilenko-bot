@@ -195,6 +195,7 @@ const COMPARISON_TEXT = {
     status: 'Доступность',
     reference: 'Номер объекта',
     notSpecified: '—',
+    back: 'Назад',
   },
   en: {
     title: '⚖️ Property comparison',
@@ -234,6 +235,7 @@ const COMPARISON_TEXT = {
     status: 'Availability',
     reference: 'Property reference',
     notSpecified: '—',
+    back: 'Back',
   },
   es: {
     title: '⚖️ Comparación de inmuebles',
@@ -273,6 +275,7 @@ const COMPARISON_TEXT = {
     status: 'Disponibilidad',
     reference: 'Referencia',
     notSpecified: '—',
+    back: 'Atrás',
   },
 };
 // Клиент с открытой заявкой написал условия поиска, но фраза не разобралась: вместо

@@ -136,8 +136,6 @@ function comparisonText(user) {
     copy.title,
     template(copy.selectedCount, { count: records.length, max: COMPARISON_LIMIT }),
     '',
-    copy.intro,
-    '',
     ...records.map((record, index) => INDEX_MARKS[index] + ' ' + (localizedExact(record.title, language, 160) || record.reference || record.id)),
   ];
   if (records.length === 1) lines.push('', copy.needMore);
@@ -164,10 +162,13 @@ function comparisonText(user) {
     ['floor', copy.floor],
     ['distanceSea', copy.distanceSea],
     ['status', copy.status],
-    ['reference', copy.reference],
   ];
+  // Строка, где у всех объектов одно и то же, ничего не решает: «Доступность: 🟢 Свободен» у каждого. Номер
+  // объекта в сравнении не нужен вовсе — названия стоят вверху.
+  const differs = (key) => new Set(values.map((value) => String(value[key] || ''))).size > 1;
   for (const [key, label] of criteria) {
     if (!values.some((value) => value[key])) continue;
+    if (key === 'status' && !differs(key)) continue;
     lines.push('', label);
     const best = BEST_LOWEST[key] === undefined ? -1 : bestIndex(key, numbers);
     if (best >= 0) anyBest = true;
@@ -185,17 +186,24 @@ function comparisonMarkup(user) {
   const rows = [];
   records.forEach((record, index) => {
     const title = cleanText(localizedExact(record.title, language, 160) || record.reference || record.id, 34);
-    rows.push([{ text: INDEX_MARKS[index] + ' ' + copy.open + ': ' + title, callback_data: 'catalog:comparison:' + index }]);
-    rows.push([{ text: '✕ ' + copy.remove + ': ' + title, callback_data: 'compare:remove:' + record.id }]);
+    // Один ряд на объект: «Открыть» и «Убрать». Название стоит в тексте под тем же номером.
+    rows.push([
+      { text: INDEX_MARKS[index] + ' ' + copy.open, callback_data: 'catalog:comparison:' + index },
+      { text: '✕ ' + copy.remove, callback_data: 'compare:remove:' + record.id },
+    ]);
   });
-  if (records.length) rows.push([{ text: copy.discuss, callback_data: 'compare:discuss' }]);
+  // «Обсудить» и WhatsApp — одним рядом; «Добавить» и «Очистить» — одним. Всего не больше шести рядов.
   if (records.length) {
+    const talk = [{ text: copy.discuss, callback_data: 'compare:discuss' }];
     const whatsapp = whatsappRow(compareMessage(records.map((record) => localizedExact(record.title, language, 80) || record.reference || record.id), language));
-    if (whatsapp) rows.push(whatsapp);
+    if (whatsapp) talk.push(...whatsapp);
+    rows.push(talk);
   }
-  if (records.length < COMPARISON_LIMIT) rows.push([{ text: '🏘 ' + copy.browse, callback_data: 'catalog:all:0' }]);
-  if (records.length) rows.push([{ text: '🗑 ' + copy.clear, callback_data: 'compare:clear' }]);
-  rows.push([{ text: '⬅️ ' + labels.more, callback_data: 'nav:my' }]);
+  const housekeeping = [];
+  if (records.length < COMPARISON_LIMIT) housekeeping.push({ text: '🏘 ' + copy.browse, callback_data: 'catalog:all:0' });
+  if (records.length) housekeeping.push({ text: '🗑 ' + copy.clear, callback_data: 'compare:clear' });
+  if (housekeeping.length) rows.push(housekeeping);
+  rows.push([{ text: '⬅️ ' + copy.back, callback_data: 'nav:my' }]);
   return { inline_keyboard: rows };
 }
 

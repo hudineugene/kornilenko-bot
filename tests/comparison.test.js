@@ -126,3 +126,20 @@ test('saved comparison ids are deduplicated and capped on load', () => {
   });
   assert.deepEqual(loaded.users.one.comparisonIds, ['a', 'b', 'c']);
 });
+
+test('сравнение компактное: до 520 знаков (было ~710) и не больше шести рядов кнопок, без строк «Доступность» и «Номер объекта»', async () => {
+  const chat = createChat();
+  await chat.say(MENU.ru.objects);
+  await chat.press('property:compare:compare-villa-a');
+  await chat.press('property:compare:compare-flat-b');
+  const step = await chat.press('compare:view');
+  const text = step.last.text;
+  assert.ok(!text.includes(COMPARE.ru.reference) && !text.includes(COMPARE.ru.status), 'строк «Доступность» и «Номер объекта» нет: ' + text);
+  assert.ok(!text.includes(COMPARE.ru.intro), 'очевидная вводная фраза убрана');
+  const rows = step.last.markup.inline_keyboard;
+  assert.ok(rows.length <= 6, 'рядов кнопок: ' + rows.length);
+  assert.ok(text.length <= 520, 'знаков: ' + text.length + '\n' + text);
+  // По одному ряду на объект: «Открыть» и «Убрать» рядом.
+  assert.deepEqual(rows[0].map((button) => button.callback_data), ['catalog:comparison:0', 'compare:remove:compare-villa-a']);
+  assert.equal(rows[rows.length - 1][0].text, '⬅️ ' + COMPARE.ru.back, 'возврат называется «Назад», а не «Моё»');
+});
