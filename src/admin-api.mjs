@@ -39,6 +39,7 @@ import {
   requireAuth,
   safeState,
   securityHeaders,
+  sendJsonText,
   sessions,
   stateFingerprint,
   useDownloadTicket,
@@ -249,6 +250,14 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  // Токен защиты отдельным коротким (несжимаемым) ответом: в сжатое состояние он не
+  // попадает, а панели, открытой заново, он нужен для первого же сохранения.
+  if (url.pathname === '/api/csrf' && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    return json(res, 200, { csrf: session.csrf });
+  }
+
   if (url.pathname === '/api/state' && req.method === 'GET') {
     const session = requireAuth(req, res);
     if (!session) return;
@@ -259,9 +268,7 @@ async function handleApi(req, res, url) {
     const serialized = JSON.stringify(state);
     const stateVersion = stateFingerprint(state);
     if (url.searchParams.get('since') === stateVersion) return json(res, 200, { unchanged: true, stateVersion });
-    securityHeaders(res);
-    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
-    return res.end(serialized.slice(0, -1) + ',"stateVersion":"' + stateVersion + '"}');
+    return sendJsonText(res, 200, serialized.slice(0, -1) + ',"stateVersion":"' + stateVersion + '"}', session.csrf);
   }
 
   if (url.pathname === '/api/admin-notifications/read-all' && req.method === 'POST') {

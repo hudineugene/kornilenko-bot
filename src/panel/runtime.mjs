@@ -523,11 +523,22 @@ async function saveDirty() {
 }
 
 // --- Состояние и навигация ---------------------------------------------------
+// Токен защиты в сжатом ответе состояния не приходит (иначе его можно угадать по
+// размеру ответа). Пока своего токена у панели нет — например, страницу только что
+// открыли — просим его коротким отдельным запросом.
+async function ensureCsrf() {
+  if (csrf) return;
+  var answer = await api("/api/csrf");
+  csrf = answer && answer.csrf || "";
+}
+
 // options пробрасываются в renderView: после действия внутри беседы (ответ,
 // смена статуса) страница не должна прыгать наверх.
 async function reload(render, options) {
   state = await api("/api/state");
-  csrf = state.csrf;
+  // Сжатый ответ приходит без токена защиты: прежний остаётся в силе.
+  csrf = state.csrf || csrf;
+  await ensureCsrf();
   stateVersion = state.stateVersion || "";
   hideRefreshHint();
   renderNav();
@@ -575,7 +586,9 @@ async function refresh() {
   // Данные изменились — переписка открытой беседы могла пополниться.
   if (typeof conversationCache === "object") conversationCache = {};
   state = body;
-  csrf = state.csrf;
+  // Сжатый ответ приходит без токена защиты: прежний остаётся в силе.
+  csrf = state.csrf || csrf;
+  await ensureCsrf();
   stateVersion = state.stateVersion || "";
   renderNav();
   renderBotState();

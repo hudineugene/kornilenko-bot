@@ -3152,6 +3152,37 @@ test('«Вернуть»: смена этапа, закрытие заявки, 
   assert.equal(bodyOf('POST', '/api/group-posts/post-aaaa-1111/restore').method, 'POST');
 });
 
+test('сжатое состояние приходит без токена защиты — панель помнит прежний и не теряет возможность сохранять', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  assert.equal(sandbox.csrf, 'test-csrf');
+  sandbox.state.csrf = '';
+  await sandbox.reload(false);
+  assert.equal(sandbox.csrf, 'test-csrf', 'токен прежний');
+  sandbox.state.csrf = 'новый-токен';
+  await sandbox.reload(false);
+  assert.equal(sandbox.csrf, 'новый-токен', 'а если бот прислал новый — берём его');
+
+  // Страницу открыли заново: своего токена нет, а сжатое состояние его не несёт —
+  // панель просит его отдельным запросом (иначе первое же сохранение получило бы отказ).
+  sandbox.csrf = '';
+  sandbox.state.csrf = '';
+  const baseFetch = sandbox.fetch;
+  const asked = [];
+  sandbox.fetch = async (url, options) => {
+    if (String(url).includes('/api/csrf')) {
+      asked.push(String(url));
+      return { ok: true, status: 200, json: async () => ({ csrf: 'токен-из-запроса' }), text: async () => '', headers: { get: () => '' } };
+    }
+    return baseFetch(url, options);
+  };
+  await sandbox.reload(false);
+  assert.equal(asked.length, 1, 'токен запрошен');
+  assert.equal(sandbox.csrf, 'токен-из-запроса');
+  await sandbox.reload(false);
+  assert.equal(asked.length, 1, 'а когда он есть — не запрашивается снова');
+});
+
 test('старые адреса подключения к Telegram ведут на «Обслуживание → Подключение к Telegram»', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();

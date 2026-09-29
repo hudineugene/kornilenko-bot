@@ -2116,7 +2116,7 @@ umbers-agree.test.js`*
 - [ ] Клавиатура и скринридер: `tabindex` и Enter у кликабельных строк и
       ячеек, `role=status` у тоста и полос, `role=tablist`, `aria-labelledby`
       у окон, `:focus-visible` у строк
-- [ ] Скорость: gzip страницы (~512 КБ → ~124 КБ, отдаётся `res.end(meta.body)`
+- [ ] *(часть сделана 30.09: gzip — страница 614 КБ → 148 КБ (готовится один раз), крупные ответы бота и `/api/state` 81 КБ → 21 КБ; токен защиты в сжатые ответы не кладётся (защита от BREACH: сжатие вместе с чужим текстом выдаёт секрет по размеру), панель берёт его коротким `GET /api/csrf`. Осталось: индексы `userById`/`inquiriesByUser`, порции в «Диалогах», `loading="lazy"` у картинок. Тесты — `tests\compression.test.js`)* Скорость: gzip страницы (~512 КБ → ~124 КБ, отдаётся `res.end(meta.body)`
       без сжатия — `admin-http.mjs:244`) и `/api/state`; индексы `userById` и
       `inquiriesByUser` (сейчас O(клиенты × заявки), `view-inquiries.mjs:40,
       130, 1156`) и порции в «Диалогах»; `loading="lazy"` у картинок

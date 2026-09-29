@@ -203,10 +203,34 @@ function securityHeaders(res) {
   res.setHeader('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
 }
 
-function json(res, status, payload) {
+function acceptsGzip(res) {
+  const request = res.req;
+  return Boolean(request && request.headers && /\bgzip\b/i.test(String(request.headers['accept-encoding'] || '')));
+}
+
+// Крупные ответы (состояние панели — сотни килобайт) сжимаются, если браузер
+// принимает gzip. Токен защиты (csrf) в сжатый ответ не кладём: сжатие вместе с
+// чужим текстом (сообщения клиентов) позволяет угадывать секрет по размеру ответа
+// (BREACH). Панель токен помнит и без него; обычные (несжатые) ответы его несут.
+const GZIP_MIN_BYTES = 1400;
+
+// Готовый текст JSON: сжимается, если он крупный и браузер принимает gzip. secret —
+// токен защиты, его в сжатом ответе не бывает.
+function sendJsonText(res, status, text, secret = '') {
   securityHeaders(res);
+  if (text.length > GZIP_MIN_BYTES && acceptsGzip(res)) {
+    const safe = secret ? text.split(secret).join('') : text;
+    const zipped = zlib.gzipSync(Buffer.from(safe, 'utf8'), { level: 5 });
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-encoding': 'gzip', vary: 'Accept-Encoding', 'content-length': zipped.length });
+    return res.end(zipped);
+  }
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify(payload));
+  res.end(text);
+}
+
+function json(res, status, payload) {
+  const secret = payload && typeof payload === 'object' && !Array.isArray(payload) && typeof payload.csrf === 'string' ? payload.csrf : '';
+  sendJsonText(res, status, JSON.stringify(payload), secret);
 }
 
 // Страница панели одна и та же до следующей сборки, поэтому отдаём её с
@@ -223,6 +247,8 @@ function pageMeta(content) {
   const body = Buffer.from(content, 'utf8');
   const meta = {
     body,
+    // Сжатая версия готовится один раз (страница до следующей сборки одна и та же).
+    gzip: zlib.gzipSync(body, { level: 9 }),
     etag: '"' + crypto.createHash('sha256').update(body).digest('hex').slice(0, 32) + '"',
     csp: "default-src 'self'; script-src " + (hashes.join(' ') || "'none'")
       + "; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
@@ -235,12 +261,20 @@ function html(res, content, req = null) {
   const meta = pageMeta(content);
   securityHeaders(res);
   res.setHeader('content-security-policy', meta.csp);
-  res.setHeader('etag', meta.etag);
+  // Сжатая и обычная версии — разные ответы с разными отпечатками.
+  const zipped = Boolean(req && /\bgzip\b/i.test(String(req.headers['accept-encoding'] || '')));
+  const etag = zipped ? meta.etag.slice(0, -1) + '-gzip"' : meta.etag;
+  res.setHeader('etag', etag);
+  res.setHeader('vary', 'Accept-Encoding');
   // no-cache — не «не кешировать», а «спроси перед использованием».
   res.setHeader('cache-control', 'no-cache');
-  if (req && req.headers['if-none-match'] === meta.etag) {
+  if (req && req.headers['if-none-match'] === etag) {
     res.writeHead(304);
     return res.end();
+  }
+  if (zipped) {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-encoding': 'gzip', 'content-length': meta.gzip.length });
+    return res.end(meta.gzip);
   }
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': meta.body.length });
   return res.end(meta.body);
@@ -922,6 +956,7 @@ export {
   stateFingerprint,
   secureRequest,
   securityHeaders,
+  sendJsonText,
   sessionKey,
   sessions,
   panelUserView,
