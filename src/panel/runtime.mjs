@@ -733,8 +733,8 @@ function navIcon(id) {
 
 function navItems() {
   return [
-    { id: "today", icon: navIcon("today"), title: "Сегодня", count: deedCount() },
-    { id: "clients", icon: navIcon("clients"), title: "Клиенты", count: waitingClients(), late: overdueClients(), tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
+    { id: "today", icon: navIcon("today"), title: "Сегодня", count: deedCount(), hint: deedCount() + " " + plural(deedCount(), "дело", "дела", "дел") + " в списке" },
+    { id: "clients", icon: navIcon("clients"), title: "Клиенты", count: waitingClients(), late: overdueClients(), hint: waitingClients() + " " + plural(waitingClients(), "клиент ждёт", "клиента ждут", "клиентов ждут") + " ответа" + (overdueClients() ? ", из них " + overdueClients() + " дольше срока" : ""), tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
     { id: "viewings", icon: navIcon("viewings"), title: "Просмотры" },
     { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
     { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"], ["channels", "Каналы и группы"]] },
@@ -832,9 +832,9 @@ function renderNav() {
   // нажатие на раздел только раскрывало список.
   el("nav").innerHTML = navItems().filter(function (item) { return !item.hidden; }).map(function (item) {
     var active = item.id === currentView;
-    return '<button class="nav-item' + (active ? " active" : "") + '" data-view="' + item.id + '" type="button">' +
+    return '<button class="nav-item' + (active ? " active" : "") + '" data-view="' + item.id + '" type="button"' + (item.hint ? ' title="' + esc(item.hint) + '" aria-label="' + esc(item.title + ": " + item.hint) + '"' : "") + '>' +
       '<span class="ico">' + item.icon + '</span><span>' + esc(item.title) + '</span>' +
-      (item.count ? '<span class="count' + (item.late ? " late" : "") + '"' + (item.late ? ' title="Из них ' + num(item.late) + ' ждут дольше срока"' : "") + '>' + num(item.count) + '</span>' : '') + '</button>';
+      (item.count ? '<span class="count' + (item.late ? " late" : "") + '">' + num(item.count) + '</span>' : '') + '</button>';
   }).join("");
   el("nav").querySelectorAll("[data-view]").forEach(function (button) {
     button.onclick = function () {
@@ -855,7 +855,7 @@ function renderTabBar() {
   var rest = navItems().filter(function (item) { return TAB_BAR_VIEWS.indexOf(item.id) < 0; });
   var moreActive = TAB_BAR_VIEWS.indexOf(currentView) < 0;
   el("tabbar").innerHTML = main.map(function (item) {
-    return '<button class="tab' + (item.id === currentView ? " active" : "") + '" data-tab-view="' + item.id + '" type="button"' + (item.id === currentView ? ' aria-current="page"' : "") + '>' +
+    return '<button class="tab' + (item.id === currentView ? " active" : "") + '" data-tab-view="' + item.id + '" type="button"' + (item.id === currentView ? ' aria-current="page"' : "") + (item.hint ? ' aria-label="' + esc(item.title + ": " + item.hint) + '"' : "") + '>' +
       '<span class="tab-ico">' + item.icon + '</span><span class="tab-title">' + esc(item.title) + '</span>' +
       (item.count ? '<b class="tab-count">' + num(item.count) + '</b>' : "") + '</button>';
   }).join("") + '<button class="tab' + (moreActive ? " active" : "") + '" id="tabMore" type="button" aria-haspopup="true" aria-expanded="false"><span class="tab-ico">⋯</span><span class="tab-title">Ещё</span></button>';
@@ -1257,7 +1257,7 @@ function renderBotState() {
     : bad ? "Связь с Telegram потеряна" : "Бот работает" + (waitingClients() ? ' · <b>' + num(waitingClients()) + "</b> " + plural(waitingClients(), "ждёт", "ждут", "ждут") + " ответа" : "");
   // Когда шапка тесная, текст состояния прячется, остаётся точка — а слова в подсказке.
   // При беде рядом с точкой остаётся короткая подпись (на телефоне её рисуют стили).
-  el("botState").title = el("botStateText").textContent || "";
+  el("botState").title = (el("botStateText").textContent || "") + (dot === "on" ? "" : " — нажмите, чтобы посмотреть подробности");
   el("botState").setAttribute("aria-label", el("botStateText").textContent || "");
   el("botState").dataset.state = dot;
   el("botState").dataset.short = dot === "off" ? "Выключен" : dot === "bad" ? "Нет связи" : "";
@@ -1467,7 +1467,11 @@ function bindShell() {
   // Колокольчик ведёт в «Сегодня»: там тот же список дел, но с кнопками.
   el("notificationBell").onclick = function () { go("today"); };
   // На телефоне текст состояния не помещается: нажатие на точку показывает его.
-  el("botState").onclick = function () { toast(el("botState").title || "Состояние бота"); };
+  // Точка состояния ведёт к разбору: при беде — на «Сегодня», к блоку «Состояние бота».
+  el("botState").onclick = async function () {
+    if (el("botState").dataset.state === "on") return toast(el("botState").title || "Состояние бота");
+    if (await go("today")) setTimeout(function () { var health = document.getElementById("healthRows"); if (health && health.scrollIntoView) health.scrollIntoView({ block: "center" }); }, 200);
+  };
   document.addEventListener("click", function (event) {
     if (event.target.closest && !event.target.closest("#globalSearchBox") && !event.target.closest("#searchToggle")) {
       el("globalResults").classList.add("hidden");

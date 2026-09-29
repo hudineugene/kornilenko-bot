@@ -3792,3 +3792,28 @@ test('числа не спорят словами: «В работе» в вор
   sandbox.renderClients(differs);
   assert.match(String(differs.innerHTML), /Показано 2 из 2 · им можно писать: 1/, 'у бота то же слово, что на «Сегодня»');
 });
+
+test('бейджи в меню подписаны: у «Сегодня» — дела, у «Клиентов» — ждут ответа; на телефоне — через aria-label; точка «нет связи» ведёт к разбору', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const items = sandbox.navItems();
+  const today = items.find((item) => item.id === 'today');
+  const clients = items.find((item) => item.id === 'clients');
+  assert.match(today.hint, /^\d+ (дело|дела|дел) в списке$/);
+  assert.match(clients.hint, /^2 клиента ждут ответа/, 'бот насчитал двух клиентов');
+  sandbox.renderNav();
+  const nav = String(sandbox.el('nav').innerHTML);
+  assert.match(nav, /aria-label="Клиенты: 2 клиента ждут ответа/);
+  assert.match(nav, /title="Сегодня: |title="\d+ (дело|дела|дел) в списке"/, 'подсказка есть и на компьютере');
+  const bar = String(sandbox.el('tabbar').innerHTML);
+  assert.match(bar, /aria-label="Клиенты: 2 клиента ждут ответа/, 'на телефоне бейдж читается скринридером');
+
+  // Беда — точка ведёт на «Сегодня» к блоку состояния; норма — только подсказка.
+  const routes = [];
+  sandbox.go = async (view) => { routes.push(view); return true; };
+  sandbox.state.runtime = { status: 'error', consecutiveFailures: 3 };
+  sandbox.renderBotState();
+  assert.match(sandbox.el('botState').title, /нажмите, чтобы посмотреть подробности/);
+  await sandbox.el('botState').onclick();
+  assert.deepEqual(routes, ['today']);
+});
