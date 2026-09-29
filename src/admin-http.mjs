@@ -14,6 +14,7 @@ import { data, runtime, verifyPassword, verifyPasswordAsync } from './store.mjs'
 import { publicRuntime } from './menus.mjs';
 import { propertyPublicationReadiness, recordImages } from './catalog.mjs';
 import { isContainerBackup, readBackupContainer } from './backup-file.mjs';
+import { userById } from './users.mjs';
 import { adminNotifications, waitingConversationCount } from './admin-notifications.mjs';
 
 const SESSIONS_FILE = path.join(path.dirname(DATA_FILE), 'bot-sessions.json');
@@ -726,7 +727,7 @@ function safeState(session) {
   for (const inquiry of data.inquiries) {
     const id = String(inquiry.userId);
     if (shown.has(id)) continue;
-    const user = data.users[id];
+    const user = userById(id);
     shown.add(id);
     if (!user) continue;
     mentioned.push({

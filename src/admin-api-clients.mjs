@@ -220,7 +220,7 @@ async function handleClientsApi(req, res, url) {
     if (!session) return;
     const body = await readJson(req);
     const ids = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 20000) : null;
-    const users = ids ? ids.map((id) => data.users[id]).filter(Boolean) : Object.values(data.users);
+    const users = ids ? ids.filter((id) => Object.hasOwn(data.users, id)).map((id) => data.users[id]) : Object.values(data.users);
     const file = xlsxWorkbook('Клиенты', CLIENT_EXPORT_COLUMNS, clientExportRows(users));
     const name = 'Клиенты ' + localDayKey() + '.xlsx';
     securityHeaders(res);

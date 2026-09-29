@@ -58,11 +58,16 @@ function postImage(body) {
 // группу отвергается: иначе пост ушёл бы в тему с тем же номером не там.
 function topicFromInput(group, value) {
   const text = cleanText(value, 300);
-  if (/^\d{1,10}$/.test(text)) return Number(text);
+  if (/^\d{1,10}$/.test(text)) {
+    if (Number(text) < 1) throw new Error('Номер темы — число больше нуля (у «Общей» темы номер 1, у остальных больше)');
+    return Number(text);
+  }
   const link = text.match(/^(?:https?:\/\/)?t\.me\/(c\/(\d+)|([A-Za-z0-9_]{4,32}))\/(\d+)(?:\/\d+)?(?:\?.*)?$/i);
   if (!link) throw new Error('Укажите номер темы или ссылку на неё вида https://t.me/c/1234567890/12');
   if (link[2] && group.id !== '-100' + link[2]) throw new Error('Эта ссылка ведёт в другую группу');
-  if (link[3] && group.username && link[3].toLowerCase() !== group.username.toLowerCase()) throw new Error('Эта ссылка ведёт в другую группу');
+  // Ссылка с публичным именем подходит только группе с таким именем: у группы без
+  // публичного адреса темы открываются ссылками вида t.me/c/….
+  if (link[3] && (!group.username || link[3].toLowerCase() !== group.username.toLowerCase())) throw new Error('Эта ссылка ведёт в другую группу');
   return Number(link[4]);
 }
 

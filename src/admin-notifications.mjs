@@ -1,6 +1,7 @@
 // Единый центр рабочих уведомлений панели. События строятся из фактического
 // состояния бота, а прочтение и обработка сохраняются отдельно.
 
+import { userById } from './users.mjs';
 import { cleanText, localDayKey } from './util.mjs';
 import { data, runtime, saveDataNow } from './store.mjs';
 import { propertyReadyForLanguage } from './catalog.mjs';
@@ -51,7 +52,7 @@ function currentAdminNotifications() {
     if (!previous || incomingMoment(inquiry) > incomingMoment(previous)) unreadByUser.set(userId, inquiry);
   }
   for (const inquiry of unreadByUser.values()) {
-    const user = data.users[String(inquiry.userId)] || {};
+    const user = userById(inquiry.userId) || {};
     const moment = incomingMoment(inquiry);
     const latest = (Array.isArray(inquiry.messages) ? inquiry.messages : [])
       .filter((message) => message.direction === 'in')
@@ -67,7 +68,7 @@ function currentAdminNotifications() {
 
   for (const inquiry of data.inquiries) {
     if (inquiry.status === 'closed' || !inquiry.followUpDate || inquiry.followUpDate > today) continue;
-    const user = data.users[String(inquiry.userId)] || {};
+    const user = userById(inquiry.userId) || {};
     const overdue = inquiry.followUpDate < today;
     items.push({
       id: 'task:' + inquiry.id + ':' + inquiry.followUpDate + ':' + (inquiry.followUpTime || ''),
@@ -82,7 +83,7 @@ function currentAdminNotifications() {
   for (const inquiry of data.inquiries) {
     const viewing = inquiry.viewing;
     if (inquiry.type !== 'viewing' || !viewing || inquiry.status === 'closed' || viewing.cancelledAt || viewing.confirmedAt) continue;
-    const user = data.users[String(inquiry.userId)] || {};
+    const user = userById(inquiry.userId) || {};
     const requested = [viewing.date || viewing.dateText, viewing.timeText].filter(Boolean).join(' · ') || 'дата и время требуют уточнения';
     items.push({
       id: 'viewing:' + inquiry.id + ':' + cleanText(requested, 180),

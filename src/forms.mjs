@@ -302,9 +302,9 @@ async function submitLead(user, pending, token, language, message, extraRows = [
   const success = lead.method === 'telegram'
     ? copy.telegramSuccess
     : lead.method === 'whatsapp'
-      ? copy.whatsappSuccess.replace('{phone}', lead.phone)
+      ? copy.whatsappSuccess.replace('{phone}', () => (lead.phone))
       : pending.instant
-        ? copy.instantSuccess.replace('{phone}', lead.phone)
+        ? copy.instantSuccess.replace('{phone}', () => (lead.phone))
         : copy.success;
   await sendMessage(user.chatId, withOffHoursNote([success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), language), token, {
     reply_markup: extraRows.length ? { inline_keyboard: extraRows } : menuKeyboard(language),

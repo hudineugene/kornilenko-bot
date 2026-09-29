@@ -641,8 +641,8 @@ async function handleCatalogPriceInputMessage(message, user, token) {
   const maxPrice = bound === 'max' ? price : current.maxPrice;
   if (minPrice && maxPrice && minPrice > maxPrice) {
     const conflict = copy.invalidPriceRange
-      .replace('{min}', formattedPriceLimit(minPrice, language))
-      .replace('{max}', formattedPriceLimit(maxPrice, language));
+      .replace('{min}', () => (formattedPriceLimit(minPrice, language)))
+      .replace('{max}', () => (formattedPriceLimit(maxPrice, language)));
     await sendMessage(user.chatId, conflict, token, { reply_markup: catalogPriceInputKeyboard(language, bound) });
     return true;
   }
@@ -652,7 +652,7 @@ async function handleCatalogPriceInputMessage(message, user, token) {
   const formatted = formattedPriceLimit(price, language);
   void notifyAdministratorAction(user, bound === 'min' ? 'Указал нижнюю границу цены в фильтре' : 'Указал верхнюю границу цены в фильтре', formatted);
   const confirmation = bound === 'min' ? copy.minimumPriceApplied : copy.customPriceApplied;
-  await sendMessage(user.chatId, confirmation.replace('{price}', formatted), token, { reply_markup: { remove_keyboard: true } });
+  await sendMessage(user.chatId, confirmation.replace('{price}', () => (formatted)), token, { reply_markup: { remove_keyboard: true } });
   const panel = catalogFilterPanel(user);
   await sendUiMessage(user.chatId, user, panel.text, token, { reply_markup: panel.markup });
   return true;
@@ -788,8 +788,8 @@ function selectionMatchHtml(user, record, language, mode) {
     .filter(Boolean)
     .join(' · ');
   const lines = ['<b>' + escapeTelegramHtml(shortenedText(copy[tierKey], 60)) + '</b>'];
-  if (reasons) lines.push(escapeTelegramHtml(shortenedText(String(copy.whyMatch || '').replace('{reasons}', reasons), 180)));
-  if (warnings) lines.push(escapeTelegramHtml(shortenedText(String(copy.noteMatch || '').replace('{warnings}', warnings), 180)));
+  if (reasons) lines.push(escapeTelegramHtml(shortenedText(String(copy.whyMatch || '').replace('{reasons}', () => (reasons)), 180)));
+  if (warnings) lines.push(escapeTelegramHtml(shortenedText(String(copy.noteMatch || '').replace('{warnings}', () => (warnings)), 180)));
   return lines.filter(Boolean).join('\n');
 }
 
@@ -824,8 +824,8 @@ function similarPropertyHtml(user, record, language, mode) {
     .filter(Boolean)
     .join(' · ');
   const lines = [];
-  if (reasons) lines.push(escapeTelegramHtml(shortenedText(String(copy.similarWhy || '').replace('{reasons}', reasons), 220)));
-  if (warnings) lines.push(escapeTelegramHtml(shortenedText(String(copy.similarNote || '').replace('{warnings}', warnings), 220)));
+  if (reasons) lines.push(escapeTelegramHtml(shortenedText(String(copy.similarWhy || '').replace('{reasons}', () => (reasons)), 220)));
+  if (warnings) lines.push(escapeTelegramHtml(shortenedText(String(copy.similarNote || '').replace('{warnings}', () => (warnings)), 220)));
   return lines.join('\n');
 }
 
@@ -1140,7 +1140,7 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
     // условий (бюджет чуть выше, без района или города), и предлагаем следить
     // за новыми объектами или передать запрос менеджеру.
     const nearby = relaxedCatalogFilter(user);
-    const nearbyLine = nearby ? '\n\n' + copy.nearby.replace('{count}', String(nearby.count)).replace('{summary}', nearby.summary) : '';
+    const nearbyLine = nearby ? '\n\n' + copy.nearby.replace('{count}', () => (String(nearby.count))).replace('{summary}', () => (nearby.summary)) : '';
     const notify = (SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru).wizardNotify;
     await sendUiMessage(chatId, user, copy.empty + '\n\n🔎 ' + filterState.summary + nearbyLine, token, { reply_markup: { inline_keyboard: [
       ...(nearby ? [[{ text: copy.showNearby, callback_data: 'cfilter:nearby' }]] : []),
@@ -1412,7 +1412,7 @@ function catalogLocationPanel(user, facet = 'city', requestedPage = 0) {
   if (isDistrict) rows.push([{ text: '↩ ' + copy.changeCity, callback_data: 'cfilter:cities:0' }]);
   rows.push([{ text: '⬅️ ' + copy.backToFilter, callback_data: 'cfilter:open' }]);
   return {
-    text: isDistrict ? copy.districtPickerTitle.replace('{city}', city) : copy.cityPickerTitle,
+    text: isDistrict ? copy.districtPickerTitle.replace('{city}', () => (city)) : copy.cityPickerTitle,
     markup: { inline_keyboard: rows },
   };
 }
@@ -1441,7 +1441,7 @@ function selectionWizardPanel(user, step) {
   const heading = [
     copy.wizardTitle,
     summary,
-    found ? copy.wizardFound.replace('{count}', String(found)) : copy.wizardNothing,
+    found ? copy.wizardFound.replace('{count}', () => (String(found))) : copy.wizardNothing,
   ].filter(Boolean).join('\n\n');
 
   if (current === 'deal') {
@@ -1479,7 +1479,7 @@ function selectionWizardPanel(user, step) {
     rows.push([skip('done')]);
   } else {
     // Итог: посмотреть подходящие, подписаться на новые или отдать менеджеру.
-    if (found) rows.push([{ text: copy.wizardShow.replace('{count}', String(found)), callback_data: 'sel:show' }]);
+    if (found) rows.push([{ text: copy.wizardShow.replace('{count}', () => (String(found))), callback_data: 'sel:show' }]);
     rows.push([{ text: copy.wizardNotify, callback_data: 'saved:save' }]);
     rows.push([{ text: copy.wizardManager, callback_data: 'cfilter:manager' }]);
     if (dead) rows.push([{ text: copy.wizardRestart, callback_data: 'sel:restart:deal' }]);
@@ -1793,7 +1793,7 @@ async function handleCatalogFilterCallback(query, token) {
     // всплывашки. Кнопки повтора нет — второе нажатие завело бы вторую заявку.
     const navigation = NAVIGATION_TEXT[user.preferredLanguage] || NAVIGATION_TEXT.ru;
     const done = {
-      text: copy.handedOver.replace('{summary}', summary),
+      text: copy.handedOver.replace('{summary}', () => (summary)),
       markup: { inline_keyboard: [[{ text: '🏘 ' + navigation.browse, callback_data: 'catalog:all:0' }], [{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]] },
     };
     const editable = query.message && query.message.message_id && typeof query.message.text === 'string' && !Array.isArray(query.message.photo);

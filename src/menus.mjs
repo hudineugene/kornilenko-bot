@@ -107,8 +107,8 @@ function catalogSummaryLine(user, language) {
   const ones = records.length % 10;
   const word = tens >= 11 && tens <= 14 ? copy.many : ones === 1 ? copy.one : ones >= 2 && ones <= 4 ? copy.few : copy.many;
   return copy.line
-    .replace('{count}', records.length + ' ' + word)
-    .replace('{cities}', cities.join(', '));
+    .replace('{count}', () => (records.length + ' ' + word))
+    .replace('{cities}', () => (cities.join(', ')));
 }
 
 async function sendWelcome(chatId, user, token, options = {}) {
@@ -120,7 +120,7 @@ async function sendWelcome(chatId, user, token, options = {}) {
     fillTemplate(languageMessages(language).greeting, user),
     catalogSummaryLine(user, language),
     // Пример запроса — из настоящего каталога; в текст владельца без {example} ничего не подставляется.
-    MENU_HINTS[language].replace('{example}', searchExampleText(user, language) ? ': «' + searchExampleText(user, language) + '»' : ''),
+    MENU_HINTS[language].replace('{example}', () => (searchExampleText(user, language) ? ': «' + searchExampleText(user, language) + '»' : '')),
   ].filter(Boolean).join('\n\n');
   const menu = menuKeyboard(language);
   // Язык выбран за клиента — значит первым делом даём его сменить.

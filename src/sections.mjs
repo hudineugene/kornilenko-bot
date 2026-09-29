@@ -141,7 +141,7 @@ function leadCallbackToast(user, language) {
   const phone = knownLeadPhone(user);
   if (!phone) return '';
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
-  return cleanText(copy.callbackToast.replace('{phone}', phone), 190);
+  return cleanText(copy.callbackToast.replace('{phone}', () => (phone)), 190);
 }
 
 async function handleContactCallback(query, token) {
@@ -422,7 +422,7 @@ function whatsappPropertyMessage(record, language) {
   const title = localizedExact(record.title, language) || localizedExact(record.title, 'ru') || '';
   const reference = cleanText(record.reference, 40);
   const name = title && reference ? title + ' (' + reference + ')' : title || reference || record.id;
-  return (copy.whatsappHelloProperty || MANAGER_CONTACT_TEXT.ru.whatsappHelloProperty).replace('{property}', name);
+  return (copy.whatsappHelloProperty || MANAGER_CONTACT_TEXT.ru.whatsappHelloProperty).replace('{property}', () => (name));
 }
 
 function propertyManagerMarkup(record, language, returnToCatalog = false) {
@@ -673,7 +673,7 @@ async function handlePropertyCallback(query, token) {
         // The comparison is saved even when an older card cannot be edited.
       }
     }
-    await acknowledgeCallback(query, token, comparison.added.replace('{count}', String(result.count)).replace('{max}', String(COMPARISON_LIMIT)));
+    await acknowledgeCallback(query, token, comparison.added.replace('{count}', () => (String(result.count))).replace('{max}', () => (String(COMPARISON_LIMIT))));
     return;
   }
   if (actionName === 'favorite') {
