@@ -872,7 +872,11 @@ function renderBotState() {
     ? "Бот выключен"
     : bad ? "Связь с Telegram потеряна" : "Бот работает" + (state.newInquiryCount ? ' · <b>' + num(state.newInquiryCount) + "</b> новых" : "");
   // Когда шапка тесная, текст состояния прячется, остаётся точка — а слова в подсказке.
+  // При беде рядом с точкой остаётся короткая подпись (на телефоне её рисуют стили).
   el("botState").title = el("botStateText").textContent || "";
+  el("botState").setAttribute("aria-label", el("botStateText").textContent || "");
+  el("botState").dataset.state = dot;
+  el("botState").dataset.short = dot === "off" ? "Выключен" : dot === "bad" ? "Нет связи" : "";
 }
 
 async function go(view, tab) {
@@ -1030,6 +1034,8 @@ function bindShell() {
   };
   // Колокольчик ведёт в «Сегодня»: там тот же список дел, но с кнопками.
   el("notificationBell").onclick = function () { go("today"); };
+  // На телефоне текст состояния не помещается: нажатие на точку показывает его.
+  el("botState").onclick = function () { toast(el("botState").title || "Состояние бота"); };
   document.addEventListener("click", function (event) {
     if (event.target.closest && !event.target.closest("#globalSearchBox") && !event.target.closest("#searchToggle")) {
       el("globalResults").classList.add("hidden");

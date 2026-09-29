@@ -474,6 +474,23 @@ test.describe('стили панели', () => {
     assert.deepEqual(unstyled, [], 'в разметке есть классы, для которых нет ни одного правила (если это метка для скрипта — добавьте её в список меток)');
   });
 
+  test('телефон: цели касания не меньше 44 px, вкладки с затухающей кромкой, шапка помещается', async () => {
+    const sheet = await css();
+    const phone = sheet.slice(sheet.lastIndexOf('/* Телефон: цели касания'));
+    for (const rule of ['.tabs button{flex:none;min-height:44px', 'input,select{min-height:44px}', '.notification-bell,.search-toggle,.head-tools .btn.icon{width:44px', '.tabs::-webkit-scrollbar{display:none}', '.app-brand{flex:1 1 0;min-width:0}']) {
+      assert.ok(phone.includes(rule), 'нет правила: ' + rule);
+    }
+    // Кнопки и цели касания на телефоне — общее правило, а не у каждой по отдельности.
+    assert.match(sheet, /\.btn,\.btn\.small\{min-height:44px\}/);
+    // 861–1180 px: поиск прячется за значок, а меню листается вбок и не налезает на соседей.
+    const middle = sheet.slice(sheet.indexOf('@media(max-width:1180px) and (min-width:861px)'));
+    assert.match(middle, /\.search-toggle\{display:inline-flex\}/);
+    assert.match(middle, /\.head-nav\{flex:1 1 0;overflow-x:auto/);
+    // Чипы календаря и кнопки в заголовках карточек переносятся, а не обрезаются.
+    assert.match(sheet, /\.viewing-event-head\{flex-wrap:wrap\}/);
+    assert.match(sheet, /\.card>header \.actions\{flex-wrap:wrap/);
+  });
+
   test('каждая используемая переменная где-то определена', async () => {
     const sheet = await css();
     const defined = new Set(Array.from(sheet.matchAll(/(--[a-z0-9-]+)\s*:/gi)).map((match) => match[1]));

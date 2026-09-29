@@ -772,9 +772,49 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
 @media(max-width:1180px) and (min-width:861px){
   .app-brand b{display:none}
   .app-head{gap:6px;padding-left:12px;padding-right:12px}
-  .nav-item{padding-left:6px;padding-right:6px}
+  .nav-item{padding-left:5px;padding-right:5px}
   .nav-item .ico{display:none}
   .state-line #botStateText{display:none}
+  /* Поле поиска прячется за значок 🔍, как на телефоне: с ним пункты меню
+     налезали друг на друга. Само меню при нехватке места листается вбок. */
+  .search-toggle{display:inline-flex}
+  .global-search{display:none;position:fixed;left:10px;right:10px;top:calc(var(--header) + 6px);z-index:60;max-width:none;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg)}
+  .global-search.open{display:block}
+  .global-results{position:static;margin-top:6px;box-shadow:none;border:0;min-width:0;max-height:60vh}
+  .head-nav{flex:1 1 0;overflow-x:auto;scrollbar-width:none}
+  .head-nav::-webkit-scrollbar{display:none}
+  .nav-item{flex:none}
+}
+/* Календарь и отчёты: чип статуса и кнопки не обрезаются, а переносятся. */
+.viewing-event-head{flex-wrap:wrap}
+.viewing-event-head .chip{max-width:100%}
+.card>header{flex-wrap:wrap}
+.card>header .actions{flex-wrap:wrap;justify-content:flex-end}
+/* Телефон: цели касания не меньше 44 px, полоса вкладок с затухающей кромкой
+   вместо серой полосы прокрутки, подписи нижней панели помещаются целиком. */
+@media(max-width:860px){
+  .tabs{scrollbar-width:none;background:linear-gradient(to right,var(--surface-soft) 30%,transparent) left center/32px 100% no-repeat local,linear-gradient(to left,var(--surface-soft) 30%,transparent) right center/32px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(16,24,40,.22),transparent) left center/12px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(16,24,40,.22),transparent) right center/12px 100% no-repeat scroll,var(--surface-soft)}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{flex:none;min-height:44px;white-space:nowrap}
+  input,select{min-height:44px}
+  .notification-bell,.search-toggle,.head-tools .btn.icon{width:44px;min-width:44px;height:44px;min-height:44px}
+  .tab{padding-left:0;padding-right:0}
+  .tab-title{letter-spacing:-.02em}
+  /* Шапка на узком экране: название усекается многоточием, подзаголовок
+     прячется, а на самых узких экранах остаётся один знак — иначе значки справа
+     уезжали за край (320 px: 467 при экране 320). */
+  .app-head{flex-wrap:nowrap}
+  .app-brand{flex:1 1 0;min-width:0}
+  .app-brand>div,.app-brand>span{min-width:0}
+  .app-brand b{display:block;overflow:hidden;text-overflow:ellipsis}
+  .app-brand span{display:none}
+  .head-tools{flex:none;gap:0}
+  /* Точка состояния: при беде рядом короткая подпись, а не одна красная точка. */
+  .head-tools .state-line{cursor:pointer}
+  .state-line[data-state="bad"]::after,.state-line[data-state="off"]::after{content:attr(data-short);font-size:var(--fs-xs);font-weight:700;color:var(--bad)}
+}
+@media(max-width:400px){
+  .app-brand b{display:none}
 }
 `;
 

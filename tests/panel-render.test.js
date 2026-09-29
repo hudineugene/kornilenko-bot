@@ -730,6 +730,27 @@ test('«Объекты» и «База клиентов» на телефоне:
   }
 });
 
+test('точка состояния бота: у неё есть подпись для скринридера и короткая метка для телефона', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const box = sandbox.el('botState');
+  sandbox.state.config.active = true;
+  sandbox.state.runtime = { status: 'running', consecutiveFailures: 0 };
+  sandbox.renderBotState();
+  assert.equal(box.dataset.state, 'on');
+  assert.equal(box.dataset.short, '', 'когда всё хорошо, подписи рядом с точкой нет');
+
+  sandbox.state.runtime = { status: 'error', consecutiveFailures: 3 };
+  sandbox.renderBotState();
+  assert.equal(box.dataset.state, 'bad');
+  assert.equal(box.dataset.short, 'Нет связи', 'при обрыве связи рядом с точкой — слова, а не одна красная точка');
+
+  sandbox.state.config.active = false;
+  sandbox.renderBotState();
+  assert.equal(box.dataset.state, 'off');
+  assert.equal(box.dataset.short, 'Выключен');
+});
+
 test('кнопки в шапке экрана не плодятся, когда список перерисовывается сам', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();
