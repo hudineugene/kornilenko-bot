@@ -3845,3 +3845,43 @@ test('число дел от бота тоже не считает сбой св
   ];
   assert.equal(attentionCounts(list).deeds, 1);
 });
+
+test('значки кнопок: ведущий глиф (＋ ⬇ ✉️ …) заменяется линейным SVG из общего набора, текст остаётся; одиночные и чужие глифы не трогаются', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const run = (text, marked) => {
+    const node = { nodeType: 3, nodeValue: text };
+    const button = fakeElement('button');
+    button.firstChild = node;
+    let inserted = null;
+    button.insertBefore = (span) => { inserted = span; };
+    if (marked) button.getAttribute = () => '1';
+    sandbox.iconifyButtons({ querySelectorAll: () => [button] });
+    return { node, inserted };
+  };
+  const plus = run(' ＋ Добавить фото');
+  assert.equal(plus.node.nodeValue, 'Добавить фото', 'глиф ушёл из текста');
+  assert.equal(plus.inserted.className, 'btn-ico');
+  assert.match(plus.inserted.innerHTML, /^<svg viewBox="0 0 24 24"[^>]*aria-hidden="true">.*M12 5v14M5 12h14/, 'вместо него — «плюс» из набора');
+  assert.match(run('⬇ Скачать копию').inserted.innerHTML, /M12 4v11/, 'стрелка вниз');
+  const mail = run('✉️ Почта');
+  assert.equal(mail.node.nodeValue, 'Почта', 'эмодзи с вариантным селектором тоже');
+  assert.match(mail.inserted.innerHTML, /rect x="3\.5"/);
+  assert.equal(run('↑').inserted, null, 'кнопка из одного глифа остаётся как есть');
+  assert.equal(run('🎵 ТикТок').inserted, null, 'неизвестные глифы не трогаем');
+  assert.equal(run('Просто текст').inserted, null);
+  assert.equal(run('＋ Объект', true).inserted, null, 'уже заменённое второй раз не трогаем');
+  assert.ok(Object.values(sandbox.GLYPH_ICONS).every((name) => sandbox.BUTTON_ICONS[name]), 'у каждого глифа в таблице есть значок');
+  assert.match(String(sandbox.icon('plus')), /stroke="currentColor"/, 'цвет — от текста кнопки');
+});
+
+test('пояснение к числу на «Сегодня» и в воронке — не только title: на телефоне оно видно подписью', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const html = String(sandbox.numberStrip([['Ждут ответа', '3', 'bad', 'Клиенты, которым ещё не ответили'], ['Всего', '9', '']]));
+  assert.match(html, /title="Клиенты, которым ещё не ответили"/, 'на компьютере — подсказка');
+  assert.match(html, /<small class="strip-hint">Клиенты, которым ещё не ответили<\/small>/, 'на телефоне — подпись под числом');
+  assert.equal((html.match(/strip-hint/g) || []).length, 1, 'у числа без пояснения подписи нет');
+  const { PANEL_CSS } = await import('../src/panel/styles.mjs');
+  assert.match(PANEL_CSS, /@media\(max-width:860px\)\{\.today-numbers \.strip-hint\{display:block\}\}/);
+});

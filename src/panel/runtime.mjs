@@ -913,6 +913,57 @@ function keyboardActivate(event) {
   return true;
 }
 
+// --- Значки кнопок --------------------------------------------------------------
+// Раньше 45 кнопок начинались с глифов и эмодзи (＋ ⇩ ✉ ➤ ✎ ⬇ ⬆ ⧉ 📌 📎 🏠 🔁 🧹 ↩ ✓): разного
+// размера, веса и вида на разных системах, тогда как в меню стоял один набор линейных SVG. Один
+// набор и для кнопок: текст в разметке остаётся прежним, а после отрисовки ведущий глиф
+// заменяется значком (см. iconifyButtons).
+var BUTTON_ICONS = {
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  download: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
+  upload: '<path d="M12 16V5M7 9l5-5 5 5M5 20h14"/>',
+  mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/>',
+  send: '<path d="M21 3 10.5 13.5"/><path d="M21 3l-6.5 18-4-7.5L3 9.5z"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+  reply: '<path d="M9 8L4 13l5 5"/><path d="M4 13h9a6 6 0 0 1 6 6"/>',
+  transfer: '<path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4"/>',
+  clean: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  clip: '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10 17.5a2 2 0 0 1-3-3L14 8"/>',
+  pin: '<path d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  home: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/>',
+};
+var GLYPH_ICONS = { "＋": "plus", "⇩": "download", "⬇": "download", "⬆": "upload", "✉": "mail", "➤": "send", "✎": "edit", "⧉": "copy", "✓": "check", "↩": "reply", "🔁": "transfer", "🧹": "clean", "📎": "clip", "📌": "pin", "↑": "up", "↓": "down", "🏠": "home" };
+
+function icon(name) {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (BUTTON_ICONS[name] || "") + "</svg>";
+}
+
+// Ведущий глиф текста кнопки → значок. Кнопка, где кроме глифа ничего нет, остаётся как есть.
+function iconifyButtons(root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll(".btn").forEach(function (button) {
+    if (button.getAttribute("data-iconified")) return;
+    var node = button.firstChild;
+    if (!node || node.nodeType !== 3) return;
+    var text = String(node.nodeValue || "").replace(/^\s+/, "").replace(/^([^\s])\uFE0F/, "$1");
+    var glyph = Array.from(text)[0];
+    var name = GLYPH_ICONS[glyph];
+    var rest = text.slice(glyph ? glyph.length : 0).replace(/^\uFE0F/, "").replace(/^\s+/, "");
+    if (!name || !rest) return;
+    button.setAttribute("data-iconified", "1");
+    node.nodeValue = rest;
+    var span = document.createElement("span");
+    span.className = "btn-ico";
+    span.setAttribute("aria-hidden", "true");
+    span.innerHTML = icon(name);
+    button.insertBefore(span, node);
+  });
+}
+
 function initAccessibility() {
   document.addEventListener("keydown", keyboardActivate);
   var page = el("page");
@@ -920,10 +971,11 @@ function initAccessibility() {
     var timer = 0;
     new MutationObserver(function () {
       clearTimeout(timer);
-      timer = setTimeout(function () { enhanceAccessibility(page); }, 30);
-    }).observe(page, { childList: true, subtree: true });
+      timer = setTimeout(function () { enhanceAccessibility(page); iconifyButtons(document.body); }, 30);
+    }).observe(document.body, { childList: true, subtree: true });
   }
   enhanceAccessibility(page);
+  iconifyButtons(document.body);
 }
 
 // --- Общий поиск в шапке ----------------------------------------------------
@@ -1398,11 +1450,13 @@ function renderView(options) {
 // после нескольких переходов по диалогам стояли по четыре пары.
 function pageAction(label, handler, kind) {
   var box = el("pageActions");
-  var button = Array.prototype.filter.call(box.children || [], function (item) { return item.textContent === label; })[0];
+  // Кнопку узнаём по исходной подписи: после замены глифа значком её текст уже другой.
+  var button = Array.prototype.filter.call(box.children || [], function (item) { return item.dataset && item.dataset.label === label || item.textContent === label; })[0];
   if (!button) {
     button = document.createElement("button");
     button.type = "button";
     button.textContent = label;
+    if (button.dataset) button.dataset.label = label;
     box.appendChild(button);
   }
   button.className = "btn " + (kind || "");

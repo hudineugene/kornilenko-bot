@@ -63,7 +63,7 @@ function unconfirmedViewings() {
 // Каждый элемент: [подпись, число, "bad" — если число требует внимания, подсказка].
 function numberStrip(items) {
   return '<div class="today-numbers">' + items.map(function (item) {
-    return '<span' + (item[3] ? ' title="' + esc(item[3]) + '"' : '') + '>' + esc(item[0]) + ': <b' + (item[2] === "bad" ? ' class="bad"' : '') + '>' + item[1] + '</b></span>';
+    return '<span' + (item[3] ? ' title="' + esc(item[3]) + '"' : '') + '>' + esc(item[0]) + ': <b' + (item[2] === "bad" ? ' class="bad"' : '') + '>' + item[1] + '</b>' + (item[3] ? '<small class="strip-hint">' + esc(item[3]) + '</small>' : '') + '</span>';
   }).join("") + '</div>';
 }
 

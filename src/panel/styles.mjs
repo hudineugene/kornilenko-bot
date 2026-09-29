@@ -138,6 +138,11 @@ tbody tr.selected{background:var(--brand-soft)}
 .editor-foot{justify-content:flex-end;gap:var(--sp-2)}
 .btn.small{padding:var(--sp-1) var(--sp-2);font-size:var(--fs-sm);border-radius:var(--radius-sm)}
 .btn.icon{padding:var(--sp-1) var(--sp-2)}
+.btn-ico{display:inline-flex;flex:none;width:16px;height:16px}
+/* Пояснение к числу: на компьютере — подсказка при наведении (title), на телефоне наведения нет — подпись под числом. */
+.strip-hint{display:none;color:var(--muted);font-size:var(--fs-xs)}
+@media(max-width:860px){.today-numbers .strip-hint{display:block}}
+.btn-ico svg{width:100%;height:100%}
 .chip{display:inline-flex;align-items:center;gap:var(--sp-1);padding:2px var(--sp-2);border-radius:999px;border:1px solid var(--line);background:var(--surface-soft);font-size:var(--fs-sm);font-weight:600;color:var(--muted);white-space:nowrap}
 .chip.ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok)}
 .chip.warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn)}
