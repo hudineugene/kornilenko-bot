@@ -320,6 +320,66 @@ function recentReactions() {
   return events.sort(function (a, b) { return (Date.parse(b.item.createdAt) || 0) - (Date.parse(a.item.createdAt) || 0); }).slice(0, 10);
 }
 
+// --- Неделя одной страницей -------------------------------------------------------
+// Главное для владельца — итоги недели: сколько пришло, сколько записалось и
+// сколько сделок, откуда клиенты. Цифры считает бот (те же, что он присылает по
+// понедельникам), панель их только показывает. Всё остальное — под «Подробнее».
+var reportWeek = "last";
+
+function weekTrend(current, previous) {
+  if (current === previous) return '<span class="week-trend">как раньше</span>';
+  return '<span class="week-trend ' + (current > previous ? "up" : "down") + '">' + (current > previous ? "↑ +" : "↓ −") + Math.abs(current - previous) + " · было " + previous + "</span>";
+}
+
+function weekTile(label, value, note) {
+  return '<div class="week-tile"><span class="week-label">' + esc(label) + '</span><b class="week-value">' + num(value) + "</b>" + (note || "") + "</div>";
+}
+
+function weeklyCard(payload) {
+  var report = payload.report;
+  var comparedWith = report.which === "current" ? "с тем же отрезком прошлой недели" : "с позапрошлой неделей";
+  return '<div class="card gap-bottom"><header><h3>Неделя ' + esc(report.label) + '</h3><div class="actions">' +
+      '<div class="tabs" id="weekScope"><button type="button" data-week="last" class="' + (report.which === "last" ? "active" : "") + '">Прошлая</button>' +
+      '<button type="button" data-week="current" class="' + (report.which === "current" ? "active" : "") + '">Эта, пока идёт</button></div>' +
+      '<button class="btn secondary small" id="weekCopy" type="button" title="Тот же текст, что бот присылает в Telegram по понедельникам">Скопировать текстом</button></div></header>' +
+    '<div class="card-body stack">' +
+      '<div class="week-grid">' +
+        weekTile("Новых клиентов", report.users.count, weekTrend(report.users.count, report.users.previous)) +
+        weekTile("Заявок", report.inquiries.count, weekTrend(report.inquiries.count, report.inquiries.previous)) +
+        weekTile("Просмотров", report.viewings.booked, '<span class="week-trend">записались · прошло ' + num(report.viewings.held) + "</span>") +
+        weekTile("Сделок", report.deals.count, weekTrend(report.deals.count, report.deals.previous)) +
+        weekTile("Без ответа сейчас", report.waiting, report.waiting ? '<span class="week-trend down">ждут ответа</span>' : '<span class="week-trend up">все отвечены</span>') +
+      "</div>" +
+      '<div class="small faint">Сравнение — ' + comparedWith + '.</div>' +
+      (report.inquiries.byType.length ? '<div class="row wrap">' + report.inquiries.byType.map(function (row) { return '<span class="chip">' + esc(row[0]) + " — " + num(row[1]) + "</span>"; }).join("") + "</div>" : "") +
+      '<div class="grid cols-2">' +
+        '<div><div class="week-subtitle">Откуда пришли новые клиенты</div>' + barList(report.sources, report.users.count) + "</div>" +
+        '<div><div class="week-subtitle">Больше всего заявок</div>' + (report.topProperties.length ? '<div class="list">' + report.topProperties.map(function (row) {
+          return '<div class="list-item"><span class="grow">' + esc(row.name) + "</span><b>" + num(row.count) + "</b></div>";
+        }).join("") + "</div>" : '<div class="empty">Заявок по объектам не было</div>') + "</div>" +
+      "</div>" +
+      (report.broadcasts.count ? '<div class="small muted">✉️ Рассылок: ' + num(report.broadcasts.count) + ", получили " + num(report.broadcasts.sent) + ", откликнулись " + num(report.broadcasts.responded) + "</div>" : "") +
+    "</div></div>";
+}
+
+async function loadWeekly(host) {
+  var box = host.querySelector("#weeklyReport");
+  if (!box) return;
+  try {
+    var payload = await api("/api/weekly-report?week=" + encodeURIComponent(reportWeek));
+    box.innerHTML = weeklyCard(payload);
+    box.querySelectorAll("#weekScope [data-week]").forEach(function (button) {
+      button.onclick = function () { reportWeek = button.dataset.week; loadWeekly(host); };
+    });
+    var copy = box.querySelector("#weekCopy");
+    if (copy) copy.onclick = function () {
+      navigator.clipboard.writeText(payload.text).then(function () { toast("Скопировано"); });
+    };
+  } catch (error) {
+    box.innerHTML = '<div class="card gap-bottom"><div class="empty"><b>Не удалось загрузить неделю</b>' + esc(error && error.message || "") + "</div></div>";
+  }
+}
+
 // «Отчёты» живут в настройках: это не ежедневная работа.
 VIEWS.reports = {
   subtitle: function () { return "Аудитория, заявки, объекты и рассылки"; },
@@ -346,6 +406,8 @@ VIEWS.reports = {
     var campaigns = (state.broadcasts || []).filter(function (entry) { return entry.sent; });
 
     host.innerHTML =
+      '<div id="weeklyReport"><div class="card gap-bottom"><div class="empty">Считаем неделю…</div></div></div>' +
+      '<details class="card gap-bottom report-more"><summary>Подробнее: 30 дней, источники, языки, рассылки, объекты</summary><div class="card-body">' +
       numberStrip([
         ["Всего клиентов", num(state.userCount), "", "+" + usersInRange(week) + " за 7 дней"],
         ["Сообщений за 30 дней", num(sumDays(days, "received"))],
@@ -384,7 +446,8 @@ VIEWS.reports = {
             var rate = row.views ? Math.round((row.details / row.views) * 100) : 0;
             return '<tr class="clickable" data-property-insights="' + esc(row.id) + '"><td><b>' + esc(row.title) + '</b><br><span class="small faint">открыть клиентов и действия</span></td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + '%</td></tr>';
           }).join("") + "</tbody></table></div>" : '<div class="empty">Объектов пока нет</div>') +
-      "</div>";
+      "</div></div></details>";
+    loadWeekly(host);
     bindSourceLink(host);
     host.querySelectorAll("[data-property-insights]").forEach(function (row) { row.onclick = function () { openObjectInsights(row.dataset.propertyInsights); }; });
   },

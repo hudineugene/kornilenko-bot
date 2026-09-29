@@ -224,15 +224,30 @@ function comparison(current, previous) {
   return ' (' + (current > previous ? '↑' : '↓') + ' было ' + previous + ')';
 }
 
-function weeklyReport(now = new Date()) {
+// Цифры недели одним объектом: из него собираются и сообщение в Telegram, и
+// страница отчёта в панели — чтобы числа в них не расходились. which: 'last' —
+// прошлая неделя целиком (её и присылает бот по понедельникам), 'current' — эта,
+// пока идёт; её сравнивают с тем же отрезком прошлой недели.
+function dealWon(inquiry) {
+  return inquiry.pipelineStage === 'won';
+}
+
+function dealTime(inquiry) {
+  return inquiry.wonAt || inquiry.updatedAt || inquiry.createdAt;
+}
+
+function weeklyReportData(now = new Date(), which = 'last') {
   const thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
-  const start = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 7);
+  const current = which === 'current';
+  const start = current ? thisMonday : new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 7);
+  const end = current ? new Date(now.getTime() + 1) : thisMonday;
   const previousStart = new Date(start.getFullYear(), start.getMonth(), start.getDate() - 7);
-  const week = weekFigures(start, thisMonday);
-  const previous = weekFigures(previousStart, start);
+  const previousEnd = current ? new Date(previousStart.getTime() + (end.getTime() - start.getTime())) : start;
+  const week = weekFigures(start, end);
+  const previous = weekFigures(previousStart, previousEnd);
   const pad = (value) => String(value).padStart(2, '0');
   const label = (date) => pad(date.getDate()) + '.' + pad(date.getMonth() + 1);
-  const lastDay = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 1);
+  const lastDay = current ? now : new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 1);
   const byType = new Map();
   for (const inquiry of week.inquiries) {
     const name = inquiryTypeLabel(inquiry);
@@ -243,31 +258,59 @@ function weeklyReport(now = new Date()) {
   const viewings = data.inquiries.filter((inquiry) => inquiry.type === 'viewing' && inquiry.viewing && inquiry.viewing.confirmedAt && !inquiry.viewing.cancelledAt);
   const heldViewings = viewings.filter((inquiry) => inquiry.viewing.confirmedDate >= startKey && inquiry.viewing.confirmedDate <= endKey).length;
   const bookedViewings = week.inquiries.filter((inquiry) => inquiry.type === 'viewing').length;
-  const waiting = data.inquiries.filter(awaitingReply).length;
+  const deals = data.inquiries.filter((inquiry) => dealWon(inquiry) && inWeek(dealTime(inquiry), start, end)).length;
+  const previousDeals = data.inquiries.filter((inquiry) => dealWon(inquiry) && inWeek(dealTime(inquiry), previousStart, previousEnd)).length;
   const byProperty = new Map();
   for (const inquiry of week.inquiries) if (inquiry.propertyId) byProperty.set(inquiry.propertyId, (byProperty.get(inquiry.propertyId) || 0) + 1);
   const topProperties = Array.from(byProperty).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id, count]) => {
     const property = data.objects.find((item) => item.id === id);
-    return (property ? localized(property.title, 'ru') || property.reference || id : 'удалённый объект') + ' — ' + count;
+    return { name: property ? localized(property.title, 'ru') || property.reference || id : 'удалённый объект', count };
   });
   const bySource = new Map();
   for (const user of week.users) bySource.set(user.source || 'без метки', (bySource.get(user.source || 'без метки') || 0) + 1);
-  const sources = Array.from(bySource).sort((a, b) => b[1] - a[1]).map(([name, count]) => name + ' — ' + count);
-  const broadcasts = data.broadcasts.filter((entry) => inWeek(entry.startedAt, start, thisMonday) && Number(entry.sent));
-  const sent = broadcasts.reduce((sum, entry) => sum + Number(entry.sent || 0), 0);
-  const responded = broadcasts.reduce((sum, entry) => sum + (Array.isArray(entry.respondedUserIds) ? entry.respondedUserIds.length : 0), 0);
+  const broadcasts = data.broadcasts.filter((entry) => inWeek(entry.startedAt, start, end) && Number(entry.sent));
+  return {
+    which: current ? 'current' : 'last',
+    label: label(start) + '–' + label(lastDay),
+    users: { count: week.users.length, previous: previous.users.length },
+    inquiries: {
+      count: week.inquiries.length,
+      previous: previous.inquiries.length,
+      byType: Array.from(byType).sort((a, b) => b[1] - a[1]),
+    },
+    viewings: { booked: bookedViewings, held: heldViewings },
+    deals: { count: deals, previous: previousDeals },
+    waiting: data.inquiries.filter(awaitingReply).length,
+    topProperties,
+    sources: Array.from(bySource).sort((a, b) => b[1] - a[1]),
+    broadcasts: {
+      count: broadcasts.length,
+      sent: broadcasts.reduce((sum, entry) => sum + Number(entry.sent || 0), 0),
+      responded: broadcasts.reduce((sum, entry) => sum + (Array.isArray(entry.respondedUserIds) ? entry.respondedUserIds.length : 0), 0),
+    },
+  };
+}
+
+function weeklyReportText(report) {
   return [
-    '📈 Итоги недели ' + label(start) + '–' + label(lastDay),
+    (report.which === 'current' ? '📈 Эта неделя, ' : '📈 Итоги недели ') + report.label,
     '',
-    '👥 Новых клиентов: ' + week.users.length + comparison(week.users.length, previous.users.length),
-    '📩 Обращений: ' + week.inquiries.length + comparison(week.inquiries.length, previous.inquiries.length),
-    ...(byType.size ? ['   ' + Array.from(byType).sort((a, b) => b[1] - a[1]).map(([name, count]) => name + ' — ' + count).join(', ')] : []),
-    '📅 Просмотров: записались ' + bookedViewings + ', прошло ' + heldViewings,
-    '⏳ Сейчас без ответа: ' + waiting,
-    ...(topProperties.length ? ['🏠 Больше всего обращений: ' + topProperties.join(', ')] : []),
-    ...(sources.length ? ['📣 Откуда пришли: ' + sources.join(', ')] : []),
-    ...(broadcasts.length ? ['✉️ Рассылок: ' + broadcasts.length + ', получили ' + sent + ', откликнулись ' + responded] : []),
+    '👥 Новых клиентов: ' + report.users.count + comparison(report.users.count, report.users.previous),
+    '📩 Обращений: ' + report.inquiries.count + comparison(report.inquiries.count, report.inquiries.previous),
+    ...(report.inquiries.byType.length ? ['   ' + report.inquiries.byType.map(([name, count]) => name + ' — ' + count).join(', ')] : []),
+    '📅 Просмотров: записались ' + report.viewings.booked + ', прошло ' + report.viewings.held,
+    // Строка про сделки появляется, когда они были на этой или прошлой неделе:
+    // «Сделок: 0» каждую неделю только мозолит глаза.
+    ...(report.deals.count || report.deals.previous ? ['🤝 Сделок: ' + report.deals.count + comparison(report.deals.count, report.deals.previous)] : []),
+    '⏳ Сейчас без ответа: ' + report.waiting,
+    ...(report.topProperties.length ? ['🏠 Больше всего обращений: ' + report.topProperties.map((item) => item.name + ' — ' + item.count).join(', ')] : []),
+    ...(report.sources.length ? ['📣 Откуда пришли: ' + report.sources.map(([name, count]) => name + ' — ' + count).join(', ')] : []),
+    ...(report.broadcasts.count ? ['✉️ Рассылок: ' + report.broadcasts.count + ', получили ' + report.broadcasts.sent + ', откликнулись ' + report.broadcasts.responded] : []),
   ].join('\n');
+}
+
+function weeklyReport(now = new Date()) {
+  return weeklyReportText(weeklyReportData(now, 'last'));
 }
 
 async function runWeeklyReport(now = new Date()) {
@@ -321,4 +364,6 @@ export {
   sendInquiryToAdministrator,
   weekFigures,
   weeklyReport,
+  weeklyReportData,
+  weeklyReportText,
 };

@@ -421,7 +421,10 @@ async function handleInquiryStatusCallback(query, token) {
     if (status === 'in_progress') inquiry.assignee = pressedBy.name;
     // «Открыть снова» на выигранном или проигранном деле снимает этот итог,
     // иначе заявка открыта, а этап всё ещё «Выиграно».
-    if (status !== 'closed' && ['won', 'lost'].includes(inquiry.pipelineStage)) inquiry.pipelineStage = status === 'new' ? 'new' : 'contact';
+    if (status !== 'closed' && ['won', 'lost'].includes(inquiry.pipelineStage)) {
+      inquiry.pipelineStage = status === 'new' ? 'new' : 'contact';
+      inquiry.wonAt = '';
+    }
   }
   inquiry.updatedAt = new Date().toISOString();
   saveDataNow();

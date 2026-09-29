@@ -499,6 +499,16 @@ code{padding:0px 4px;border-radius:5px;background:var(--surface-soft);border:1px
 .start{align-items:flex-start}
 .switch-inline{width:34px;height:24px;padding:0;vertical-align:middle}
 .chip-inline{width:auto;display:inline-block;padding:2px 6px}
+/* Неделя одной страницей: плитки с числом и сравнением. */
+.week-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.week-tile{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:var(--surface-soft)}
+.week-label{color:var(--muted);font-size:var(--fs-sm)}
+.week-value{font-size:var(--fs-xl);line-height:1.1}
+.week-trend{font-size:var(--fs-xs);color:var(--muted)}
+.week-trend.up{color:var(--live)}
+.week-trend.down{color:var(--bad)}
+.week-subtitle{margin-bottom:6px;color:var(--muted);font-size:var(--fs-sm);font-weight:600}
+.report-more>summary{padding:12px 16px;cursor:pointer;font-weight:600}
 .today-numbers{display:flex;flex-wrap:wrap;gap:6px 20px;margin-bottom:12px;padding:10px 14px;border-radius:11px;background:var(--surface);border:1px solid var(--line);font-size:var(--fs);color:var(--muted)}
 .today-numbers b{font-size:var(--fs-lg);color:var(--text)}
 .today-numbers b.bad{color:var(--bad)}

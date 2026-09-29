@@ -1301,7 +1301,14 @@ test('на пяти экранах цифры — одной строкой, а 
     const host = fakeElement('main');
     await sandbox.VIEWS[view].render(host, tab);
     const html = String(host.innerHTML);
-    assert.match(html, /^<div class="today-numbers">/, view + '/' + tab + ': сверху строка цифр');
+    // «Отчёты» начинаются с недели одной страницей; строка цифр за 30 дней — в «Подробнее».
+    if (tab === 'reports') {
+      assert.match(html, /^<div id="weeklyReport">/, 'сверху — итоги недели');
+      assert.match(html, /<summary>Подробнее: 30 дней/, 'остальное сложено под «Подробнее»');
+      assert.match(html, /<div class="today-numbers">/, view + '/' + tab + ': строка цифр внутри');
+    } else {
+      assert.match(html, /^<div class="today-numbers">/, view + '/' + tab + ': сверху строка цифр');
+    }
     assert.match(html, expected, view + '/' + tab + ': нужные цифры на месте');
     assert.ok(!/class="card kpi"/.test(html), view + '/' + tab + ': карточек-плиток нет');
   }
@@ -1586,6 +1593,39 @@ test('«Сегодня»: «Мои / Все» появляется при дву
   sandbox.VIEWS.today.render(host);
   html = String(host.innerHTML);
   assert.match(html, /Своих дел нет/, 'у Олега закреплённых нет — так и сказано, а не «все отвечены»');
+});
+
+test('«Отчёты»: неделя одной страницей — плитки со сравнением, источники, объекты, копирование текстом', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const report = {
+    which: 'last', label: '14.09–20.09',
+    users: { count: 5, previous: 2 },
+    inquiries: { count: 3, previous: 3, byType: [['вопрос по объекту', 2], ['запись на просмотр', 1]] },
+    viewings: { booked: 1, held: 4 },
+    deals: { count: 0, previous: 1 },
+    waiting: 2,
+    topProperties: [{ name: 'Вилла у моря', count: 2 }],
+    sources: [['instagram', 3], ['без метки', 2]],
+    broadcasts: { count: 1, sent: 40, responded: 6 },
+  };
+  const html = String(sandbox.weeklyCard({ report, text: 'текст' }));
+  assert.match(html, /Неделя 14\.09–20\.09/);
+  for (const word of ['Новых клиентов', 'Заявок', 'Просмотров', 'Сделок', 'Без ответа сейчас', 'Откуда пришли новые клиенты', 'Больше всего заявок', 'Скопировать текстом', 'Вилла у моря', 'instagram']) {
+    assert.ok(html.includes(word), 'на странице есть: ' + word);
+  }
+  assert.match(html, /↑ \+3 · было 2/, 'рост — со стрелкой и числом');
+  assert.match(html, /как раньше/, 'без изменений — так и сказано');
+  assert.match(html, /↓ −1 · было 1/, 'падение — со стрелкой');
+  assert.match(html, /записались · прошло 4/);
+  assert.match(html, /Рассылок: 1, получили 40, откликнулись 6/);
+  assert.match(html, /с позапрошлой неделей/);
+  assert.ok(!/обращени/i.test(html.replace('вопрос по объекту', '')), 'слова «обращения» нет: в панели это «заявки»');
+
+  // Неделя идёт: сравнение с тем же отрезком, переключатель показывает «Эта».
+  const current = String(sandbox.weeklyCard({ report: { ...report, which: 'current' }, text: '' }));
+  assert.match(current, /с тем же отрезком прошлой недели/);
+  assert.match(current, /data-week="current" class="active"/);
 });
 
 test('«База клиентов»: кнопка «В Excel» выгружает тех, кто на экране', async () => {

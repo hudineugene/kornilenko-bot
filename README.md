@@ -116,7 +116,7 @@ npm-зависимости не нужны; для сборки нужен то�
   равно восстанавливаются, а панель пишет, сколько фото нужно загрузить
   заново. В файл резервной копии из панели ключ копии не попадает.
 
-`DATA_VERSION` в `src\data-format.mjs` — версия формата данных (сейчас 41). Миграции,
+`DATA_VERSION` в `src\data-format.mjs` — версия формата данных (сейчас 42). Миграции,
 которые меняют сохранённые данные, выполняются один раз — только для файлов
 более старой версии. Новую миграцию закрывайте условием по
 `storedVersion` (см. `normalizeLoadedData`) и увеличивайте `DATA_VERSION`,
@@ -246,7 +246,19 @@ npm-зависимости не нужны; для сборки нужен то�
 администратор получает итоги прошлой недели: новые клиенты и обращения в
 сравнении с неделей раньше, типы обращений, просмотры, сколько обращений
 сейчас без ответа, объекты с наибольшим числом обращений, источники клиентов
-и рассылки.
+и рассылки. Если были сделки (обращение переведено на этап «Сделка»), в
+отчёте появляется строка «🤝 Сделок» со сравнением; дата сделки (`wonAt`)
+записывается в момент перевода на этот этап.
+
+Те же цифры — на странице **«Настройки → Отчёты»**: сверху итоги недели одной
+страницей (плитки «Новых клиентов», «Заявок», «Просмотров», «Сделок», «Без
+ответа сейчас» со сравнением, источники и объекты), переключатель «Прошлая /
+Эта, пока идёт» (эту сравнивают с тем же отрезком прошлой недели) и кнопка
+«Скопировать текстом» — тот самый текст, что бот присылает в Telegram. Числа
+считает бот (`weeklyReportData` в `src
+otices.mjs`), панель только показывает,
+поэтому в Telegram и на экране они не расходятся. Прежние 30-дневные
+таблицы сложены под «Подробнее».
 
 ### Несколько менеджеров
 
@@ -898,7 +910,7 @@ HTML в описаниях превращается в обычный текст
 `BOT_NO_START=1` и временной папкой данных, поэтому не трогают рабочие данные
 и не обращаются к Telegram (Bot API заменён заглушкой).
 
-Всего 73 файла; каждый начинается с комментария, зачем он нужен. По темам:
+Всего 74 файла; каждый начинается с комментария, зачем он нужен. По темам:
 
 | Тема | Файлы |
 |---|---|
@@ -906,7 +918,7 @@ HTML в описаниях превращается в обычный текст
 | Формы и диалоги клиента | `dialogs`, `typed-answers`, `messages`, `album`, `service-messages`, `queue-loss`, `parallel-updates`, `double-send`, `search-phrases`, `measures`, `my-area`, `comparison`, `saved-search` |
 | Каталог и загрузка с сайта | `catalog-card-save`, `feed`, `feed-ssrf`, `file-id` |
 | Просмотры, напоминания, рабочее время | `viewings`, `reminders`, `hours`, `calculator`, `attention`, `local-days` |
-| Уведомления, рассылки, группы | `subscriptions`, `broadcast-resume`, `scheduled-posts`, `groups`, `group-topics`, `notice-retry`, `consent-retention`, `manager-photo`, `whatsapp-text`, `status`, `experience`, `managers`, `admin-chat` |
+| Уведомления, рассылки, группы | `subscriptions`, `broadcast-resume`, `scheduled-posts`, `groups`, `group-topics`, `notice-retry`, `consent-retention`, `manager-photo`, `weekly-report`, `whatsapp-text`, `status`, `experience`, `managers`, `admin-chat` |
 | Панель | `panel`, `panel-render`, `templates-export`, `conversation-search`, `attachments`, `cleanup-scope` |
 | Безопасность и вход | `security`, `foreign-page`, `login-limits`, `login-protection`, `password-gate`, `password-reset` |
 | Копии и восстановление | `offsite`, `backup-format`, `backup-retention`, `restore-order`, `erase-export`, `privacy` |

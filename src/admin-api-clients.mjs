@@ -16,6 +16,7 @@ import { json, parseUploadedDocument, parseUploadedImage, readJson, requireAuth,
 import { replyTemplateInput } from './admin-input.mjs';
 import { CLIENT_EXPORT_COLUMNS, INQUIRY_EXPORT_COLUMNS, clientExportRows, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { confirmViewing } from './viewings.mjs';
+import { weeklyReportData, weeklyReportText } from './notices.mjs';
 
 // Сколько бесед вернуть в ответ на поиск: больше в списке всё равно не читают,
 // а перебор пяти тысяч переписок не должен занимать заметное время.
@@ -202,6 +203,14 @@ async function handleClientsApi(req, res, url) {
       'content-disposition': 'attachment; filename="inquiries-' + localDayKey() + '.xlsx"; filename*=UTF-8\'\'' + encodeURIComponent(name),
     });
     return res.end(file);
+  }
+
+  // Неделя одной страницей: те же цифры, что бот присылает по понедельникам.
+  if (url.pathname === '/api/weekly-report' && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const report = weeklyReportData(new Date(), url.searchParams.get('week') === 'current' ? 'current' : 'last');
+    return json(res, 200, { report, text: weeklyReportText(report) }), true;
   }
 
   // Клиенты одним файлом: панель присылает номера тех, кого показывает (с учётом
@@ -413,6 +422,7 @@ async function handleClientsApi(req, res, url) {
     // Сначала статус, потом этап: если пришли оба, выбранный этап остаётся
     // последним словом. Раньше порядок был обратным, и «Выиграно» из карточки
     // клиента тут же откатывалось на «Общение» — работало только перетаскивание.
+    const wasWon = inquiry.pipelineStage === 'won';
     if (body.status != null) {
       inquiry.status = body.status;
       if (body.status !== 'closed' && ['won', 'lost'].includes(inquiry.pipelineStage)) {
@@ -428,6 +438,9 @@ async function handleClientsApi(req, res, url) {
     if (body.note != null) inquiry.note = cleanText(body.note, 2000);
     if (assignee != null) inquiry.assignee = assignee;
     inquiry.updatedAt = new Date().toISOString();
+    // Дата сделки: ставится один раз, когда обращение стало «Сделкой», и снимается, если его вернули в работу.
+    if (inquiry.pipelineStage === 'won' && !wasWon) inquiry.wonAt = inquiry.updatedAt;
+    else if (inquiry.pipelineStage !== 'won') inquiry.wonAt = '';
     saveDataNow();
     return json(res, 200, { ok: true });
   }
