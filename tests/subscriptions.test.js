@@ -216,6 +216,55 @@ test('рассылка карточкой не уходит по проданн�
   }
 });
 
+test('рассылка карточкой: объект удалили после создания — уходит текст; бот заблокирован — неудача без остановки', async () => {
+  // Объект удалён между созданием рассылки и отправкой: карточку собрать не из чего.
+  resetData((data) => {
+    data.config.active = true;
+    data.users['830001'] = { id: '830001', chatId: 830001, firstName: 'Ольга', preferredLanguage: 'ru', activity: [], favorites: ['deleted-object'], newsConsentAt: new Date().toISOString() };
+    data.broadcasts.push({
+      id: 'bc-gone', status: 'queued', messages: { ru: 'Новинка для вас', en: '', es: '' },
+      languages: [], tags: [], pipelineStages: [], sources: [],
+      propertyId: 'deleted-object', propertySignal: 'favorite', sendAsCard: true,
+      buttonText: { ru: '', en: '', es: '' }, buttonUrl: '', image: null,
+      processedUserIds: [], respondedUserIds: [], inquiryUserIds: [], unsubscribedUserIds: [], photoOnlyUserIds: [],
+      failures: [], sent: 0, failed: 0, total: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+  });
+  bot.getData().objects = [];
+  telegram.calls = [];
+  await bot.runBroadcast(bot.getData().broadcasts.find((item) => item.id === 'bc-gone'));
+  assert.equal(telegram.calls.some((call) => call.method === 'sendPhoto'), false, 'картинки нет: объекта нет');
+  const text = telegram.calls.find((call) => call.method === 'sendMessage' && String(call.body.chat_id) === '830001');
+  assert.ok(text, 'клиент всё же получил рассылку обычным текстом');
+  assert.match(text.body.text, /Новинка для вас/);
+
+  // Клиент заблокировал бота: карточка ему не уходит, остальные получают.
+  await cardBroadcast('bc-card-blocked', 'Появился объект для вас');
+  const data = bot.getData();
+  data.users['830002'] = { id: '830002', chatId: 830002, firstName: 'Игорь', preferredLanguage: 'ru', activity: [], favorites: ['villa-card'], newsConsentAt: new Date().toISOString() };
+  const entry = data.broadcasts.find((item) => item.id === 'bc-card-blocked');
+  Object.assign(entry, { status: 'queued', processedUserIds: [], sent: 0, failed: 0, failures: [] });
+  const original = global.fetch;
+  global.fetch = (url, init) => {
+    const body = init instanceof Object && init.body instanceof FormData ? Object.fromEntries(init.body.entries()) : init && typeof init.body === 'string' ? JSON.parse(init.body) : {};
+    if (String(url).endsWith('sendPhoto') && String(body.chat_id) === '830001') {
+      return Promise.reject(Object.assign(new Error('Forbidden: bot was blocked by the user'), { telegramCode: 403, status: 403 }));
+    }
+    return original(url, init);
+  };
+  telegram.calls = [];
+  try {
+    await bot.runBroadcast(entry);
+  } finally {
+    global.fetch = original;
+  }
+  assert.equal(entry.failed, 1, 'заблокировавший записан как неудача');
+  assert.equal(entry.sent, 1, 'остальным карточка ушла');
+  assert.equal(entry.status, 'done', 'рассылка дошла до конца');
+  assert.equal(bot.userById('830001').blockedBy, 'telegram', 'клиент помечен: больше ему не пишем');
+  assert.ok(telegram.calls.some((call) => call.method === 'sendPhoto' && String(call.body.chat_id) === '830002'), 'второй получил фото');
+});
+
 test('длинная подпись рассылки не режет эмодзи пополам и не съедает описание объекта', async () => {
   // Вступление из эмодзи: граница в 1024 знака приходится на середину пары.
   await cardBroadcast('bc-long', '🏡'.repeat(700));

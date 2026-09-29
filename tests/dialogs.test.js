@@ -932,6 +932,31 @@ test.describe('property card', () => {
     assert.ok(!lastCallbacks.includes('guide:page:5'), 'дальше пятого не листается');
   });
 
+  test('гид: пять экранов на каждом из трёх языков, «Консультация» с любого экрана создаёт заявку', async () => {
+    for (const language of ['ru', 'en', 'es']) {
+      const chat = createChat({ language });
+      chat.user.phone = '+34 600 123 456';
+      chat.user.contactName = 'Клиент';
+      const first = await chat.say(MENU[language].guide);
+      const texts = [first.last.text];
+      for (let page = 1; page < 5; page += 1) {
+        const step = await chat.press('guide:page:' + page);
+        texts.push(step.calls.filter((call) => call.method === 'editMessageText').pop().body.text);
+      }
+      assert.equal(new Set(texts).size, 5, language + ': пять разных экранов');
+      texts.forEach((text, index) => {
+        assert.ok(text.length > 40, language + ': экран ' + (index + 1) + ' не пустой');
+        // Английский и испанский экран без единой русской буквы: пустой перевод не подменён русским текстом.
+        if (language !== 'ru') assert.ok(!/[А-Яа-яЁё]/.test(text), language + ': экран ' + (index + 1) + ' без русского текста');
+      });
+      // Консультация — на последнем экране, а не только на первом.
+      const consult = await chat.press('contact:lead');
+      assert.equal(chat.inquiries.length, 1, language + ': заявка создана');
+      assert.equal(chat.inquiries[0].type, 'lead');
+      assert.ok(consult.last.text, language + ': клиент получил подтверждение');
+    }
+  });
+
   test('тексты гида правит владелец, как «О компании»', async () => {
     const data = bot.getData();
     data.guidePages = bot.normalizeGuidePages([{ id: 'nie', title: { ru: 'Свой заголовок' }, text: { ru: 'Свой текст про NIE.' } }]);

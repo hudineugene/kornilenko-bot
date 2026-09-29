@@ -882,11 +882,11 @@ HTML в описаниях превращается в обычный текст
 `BOT_NO_START=1` и временной папкой данных, поэтому не трогают рабочие данные
 и не обращаются к Telegram (Bot API заменён заглушкой).
 
-Всего 69 файлов; каждый начинается с комментария, зачем он нужен. По темам:
+Всего 71 файл; каждый начинается с комментария, зачем он нужен. По темам:
 
 | Тема | Файлы |
 |---|---|
-| Данные и миграции | `bot`, `improvements`, `data-version`, `data-recovery`, `data-size`, `saving`, `disk-space`, `inquiry-limit`, `state-size`, `state-version` |
+| Данные и миграции | `bot`, `improvements`, `migration-old-versions`, `data-version`, `data-recovery`, `data-size`, `saving`, `disk-space`, `inquiry-limit`, `state-size`, `state-version` |
 | Формы и диалоги клиента | `dialogs`, `typed-answers`, `messages`, `album`, `service-messages`, `queue-loss`, `parallel-updates`, `double-send`, `search-phrases`, `measures`, `my-area`, `comparison`, `saved-search` |
 | Каталог и загрузка с сайта | `catalog-card-save`, `feed`, `feed-ssrf`, `file-id` |
 | Просмотры, напоминания, рабочее время | `viewings`, `reminders`, `hours`, `calculator`, `attention`, `local-days` |
@@ -894,7 +894,7 @@ HTML в описаниях превращается в обычный текст
 | Панель | `panel`, `panel-render`, `templates-export`, `conversation-search`, `attachments`, `cleanup-scope` |
 | Безопасность и вход | `security`, `foreign-page`, `login-limits`, `login-protection`, `password-gate`, `password-reset` |
 | Копии и восстановление | `offsite`, `backup-format`, `backup-retention`, `restore-order`, `erase-export`, `privacy` |
-| Запуск, остановка, устойчивость | `resilience`, `shutdown`, `version-guard`, `autostart`, `logfile`, `logfile-location` |
+| Запуск, остановка, устойчивость | `resilience`, `rejected-token-start`, `shutdown`, `version-guard`, `autostart`, `logfile`, `logfile-location` |
 | Инструкции | `docs` — файлы и команды, названные в `docs\runbook.md`, существуют |
 
 `tests\dialogs.test.js` и `tests\experience.test.js` ведут переписку через

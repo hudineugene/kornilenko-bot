@@ -161,6 +161,61 @@ test('объект публикуется в канал одним запрос�
   assert.equal(bot.propertyIdFromStartPayload('property_from-feed'), 'from-feed', 'прежние ссылки работают');
 });
 
+test('публикация объекта в канал: что бывает, когда что-то не так', async () => {
+  const data = bot.getData();
+  data.bot = { id: 1, username: 'kornilenko_bot', firstName: 'Bot' };
+  data.groups = [{ id: '-1001', title: 'Наш канал', type: 'channel', memberCount: 120, messages: [] }];
+  const publish = (id, body) => realFetch(base + '/api/objects/' + id + '/channel-post', { method: 'POST', headers, body: JSON.stringify(body) });
+  const posts = () => telegram.calls.filter((call) => ['sendPhoto', 'sendMessage'].includes(call.method) && String(call.body.chat_id) === '-1001');
+  const fed = objectById('from-feed');
+
+  // Нет такого объекта или канала — понятный отказ, в Telegram ничего не уходит.
+  telegram.calls = [];
+  assert.equal((await publish('no-such-object', { groupId: '-1001' })).status, 404);
+  assert.equal((await publish(fed.id, { groupId: '-9999' })).status, 404);
+  assert.equal(posts().length, 0);
+
+  // Без фотографии, но с текстом — уходит обычным сообщением.
+  const textOnly = { ...imported(), id: 'text-only', imagesByLanguage: { ru: [], en: [], es: [] } };
+  data.objects.push(textOnly);
+  telegram.calls = [];
+  assert.equal((await publish('text-only', { groupId: '-1001', language: 'ru' })).status, 200);
+  assert.deepEqual(posts().map((call) => call.method), ['sendMessage'], 'без фото — только текст');
+
+  // Отложенный пост ничего не отправляет сейчас и ждёт своего часа.
+  telegram.calls = [];
+  const before = (data.groupPosts || []).length;
+  const later = await publish(fed.id, { groupId: '-1001', language: 'ru', sendAt: new Date(Date.now() + 3600e3).toISOString() });
+  assert.equal(later.status, 200);
+  assert.equal(posts().length, 0, 'сейчас не отправляли');
+  assert.equal(data.groupPosts.length, before + 1);
+  assert.equal(data.groupPosts[before].status, 'scheduled');
+
+  // У бота нет прав в канале: Telegram отказывает — владелец видит причину, а не «успех».
+  const rejecting = global.fetch;
+  global.fetch = (url, init) => {
+    if (String(url).endsWith('/sendPhoto') || String(url).endsWith('/sendMessage')) {
+      return Promise.resolve(new Response(JSON.stringify({ ok: false, error_code: 403, description: 'Forbidden: bot is not a member of the channel chat' }), { status: 403, headers: { 'content-type': 'application/json' } }));
+    }
+    return rejecting(url, init);
+  };
+  const remembered = data.groups[0].messages.length;
+  try {
+    const denied = await publish(fed.id, { groupId: '-1001', language: 'ru' });
+    assert.equal(denied.status, 400);
+    assert.match((await denied.json()).error, /Не удалось опубликовать: .*not a member/);
+    assert.equal(data.groups[0].messages.length, remembered, 'неотправленное не записано как опубликованное');
+  } finally {
+    global.fetch = rejecting;
+  }
+
+  // Повторная публикация того же объекта — новый пост (каждое нажатие — осознанное), не «залипший» прежний.
+  telegram.calls = [];
+  assert.equal((await publish(fed.id, { groupId: '-1001', language: 'ru' })).status, 200);
+  assert.equal((await publish(fed.id, { groupId: '-1001', language: 'ru' })).status, 200);
+  assert.equal(posts().length, 2, 'два нажатия — два поста');
+});
+
 test('метка источника в ссылке на объект не выводит её за лимит Telegram в 64 знака', () => {
   bot.getData().bot = { ...(bot.getData().bot || {}), username: 'kornilenko_bot' };
   const start = (link) => link.split('?start=')[1];

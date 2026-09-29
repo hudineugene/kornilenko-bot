@@ -596,6 +596,20 @@ test.describe('каталог списком', () => {
     assert.equal(lines.length, 4, 'на второй странице остаток');
     assert.match(lines[0], /^9\. /, 'нумерация продолжается');
   });
+
+  test('«Списком» при пустом каталоге и после того, как объекты сняли, не ломается', async () => {
+    const chat = createChat();
+    await chat.say(MENU.ru.objects);
+    // Клиент открыл список, а объекты за это время скрыли: устаревшая кнопка отвечает, а не молчит.
+    bot.getData().objects.forEach((record) => { record.status = 'hidden'; });
+    const empty = await chat.press('clist:all:0');
+    assert.ok(empty.calls.some((call) => ['sendMessage', 'editMessageText', 'answerCallbackQuery'].includes(call.method)), 'бот ответил');
+    // И страница, которой уже нет (список стал короче), не роняет бот.
+    bot.getData().objects.forEach((record) => { record.status = 'active'; });
+    bot.getData().objects.splice(3);
+    const gone = await chat.press('clist:all:5');
+    assert.ok(gone.calls.some((call) => ['sendMessage', 'editMessageText', 'answerCallbackQuery'].includes(call.method)), 'бот ответил и на несуществующую страницу');
+  });
 });
 
 test.describe('мастер подбора', () => {

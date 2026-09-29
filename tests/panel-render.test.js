@@ -1326,6 +1326,25 @@ test('«Все события»: на карточке два действия �
   assert.match(String(handled.innerHTML), /data-notification-action="reopen"[^>]*>Вернуть</);
 });
 
+test('«Скрыть» и «Вернуть» на событии уходят на бота теми же запросами, что и кнопки', async () => {
+  twoWaitingConversations();
+  const { sandbox, requests } = await panelSandbox();
+  const item = sandbox.state.notifications.find((entry) => entry.active);
+  assert.ok(item, 'есть активное событие');
+  for (const action of ['handle', 'reopen']) {
+    requests.length = 0;
+    await sandbox.changeNotification(item, action);
+    const call = requests.find((request) => request.url === '/api/admin-notifications/' + encodeURIComponent(item.id) && request.method === 'PATCH');
+    assert.ok(call, action + ': запрос ушёл');
+    assert.deepEqual(call.body, { action });
+  }
+  // Кнопка в разметке связана с тем же действием и тем же событием.
+  sandbox.notificationFilter = 'active';
+  const host = fakeElement('main');
+  await sandbox.VIEWS.notifications.render(host, '');
+  assert.ok(String(host.innerHTML).includes('data-notification-action="handle" data-notification-id="' + item.id + '"'));
+});
+
 test('технику убрали с рабочих экранов: токен и автозапуск — в «Обслуживании», не в «Команде»', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, requests } = await panelSandbox();
