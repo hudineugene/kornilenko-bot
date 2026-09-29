@@ -141,37 +141,6 @@ function openChannelComposer() {
   go("posts", "channel");
 }
 
-function renderCampaigns(host) {
-  var drafts = (state.broadcasts || []).filter(function (entry) { return entry.status === "draft" || entry.status === "scheduled"; });
-  var history = (state.broadcasts || []).filter(function (entry) { return entry.status !== "draft" && entry.status !== "scheduled"; });
-  pageAction("＋ Рассылка", function () { openCampaignEditor(null); });
-  host.innerHTML =
-    (drafts.length ? '<div class="card gap-bottom"><header><h3>Черновики и запланированные</h3></header><div class="table-wrap"><table><thead><tr><th>Текст</th><th>Когда</th><th>Аудитория</th><th></th></tr></thead><tbody>' +
-      drafts.map(function (entry) {
-        return '<tr data-id="' + esc(entry.id) + '"><td class="clickable" data-edit="1">' + esc(String(localized(entry.messages, "ru")).slice(0, 70)) + "</td>" +
-          "<td>" + (entry.status === "scheduled" ? dateTime(entry.scheduledAt) : "черновик") + "</td>" +
-          "<td>" + esc(campaignAudienceLabel(entry)) + "</td>" +
-          '<td class="right"><button class="btn ghost small" data-delete="1">✕</button></td></tr>';
-      }).join("") + "</tbody></table></div></div>" : "") +
-    '<div class="card"><header><h3>История рассылок</h3><div class="actions"><span class="small faint">получатели · отклики · отписки</span></div></header><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Текст</th><th>Аудитория</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
-    (history.length ? history.map(function (entry) {
-      return "<tr><td class=\"nowrap\">" + dateShort(entry.startedAt) + "</td><td>" + esc(String(localized(entry.messages, "ru")).slice(0, 60)) + "</td><td class=\"small\">" + esc(campaignAudienceLabel(entry)) + "</td>" +
-        '<td class="right">' + num(entry.sent) + '</td><td class="right">' + num(entry.responses) + '</td><td class="right">' + num(entry.unsubscribes) + "</td>" +
-        "<td>" + campaignStatusChip(entry) + "</td></tr>";
-    }).join("") : '<tr><td colspan="7"><div class="empty"><b>Рассылок ещё не было</b>Сообщение получат клиенты, которые не отписались</div></td></tr>') +
-    "</tbody></table></div></div>";
-  host.querySelectorAll("tr[data-id]").forEach(function (row) {
-    var id = row.dataset.id;
-    var edit = row.querySelector("[data-edit]");
-    if (edit) edit.onclick = function () { openCampaignEditor(id); };
-    var remove = row.querySelector("[data-delete]");
-    if (remove) remove.onclick = async function () {
-      if (!(await confirmDialog("Удалить рассылку?", "Черновик будет удалён.", "Удалить", true))) return;
-      try { await api("/api/broadcasts/" + encodeURIComponent(id), { method: "DELETE" }); await reload(); } catch (error) { fail(error); }
-    };
-  });
-}
-
 function openCampaignEditor(id) {
   var entry = id ? (state.broadcasts || []).find(function (item) { return item.id === id; }) : null;
   var tags = [];

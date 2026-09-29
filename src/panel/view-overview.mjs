@@ -50,16 +50,6 @@ function kpiCard(label, value, note, noteKind) {
     (note ? '<span class="delta ' + (noteKind || "") + '">' + note + "</span>" : "") + "</div>";
 }
 
-// Что требует внимания — один список на всю панель: его собирает бот
-// (admin-notifications.mjs), тот же список показывают колокольчик и Центр
-// уведомлений. Раньше Обзор считал своё в браузере, и на одном экране
-// оказывались разные числа и разные поводы.
-function attentionItems() {
-  return (state.notifications || [])
-    .filter(function (item) { return item.active && !item.handledAt; })
-    .slice(0, 8);
-}
-
 // «2026-09-29» → «29.09»: подписи под графиком.
 function chartDay(key) {
   var parts = String(key).split("-");

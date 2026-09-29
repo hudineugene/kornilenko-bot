@@ -1,10 +1,9 @@
 // Обращения, просмотры и клиенты: списки слева, карточка справа.
 
 const INQUIRIES_JS = String.raw`
-var inquiryFilter = { status: "waiting", search: "" };
+var inquiryFilter = { status: "waiting" };
 // Ответ бота на поиск по переписке: сами сообщения в панель не уезжают, поэтому
 // по ним ищет бот. Здесь — на какой запрос и какие беседы он нашёл.
-var conversationSearch = { query: "", ids: {} };
 var selectedInquiry = "";
 // Беседу выбрала панель сама (при обновлении по таймеру), а не человек: как
 // только на экран посмотрит человек, беседа считается прочитанной.
@@ -78,11 +77,6 @@ function selectionMatchingCounts(item) {
   selectionMatchingResults(item).forEach(function (result) { if (counts[result.tier] != null) counts[result.tier] += 1; });
   return counts;
 }
-function selectionMatchingSummary(item) {
-  if (!item || item.type !== "selection" || !item.matching) return "";
-  var counts = selectionMatchingCounts(item);
-  return "🤖 точно " + counts.exact + " · близко " + counts.close + " · рассмотреть " + counts.consider;
-}
 function selectionMatchingPanel(item) {
   if (!item || item.type !== "selection" || !item.matching) return "";
   var results = selectionMatchingResults(item);
@@ -124,11 +118,6 @@ function viewingCardHtml(item, property) {
     "</div>";
 }
 
-// Телефон: список и переписка — разные экраны, а не два блока друг под другом.
-function narrowScreen() {
-  return typeof window !== "undefined" && Number(window.innerWidth) > 0 && window.innerWidth <= 860;
-}
-
 function statusChip(item) {
   var state = inquiryState(item);
   return '<span class="chip ' + state.chip + '">' + state.text + "</span>";
@@ -164,21 +153,6 @@ function conversationMatches(group) {
   if (inquiryFilter.status === "waiting" && !group.waiting) return false;
   if (inquiryFilter.status === "answered" && !group.answered) return false;
   if (inquiryFilter.status === "closed" && !group.closed) return false;
-  if (inquiryFilter.search) {
-    var user = group.user;
-    var parts = [userName(user), user.username, user.phone, user.id];
-    var foundInMessages = false;
-    group.inquiries.forEach(function (item) {
-      // Вид заявки (просмотр, звонок…) ищется словом, отдельного фильтра для него нет.
-      parts.push(item.text, item.note, item.assignee, inquiryTypeName(item));
-      if (item.lastMessage) parts.push(item.lastMessage.text, item.lastMessage.fileName);
-      (item.replies || []).forEach(function (reply) { parts.push(reply.text); });
-      // По всей переписке ищет бот: у панели её нет.
-      if (conversationSearch.query === inquiryFilter.search && conversationSearch.ids[item.id]) foundInMessages = true;
-    });
-    if (foundInMessages) return true;
-    if (parts.filter(Boolean).join(" ").toLowerCase().indexOf(inquiryFilter.search.toLowerCase()) < 0) return false;
-  }
   return true;
 }
 
@@ -516,31 +490,6 @@ function renderInquiryList(host) {
     row.onclick = function () { selectConversation(row.dataset.id); renderInquiryList(host); };
   });
   renderInquiryCard(host.querySelector("#inquiryCard"));
-}
-
-// Поиск по переписке спрашиваем у бота и перерисовываем список, когда пришёл
-// ответ. Пока ответа нет, список показывает то, что нашлось по именам,
-// телефонам, темам заявок и последним сообщениям.
-function searchConversations(host, query) {
-  if (!query || query.length < 2) {
-    conversationSearch = { query: "", ids: {} };
-    return;
-  }
-  api("/api/conversations/search?q=" + encodeURIComponent(query)).then(function (answer) {
-    if (inquiryFilter.search !== query) return;
-    var ids = {};
-    (answer.inquiryIds || []).forEach(function (id) { ids[id] = true; });
-    conversationSearch = { query: query, ids: ids };
-    if (!answer.inquiryIds || !answer.inquiryIds.length) return;
-    renderInquiryList(host);
-    var next = host.querySelector("#inqSearch");
-    if (next) {
-      next.focus();
-      next.setSelectionRange(next.value.length, next.value.length);
-    }
-  }).catch(function () {
-    // Не ответил — ищем по тому, что есть в панели.
-  });
 }
 
 // Уборка списка: закрытые, отвеченные или всё подряд, с отсечкой по возрасту.
