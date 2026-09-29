@@ -267,7 +267,7 @@ test('центр переписки объединяет диалоги и по�
   assert.match(PANEL_HTML, /\["inbox", "Диалоги"\]/);
   assert.match(PANEL_HTML, /Непрочитанные/);
   assert.match(PANEL_HTML, /class="messenger-shell/);
-  assert.match(PANEL_HTML, /Один клиент — одна переписка/);
+  assert.match(PANEL_HTML, /Один клиент — один диалог/);
   assert.match(PANEL_HTML, /class="conversation-thread"/);
   assert.match(PANEL_HTML, /conversation-media/);
   assert.match(PANEL_HTML, /message\.reactions/);
@@ -757,4 +757,23 @@ test('в страницу не уходят комментарии кода; с�
   // Бюджет: страница в браузер уходит не больше 560 КБ сырой (было 612 КБ с комментариями).
   const kilobytes = Buffer.byteLength(PANEL_HTML) / 1024;
   assert.ok(kilobytes <= 560, 'размер страницы ' + kilobytes.toFixed(0) + ' КБ');
+});
+
+test('словарь: одно слово — одна вещь (просрочено / показ / этап / диалог / «Вы:» у бота)', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const banned = [
+    [/Просрочено ·|>Просрочено<|"Просрочено"|Просроченные/, '«просрочено»: у шага — «Шаг просрочен», у ожидания — «дольше срока», у встречи — «Дата прошла»'],
+    [/из них просрочено/, 'ожидание ответа — «из них дольше срока»'],
+    [/Показы объектов/, 'встречи — «Просмотры», в каталоге — «видели в каталоге»'],
+    [/counted\(stats\.impressions, "показ"/, 'показы карточки — «в каталоге», не «показы»'],
+    [/Этап сделки <span|Этап работы|Последний этап/, 'поле pipelineStage везде называется «Этап»'],
+    [/Активные клиенты/, '«В работе»: «активных» у базы — «им можно писать»'],
+    [/Один клиент — одна переписка|общую переписку|Загружаем переписку|другим задачам/, '«диалог» — сущность, «переписка» — только история; «дело / шаг», не «задача»'],
+    [/онлайн-показ/, 'встреча — «просмотр»'],
+  ];
+  for (const [pattern, why] of banned) assert.ok(!pattern.test(PANEL_HTML), 'в панели осталось: ' + pattern + ' — ' + why);
+  // «Вы:» ставится только менеджеру: автоответ бота подписан «Бот:».
+  const previews = PANEL_HTML.match(/preview = \([^;]*"Вы: "[^;]*;/g) || [];
+  assert.equal(previews.length, 1);
+  assert.match(previews[0], /fromBot \? "Бот: " : "Вы: "/);
 });

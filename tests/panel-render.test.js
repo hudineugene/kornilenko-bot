@@ -3337,7 +3337,7 @@ test('сбой загрузки переписки виден как сбой, �
   await new Promise((resolve) => setTimeout(resolve, 30));
   const card = host.querySelector('#inquiryCard');
   const html = String(card.innerHTML);
-  assert.match(html, /Не удалось загрузить переписку/, 'сказано, что это сбой');
+  assert.match(html, /Не удалось загрузить сообщения/, 'сказано, что это сбой');
   assert.match(html, /Диск занят/, 'и почему');
   assert.match(html, /id="retryConversation"/, 'есть кнопка «Повторить»');
   assert.doesNotMatch(html, /Сообщений пока нет/, 'сбой больше не выглядит пустой беседой');
