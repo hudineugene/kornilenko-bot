@@ -1,7 +1,12 @@
 // Client-side property comparison: a small, mobile-friendly shortlist with
 // the same criteria and order for every selected property.
 
-import { cleanText } from './util.mjs';
+import { cleanText, formatMoney } from './util.mjs';
+import { calculatorAvailable, purchaseEstimate } from './calculator.mjs';
+import { createInquiry } from './inquiries.mjs';
+import { withOffHoursNote } from './hours.mjs';
+import { sendMessage } from './telegram.mjs';
+import { menuKeyboard } from './menus.mjs';
 import { scheduleSave } from './store.mjs';
 import { normalizeUser } from './users.mjs';
 import { telegramRequest } from './telegram.mjs';
@@ -89,6 +94,39 @@ function recordValues(record, language) {
   };
 }
 
+// Числа для «лучшего значения»: сравнивать можно только сопоставимое. Цены — если
+// у всех объектов одна сделка (продажа/аренда) и одна валюта; иначе деньги рядом
+// не ставим. Пусто (0) — значение неизвестно.
+function comparableNumbers(records) {
+  const currencies = new Set(records.map((record) => cleanText(record.currency || 'EUR', 10).toUpperCase()));
+  const deals = new Set(records.map((record) => record.dealType === 'rent' ? 'rent' : 'sale'));
+  const sameMoney = currencies.size === 1 && deals.size === 1;
+  const positive = (value) => (Number(value) > 0 ? Number(value) : 0);
+  const costsAvailable = sameMoney && records.every((record) => calculatorAvailable(record));
+  return {
+    sameMoney,
+    currency: [...currencies][0],
+    price: records.map((record) => (sameMoney ? positive(record.priceValue) : 0)),
+    pricePerM2: records.map((record) => (sameMoney && positive(record.priceValue) && positive(record.area) ? positive(record.priceValue) / positive(record.area) : 0)),
+    area: records.map((record) => positive(record.area)),
+    distanceSea: records.map((record) => positive(record.distanceSea)),
+    purchaseCosts: records.map((record) => (costsAvailable ? purchaseEstimate(record).costsTotal : 0)),
+  };
+}
+
+// Индекс лучшего значения: меньше — лучше (цена, расходы, расстояние), больше —
+// лучше (площадь). Галочка нужна, только когда есть из чего выбирать: известно
+// хотя бы два значения и они не равны.
+const BEST_LOWEST = { price: true, pricePerM2: true, area: false, distanceSea: true, purchaseCosts: true };
+
+function bestIndex(key, numbers) {
+  const values = numbers[key];
+  const known = values.filter((value) => value > 0);
+  if (known.length < 2 || known.every((value) => value === known[0])) return -1;
+  const target = BEST_LOWEST[key] ? Math.min(...known) : Math.max(...known);
+  return values.indexOf(target);
+}
+
 function comparisonText(user) {
   const language = user.preferredLanguage || 'ru';
   const copy = COMPARISON_TEXT[language] || COMPARISON_TEXT.ru;
@@ -104,8 +142,18 @@ function comparisonText(user) {
   ];
   if (records.length === 1) lines.push('', copy.needMore);
   const values = records.map((record) => recordValues(record, language));
+  const numbers = comparableNumbers(records);
+  const symbol = numbers.currency === 'EUR' ? '€' : numbers.currency;
+  const unit = language === 'ru' ? 'м²' : 'm²';
+  values.forEach((value, index) => {
+    if (numbers.pricePerM2[index]) value.pricePerM2 = formatMoney(Math.round(numbers.pricePerM2[index]), symbol, language, 0) + '/' + unit;
+    if (numbers.purchaseCosts[index]) value.purchaseCosts = '≈ ' + formatMoney(Math.round(numbers.purchaseCosts[index]), symbol, language, 0);
+  });
+  let anyBest = false;
   const criteria = [
     ['price', copy.price],
+    ['pricePerM2', copy.pricePerM2],
+    ['purchaseCosts', copy.purchaseCosts],
     ['location', copy.location],
     ['type', copy.type],
     ['area', copy.area],
@@ -121,8 +169,11 @@ function comparisonText(user) {
   for (const [key, label] of criteria) {
     if (!values.some((value) => value[key])) continue;
     lines.push('', label);
-    values.forEach((value, index) => lines.push(INDEX_MARKS[index] + ' ' + (value[key] || copy.notSpecified)));
+    const best = BEST_LOWEST[key] === undefined ? -1 : bestIndex(key, numbers);
+    if (best >= 0) anyBest = true;
+    values.forEach((value, index) => lines.push(INDEX_MARKS[index] + ' ' + (index === best ? '✅ ' : '') + (value[key] || copy.notSpecified)));
   }
+  if (anyBest) lines.push('', copy.bestValue);
   return lines.join('\n').slice(0, 4000);
 }
 
@@ -137,6 +188,7 @@ function comparisonMarkup(user) {
     rows.push([{ text: INDEX_MARKS[index] + ' ' + copy.open + ': ' + title, callback_data: 'catalog:comparison:' + index }]);
     rows.push([{ text: '✕ ' + copy.remove + ': ' + title, callback_data: 'compare:remove:' + record.id }]);
   });
+  if (records.length) rows.push([{ text: copy.discuss, callback_data: 'compare:discuss' }]);
   if (records.length) {
     const whatsapp = whatsappRow(compareMessage(records.map((record) => localizedExact(record.title, language, 80) || record.reference || record.id), language));
     if (whatsapp) rows.push(whatsapp);
@@ -177,6 +229,18 @@ async function handleComparisonCallback(query, token, notifyAction = null) {
       void notifyAction(user, 'Открыл сравнение объектов', template(copy.selectedCount, { count: catalogRecords(user, 'comparison').length, max: COMPARISON_LIMIT }));
     }
     await sendComparison(chatId, user, token);
+    return;
+  }
+  if (action === 'discuss') {
+    const records = catalogRecords(user, 'comparison');
+    if (!records.length) {
+      await acknowledge(query, token, (INTERACTION_TEXT[language] || INTERACTION_TEXT.ru).stale);
+      return;
+    }
+    await acknowledge(query, token);
+    const titles = records.map((record) => '• ' + (localizedExact(record.title, language, 160) || record.reference || record.id));
+    createInquiry(user, [copy.discussRequest, ...titles].join('\n'), { type: 'question', propertyId: records[0].id });
+    await sendMessage(chatId, withOffHoursNote(copy.discussSent, language), token, { reply_markup: menuKeyboard(language) });
     return;
   }
   if (action === 'remove') {

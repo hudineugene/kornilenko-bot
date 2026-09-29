@@ -68,8 +68,8 @@ test('properties are added from the card and compared by consistent criteria', a
   assert.match(step.last.text, /^⚖️ Сравнение объектов\nВыбрано: 2 из 3/);
   assert.ok(step.last.text.includes('1️⃣ Вилла у моря'));
   assert.ok(step.last.text.includes('2️⃣ Квартира в центре'));
-  assert.match(step.last.text, /💰 Цена\n1️⃣ 650\s000 €\n2️⃣ 320\s000 €/);
-  assert.match(step.last.text, /📐 Площадь\n1️⃣ 180 м²\n2️⃣ 92 м²/);
+  assert.match(step.last.text, /💰 Цена\n1️⃣ 650\s000 €\n2️⃣ ✅ 320\s000 €/, 'лучшая (меньшая) цена помечена ✅');
+  assert.match(step.last.text, /📐 Площадь\n1️⃣ ✅ 180 м²\n2️⃣ 92 м²/);
   assert.match(step.last.text, /🔑 Состояние\n1️⃣ После ремонта\n2️⃣ Новое/);
 
   const opened = await chat.press('catalog:comparison:1');
