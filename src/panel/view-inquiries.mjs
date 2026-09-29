@@ -503,6 +503,9 @@ function renderInquiryList(host) {
     '<div class="messenger-shell' + (selectedInquiry ? " chat-open" : "") + '"><aside class="card conversation-list-panel"><header><div><h3>Диалоги</h3><span class="small muted">Один клиент — одна переписка</span></div><span class="chip">' + rows.length + " из " + counts.all + '</span></header><div class="conversation-list">' +
       (conversationItems || '<div class="empty"><b>Диалогов не найдено</b>Измените фильтр или поисковый запрос</div>') +
     '</div></aside><section class="messenger-chat" id="inquiryCard"></section></div>';
+  // На телефоне открытый диалог занимает весь экран: заголовок, вкладки и
+  // фильтры (около 700 px) скрываются, остаётся «← Диалоги» и сама переписка.
+  if (document.body && document.body.classList) document.body.classList.toggle("phone-chat", Boolean(selectedInquiry));
 
   host.querySelectorAll("#inqStatus button").forEach(function (button) {
     button.onclick = function () { inquiryFilter.status = button.dataset.status; renderInquiryList(host); };
@@ -755,7 +758,9 @@ function renderInquiryCard(host) {
       // Справа — всё, что менеджер меняет по этому клиенту. Одна панель, одна
       // кнопка сохранения: раньше статус сохранялся сам по нажатию, а этап,
       // заметка и теги — отдельно, и половина правок терялась.
-      '<aside class="conversation-side"><div class="conversation-side-inner stack">' +
+      // На телефоне панель сворачивается под полем ответа: статус, этап, заметка
+      // и «Сохранить» лежат прямо под ним, а не в конце длинной страницы.
+      '<aside class="conversation-side"><details class="conversation-side-details" open><summary>Статус, этап и заметки</summary><div class="conversation-side-inner stack">' +
         selectionMatchingPanel(item) +
         (viewing ? '<div class="msg">📅 ' + esc((viewing.confirmedDate || viewing.dateText || "дата не выбрана") + " · " + (viewing.confirmedTime || viewing.timeText || "")) + (viewing.online ? "<br>📹 онлайн-показ по видеосвязи" : "") + (viewing.confirmedAt ? '<br><span class="small ok-text">просмотр подтверждён</span>' : '<br><span class="small warn-text">нужно подтвердить просмотр</span>') + "</div>" : "") +
         (viewing && !viewing.cancelledAt ? '<button class="btn secondary small" id="scheduleViewing" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + '</button>' : "") +
@@ -773,7 +778,7 @@ function renderInquiryCard(host) {
         '<div class="field"><label for="clientTagsInq">Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div>' +
         '<div class="field"><label for="clientNoteInq">Общая заметка о клиенте</label><textarea id="clientNoteInq" placeholder="Предпочтения, договорённости и важные детали">' + esc(user.note || "") + "</textarea></div>" +
         '<div class="conversation-save"><button class="btn" id="saveInq" type="button">Сохранить</button><button class="btn ghost small" id="openClientCard" type="button">Карточка клиента 360°</button><button class="btn ghost small" id="inquiryExtras" type="button">⋯ Ещё</button></div>' +
-      '</div></aside>' +
+      '</div></details></aside>' +
     "</div></div>";
 
   // Переписку открываем на последнем сообщении: читают всегда конец разговора,
@@ -784,9 +789,14 @@ function renderInquiryCard(host) {
   // На узком экране список и беседа идут друг под другом: выбрал беседу —
   // покажи её, иначе менеджер остаётся смотреть на список и не понимает, что
   // что-то открылось.
-  if (openedByHuman && window.innerWidth <= 860 && window.scrollTo) {
-    // Переписка занимает весь экран — показываем её с начала.
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  if (window.innerWidth <= 860) {
+    // Панель заявки на телефоне закрыта, пока не понадобится.
+    var sideDetails = host.querySelector(".conversation-side-details");
+    if (sideDetails) sideDetails.open = false;
+    // Открыли диалог — сразу конец переписки и поле ответа: последнее сообщение
+    // над полем, без прокрутки через шапку и панель заявки.
+    var replyBox = host.querySelector(".reply-box");
+    if (openedByHuman && replyBox && replyBox.scrollIntoView) replyBox.scrollIntoView({ block: "end" });
   }
 
   var backToList = host.querySelector("#backToList");

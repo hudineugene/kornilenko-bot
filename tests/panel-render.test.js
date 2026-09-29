@@ -899,6 +899,9 @@ test('на телефоне список и переписка — разные 
   const host = fakeElement('main');
   const scrolled = [];
   sandbox.scrollTo = function (options) { scrolled.push(options || {}); };
+  // Открытый диалог прокручивается к полю ответа, чтобы конец переписки и поле были на экране.
+  host.querySelector('#inquiryCard').querySelector('.reply-box').scrollIntoView = function (options) { scrolled.push(options || {}); };
+  const classes = sandbox.document.body.classList;
 
   // Пока никого не выбрали — виден список.
   await sandbox.VIEWS.clients.render(host, '');
@@ -908,8 +911,12 @@ test('на телефоне список и переписка — разные 
   sandbox.selectConversation('inq-olga');
   await sandbox.VIEWS.clients.render(host, '');
   assert.match(String(host.innerHTML), /messenger-shell chat-open/, 'переписка вместо списка');
-  assert.equal(scrolled.length, 1, 'экран показан с начала');
+  assert.equal(scrolled.length, 1, 'диалог открыт на поле ответа');
+  assert.equal(scrolled[0].block, 'end');
+  assert.ok(classes.contains('phone-chat'), 'обвязка (заголовок, вкладки, фильтры) на телефоне скрыта');
   const card = host.querySelector('#inquiryCard');
+  assert.equal(card.querySelector('.conversation-side-details').open, false, 'панель заявки свёрнута под полем ответа');
+  assert.match(String(card.innerHTML), /<summary>Статус, этап и заметки<\/summary>/);
   assert.ok(card.querySelector('#backToList'), 'есть возврат к списку');
 
   // Обновление по таймеру экран не дёргает.
@@ -919,6 +926,7 @@ test('на телефоне список и переписка — разные 
   // Возврат к списку.
   await card.querySelector('#backToList').onclick();
   assert.equal(sandbox.selectedInquiryId ? sandbox.selectedInquiryId() : '', '');
+  assert.ok(!classes.contains('phone-chat'), 'со списком обвязка возвращается');
   sandbox.innerWidth = 1280;
 });
 

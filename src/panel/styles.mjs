@@ -633,7 +633,10 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .viewing-history-date{padding-bottom:0}
   .viewing-history-row .viewing-event{display:flex;align-items:stretch}
 }
-@media(min-width:861px){.menu-toggle{display:none}}
+@media(min-width:861px){.menu-toggle{display:none}.conversation-side-details>summary{display:none}}
+.conversation-side-details>summary{list-style:none;cursor:pointer;padding:12px 14px;font-weight:600;background:var(--surface-soft);border:1px solid var(--line);border-radius:var(--radius)}
+.conversation-side-details>summary::-webkit-details-marker{display:none}
+.conversation-side-details[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom:0}
 /* Нижняя панель разделов — только на телефоне. */
 .tabbar,.more-sheet{display:none}
 @media(max-width:860px){
@@ -654,6 +657,17 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .page{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
   .savebar,.refresh-hint{bottom:calc(66px + env(safe-area-inset-bottom))}
   .toast{bottom:calc(72px + env(safe-area-inset-bottom));right:14px;left:14px;max-width:none}
+  /* Шапка страницы уезжает вместе с прокруткой: липкая, она съедала пятую часть экрана. */
+  .topbar{position:static}
+  /* Открытый диалог — целый экран: заголовок, вкладки раздела и фильтры скрыты. */
+  .phone-chat .topbar,.phone-chat .page>.toolbar,.phone-chat .messenger-toolbar{display:none}
+  .phone-chat .page{padding-top:8px}
+  .conversation-thread{max-height:42vh}
+  /* Прокрутка «к полю ответа» не должна прятать кнопку «Отправить» под нижней панелью. */
+  .reply-box{scroll-margin-bottom:calc(72px + env(safe-area-inset-bottom))}
+  .conversation-side{margin-top:8px}
+  .conversation-side-details:not([open])>summary::after{content:" ⌄"}
+  .conversation-side-details[open]>summary::after{content:" ⌃"}
   /* Кнопки под палец: не ниже 44 px. Мелкие кнопки редактора текста не трогаем. */
   .btn,.btn.small{min-height:44px}
   .markup-bar .btn,.toast-action,.reply-delivery .btn.small{min-height:0}

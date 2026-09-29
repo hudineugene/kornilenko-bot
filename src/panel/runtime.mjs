@@ -729,6 +729,8 @@ async function handleHashChange() {
 function renderView(options) {
   if (!state) return;
   pageTouched = false;
+  // Экран диалога на телефоне прячет обвязку; с любого другого экрана метка снимается.
+  if (document.body && document.body.classList) document.body.classList.remove("phone-chat");
   renderingAuto = Boolean(options && options.auto);
   var item = navItems().find(function (entry) { return entry.id === currentView; });
   var view = VIEWS[currentView];

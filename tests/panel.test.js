@@ -317,6 +317,17 @@ test('на телефоне разделы — в нижней панели, а 
   assert.match(phone, /\.savebar,\.refresh-hint\{bottom:calc\(66px/);
 });
 
+test('экран диалога на телефоне: без обвязки, шапка не липнет, панель заявки свёрнута под полем ответа', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const style = PANEL_HTML.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
+  const phone = style.slice(style.indexOf('/* Нижняя панель разделов'));
+  assert.match(phone, /\.topbar\{position:static\}/, 'шапка страницы на телефоне не липкая: она занимала пятую часть экрана');
+  assert.match(phone, /\.phone-chat \.topbar,\.phone-chat \.page>\.toolbar,\.phone-chat \.messenger-toolbar\{display:none\}/, 'у открытого диалога нет заголовка, вкладок и фильтров');
+  assert.match(phone, /\.reply-box\{scroll-margin-bottom:/, 'кнопка «Отправить» не прячется под нижней панелью');
+  assert.match(PANEL_HTML, /<details class="conversation-side-details" open><summary>Статус, этап и заметки<\/summary>/, 'статус, этап и «Сохранить» — в раскрывающемся блоке под полем ответа');
+  assert.match(style, /@media\(min-width:861px\)\{\.menu-toggle\{display:none\}\.conversation-side-details>summary\{display:none\}\}/, 'на компьютере панель раскрыта и без заголовка');
+});
+
 test.describe('стили панели', () => {
   async function css() {
     const { PANEL_HTML } = await import('../src/panel/index.mjs');
