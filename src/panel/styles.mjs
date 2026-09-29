@@ -567,6 +567,7 @@ code{padding:0px 4px;border-radius:5px;background:var(--surface-soft);border:1px
 .today-numbers b{font-size:var(--fs-lg);color:var(--text)}
 .today-numbers b.bad{color:var(--bad)}
 .deeds{display:flex;flex-direction:column}
+.deed.done{opacity:.85}
 .deed{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-top:1px solid var(--line-soft)}
 .deed:first-child{border-top:0}
 .deed-icon{flex:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--surface-soft);color:var(--muted);font-size:var(--fs)}

@@ -151,7 +151,8 @@ function currentAdminNotifications() {
   } else if (!data.config.adminNotificationVerifiedAt) {
     items.push({ id: 'system:admin-chat', kind: 'system', severity: 'warn', title: 'Админ-чат не проверен', text: 'Уведомления о клиентах могут не приходить в Telegram.', createdAt: data.stats.startedAt || data.stats.lastUpdateAt || '', route: route('settings', 'connection') });
   }
-  if (data.config.active && (runtime.status === 'error' || runtime.consecutiveFailures > 0)) {
+  const connectionShown = data.config.active && (runtime.status === 'error' || runtime.consecutiveFailures > 0);
+  if (connectionShown) {
     items.push({
       id: 'system:connection:' + cleanText(runtime.lastError || 'telegram', 120),
       kind: 'system', severity: 'bad', title: 'Нет стабильной связи с Telegram',
@@ -160,7 +161,12 @@ function currentAdminNotifications() {
     });
   }
   const latestError = Array.isArray(data.errors) ? data.errors[0] : null;
-  if (latestError) {
+  // Пока висит «Нет стабильной связи с Telegram», та же ошибка из журнала второй
+  // строкой не нужна: это одно и то же событие, а не два.
+  const sameAsConnection = connectionShown && latestError && (
+    /^(Связь с Telegram|Подключение к Telegram)$/.test(String(latestError.area || ''))
+    || (runtime.lastError && cleanText(latestError.message, 300) === cleanText(runtime.lastError, 300)));
+  if (latestError && !sameAsConnection) {
     items.push({
       id: 'error:' + (latestError.id || latestError.createdAt), kind: 'error', severity: 'warn', title: 'Техническая ошибка: ' + cleanText(latestError.area, 100),
       text: cleanText(latestError.message, 300) + (data.errors.length > 1 ? ' · Ещё записей в журнале: ' + (data.errors.length - 1) : ''),

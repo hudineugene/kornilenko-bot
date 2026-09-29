@@ -131,6 +131,28 @@ function scopedDeeds(deeds) {
   return { shown: shown, hidden: deeds.length - shown.length, active: true };
 }
 
+// Лента одна: «Требуют внимания» — то, что ещё надо сделать; «Выполненное» —
+// скрытое руками и то, что уже устранилось само. Колокольчик считает первую вкладку.
+var feedFilter = "active";
+
+function doneList() {
+  return (state.notifications || [])
+    .filter(function (item) { return item.handledAt || !item.active; })
+    .sort(function (first, second) { return (Date.parse(second.handledAt || second.createdAt) || 0) - (Date.parse(first.handledAt || first.createdAt) || 0); })
+    .slice(0, 30);
+}
+
+function doneRowsHtml() {
+  var rows = doneList();
+  if (!rows.length) return '<div class="empty"><b>Пока пусто</b>Сюда попадает то, что вы скрыли, и то, что решилось само</div>';
+  return '<div class="deeds">' + rows.map(function (item) {
+    var resolved = !item.active;
+    return '<div class="deed done"><span class="deed-icon">' + deedIcon(item) + '</span>' +
+      '<span class="deed-body"><b>' + esc(item.title) + '</b> <span class="chip ' + (resolved ? "ok" : "") + '">' + (resolved ? "причина устранена" : "скрыто") + '</span><span>' + esc(item.text) + '</span></span>' +
+      '<span class="deed-actions">' + (!resolved ? '<button class="btn ghost small" data-notification-action="reopen" data-notification-id="' + esc(item.id) + '" type="button">Вернуть</button>' : "") + '</span></div>';
+  }).join("") + '</div>';
+}
+
 // Сначала то, что горит, потом по времени: свежее сверху.
 function deedList() {
   var rank = { bad: 0, warn: 1 };
@@ -278,13 +300,14 @@ VIEWS.today = {
       '<div class="split">' +
         '<div class="stack">' +
           '<div id="readiness"></div>' +
-          '<div class="card"><header><h3>Список дел</h3><div class="actions">' +
-            (deeds.length ? '<span class="chip ' + (deeds.some(function (item) { return item.severity === "bad"; }) ? "bad" : "warn") + '">' + num(deeds.length) + '</span>' : '') +
-            '<button class="btn ghost small" type="button" data-go="notifications">Все события</button></div></header>' +
-            (people.length > 1 ? '<div class="deeds-scope row wrap"><div class="tabs" id="deedScope"><button type="button" data-scope="all" class="' + (todayScope.mine ? "" : "active") + '">Все</button><button type="button" data-scope="mine" class="' + (todayScope.mine ? "active" : "") + '">Мои</button></div>' +
+          '<div class="card"><header><h3>Список дел</h3><div class="actions"><div class="tabs" id="feedTabs">' +
+            '<button type="button" class="' + (feedFilter === "active" ? "active" : "") + '" data-feed-filter="active">Требуют внимания <span>' + num(deeds.length) + '</span></button>' +
+            '<button type="button" class="' + (feedFilter === "done" ? "active" : "") + '" data-feed-filter="done">Выполненное</button></div></div></header>' +
+            (feedFilter === "done" ? doneRowsHtml() : "") +
+            (feedFilter !== "done" && people.length > 1 ? '<div class="deeds-scope row wrap"><div class="tabs" id="deedScope"><button type="button" data-scope="all" class="' + (todayScope.mine ? "" : "active") + '">Все</button><button type="button" data-scope="mine" class="' + (todayScope.mine ? "active" : "") + '">Мои</button></div>' +
               '<label class="small muted" for="deedMe">Я —</label><select id="deedMe" style="width:auto;min-width:0">' + people.map(function (name) { return '<option value="' + esc(name) + '"' + (name === todayScope.me ? " selected" : "") + ">" + esc(name) + "</option>"; }).join("") + "</select>" +
               (scoped.active && scoped.hidden ? '<span class="small faint">Ещё ' + num(scoped.hidden) + ' — чужие или не про клиентов: они в «Все»</span>' : "") + "</div>" : "") +
-            (deeds.length ? '<div class="deeds">' + deeds.map(function (item) {
+            (feedFilter === "done" ? "" : deeds.length ? '<div class="deeds">' + deeds.map(function (item) {
               return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '">' +
                 '<span class="deed-icon">' + deedIcon(item) + '</span>' +
                 '<span class="deed-body"><b>' + esc(item.title) + '</b>' + (people.length > 1 && deedAssignee(item) === "" ? ' <span class="chip warn">без менеджера</span>' : "") + '<span>' + esc(item.text) + '</span></span>' +
@@ -319,6 +342,15 @@ VIEWS.today = {
       node.onclick = function () { go(node.dataset.go, node.dataset.tab || ""); };
     });
     loadReadiness(host);
+    host.querySelectorAll("[data-feed-filter]").forEach(function (button) {
+      button.onclick = function () { feedFilter = button.dataset.feedFilter; VIEWS.today.render(host); };
+    });
+    host.querySelectorAll("[data-notification-action]").forEach(function (button) {
+      button.onclick = function () {
+        var item = (state.notifications || []).find(function (entry) { return entry.id === button.dataset.notificationId; });
+        if (item) changeNotification(item, button.dataset.notificationAction, button);
+      };
+    });
     host.querySelectorAll("#deedScope [data-scope]").forEach(function (button) {
       button.onclick = function () { todayScope.mine = button.dataset.scope === "mine"; rememberTodayScope(); VIEWS.today.render(host); };
     });

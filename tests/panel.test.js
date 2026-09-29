@@ -21,7 +21,7 @@ test('в разметке панели есть каркас и все разд�
     assert.ok(PANEL_HTML.includes('id="' + id + '"'), 'нет элемента ' + id);
   }
   const script = PANEL_HTML.slice(PANEL_HTML.indexOf('<script'));
-  for (const view of ['today', 'notifications', 'clients', 'viewings', 'objects', 'texts', 'posts', 'reports', 'settings']) {
+  for (const view of ['today', 'clients', 'viewings', 'objects', 'texts', 'posts', 'reports', 'settings']) {
     assert.ok(script.includes('VIEWS.' + view + ' ='), 'нет раздела ' + view);
   }
 });
@@ -379,7 +379,6 @@ test('слова панели совпадают со словами клиен�
   assert.match(PANEL_HTML, />Открыть диалог</);
   assert.match(PANEL_HTML, /\["more", "Моё"\]/, 'поле называется так же, как кнопка у клиента');
   assert.match(PANEL_HTML, /\["guide", "Как купить"\]/, 'новая кнопка меню правится там же');
-  assert.match(PANEL_HTML, /Записи на просмотр/, 'тип событий не путается с разделом «Просмотры»');
   assert.match(PANEL_HTML, /contactScreenLabel\("request", "📞 Заказать звонок"\)/, 'предпросмотр контактов показывает настоящие кнопки экрана связи');
 });
 
@@ -621,13 +620,11 @@ test('просмотры собраны в недельный календарь
 test('центр уведомлений связывает рабочие события с нужными разделами', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /id="notificationBell"/);
-  assert.match(PANEL_HTML, /VIEWS\.notifications/);
+  // Лента одна — «Список дел» на «Сегодня»; отдельной страницы уведомлений нет.
+  assert.ok(!/VIEWS\.notifications/.test(PANEL_HTML));
   assert.match(PANEL_HTML, /Требуют внимания/);
-  assert.match(PANEL_HTML, /Непрочитанные/);
-  assert.match(PANEL_HTML, /Обработанные/);
-  assert.match(PANEL_HTML, /data-notification-open/);
-  assert.match(PANEL_HTML, /\/api\/admin-notifications\/read-all/);
-  assert.match(PANEL_HTML, /action: "handle"|data-notification-action="handle"/);
+  assert.match(PANEL_HTML, /Выполненное/);
+  assert.match(PANEL_HTML, /data-notification-action="reopen"/);
 });
 
 test('отложенное время переводится через часовой пояс компании', async () => {

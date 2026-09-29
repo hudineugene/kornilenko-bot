@@ -622,7 +622,6 @@ function navIcon(id) {
 function navItems() {
   return [
     { id: "today", icon: navIcon("today"), title: "Сегодня", count: waitingClients(), late: overdueClients() },
-    { id: "notifications", icon: navIcon("notifications"), title: "Все события", hidden: true },
     { id: "clients", icon: navIcon("clients"), title: "Клиенты", tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
     { id: "viewings", icon: navIcon("viewings"), title: "Просмотры" },
     { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
@@ -636,6 +635,8 @@ function navItems() {
 // Переводим их в новые, чтобы ни одна закладка и ни одна кнопка не сломались.
 var LEGACY_ROUTES = {
   "overview": ["today", ""],
+  // Отдельной страницы уведомлений нет: лента одна — «Список дел» на «Сегодня».
+  "notifications": ["today", ""],
   "stats": ["settings", "reports"],
   "inquiries": { "": ["clients", "inbox"], "inbox": ["clients", "inbox"], "tasks": ["clients", "tasks"], "pipeline": ["clients", "pipeline"], "viewings": ["viewings", ""], "clients": ["clients", "base"] },
   "catalog": { "": ["objects", "list"], "objects": ["objects", "list"], "offers": ["objects", "offers"], "feed": ["settings", "service"] },
@@ -1009,7 +1010,7 @@ function renderNotificationBell() {
   var count = state ? deedList().length : 0;
   badge.textContent = count > 99 ? "99+" : String(count);
   badge.classList.toggle("hidden", count === 0);
-  button.classList.toggle("active", currentView === "today" || currentView === "notifications");
+  button.classList.toggle("active", currentView === "today");
   button.setAttribute("aria-label", count ? "Открыть список дел: " + count + " " + plural(count, "дело", "дела", "дел") : "Открыть список дел");
   button.title = count ? count + " " + plural(count, "дело", "дела", "дел") + " требуют внимания" : "Дел нет";
 }

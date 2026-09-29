@@ -1533,7 +1533,7 @@ test('нижняя панель: четыре главных раздела и �
   assert.match(bar, /data-tab-view="today"[^>]*aria-current="page"/, 'текущий раздел отмечен');
   assert.match(bar, /<b class="tab-count">2<\/b>/, 'на «Сегодня» число ждущих клиентов');
   const sheet = String(sandbox.document.getElementById('moreSheet').innerHTML);
-  for (const title of ['Публикации', 'Тексты бота', 'Настройки', 'Все события', 'Выйти']) assert.ok(sheet.includes(title), title + ' — в «Ещё»');
+  for (const title of ['Публикации', 'Тексты бота', 'Настройки', 'Выйти']) assert.ok(sheet.includes(title), title + ' — в «Ещё»');
   assert.ok(!sheet.includes('>Сегодня<'), 'главные разделы в «Ещё» не повторяются');
 
   // Раздел из «Ещё» подсвечивает саму кнопку «Ещё».
@@ -1549,7 +1549,6 @@ test('на пяти экранах цифры — одной строкой, а 
     ['clients', 'tasks', /К выполнению: <b/],
     ['clients', 'pipeline', /Активные клиенты: <b/],
     ['viewings', '', /Ждут подтверждения: <b/],
-    ['notifications', '', /Требуют внимания: <b/],
     ['settings', 'reports', /Всего клиентов: <b/],
   ];
   for (const [view, tab, expected] of screens) {
@@ -1569,30 +1568,45 @@ test('на пяти экранах цифры — одной строкой, а 
   }
 });
 
-test('«Все события»: на карточке два действия — «Открыть» и «Скрыть», без «Прочитано» и «Обработано»', async () => {
+test('одна лента: «Список дел» на «Сегодня» с фильтром «Выполненное»; отдельной страницы нет, колокольчик считает то же', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();
-  sandbox.notificationFilter = 'active';
+  assert.equal(sandbox.VIEWS.notifications, undefined, 'страницы «Все события» больше нет');
+  // Старые ссылки и закладки на #/notifications ведут на «Сегодня».
+  assert.equal(Array.from(sandbox.normalizeRoute('notifications', '')).join('/'), 'today/');
+
   const host = fakeElement('main');
-  await sandbox.VIEWS.notifications.render(host, '');
+  await sandbox.VIEWS.today.render(host);
   const html = String(host.innerHTML);
-  assert.match(html, /data-notification-open=/, 'есть «Открыть»');
-  assert.match(html, /data-notification-action="handle"[^>]*>Скрыть</, 'и «Скрыть»');
-  assert.ok(!/data-notification-action="(read|unread)"/.test(html), 'кнопок «Прочитано»/«Непрочитано» нет');
-  assert.ok(!/>Прочитано</.test(html) && !/>Обработано</.test(html), 'слов «Прочитано» и «Обработано» на кнопках нет');
-  // Скрытое возвращается.
-  sandbox.notificationFilter = 'handled';
-  const handled = fakeElement('main');
-  sandbox.state.notifications.forEach((item, index) => { if (index === 0) item.handledAt = new Date().toISOString(); });
-  await sandbox.VIEWS.notifications.render(handled, '');
-  assert.match(String(handled.innerHTML), /data-notification-action="reopen"[^>]*>Вернуть</);
+  const count = sandbox.deedList().length;
+  assert.ok(count > 0, 'есть дела');
+  assert.match(html, /data-deed="/, 'есть «Открыть»');
+  assert.match(html, /data-deed-hide="[^"]*"[^>]*>Скрыть</, 'и «Скрыть»');
+  assert.match(html, new RegExp('data-feed-filter="active"[^>]*>Требуют внимания <span>' + count + '</span>'), 'один счётчик на вкладке');
+  assert.match(html, /data-feed-filter="done"/, '«Выполненное» — фильтр той же ленты');
+  assert.ok(!/Все события|Непрочитанные|Срочные/.test(html), 'второго набора счётчиков нет');
+  // Колокольчик показывает то же число.
+  sandbox.renderNotificationBell();
+  assert.equal(String(sandbox.document.getElementById('notificationCount').textContent), String(count), 'колокольчик = счётчик ленты');
+
+  // Скрытое уходит в «Выполненное» и возвращается.
+  const first = sandbox.deedList()[0];
+  first.handledAt = new Date().toISOString();
+  assert.equal(sandbox.deedList().length, count - 1, 'из активных ушло');
+  sandbox.feedFilter = 'done';
+  const done = fakeElement('main');
+  await sandbox.VIEWS.today.render(done);
+  const doneHtml = String(done.innerHTML);
+  assert.ok(doneHtml.includes('data-notification-action="reopen" data-notification-id="' + first.id + '"'), 'у скрытого — «Вернуть»');
+  assert.match(doneHtml, />Вернуть</);
+  assert.ok(!doneHtml.includes('data-deed="' + first.id + '"'), 'кнопки «Открыть» у выполненного нет');
 });
 
 test('значки навигации — один набор линейных SVG, а не глифы вперемешку с цветным эмодзи', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();
   const items = sandbox.navItems();
-  assert.equal(items.map((item) => item.id).join(','), 'today,notifications,clients,viewings,objects,posts,texts,settings');
+  assert.equal(items.map((item) => item.id).join(','), 'today,clients,viewings,objects,posts,texts,settings');
   for (const item of items) {
     assert.match(item.icon, /^<svg viewBox="0 0 24 24"[^>]*stroke="currentColor"/, item.id + ': значок — линейный SVG');
     const visibleText = item.icon.replace(/<[^>]*>/g, '');
@@ -1938,10 +1952,9 @@ test('«Скрыть» и «Вернуть» на событии уходят н
     assert.deepEqual(call.body, { action });
   }
   // Кнопка в разметке связана с тем же действием и тем же событием.
-  sandbox.notificationFilter = 'active';
   const host = fakeElement('main');
-  await sandbox.VIEWS.notifications.render(host, '');
-  assert.ok(String(host.innerHTML).includes('data-notification-action="handle" data-notification-id="' + item.id + '"'));
+  await sandbox.VIEWS.today.render(host);
+  assert.ok(String(host.innerHTML).includes('data-deed-hide="' + item.id + '"'));
 });
 
 test('технику убрали с рабочих экранов: токен и автозапуск — в «Обслуживании», не в «Команде»', async () => {

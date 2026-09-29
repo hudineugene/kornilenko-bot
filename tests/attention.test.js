@@ -70,6 +70,34 @@ test('каталог, которого клиент не видит, попад�
   assert.equal(attention().some((item) => item.kind === 'catalog'), false, 'когда всё видно, не напоминаем');
 });
 
+test('одна ошибка связи — одна строка в ленте: «нет связи» и «техническая ошибка» с тем же текстом не дублируются', async () => {
+  const { runtime } = await import('../src/store.mjs');
+  const saved = { status: runtime.status, failures: runtime.consecutiveFailures, error: runtime.lastError };
+  try {
+    const message = 'Telegram отклонил токен бота. Проверьте токен в настройках.';
+    runtime.status = 'error';
+    runtime.consecutiveFailures = 3;
+    runtime.lastError = message;
+    bot.getData().errors = [{ id: 'e1', area: 'Связь с Telegram', message, createdAt: minutesAgo(1) }];
+    const both = attention();
+    assert.equal(both.filter((item) => item.kind === 'system' && /связи с Telegram/.test(item.title)).length, 1, 'строка про связь есть');
+    assert.equal(both.filter((item) => item.kind === 'error').length, 0, 'та же ошибка второй строкой не повторяется');
+
+    // Другая, настоящая техническая ошибка остаётся.
+    bot.getData().errors = [{ id: 'e2', area: 'Копия данных в Telegram', message: 'Файл слишком большой', createdAt: minutesAgo(1) }];
+    assert.equal(attention().filter((item) => item.kind === 'error').length, 1);
+
+    // Связь вернулась — ошибка про Telegram остаётся в журнале и показывается как раньше.
+    runtime.status = 'online';
+    runtime.consecutiveFailures = 0;
+    runtime.lastError = '';
+    bot.getData().errors = [{ id: 'e3', area: 'Связь с Telegram', message, createdAt: minutesAgo(1) }];
+    assert.equal(attention().filter((item) => item.kind === 'error').length, 1);
+  } finally {
+    Object.assign(runtime, { status: saved.status, consecutiveFailures: saved.failures, lastError: saved.error });
+  }
+});
+
 test('пустой каталог тоже повод', () => {
   bot.getData().objects = [];
   const item = attention().find((entry) => entry.kind === 'catalog');
