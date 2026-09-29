@@ -757,7 +757,7 @@ function renderInquiryCard(host) {
       // заметка и теги — отдельно, и половина правок терялась.
       '<aside class="conversation-side"><div class="conversation-side-inner stack">' +
         selectionMatchingPanel(item) +
-        (viewing ? '<div class="msg">📅 ' + esc((viewing.confirmedDate || viewing.dateText || "дата не выбрана") + " · " + (viewing.confirmedTime || viewing.timeText || "")) + (viewing.confirmedAt ? '<br><span class="small ok-text">просмотр подтверждён</span>' : '<br><span class="small warn-text">нужно подтвердить просмотр</span>') + "</div>" : "") +
+        (viewing ? '<div class="msg">📅 ' + esc((viewing.confirmedDate || viewing.dateText || "дата не выбрана") + " · " + (viewing.confirmedTime || viewing.timeText || "")) + (viewing.online ? "<br>📹 онлайн-показ по видеосвязи" : "") + (viewing.confirmedAt ? '<br><span class="small ok-text">просмотр подтверждён</span>' : '<br><span class="small warn-text">нужно подтвердить просмотр</span>') + "</div>" : "") +
         (viewing && !viewing.cancelledAt ? '<button class="btn secondary small" id="scheduleViewing" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + '</button>' : "") +
         // Статус один: «Ждёт ответа», «Отвечено» или «Закрыт». Первые два бот
         // ставит сам по переписке — руками остаётся только закрыть заявку или
@@ -1010,12 +1010,17 @@ function viewingSort(a, b) {
   if (aKey !== bKey) return aKey.localeCompare(bKey);
   return viewingTimeLabel(a).localeCompare(viewingTimeLabel(b), "ru");
 }
+// Онлайн-показ по видеосвязи: менеджеру надо видеть это сразу, чтобы не
+// готовить адрес и ключи.
+function viewingOnlineTag(item) {
+  return item && item.viewing && item.viewing.online ? ' <span class="chip brand">📹 онлайн</span>' : "";
+}
 function viewingEventHtml(item, today, compact) {
   var user = userOf(item), property = viewingProperty(item), status = viewingStatus(item, today);
   return '<article class="viewing-event ' + status.event + '">' +
     '<div class="viewing-event-head"><b class="viewing-event-time">' + esc(viewingTimeLabel(item)) + '</b><span class="chip ' + status.chip + '">' + esc(status.text) + '</span></div>' +
     '<div class="viewing-event-client">' + esc(userName(user)) + '</div>' +
-    '<div class="viewing-event-property">⌂ ' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + '</div>' +
+    '<div class="viewing-event-property">⌂ ' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + viewingOnlineTag(item) + '</div>' +
     (!compact && user.phone ? '<div class="small muted">' + esc(user.phone) + '</div>' : "") +
     '<div class="viewing-event-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Заявка</button>' +
     (!item.viewing.cancelledAt && item.status !== "closed" ? '<button class="btn secondary small" data-viewing-schedule="' + esc(item.id) + '" type="button">' + (item.viewing.confirmedAt ? "Перенести" : "Подтвердить") + '</button>' : "") + '</div></article>';
@@ -1036,6 +1041,7 @@ function openViewingSchedule(item) {
     protectChanges: true,
     body: '<div class="stack"><div class="viewing-dialog-context"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><div><b>' + esc(userName(user)) + '</b><span>' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + '</span></div></div>' +
       (requested ? '<div class="msg">📝 Клиент просил: ' + esc(requested) + '</div>' : '') +
+      (viewing.online ? '<div class="msg">📹 Клиент выбрал онлайн-показ по видеосвязи: адрес ему не отправится, ссылку на видеосвязь пришлите в переписке.</div>' : '') +
       (currentDate ? '' : '<div class="msg attention">Дату из просьбы клиента бот не разобрал — выберите её сами. Клиент получит именно то, что здесь указано.</div>') +
       '<div class="grid cols-2"><div class="field"><label for="viewingScheduleDate">Дата</label><input id="viewingScheduleDate" type="date" min="' + esc(pipelineToday()) + '" value="' + esc(currentDate) + '"></div><div class="field"><label for="viewingScheduleTime">Время</label><input id="viewingScheduleTime" type="time" value="' + esc(currentTime) + '"><div class="quick-times">' + VIEWING_QUICK_TIMES.map(function (time) { return '<button class="btn ghost small" type="button" data-quick-time="' + time + '">' + time + '</button>'; }).join("") + '</div></div></div>' +
       '<div class="msg">После сохранения клиент получит ' + (moving ? "обновлённые" : "подтверждённые") + ' дату и время в Telegram.</div></div>',
@@ -1090,7 +1096,7 @@ function renderViewings(host) {
   if (viewingMode === "pending") {
     body = pending.length ? '<div class="viewing-pending-list">' + pending.map(function (item) {
       var key = viewingDateKey(item), requested = key ? viewingDayLabel(key).day + " · " + viewingTimeLabel(item) : (item.viewing.dateText || "Дата требует уточнения") + " · " + viewingTimeLabel(item);
-      return '<div class="card viewing-pending-card"><div><span class="chip ' + (key && key < today ? "bad" : "warn") + '">' + (key && key < today ? "Просрочено" : "Ждёт подтверждения") + '</span><h3>' + esc(userName(userOf(item))) + '</h3><p>' + esc(localized(viewingProperty(item) && viewingProperty(item).title, "ru") || "Объект не найден") + '</p><small>Запрошено: ' + esc(requested) + '</small></div><div class="viewing-pending-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Открыть заявку</button><button class="btn" data-viewing-schedule="' + esc(item.id) + '" type="button">Подтвердить и уведомить</button></div></div>';
+      return '<div class="card viewing-pending-card"><div><span class="chip ' + (key && key < today ? "bad" : "warn") + '">' + (key && key < today ? "Просрочено" : "Ждёт подтверждения") + '</span><h3>' + esc(userName(userOf(item))) + '</h3><p>' + esc(localized(viewingProperty(item) && viewingProperty(item).title, "ru") || "Объект не найден") + viewingOnlineTag(item) + '</p><small>Запрошено: ' + esc(requested) + '</small></div><div class="viewing-pending-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Открыть заявку</button><button class="btn" data-viewing-schedule="' + esc(item.id) + '" type="button">Подтвердить и уведомить</button></div></div>';
     }).join("") + '</div>' : '<div class="card"><div class="empty"><b>Все просмотры подтверждены</b>Новых записей, ожидающих ответа менеджера, нет</div></div>';
   } else if (viewingMode === "history") {
     body = viewingHistoryHtml(history, today);

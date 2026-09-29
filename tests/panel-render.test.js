@@ -783,6 +783,13 @@ test('«Просмотры» открываются на очереди подт
   assert.match(body, /Клиент просил: como indicado · después de comer/, 'просьба клиента видна как есть');
   for (const time of ['10:00', '12:00', '17:00']) assert.match(body, new RegExp('data-quick-time="' + time + '"'), 'кнопка ' + time);
   assert.match(body, /id="viewingScheduleDate"[^>]*value=""/, 'дата не подставлена «сегодняшним числом»');
+
+  // Онлайн-показ: менеджер видит формат и в очереди, и в окне подтверждения.
+  sandbox.state.inquiries[0].viewing.online = true;
+  sandbox.openViewingSchedule(sandbox.state.inquiries[0]);
+  assert.match(String(dialogOptions.body), /онлайн-показ по видеосвязи/, 'в окне подтверждения');
+  assert.match(sandbox.viewingOnlineTag(sandbox.state.inquiries[0]), /📹 онлайн/, 'и пометка в очереди');
+  assert.equal(sandbox.viewingOnlineTag({ viewing: {} }), '', 'у обычного показа пометки нет');
 });
 
 test('состояние заявки бот считает сам, руками остаётся только закрыть', async () => {

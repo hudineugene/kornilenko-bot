@@ -167,7 +167,11 @@ function viewingPlaceLines(property, language, copy) {
 function viewingDetailsText(inquiry, property, language, heading, footer) {
   const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
   const when = viewingWhen(inquiry, language);
-  const [titleLine, ...placeLines] = viewingPlaceLines(property, language, copy);
+  const [titleLine, ...addressLines] = viewingPlaceLines(property, language, copy);
+  // Онлайн-показ проходит по видеосвязи: адрес и «как добраться» клиенту не
+  // нужны, а вот формат надо назвать — иначе он поедет на объект.
+  const online = Boolean(inquiry.viewing && inquiry.viewing.online);
+  const placeLines = online ? [copy.online] : addressLines;
   return [
     heading,
     '',
@@ -192,7 +196,8 @@ async function sendViewingConfirmation(inquiry, user, token = data.config.botTok
   const language = user.preferredLanguage || inquiry.language || 'ru';
   const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
   const property = viewingProperty(inquiry);
-  const map = property ? validHttpUrl(property.mapUrl) : '';
+  // На онлайн-показ карта не нужна.
+  const map = property && !(inquiry.viewing && inquiry.viewing.online) ? validHttpUrl(property.mapUrl) : '';
   const text = viewingDetailsText(inquiry, property, language, options.heading || copy.confirmed, copy.confirmedFooter);
   // Сразу после записи клиенту важнее вернуть главное меню, чем показать две
   // кнопки: карта уходит ссылкой в текст, «Мои заявки» названы в подписи.
@@ -372,7 +377,7 @@ async function sendViewingReminder(inquiry, user, token) {
   const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
   const property = viewingProperty(inquiry);
   const rows = [];
-  const map = property ? validHttpUrl(property.mapUrl) : '';
+  const map = property && !(inquiry.viewing && inquiry.viewing.online) ? validHttpUrl(property.mapUrl) : '';
   if (map) rows.push([{ text: copy.openMap, url: map }]);
   rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).cancelViewing, callback_data: 'myreq:cancel:' + inquiry.id }]);
   await sendMessage(user.chatId, viewingDetailsText(inquiry, property, language, copy.reminder, copy.reminderFooter), token, { reply_markup: { inline_keyboard: rows } });

@@ -500,6 +500,30 @@ test.describe('reminder, feedback and the day\'s list', () => {
     assert.deepEqual((await bot.runViewingNotices(at(date, -1, 19))).reminders, [], 'once');
   });
 
+  test('онлайн-показ: подтверждение и напоминание говорят про видеосвязь, без адреса и карты', async () => {
+    const chat = createChat();
+    const inquiry = await confirmedViewing(chat);
+    inquiry.viewing.online = true;
+
+    telegram.calls = [];
+    await bot.confirmViewing(inquiry, { date: inquiry.viewing.confirmedDate, time: '11:00', source: 'panel' });
+    const [confirmation] = sentTo(chat);
+    assert.ok(confirmation.body.text.includes('📹 Онлайн-показ по видеосвязи'), 'подтверждение называет формат');
+    assert.ok(!confirmation.body.text.includes('📍'), 'адрес клиенту не нужен');
+    assert.ok(!confirmation.body.reply_markup.inline_keyboard.flat().some((button) => button.url), 'кнопки «как добраться» нет');
+
+    telegram.calls = [];
+    const date = inquiry.viewing.confirmedDate;
+    inquiry.viewing.remindedAt = '';
+    inquiry.viewing.confirmedAt = daysFromNow(-1).toISOString();
+    await bot.runViewingNotices(at(date, -1, 18, 15));
+    const [reminder] = sentTo(chat);
+    assert.match(reminder.body.text, /^⏰ Напоминаем: завтра просмотр/);
+    assert.ok(reminder.body.text.includes('📹 Онлайн-показ по видеосвязи'), 'и напоминание тоже');
+    assert.ok(!reminder.body.text.includes('📍'));
+    assert.ok(!reminder.body.reply_markup.inline_keyboard.flat().some((button) => button.url), 'карты нет и здесь');
+  });
+
   test('no reminder for a viewing confirmed that evening, cancelled or not confirmed', async () => {
     const late = await confirmedViewing(createChat());
     late.viewing.confirmedAt = at(late.viewing.confirmedDate, -1, 19).toISOString();
