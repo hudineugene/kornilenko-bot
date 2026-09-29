@@ -753,8 +753,8 @@ test('состояние заявки бот считает сам, руками
   assert.ok(!String(card.innerHTML).includes('id="keepOpen"'));
 
   const options = String(card.innerHTML).match(/<select id="inqStatusValue">.*?<\/select>/s)[0];
-  assert.match(options, /Открыта/);
-  assert.match(options, /Закрыта/);
+  assert.match(options, /Ждёт ответа/, 'в списке — само состояние, а не безликое «Открыта»');
+  assert.match(options, /Закрыт</);
   assert.ok(!/В работе<\/option>/.test(options), 'промежуточного статуса в списке нет');
 
   // Закрытие — обычное сохранение.
@@ -868,6 +868,34 @@ test('на телефоне список и переписка — разные 
   sandbox.innerWidth = 1280;
 });
 
+test('статус один: «Ждёт ответа / Отвечено / Закрыт», без «В работе» и без второго фильтра', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.clients.render(host, '');
+  const html = String(host.innerHTML).replace(/ /g, ' ');
+
+  assert.ok(!html.includes('id="inqType"'), 'отдельного фильтра по виду заявки нет');
+  assert.ok(!/data-status="progress"/.test(html), 'вкладки «В работе» нет');
+  assert.ok(!/>В работе/.test(html), 'слова «В работе» нет ни во вкладках, ни в строках');
+  for (const label of ['Ждут ответа', 'Отвеченные', 'Закрытые']) assert.match(html, new RegExp(label), label + ' — на месте');
+
+  // Вид заявки ищется обычным поиском.
+  sandbox.inquiryFilter.status = '';
+  sandbox.inquiryFilter.search = 'сообщение';
+  const found = sandbox.conversationGroups().filter(sandbox.conversationMatches);
+  assert.ok(found.length > 0, 'поиск понимает название вида заявки');
+
+  // В карточке — один статус, этап отдельно и по желанию.
+  sandbox.selectConversation('inq-olga');
+  const view = fakeElement('main');
+  await sandbox.VIEWS.clients.render(view, '');
+  const card = String(view.querySelector('#inquiryCard').innerHTML);
+  assert.match(card, /<label for="inqStatusValue">Статус<\/label>/);
+  assert.match(card, /Этап сделки <span class="small faint">\(по желанию\)/);
+  assert.ok(!card.includes('Этап воронки'), 'старая подпись убрана');
+});
+
 test('три слоя фильтров сворачиваются в одну строку', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();
@@ -972,7 +1000,9 @@ test('фильтр в «Переписке» не замораживает эк�
   const body = sandbox.document.getElementById('viewBody');
   // Так это и происходит: выбор в списке поднимает событие input на странице.
   sandbox.pageTouched = true;
-  body.querySelector('#inqType').onchange({ target: { value: 'lead' } });
+  const compactFilter = body.querySelector('#inqStatusCompact');
+  compactFilter.value = 'closed';
+  compactFilter.onchange();
   assert.equal(sandbox.pageTouched, false, 'после перерисовки экран снова свободен');
 
   // И теперь обновление действительно обновляет экран, а не только полоску.

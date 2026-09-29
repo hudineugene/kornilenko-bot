@@ -1,7 +1,7 @@
 // Обращения, просмотры и клиенты: списки слева, карточка справа.
 
 const INQUIRIES_JS = String.raw`
-var inquiryFilter = { status: "waiting", type: "", search: "" };
+var inquiryFilter = { status: "waiting", search: "" };
 // Ответ бота на поиск по переписке: сами сообщения в панель не уезжают, поэтому
 // по ним ищет бот. Здесь — на какой запрос и какие беседы он нашёл.
 var conversationSearch = { query: "", ids: {} };
@@ -148,7 +148,6 @@ function conversationGroups() {
     group.active = group.inquiries.find(function (item) { return item.id === selectedInquiry; }) || group.inquiries.find(function (item) { return item.status !== "closed"; }) || group.latest;
     group.unread = group.inquiries.filter(inquiryUnread).length;
     group.waiting = group.inquiries.some(awaitsReply);
-    group.inProgress = group.inquiries.some(function (item) { return item.status === "in_progress"; });
     group.answered = group.inquiries.some(function (item) { return item.status !== "closed" && !awaitsReply(item) && (item.replies || []).length; });
     group.closed = group.inquiries.every(function (item) { return item.status === "closed"; });
     // Диалог, где клиент только искал объекты сам: отвечать не на что.
@@ -159,16 +158,15 @@ function conversationGroups() {
 function conversationMatches(group) {
   if (inquiryFilter.status === "unread" && !group.unread) return false;
   if (inquiryFilter.status === "waiting" && !group.waiting) return false;
-  if (inquiryFilter.status === "progress" && !group.inProgress) return false;
   if (inquiryFilter.status === "answered" && !group.answered) return false;
   if (inquiryFilter.status === "closed" && !group.closed) return false;
-  if (inquiryFilter.type && !group.inquiries.some(function (item) { return item.type === inquiryFilter.type; })) return false;
   if (inquiryFilter.search) {
     var user = group.user;
     var parts = [userName(user), user.username, user.phone, user.id];
     var foundInMessages = false;
     group.inquiries.forEach(function (item) {
-      parts.push(item.text, item.note, item.assignee);
+      // Вид заявки (просмотр, звонок…) ищется словом, отдельного фильтра для него нет.
+      parts.push(item.text, item.note, item.assignee, inquiryTypeName(item));
       if (item.lastMessage) parts.push(item.lastMessage.text, item.lastMessage.fileName);
       (item.replies || []).forEach(function (reply) { parts.push(reply.text); });
       // По всей переписке ищет бот: у панели её нет.
@@ -456,7 +454,6 @@ function renderInquiryList(host) {
   var counts = {
     unread: allGroups.filter(function (group) { return group.unread; }).length,
     waiting: allGroups.filter(function (group) { return group.waiting; }).length,
-    progress: allGroups.filter(function (group) { return group.inProgress; }).length,
     answered: allGroups.filter(function (group) { return group.answered; }).length,
     closed: allGroups.filter(function (group) { return group.closed; }).length,
     all: allGroups.length,
@@ -470,8 +467,8 @@ function renderInquiryList(host) {
     var lastMessage = item.lastMessage;
     var preview = lastMessage ? (lastMessage.text || lastMessage.fileName) : item.text;
     if (lastMessage && lastMessage.direction === "out" && preview) preview = "Вы: " + preview;
-    var stateText = group.waiting ? "Ждёт ответа" : group.inProgress ? "В работе" : group.closed ? "Закрыт" : group.searchOnly ? "Ответ не нужен" : "Отвечено";
-    var stateClass = group.waiting ? "bad" : group.inProgress ? "warn" : group.closed ? "" : "ok";
+    var stateText = group.waiting ? "Ждёт ответа" : group.closed ? "Закрыт" : group.searchOnly ? "Ответ не нужен" : "Отвечено";
+    var stateClass = group.waiting ? "bad" : group.closed ? "" : "ok";
     return '<button class="conversation-item' + (selected ? " selected" : "") + (group.unread ? " unread" : "") + '" data-id="' + esc(group.active.id) + '" data-user="' + esc(group.userId) + '" type="button">' +
       '<span class="conversation-avatar">' + esc(initials(user.firstName)) + (group.unread ? '<i></i>' : '') + '</span>' +
       '<span class="conversation-item-body"><span class="conversation-item-top"><b>' + esc(userName(user)) + '</b><time>' + ago(item.clientMessageAt || item.updatedAt || item.createdAt) + '</time></span>' +
@@ -483,21 +480,17 @@ function renderInquiryList(host) {
     '<div class="messenger-toolbar">' +
       '<div class="messenger-controls">' +
         '<div class="search"><input id="inqSearch" placeholder="Поиск по клиентам и сообщениям" value="' + esc(inquiryFilter.search) + '"></div>' +
-        '<select id="inqType">' + [["", "Все заявки"], ["general", "Обычные сообщения"], ["lead", "Заявки на звонок"], ["viewing", "Просмотры"], ["selection", "Подбор недвижимости"], ["question", "Вопросы по объекту"], ["interest", "Интерес к объекту"]].map(function (option) {
-          return '<option value="' + option[0] + '"' + (inquiryFilter.type === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
-        }).join("") + '</select>' +
       '</div>' +
-      // На телефоне шесть вкладок не помещаются: тот же выбор одной строкой.
+      // На телефоне вкладки не помещаются: тот же выбор одной строкой.
       '<select class="messenger-filter-compact" id="inqStatusCompact">' +
         [["unread", "Непрочитанные", counts.unread], ["waiting", "Ждут ответа", counts.waiting],
-          ["progress", "В работе", counts.progress], ["answered", "Отвеченные", counts.answered],
+          ["answered", "Отвеченные", counts.answered],
           ["closed", "Закрытые", counts.closed], ["", "Все", counts.all]].map(function (option) {
           return '<option value="' + option[0] + '"' + (inquiryFilter.status === option[0] ? " selected" : "") + ">" + option[1] + (option[2] ? " · " + option[2] : "") + "</option>";
         }).join("") + "</select>" +
       '<div class="tabs messenger-filters" id="inqStatus">' +
         '<button type="button" data-status="unread" class="' + (inquiryFilter.status === "unread" ? "active" : "") + '">Непрочитанные' + (counts.unread ? " · " + counts.unread : "") + "</button>" +
         '<button type="button" data-status="waiting" class="' + (inquiryFilter.status === "waiting" ? "active" : "") + '">Ждут ответа' + (counts.waiting ? " · " + counts.waiting : "") + "</button>" +
-        '<button type="button" data-status="progress" class="' + (inquiryFilter.status === "progress" ? "active" : "") + '">В работе' + (counts.progress ? " · " + counts.progress : "") + "</button>" +
         '<button type="button" data-status="answered" class="' + (inquiryFilter.status === "answered" ? "active" : "") + '">Отвеченные' + (counts.answered ? " · " + counts.answered : "") + "</button>" +
         '<button type="button" data-status="closed" class="' + (inquiryFilter.status === "closed" ? "active" : "") + '">Закрытые' + (counts.closed ? " · " + counts.closed : "") + "</button>" +
         '<button type="button" data-status="" class="' + (inquiryFilter.status === "" ? "active" : "") + '">Все · ' + counts.all + "</button>" +
@@ -510,7 +503,6 @@ function renderInquiryList(host) {
   host.querySelectorAll("#inqStatus button").forEach(function (button) {
     button.onclick = function () { inquiryFilter.status = button.dataset.status; renderInquiryList(host); };
   });
-  host.querySelector("#inqType").onchange = function (event) { inquiryFilter.type = event.target.value; renderInquiryList(host); };
   var search = host.querySelector("#inqSearch");
   search.oninput = function () {
     inquiryFilter.search = search.value.trim();
@@ -763,13 +755,14 @@ function renderInquiryCard(host) {
         selectionMatchingPanel(item) +
         (viewing ? '<div class="msg">📅 ' + esc((viewing.confirmedDate || viewing.dateText || "дата не выбрана") + " · " + (viewing.confirmedTime || viewing.timeText || "")) + (viewing.confirmedAt ? '<br><span class="small ok-text">просмотр подтверждён</span>' : '<br><span class="small warn-text">нужно подтвердить просмотр</span>') + "</div>" : "") +
         (viewing && !viewing.cancelledAt ? '<button class="btn secondary small" id="scheduleViewing" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + '</button>' : "") +
-        // «Ждёт ответа» и «Отвечено» бот ставит сам по переписке — руками
-        // остаётся только закрыть заявку или вернуть её в работу.
-        '<div class="field"><label for="inqStatusValue">Заявка</label><select id="inqStatusValue">' +
-          [["open", "Открыта · " + inquiryState(item).text], ["closed", "Закрыта"]].map(function (option) {
+        // Статус один: «Ждёт ответа», «Отвечено» или «Закрыт». Первые два бот
+        // ставит сам по переписке — руками остаётся только закрыть заявку или
+        // открыть её снова. Этап сделки — отдельное необязательное поле ниже.
+        '<div class="field"><label for="inqStatusValue">Статус</label><select id="inqStatusValue">' +
+          [["open", item.status === "closed" ? "Открыть снова" : inquiryState(item).text], ["closed", "Закрыт"]].map(function (option) {
             return '<option value="' + option[0] + '"' + ((item.status === "closed" ? "closed" : "open") === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
           }).join("") + '</select></div>' +
-        '<div class="field"><label for="inqPipeline">Этап воронки</label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div>' +
+        '<div class="field"><label for="inqPipeline">Этап сделки <span class="small faint">(по желанию)</span></label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div>' +
         '<div class="field"><label for="inqAssignee">Ответственный менеджер</label><select id="inqAssignee"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div>' +
         '<div class="row followup-fields"><div class="field grow"><label for="followDate">Следующий шаг</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label for="followTime">Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div>' +
         '<div class="field"><label for="inqNote">Заметка по этой заявке</label><textarea id="inqNote" placeholder="Что важно сделать по заявке">' + esc(item.note || "") + "</textarea></div>" +
