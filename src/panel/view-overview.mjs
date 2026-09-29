@@ -531,6 +531,7 @@ function funnelBlock(funnel) {
   var languageName = { ru: "Русский", en: "English", es: "Español", unknown: "Язык не выбран" };
   return '<div class="funnel-report"><div class="week-subtitle">Воронка бота: новые клиенты недели</div>' +
     barList(funnelSteps(funnel), funnel.joined) +
+    (funnel.goals && funnel.goals.answered ? '<div class="small muted">🎯 Цели: для жизни ' + num(funnel.goals.live) + ", инвестиция и аренда " + num(funnel.goals.invest) + ", пока смотрят " + num(funnel.goals.browse) + (funnel.goals.mostlyBrowsing ? ' — <b>большинство «пока смотрит»: деление по целям почти не помогает</b>' : "") + "</div>" : "") +
     (tracked && funnel.partial ? '<div class="small muted">Каталог и «Подробнее» бот считает с ' + esc(funnel.trackedFrom) + ": у клиентов, пришедших раньше, эти цифры неполные.</div>" : "") +
     (!tracked ? '<div class="small muted">Открытия каталога и «Подробнее» бот начнёт считать после этого обновления — пока в воронке только то, что видно по заявкам.</div>' : "") +
     '<div class="grid cols-2">' +

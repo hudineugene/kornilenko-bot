@@ -157,6 +157,10 @@ function normalizeUser(from, chatId, countMessage = true) {
       ...(previous.funnel && previous.funnel.catalog ? { catalog: cleanText(previous.funnel.catalog, 40) } : {}),
       ...(previous.funnel && previous.funnel.details ? { details: cleanText(previous.funnel.details, 40) } : {}),
     },
+    // Цель клиента со старта: «купить для жизни» / «инвестиция и аренда» / «пока смотрю».
+    goal: ['live', 'invest', 'browse'].includes(previous.goal) ? previous.goal : '',
+    goalAt: cleanText(previous.goalAt, 40),
+    goalAskedAt: cleanText(previous.goalAskedAt, 40),
     sourceAt: cleanText(previous.sourceAt, 40),
     alertsSent: previous.alertsSent && typeof previous.alertsSent === 'object' && !Array.isArray(previous.alertsSent) ? previous.alertsSent : {},
     // The client turned broadcasts off (the "Unsubscribe" button or settings).

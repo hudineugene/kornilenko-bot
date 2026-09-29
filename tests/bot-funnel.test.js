@@ -145,3 +145,35 @@ test.describe('цифры недели', () => {
     assert.ok(!weeklyReportText(bot.weeklyReportData(NOW, 'last')).includes('Воронка'));
   });
 });
+
+test.describe('цели клиентов', () => {
+  const goalUsers = (goals) => resetData((data) => {
+    goals.forEach((goal, index) => {
+      data.users['g' + index] = { id: 'g' + index, chatId: 500 + index, firstName: 'G' + index, activity: [], preferredLanguage: 'ru', firstSeenAt: at(15), goal };
+    });
+  });
+
+  test('в отчёте — сколько выбрали каждую цель; пока ответов мало, предупреждения нет', () => {
+    goalUsers(['live', 'invest', 'browse', '']);
+    const { funnel } = bot.weeklyReportData(NOW, 'last');
+    assert.deepEqual([funnel.goals.live, funnel.goals.invest, funnel.goals.browse, funnel.goals.answered], [1, 1, 1, 3]);
+    assert.equal(funnel.goals.mostlyBrowsing, false, 'ответов меньше пяти — выводов не делаем');
+    const text = weeklyReportText(bot.weeklyReportData(NOW, 'last'));
+    assert.match(text, /🎯 Цели новых клиентов: для жизни 1, инвестиция и аренда 1, пока смотрят 1/);
+    assert.ok(!/большинство выбирает/.test(text));
+  });
+
+  test('«Пока смотрю» у большинства (от пяти ответов) — отчёт говорит, что деление по целям не работает', () => {
+    goalUsers(['browse', 'browse', 'browse', 'live', 'invest']);
+    const { funnel } = bot.weeklyReportData(NOW, 'last');
+    assert.equal(funnel.goals.mostlyBrowsing, true);
+    assert.match(weeklyReportText(bot.weeklyReportData(NOW, 'last')), /большинство выбирает «Пока смотрю»/);
+    goalUsers(['browse', 'browse', 'live', 'live', 'invest']);
+    assert.equal(bot.weeklyReportData(NOW, 'last').funnel.goals.mostlyBrowsing, false, 'меньше половины — не считается');
+  });
+
+  test('никто не отвечал — строки про цели нет', () => {
+    goalUsers(['', '']);
+    assert.ok(!weeklyReportText(bot.weeklyReportData(NOW, 'last')).includes('Цели новых клиентов'));
+  });
+});

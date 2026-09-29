@@ -1,5 +1,6 @@
 // Обращения клиентов, уведомления администратору и ответы из Telegram.
 
+import { goalLabelRu } from './goal.mjs';
 import crypto from 'node:crypto';
 import { cleanText, localDayKey } from './util.mjs';
 import { normalizePipelineStage, normalizeSelectionMatching, normalizeViewing } from './data-format.mjs';
@@ -483,7 +484,7 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   // Routing of replies does not depend on this text (see adminReplyTargets),
   // so it only carries what a person needs to read.
   const language = user.preferredLanguage ? ' · ' + user.preferredLanguage.toUpperCase() : '';
-  const who = '👤 ' + name + username + language + (user.source ? ' · 📣 ' + user.source : '');
+  const who = '👤 ' + name + username + language + (user.source ? ' · 📣 ' + user.source : '') + (user.goal ? ' · 🎯 ' + goalLabelRu(user.goal) : '');
   const cleanDetails = cleanText(details, 4000);
   // A manager calling back needs the number without opening the panel; past
   // inquiries tell a returning client from a new one.

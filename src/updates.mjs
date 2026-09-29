@@ -34,6 +34,7 @@ import { handlePrivacyCallback, sendPrivacyCentre } from './privacy.mjs';
 import { handleComparisonCallback } from './comparison.mjs';
 import { handleSavedSearchCallback } from './saved-search.mjs';
 import { handleTrustCallback } from './trust.mjs';
+import { askGoal, handleGoalCallback } from './goal.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
 import { ADMIN_CHAT_HINT, handleAdminChatMessage } from './admin-commands.mjs';
 import { handleChatJoinRequest, handleMyChatMember, rememberGroupMessage } from './groups.mjs';
@@ -183,6 +184,7 @@ async function handleUpdate(update, token) {
       }
       else if (callbackData.startsWith('about:')) await handleAboutCallback(update.callback_query, token);
       else if (callbackData.startsWith('trust:')) await handleTrustCallback(update.callback_query, token);
+      else if (callbackData.startsWith('goal:')) await handleGoalCallback(update.callback_query, token);
       else if (callbackData.startsWith('guide:')) await handleGuideCallback(update.callback_query, token);
       else if (callbackData.startsWith('vf:')) await handleViewingFormCallback(update.callback_query, token);
       else if (callbackData.startsWith('nav:')) await handleNavigationCallback(update.callback_query, token);
@@ -290,7 +292,8 @@ async function handleUpdate(update, token) {
     void notifyAdministratorAction(user, 'Первый запуск', detail);
     await sendWelcome(message.chat.id, user, token, { languageButton: guessed });
     if (command === '/start') {
-      await openPendingStartPayload(user, token);
+      // Ссылка на объект открывает объект; вопрос о цели — только когда открывать нечего.
+      if (!(await openPendingStartPayload(user, token))) await askGoal(message.chat.id, user, token);
       return;
     }
   }

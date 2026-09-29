@@ -2469,6 +2469,17 @@ test('«Почему мы»: вкладка в «Текстах бота»; по
   assert.equal(many.querySelector('#addReview').disabled, true, 'больше пяти нельзя');
 });
 
+test('«Отчёт»: цели новых клиентов — в воронке; «большинство пока смотрит» выделено', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const funnel = { joined: 10, catalog: 0, details: 0, inquiry: 1, viewing: 0, confirmed: 0, trackedFrom: '', partial: false, byLanguage: [], bySource: [], goals: { live: 2, invest: 1, browse: 6, answered: 9, mostlyBrowsing: true } };
+  const html = String(sandbox.funnelBlock(funnel));
+  assert.match(html, /Цели: для жизни 2, инвестиция и аренда 1, пока смотрят 6/);
+  assert.match(html, /большинство «пока смотрит»/);
+  assert.ok(!/большинство/.test(String(sandbox.funnelBlock({ ...funnel, goals: { live: 4, invest: 3, browse: 2, answered: 9, mostlyBrowsing: false } }))));
+  assert.ok(!/Цели:/.test(String(sandbox.funnelBlock({ ...funnel, goals: { live: 0, invest: 0, browse: 0, answered: 0, mostlyBrowsing: false } }))), 'никто не отвечал — строки нет');
+});
+
 test('«Отчёт»: реклама → сделки — одна таблица «источник → клиенты → заявки → просмотры → сделки» и конструктор ссылки рядом', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();

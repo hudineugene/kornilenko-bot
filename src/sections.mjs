@@ -18,6 +18,7 @@ import { addToComparison, comparisonContains, sendComparison } from './compariso
 import { similarPropertyRanking } from './similar.mjs';
 import { DEAD_END_TEXT, nearestByBudget } from './dead-end.mjs';
 import { trustButtonRow } from './trust.mjs';
+import { askGoal } from './goal.mjs';
 
 async function sendPromotionPage(chatId, user, token, page = 0) {
   const language = user.preferredLanguage || 'ru';
@@ -364,7 +365,7 @@ async function handleLanguageCallback(query, token) {
     }
   }
   await sendWelcome(chatId, user, token);
-  await openPendingStartPayload(user, token);
+  if (!(await openPendingStartPayload(user, token))) await askGoal(chatId, user, token);
 }
 
 async function acknowledgeCallback(query, token, text = '') {

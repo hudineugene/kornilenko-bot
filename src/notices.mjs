@@ -283,8 +283,14 @@ function botFunnel(users, start) {
   }
   const pad = (value) => String(value).padStart(2, '0');
   const trackedFrom = earliest ? pad(new Date(earliest).getDate()) + '.' + pad(new Date(earliest).getMonth() + 1) : '';
+  // Цели, которые выбрали новые клиенты недели. Если «пока смотрят» выбирает
+  // большинство (при достаточном числе ответов), сегментация почти не помогает.
+  const goals = { live: 0, invest: 0, browse: 0 };
+  for (const user of users) if (Object.hasOwn(goals, user.goal)) goals[user.goal] += 1;
+  const answered = goals.live + goals.invest + goals.browse;
   return {
     ...funnelRow(users, byUser),
+    goals: { ...goals, answered, mostlyBrowsing: answered >= 5 && goals.browse * 2 > answered },
     trackedFrom,
     partial: Boolean(earliest) && new Date(earliest) > start,
     byLanguage: groups((user) => ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'unknown'),
@@ -360,8 +366,11 @@ function funnelTextLines(funnel) {
     'запись ' + funnel.viewing,
     'подтверждено ' + funnel.confirmed,
   ];
+  const goals = funnel.goals || { answered: 0 };
   return [
     '🔻 Воронка новых клиентов: ' + steps.join(' → '),
+    ...(goals.answered ? ['🎯 Цели новых клиентов: для жизни ' + goals.live + ', инвестиция и аренда ' + goals.invest + ', пока смотрят ' + goals.browse] : []),
+    ...(goals.mostlyBrowsing ? ['   ⚠ большинство выбирает «Пока смотрю» — деление по целям почти не помогает'] : []),
     ...(tracked && funnel.partial ? ['   каталог и «Подробнее» — с ' + funnel.trackedFrom + ': у пришедших раньше цифры неполные'] : []),
   ];
 }

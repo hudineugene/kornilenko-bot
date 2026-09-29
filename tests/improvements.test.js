@@ -49,7 +49,7 @@ test.describe('language from Telegram', () => {
     const client = newcomer('ru');
     const sent = await client.say('/start');
     assert.equal(client.user.preferredLanguage, 'ru');
-    assert.equal(sent.length, 1);
+    assert.equal(sent.length, 2, 'приветствие и вопрос о цели');
     assert.match(sent[0].body.text, /^Здравствуйте, Новый!/);
     assert.ok(buttonsOf(sent[0].body.reply_markup).includes(MENU.ru.more), 'the language can still be changed in «My space»');
   });
@@ -1040,7 +1040,7 @@ test.describe('catalog filter', () => {
     // просмотренных больше не занимает строку.
     assert.deepEqual(callbacksOf(personal.last.markup), [
       'catalog:favorites:0', 'compare:view', 'myreq:list', 'subs:menu',
-      'privacy:open', 'nav:help', 'nav:language', 'nav:menu',
+      'goal:menu', 'privacy:open', 'nav:help', 'nav:language', 'nav:menu',
     ]);
     assert.ok(personal.last.buttons.includes(MENU.ru.favorites + ' · 1'));
     assert.ok(personal.last.buttons.includes(bot.text.comparison.ru.menuButton + ' · 0'));
@@ -1674,7 +1674,7 @@ test('пример в приветствии берётся из настоящ�
   const newcomer = createChat();
   newcomer.user.preferredLanguage = '';
   const welcome = await newcomer.say('/start');
-  const text = String(welcome.last.text || welcome.last.caption || '').replace(/ /g, ' ');
+  const text = String(welcome.replies[0].text || welcome.replies[0].caption || '').replace(/ /g, ' ');
   assert.ok(text.includes('«Альтеа, 3 спальни, до 350 000 €»'), 'пример собран из каталога: ' + text);
 
   // Английский пример из того же каталога, написанный слово в слово, находит объект.

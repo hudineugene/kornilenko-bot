@@ -106,7 +106,7 @@ test.describe('знаки $ в названиях и введённых данн
     const chat = createChat();
     chat.user.preferredLanguage = '';
     const step = await chat.say('/start');
-    const text = step.last.text || step.last.caption || '';
+    const text = step.replies[0].text || step.replies[0].caption || '';
     assert.ok(text.includes("Кала $& Бланка $'"), 'город целиком: ' + text);
   });
 });

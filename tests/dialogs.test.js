@@ -871,11 +871,11 @@ test.describe('property card', () => {
     const chat = createChat();
     chat.user.preferredLanguage = '';
     const step = await chat.say('/start');
-    const text = step.last.text || step.last.caption || '';
+    const text = step.replies[0].text || step.replies[0].caption || '';
     assert.match(text, /Сейчас в каталоге: 2 объекта — Альтеа, Кальпе/, 'видно, что бот не пустой и где есть дома');
     assert.match(text, /Можно просто написать, что ищете/, 'и что искать можно словами');
     assert.match(text.replace(/\u00a0/g, ' '), /«Альтеа, 3 спальни, до 350 000 €»/, 'с примером из настоящего каталога');
-    assert.equal(step.last.markup.input_field_placeholder, 'Напишите, что ищете', 'тот же пример в поле ввода');
+    assert.equal(step.replies[0].markup.input_field_placeholder, 'Напишите, что ищете', 'тот же пример в поле ввода');
   });
 
   test('пустой каталог не обещает того, чего нет', async () => {
@@ -883,7 +883,7 @@ test.describe('property card', () => {
     const chat = createChat();
     chat.user.preferredLanguage = '';
     const step = await chat.say('/start');
-    const text = step.last.text || step.last.caption || '';
+    const text = step.replies[0].text || step.replies[0].caption || '';
     assert.match(text, /Каталог пополняется/, 'честная строка вместо «0 объектов»');
     assert.ok(!/Сейчас в каталоге/.test(text));
   });
@@ -892,7 +892,7 @@ test.describe('property card', () => {
     const chat = createChat();
     const personal = await chat.say(MENU.ru.more);
     const rows = personal.last.markup.inline_keyboard;
-    assert.ok(rows.length <= 7, 'строк не больше семи вместе с возвратом в меню, было одиннадцать');
+    assert.ok(rows.length <= 8, 'строк не больше восьми вместе с возвратом в меню (и строкой «Моя цель»), было одиннадцать');
     const callbacks = callbacksOf(personal.last.markup);
     assert.ok(!callbacks.includes('catalog:recent:0'), 'недавно просмотренные больше не занимают строку');
     assert.ok(!callbacks.includes('saved:view'), 'сохранённый поиск переехал в «Подписки»');
