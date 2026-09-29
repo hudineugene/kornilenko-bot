@@ -24,9 +24,9 @@ test('инструкция «Что делать, если…» называет
   assert.match(read('src/entry.mjs'), /--reset-password/);
   assert.match(read('package.json'), /esbuild src\/entry\.mjs/, 'bot.exe собирается из точки входа с этим режимом');
   // Экран из инструкции есть в панели.
-  const settings = read('src/panel/view-settings.mjs');
-  assert.match(settings, /"Данные и копии"/);
-  assert.match(settings, /Подключение к Telegram/);
+  const menu = read('src/panel/runtime.mjs');
+  assert.match(menu, /"Данные и копии"/);
+  assert.match(menu, /\["telegram", "Подключение"\]/);
 });
 
 test('start-bot.ps1: в комментарии правильный путь журнала', () => {

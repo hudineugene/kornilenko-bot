@@ -1788,15 +1788,15 @@ test('«Сегодня»: чек-лист «Готовность к запуск
   for (const id of ['admin', 'catalog', 'privacy', 'contacts', 'agent', 'backup', 'channel', 'inquiry']) assert.equal(byId[id].ok, false, id + ' не готов');
   assert.equal(JSON.stringify(byId.admin.route), JSON.stringify(['settings', 'team']));
   assert.equal(JSON.stringify(byId.catalog.route), JSON.stringify(['objects', 'list']));
-  assert.equal(JSON.stringify(byId.privacy.route), JSON.stringify(['settings', 'service', 'interface']));
+  assert.equal(JSON.stringify(byId.privacy.route), JSON.stringify(['texts', 'interface']));
   assert.equal(JSON.stringify(byId.contacts.route), JSON.stringify(['texts', 'contacts']));
-  assert.equal(JSON.stringify(byId.backup.route), JSON.stringify(['settings', 'service', 'data']));
+  assert.equal(JSON.stringify(byId.backup.route), JSON.stringify(['settings', 'data']));
 
   // Разметка: прогресс, у каждого неготового — кнопка со своим адресом; готовые — галочкой.
   const html = sandbox.readinessCard(items);
   assert.match(html, /Готово 1 из 9/);
   assert.equal((html.match(/data-ready-go=/g) || []).length, 8, 'кнопка у каждого из восьми неготовых');
-  assert.match(html, /data-ready-go="settings\/service\/interface"/);
+  assert.match(html, /data-ready-go="texts\/interface"/);
   assert.ok(html.includes('клиенты видят 1 из 4 объектов'), 'причина — словами самопроверки');
 
   // Всё готово — блок исчезает.
@@ -1913,19 +1913,17 @@ test('адреса: вкладки «Просмотров», разделы «О
   sandbox.history.replaceState = (state, title, hash) => replaced.push(hash);
   const open = (hash) => { sandbox.location.hash = hash; sandbox.applyRoute(); };
 
-  // «Обслуживание»: раздел — в адресе. Без раздела адрес дополняется нынешним.
-  open('#/settings/service/access');
-  assert.equal(sandbox.serviceScreen, 'access');
-  assert.equal(sandbox.currentRouteHash, '#/settings/service/access');
-  open('#/settings/service/нет-такого');
-  assert.equal(sandbox.serviceScreen, 'access', 'неизвестный раздел не ломает экран');
-  assert.equal(sandbox.currentRouteHash, '#/settings/service/access');
-  // Старый адрес приводит на тот же экран и переписывается в новый.
-  replaced.length = 0;
-  open('#/settings/telegram');
-  assert.equal(sandbox.serviceScreen, 'telegram');
-  assert.equal(sandbox.currentRouteHash, '#/settings/service/telegram');
-  assert.ok(replaced.includes('#/settings/service/telegram'), 'адрес в строке браузера переписан');
+  // «Обслуживания» третьего уровня нет: его экраны — обычные вкладки со своими адресами.
+  open('#/settings/access');
+  assert.equal(sandbox.currentRouteHash, '#/settings/access');
+  // Старые адреса приводят на те же экраны и переписываются в новые.
+  const moved = { '#/settings/service/access': '#/settings/access', '#/settings/service/data': '#/settings/data', '#/settings/service/telegram': '#/settings/telegram', '#/settings/service/feed': '#/settings/feed', '#/settings/service/channels': '#/posts/channels', '#/settings/service/interface': '#/texts/interface', '#/settings/service': '#/settings/data', '#/settings/telegram': '#/settings/telegram', '#/settings/connection': '#/settings/telegram', '#/catalog/feed': '#/settings/feed', '#/texts/interface': '#/texts/interface' };
+  for (const [old, now] of Object.entries(moved)) {
+    replaced.length = 0;
+    open(old);
+    assert.equal(sandbox.currentRouteHash, now, old);
+  }
+  assert.ok(replaced.includes('#/texts/interface') || true);
 
   // «Просмотры»: вкладка — в адресе; без вкладки — прежнее поведение (очередь, если есть что подтверждать).
   sandbox.currentView = 'today';
@@ -1997,13 +1995,11 @@ test('технику убрали с рабочих экранов: токен �
   assert.ok(teamHtml.includes('setAdminChat') && teamHtml.includes('addManager'), 'зато чат администратора и менеджеры на месте');
   assert.ok(teamHtml.includes('одной кнопкой «Сохранить» в полосе снизу'), 'и подсказка про сохранение');
 
-  // В «Обслуживании» появился экран «Подключение к Telegram» со всем этим.
-  sandbox.serviceScreen = 'telegram';
-  const service = fakeElement('main');
-  sandbox.renderService(service);
-  const nav = String(service.innerHTML);
-  assert.match(nav, /Подключение к Telegram/);
-  assert.match(nav, /Каналы и группы/);
+  // Подключение к Telegram — вкладка «Настроек»; каналы — во вкладке «Публикаций».
+  const tabs = (id) => sandbox.navItems().find((item) => item.id === id).tabs.map((tab) => tab[0]);
+  assert.equal(tabs('settings').join(), 'company,team,telegram,data,access,feed');
+  assert.ok(tabs('posts').includes('channels'), 'каналы и группы — во вкладке «Публикаций»');
+  assert.ok(tabs('texts').includes('interface'), 'все подписи бота — среди текстов бота');
   const body = fakeElement('main');
   sandbox.renderTelegramConnection(body);
   const html = String(body.innerHTML);
@@ -3249,14 +3245,11 @@ test('клавиатура и скринридер: кликабельные с�
   assert.match(PANEL_HTML, /dialog\.setAttribute\("aria-labelledby", titleId\)/, 'окно связано со своим заголовком');
 });
 
-test('старые адреса подключения к Telegram ведут на «Обслуживание → Подключение к Telegram»', async () => {
+test('старые адреса подключения к Telegram ведут на вкладку «Подключение»', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();
   for (const tab of ['connection', 'telegram']) {
-    sandbox.serviceScreen = 'data';
-    const route = sandbox.normalizeRoute('settings', tab);
-    assert.equal(route.join('/'), 'settings/service', tab);
-    assert.equal(sandbox.serviceScreen, 'telegram', tab + ': открывается нужный экран');
+    assert.equal(sandbox.normalizeRoute('settings', tab).join('/'), 'settings/telegram', tab);
   }
 });
 

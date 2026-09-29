@@ -199,10 +199,10 @@ function readinessItems(report) {
     var check = checks[id];
     if (check) items.push({ id: id, title: title, ok: check.status === "ok", detail: check.detail || "", route: route });
   }
-  fromCheck("token", "Бот подключён к Telegram", ["settings", "service", "telegram"]);
+  fromCheck("token", "Бот подключён к Telegram", ["settings", "telegram"]);
   fromCheck("admin", "Заявки приходят в ваш Telegram", ["settings", "team"]);
   fromCheck("catalog", "Клиенты видят каталог", ["objects", "list"]);
-  fromCheck("privacy", "Политика конфиденциальности заполнена", ["settings", "service", "interface"]);
+  fromCheck("privacy", "Политика конфиденциальности заполнена", ["texts", "interface"]);
   var hasChannel = Boolean(contacts.phone || contacts.whatsapp || contacts.telegram || contacts.email);
   items.push({ id: "contacts", title: "Контакты для связи заполнены", ok: hasChannel, detail: hasChannel ? "" : "Нет ни телефона, ни WhatsApp, ни Telegram, ни почты — клиенту некуда писать", route: ["texts", "contacts"] });
   var promise = Number(((config.workingHours || {}).replyMinutes) || 0);
@@ -213,9 +213,9 @@ function readinessItems(report) {
   items.push({ id: "agent", title: "Лицо агента: имя, фото, срок ответа", ok: !agentMissing.length, detail: agentMissing.length ? "Не заполнено: " + agentMissing.join(", ") : "", route: ["texts", "contacts"] });
   var copyOk = checks.version ? checks.version.status === "ok" : true;
   var offsite = Boolean((config.telegramBackup || {}).enabled);
-  items.push({ id: "backup", title: "Копия данных сделана и лежит не только на этом компьютере", ok: copyOk && offsite, detail: !copyOk ? (checks.version.detail || "") : offsite ? "" : "Копия в Telegram не включена: все копии лежат на одном диске", route: ["settings", "service", "data"] });
+  items.push({ id: "backup", title: "Копия данных сделана и лежит не только на этом компьютере", ok: copyOk && offsite, detail: !copyOk ? (checks.version.detail || "") : offsite ? "" : "Копия в Telegram не включена: все копии лежат на одном диске", route: ["settings", "data"] });
   var hasGroup = (state.groups || []).some(function (group) { return ["member", "administrator", "creator"].indexOf(group.status) >= 0; });
-  items.push({ id: "channel", title: "Канал или группа подключены", ok: hasGroup, detail: hasGroup ? "" : "Бот пока не состоит ни в одном канале или группе", route: ["settings", "service", "channels"] });
+  items.push({ id: "channel", title: "Канал или группа подключены", ok: hasGroup, detail: hasGroup ? "" : "Бот пока не состоит ни в одном канале или группе", route: ["posts", "channels"] });
   var hasInquiry = (state.inquiries || []).length > 0;
   items.push({ id: "inquiry", title: "Первая заявка проверена", ok: hasInquiry, detail: hasInquiry ? "" : "Напишите боту сами и оставьте заявку — убедитесь, что она дошла", route: ["clients", "inbox"] });
   return items;

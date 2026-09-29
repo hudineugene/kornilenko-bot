@@ -475,7 +475,7 @@ function bindConnectGroup(host) {
 }
 
 // Два экрана из одних данных. «Пост в канал» (раздел «Публикации») — рабочий:
-// выбор канала и форма поста, ничего лишнего. «Каналы и группы» (в «Обслуживании»)
+// выбор канала и форма поста, ничего лишнего. «Каналы и группы» (отдельная вкладка «Публикаций»)
 // — редкая настройка: подключение по ID, права, ссылки, «опасная зона». Раньше
 // всё было вместе, и человеку, который хотел выложить пост, первой встречалась
 // статистика, а рядом с кнопкой «Отправить» — кнопка «Покинуть канал».
@@ -495,9 +495,9 @@ function renderGroups(host, mode) {
       bindConnectGroup(host);
     } else {
       host.innerHTML = '<div class="card"><div class="empty"><b>Канал ещё не подключён</b>' +
-        "Подключите канал или группу — один раз, в «Настройки → Обслуживание → Каналы и группы».</div>" +
+        "Подключите канал или группу — один раз, в «Публикации → Каналы и группы».</div>" +
         '<div class="card-body row"><button class="btn secondary" id="goConnectChannel" type="button">Открыть «Каналы и группы»</button></div></div>';
-      host.querySelector("#goConnectChannel").onclick = function () { serviceScreen = "channels"; go("settings", "service"); };
+      host.querySelector("#goConnectChannel").onclick = function () { go("posts", "channels"); };
     }
     return;
   }
@@ -1173,6 +1173,7 @@ VIEWS.posts = {
   subtitle: function () { return "Рассылки клиентам и посты в каналах"; },
   render: function (host, tab) {
     if (tab === "channel") return renderGroups(host, "post");
+    if (tab === "channels") return renderGroups(host, "manage");
     if (tab === "style") return renderPostStyle(host);
     renderPublications(host);
   },

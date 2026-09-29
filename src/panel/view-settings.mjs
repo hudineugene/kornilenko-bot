@@ -98,7 +98,7 @@ function renderConnection(host) {
   host.querySelector("#addManager").onclick = function () { managers.push({ name: "", chatId: "" }); drawManagers(); watcher.check(); };
 }
 
-// «Подключение к Telegram» живёт в «Обслуживании»: токен бота, включение и
+// «Подключение к Telegram» — вкладка «Подключение» в «Настройках»: токен бота, включение и
 // автозапуск нужны редко, и на рабочем экране «Настройки → Команда» им не место.
 function renderTelegramConnection(host) {
   var config = state.config, bot = state.bot || {};
@@ -520,42 +520,16 @@ function renderAccess(host) {
   };
 }
 
-// «Обслуживание» — всё, что нужно редко и требует осторожности: копии данных,
-// доступ из интернета, загрузка с сайта, подписи интерфейса. Раньше это лежало
-// вперемешку с ежедневной работой, и менеджер натыкался на токен BotFather и
-// «опасную зону» между рабочим временем и напоминаниями.
-var SERVICE_SCREENS = [
-  ["data", "Данные и копии", "Резервные копии, восстановление, самопроверка, файлы, журнал ошибок"],
-  ["telegram", "Подключение к Telegram", "Токен бота, включение и надёжный запуск"],
-  ["channels", "Каналы и группы", "Подключение по ID, права бота, ссылки, «опасная зона»"],
-  ["access", "Доступ", "Пароль панели и доступ к панели из интернета"],
-  ["feed", "Загрузка с сайта", "Обновление каталога по ссылке с вашего сайта"],
-  ["interface", "Все подписи бота", "Тексты кнопок и служебных сообщений на трёх языках"],
-];
-
-function renderService(host) {
-  var current = SERVICE_SCREENS.some(function (item) { return item[0] === serviceScreen; }) ? serviceScreen : "data";
-  host.innerHTML = '<div class="service-nav">' + SERVICE_SCREENS.map(function (item) {
-    return '<button class="service-card' + (item[0] === current ? " active" : "") + '" data-service="' + item[0] + '" type="button">' +
-      '<b>' + esc(item[1]) + '</b><span>' + esc(item[2]) + '</span></button>';
-  }).join("") + '</div><div id="serviceBody"></div>';
-  host.querySelectorAll("[data-service]").forEach(function (button) {
-    button.onclick = function () { serviceScreen = button.dataset.service; pushRoute("settings", "service", serviceScreen); renderService(host); };
-  });
-  var body = host.querySelector("#serviceBody");
-  if (current === "telegram") return renderTelegramConnection(body);
-  if (current === "channels") return renderGroups(body, "manage");
-  if (current === "access") return renderAccess(body);
-  if (current === "feed") return renderFeed(body);
-  if (current === "interface") return renderInterface(body);
-  renderData(body);
-}
-
 VIEWS.settings = {
-  subtitle: function () { return "Компания, команда и обслуживание"; },
+  subtitle: function () { return "Компания, команда, подключение и данные"; },
   render: function (host, tab) {
+    // Редкое и осторожное — токен, копии, доступ из интернета, загрузка с сайта — лежит
+    // теми же вкладками, что и повседневное: отдельного «Обслуживания» третьего уровня нет.
     if (tab === "team") return renderConnection(host);
-    if (tab === "service") return renderService(host);
+    if (tab === "telegram") return renderTelegramConnection(host);
+    if (tab === "data") return renderData(host);
+    if (tab === "access") return renderAccess(host);
+    if (tab === "feed") return renderFeed(host);
     renderWork(host);
   },
 };

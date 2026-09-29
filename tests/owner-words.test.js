@@ -51,7 +51,7 @@ test.describe('адреса в панели, на которые отсылае�
     const { runSelfCheck } = await import('../src/selfcheck.mjs');
     const report = runSelfCheck();
     const token = report.checks.find((item) => item.id === 'token');
-    assert.equal(token.hint, 'Настройки → Обслуживание → Подключение к Telegram');
+    assert.equal(token.hint, 'Настройки → Подключение');
   });
 });
 

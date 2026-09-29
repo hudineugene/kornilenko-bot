@@ -735,6 +735,7 @@ VIEWS.texts = {
     if (tab === "rules") return renderRules(host);
     if (tab === "trust") return renderTrust(host);
     if (tab === "plan") return renderBuyPlan(host);
+    if (tab === "interface") return renderInterface(host);
 
     renderWelcome(host);
   },

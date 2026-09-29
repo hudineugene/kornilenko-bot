@@ -225,10 +225,10 @@ function openChannelPost(id) {
   if (!channels.length) {
     return openDialog({
       title: "Каналов пока нет",
-      body: '<div class="stack"><div>Чтобы публиковать объекты, подключите канал в «Настройки → Обслуживание → Каналы и группы» и сделайте бота его администратором.</div></div>',
+      body: '<div class="stack"><div>Чтобы публиковать объекты, подключите канал в «Публикации → Каналы и группы» и сделайте бота его администратором.</div></div>',
       footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="goChannels" type="button">Открыть «Каналы и группы»</button>',
       ready: function (dialog) {
-        dialog.querySelector("#goChannels").onclick = function () { dialog.closeClean(); serviceScreen = "channels"; go("settings", "service"); };
+        dialog.querySelector("#goChannels").onclick = function () { dialog.closeClean(); go("posts", "channels"); };
       },
     });
   }

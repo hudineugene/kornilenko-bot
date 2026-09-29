@@ -75,8 +75,6 @@ var currentRouteHash = "", allowNextRoute = false, routePromptOpen = false;
 // значит перерисовка стёрла бы его черновик. pendingRefresh — данные обновились,
 // но экран оставлен как есть, и это видно по полоске.
 var stateVersion = "", pageTouched = false, pendingRefresh = false;
-// Какой экран открыт в «Обслуживании» (данные, доступ, выгрузка, подписи).
-var serviceScreen = "data";
 // Экран рисуется сам (обновление по таймеру) или по действию человека. Разделам
 // это важно: при входе в «Переписку» открытую беседу человек видит и читает, а
 // при обновлении по таймеру экран мог быть и не на виду.
@@ -652,10 +650,10 @@ function navItems() {
     { id: "clients", icon: navIcon("clients"), title: "Клиенты", count: waitingClients(), late: overdueClients(), tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
     { id: "viewings", icon: navIcon("viewings"), title: "Просмотры" },
     { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
-    { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"]] },
+    { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"], ["channels", "Каналы и группы"]] },
     { id: "reports", icon: navIcon("reports"), title: "Отчёт" },
-    { id: "texts", icon: navIcon("texts"), title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["trust", "Почему мы"], ["plan", "План покупки"], ["sections", "Если раздел пуст"], ["rules", "Автоответы и шаблоны"]] },
-    { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["service", "Обслуживание"]] },
+    { id: "texts", icon: navIcon("texts"), title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["trust", "Почему мы"], ["plan", "План покупки"], ["sections", "Если раздел пуст"], ["rules", "Автоответы и шаблоны"], ["interface", "Все подписи бота"]] },
+    { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["telegram", "Подключение"], ["data", "Данные и копии"], ["access", "Доступ"], ["feed", "Загрузка с сайта"]] },
   ];
 }
 
@@ -667,18 +665,12 @@ var LEGACY_ROUTES = {
   "notifications": ["today", ""],
   "stats": ["reports", ""],
   "inquiries": { "": ["clients", "inbox"], "inbox": ["clients", "inbox"], "tasks": ["clients", "tasks"], "pipeline": ["clients", "pipeline"], "viewings": ["viewings", ""], "clients": ["clients", "base"] },
-  "catalog": { "": ["objects", "list"], "objects": ["objects", "list"], "offers": ["objects", "offers"], "feed": ["settings", "service"] },
+  "catalog": { "": ["objects", "list"], "objects": ["objects", "list"], "offers": ["objects", "offers"], "feed": ["settings", "feed"] },
   "reach": { "": ["posts", "broadcast"], "campaigns": ["posts", "broadcast"], "group": ["posts", "channel"], "style": ["posts", "channel"] },
-  "settings": { "reports": ["reports", ""], "connection": ["settings", "service"], "telegram": ["settings", "service"], "work": ["settings", "company"], "data": ["settings", "service"], "access": ["settings", "service"] },
-  "texts": { "interface": ["settings", "service"] },
+  "settings": { "reports": ["reports", ""], "connection": ["settings", "telegram"], "work": ["settings", "company"], "service": ["settings", "data"] },
 };
 
-// Какой экран «Обслуживания» открыть, если пришли по старому адресу.
-var LEGACY_SERVICE = { "settings/connection": "telegram", "settings/telegram": "telegram", "catalog/feed": "feed", "settings/data": "data", "settings/access": "access", "texts/interface": "interface" };
-
 function normalizeRoute(view, tab) {
-  var key = String(view || "") + "/" + String(tab || "");
-  if (LEGACY_SERVICE[key]) serviceScreen = LEGACY_SERVICE[key];
   var rule = LEGACY_ROUTES[view];
   if (!rule) return [view, tab || ""];
   if (Array.isArray(rule)) return rule.slice();
@@ -1221,17 +1213,20 @@ function pushRoute(view, tab, sub) {
 
 function applyRoute() {
   var parts = (location.hash || "").replace(/^#\//, "").split("/");
+  // Раздел «Обслуживание» расформирован: его экраны стали вкладками. Старые адреса
+  // вида #/settings/service/<экран> ведут на новые места.
+  if (parts[0] === "settings" && parts[1] === "service") {
+    var moved = { "channels": ["posts", "channels"], "interface": ["texts", "interface"] }[parts[2]];
+    if (moved) { parts[0] = moved[0]; parts[1] = moved[1]; }
+    else parts[1] = ["telegram", "data", "access", "feed"].indexOf(parts[2]) >= 0 ? parts[2] : "data";
+  }
   var route = normalizeRoute(parts[0], parts[1]);
   var view = VIEWS[route[0]] ? route[0] : "today";
   var tab = route[1] || "";
   var sub = parts[2] || "";
   // Каждый заход в «Просмотры» снова начинается с очереди подтверждения.
   if (view === "viewings" && currentView !== "viewings") viewingModeChosen = false;
-  if (view === "settings" && tab === "service") {
-    // Раздел «Обслуживания»: из адреса, а без него (или по старой ссылке) — тот, что открыт.
-    if (SERVICE_SCREENS.some(function (item) { return item[0] === sub; })) serviceScreen = sub;
-    sub = serviceScreen;
-  } else if (view === "viewings") {
+  if (view === "viewings") {
     if (VIEWING_MODES.indexOf(tab) >= 0) {
       viewingMode = tab;
       viewingModeChosen = true;
