@@ -99,6 +99,10 @@ tbody tr.selected{background:var(--brand-soft)}
 .btn.ghost:hover{background:var(--surface-soft);color:var(--text)}
 .btn.danger{background:var(--bad);border-color:var(--bad)}
 .btn.danger:hover{background:var(--bad);border-color:var(--bad)}
+/* Опасное действие рядом с обычными — контуром, а не сплошной заливкой. */
+.btn.danger-outline{background:none;border-color:var(--bad-line-strong);color:var(--bad)}
+.btn.danger-outline:hover{background:var(--bad-soft, rgba(217,45,32,.08))}
+.editor-foot{justify-content:flex-end;gap:8px}
 .btn.small{padding:4px 8px;font-size:var(--fs-sm);border-radius:7px}
 .btn.icon{padding:4px 6px}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);background:var(--surface-soft);font-size:var(--fs-sm);font-weight:600;color:var(--muted);white-space:nowrap}

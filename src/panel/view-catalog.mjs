@@ -173,7 +173,7 @@ function openObjectExtras(id) {
       '<button class="btn secondary" data-move="down" type="button">↓ Опустить в списке</button></div>' +
       '<button class="btn secondary" data-copy="1" type="button">⧉ Создать копию</button>' +
       '<span class="small muted">Копия создаётся черновиком — клиенты её не видят, пока не опубликуете.</span>' +
-      '<button class="btn danger" data-delete="1" type="button">Удалить объект</button>' +
+      '<button class="btn danger-outline" data-delete="1" type="button">Удалить объект</button>' +
       '<span class="small muted">Карточка исчезнет из каталога бота без возможности вернуть.</span></div>',
     footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
     ready: function (dialog) {
@@ -219,10 +219,10 @@ function openChannelPost(id) {
   if (!channels.length) {
     return openDialog({
       title: "Каналов пока нет",
-      body: '<div class="stack"><div>Чтобы публиковать объекты, добавьте канал в разделе «Публикации» и сделайте бота его администратором.</div></div>',
-      footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="goChannels" type="button">Открыть «Публикации»</button>',
+      body: '<div class="stack"><div>Чтобы публиковать объекты, подключите канал в «Настройки → Обслуживание → Каналы и группы» и сделайте бота его администратором.</div></div>',
+      footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="goChannels" type="button">Открыть «Каналы и группы»</button>',
       ready: function (dialog) {
-        dialog.querySelector("#goChannels").onclick = function () { dialog.closeClean(); go("posts", "channel"); };
+        dialog.querySelector("#goChannels").onclick = function () { dialog.closeClean(); serviceScreen = "channels"; go("settings", "service"); };
       },
     });
   }
@@ -372,9 +372,7 @@ function openRecordEditor(kind, id) {
             return '<option value="' + type[0] + '"' + (record && record.propertyType === type[0] ? " selected" : "") + ">" + type[1] + "</option>";
           }).join("") + "</select></div>" +
           '<div class="field"><label>Сделка</label><select id="fDeal"><option value="sale"' + (record && record.dealType === "rent" ? "" : " selected") + '>Продажа</option><option value="rent"' + (record && record.dealType === "rent" ? " selected" : "") + ">Аренда</option></select></div>" +
-          '<div class="field"><label>Статус</label><select id="fStatus">' + PROPERTY_STATUS.map(function (item) {
-            return '<option value="' + item[0] + '"' + ((record ? record.status : "hidden") === item[0] ? " selected" : "") + ">" + item[1] + "</option>";
-          }).join("") + "</select></div>" +
+          '<input type="hidden" id="fStatus" value="' + esc(record ? record.status : "hidden") + '">' +
           '<div class="field"><label>Цена</label><input id="fPrice" type="number" min="0" value="' + esc(record && record.priceValue || "") + '"></div>' +
           '<div class="field"><label>Валюта</label><select id="fCurrency">' + ["EUR", "USD", "GBP"].map(function (code) {
             return '<option value="' + code + '"' + (record && record.currency === code ? " selected" : "") + ">" + code + "</option>";
@@ -420,7 +418,12 @@ function openRecordEditor(kind, id) {
     wide: true,
     protectChanges: true,
     body: body,
-    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveRecord" type="button">Сохранить</button>',
+    // У объекта главные действия — внизу формы и зависят от состояния: черновик
+    // публикуют, опубликованный сохраняют или снимают с публикации. Раньше
+    // «Опубликовать» стояло в самом верху, а внизу была одна «Сохранить».
+    footer: isObject
+      ? '<button class="btn secondary" data-close="1" type="button">Отмена</button><span class="grow"></span><span class="row wrap editor-foot" id="editorFoot"></span>'
+      : '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveRecord" type="button">Сохранить</button>',
     ready: function (dialog) {
       bindLanguageTabs(dialog);
       var pendingImages = { ru: [], en: [], es: [] };
@@ -480,20 +483,40 @@ function openRecordEditor(kind, id) {
         dialog.querySelector("#publicationCheck").innerHTML =
           '<div class="publication-head"><div><b>Готовность карточки</b><span>Единый стандарт для всех языков</span></div><span class="chip ' + state.chip + '">' + state.text + "</span></div>" +
           '<div class="publication-rows">' + rows.map(function (row) {
-            return '<div class="publication-row"><b>' + row.code.toUpperCase() + '</b><span class="grow">' + esc(row.name) + '</span><span class="' + (row.issues.length ? "warn-text" : "ok-text") + '">' + (row.issues.length ? esc(row.issues.join(", ")) : "готово") + "</span></div>";
+            return '<div class="publication-row"><b>' + row.code.toUpperCase() + '</b><span class="grow">' + esc(row.name) + '</span><span class="' + (row.issues.length ? "warn-text" : "ok-text") + '">' + (row.issues.length ? "не хватает: " + esc(row.issues.join(", ")) : "готово") + "</span></div>";
           }).join("") + "</div>" +
-          // Одна кнопка вместо поиска нужного статуса в списке.
-          '<div class="publication-actions"><button class="btn' + (live ? " secondary" : "") + '" id="togglePublish" type="button"' + (!ready && !live ? " disabled" : "") + '>' +
-            (live ? "Снять с публикации" : "Опубликовать") + "</button>" +
-            '<span class="small muted">' + (live ? "Объект пропадёт из каталога, переписка и заявки останутся." : ready ? "Объект сразу появится в каталоге у клиентов." : "Сначала заполните то, чего не хватает.") + "</span></div>" +
+          // Состояние объекта на рынке: бронь и продажа — отдельные пометки, а не
+          // поле «Статус», которое дублировало кнопку «Опубликовать».
+          (live || status === "sold" ? '<div class="publication-actions">' +
+            (status === "active" ? '<button class="btn ghost small" data-set-status="reserved" type="button">Отметить забронированным</button>' : "") +
+            (status === "reserved" ? '<button class="btn ghost small" data-set-status="active" type="button">Снять бронь</button>' : "") +
+            (live ? '<button class="btn ghost small" data-set-status="sold" type="button">Отметить проданным</button>' : "") +
+            (status === "sold" ? '<button class="btn ghost small" data-set-status="active" type="button"' + (ready ? "" : " disabled") + '>Вернуть в продажу</button>' : "") +
+          "</div>" : "") +
           (liveAndIncomplete ? '<div class="publication-warning">Сохранить карточку можно и так, но клиенты видят её только на тех языках, где заполнено всё. Пока не хватает данных, объект в каталоге не показывается.</div>' : "");
-        var toggle = dialog.querySelector("#togglePublish");
-        if (toggle) toggle.onclick = function () {
-          dialog.querySelector("#fStatus").value = live ? "hidden" : "active";
-          renderPublicationCheck();
-          renderRecordPreview();
-          saveRecord();
-        };
+        dialog.querySelectorAll("[data-set-status]").forEach(function (button) {
+          button.onclick = function () {
+            dialog.querySelector("#fStatus").value = button.dataset.setStatus;
+            renderPublicationCheck();
+            renderRecordPreview();
+          };
+        });
+        // Подвал: главное действие — справа, второстепенные — слева от него.
+        var foot = dialog.querySelector("#editorFoot");
+        if (foot) {
+          foot.innerHTML = live
+            ? '<button class="btn secondary" id="unpublish" type="button" title="Объект пропадёт из каталога, переписка и заявки останутся">Снять с публикации</button>' +
+              '<button class="btn secondary" id="postToChannel" type="button"' + (record ? "" : " disabled") + ' title="' + (record ? "Пост с фотографией, ценой и кнопкой «Смотреть в боте»" : "Сначала сохраните объект") + '">➤ Опубликовать в канал</button>' +
+              '<button class="btn" id="saveRecord" type="button">Сохранить</button>'
+            : '<button class="btn secondary" id="saveDraft" type="button">' + (status === "sold" ? "Сохранить" : "Сохранить как черновик") + '</button>' +
+              (status === "sold" ? "" : '<button class="btn" id="publishNow" type="button"' + (ready ? "" : " disabled") + ' title="' + (ready ? "Объект сразу появится в каталоге у клиентов" : "Сначала заполните то, чего не хватает") + '">Опубликовать</button>');
+          var bind = function (id, handler) { var button = foot.querySelector(id); if (button) button.onclick = handler; };
+          bind("#saveRecord", saveRecord);
+          bind("#saveDraft", saveRecord);
+          bind("#publishNow", function () { dialog.querySelector("#fStatus").value = "active"; saveRecord(); });
+          bind("#unpublish", function () { dialog.querySelector("#fStatus").value = "hidden"; saveRecord(); });
+          bind("#postToChannel", function () { if (record) openChannelPost(record.id); });
+        }
         var type = value("fType");
         var residential = ["apartment", "house", "villa", "townhouse", "newbuild"].indexOf(type) >= 0;
         dialog.querySelectorAll("[data-required]").forEach(function (marker) {
@@ -717,7 +740,7 @@ function openRecordEditor(kind, id) {
           await reload();
         } catch (error) { fail(error); }
       }
-      dialog.querySelector("#saveRecord").onclick = saveRecord;
+      if (!isObject) dialog.querySelector("#saveRecord").onclick = saveRecord;
     },
   });
 }

@@ -1399,6 +1399,47 @@ test('«Пост в канал» — форма поста с выбором к�
   assert.ok(!manageHtml.includes('id="groupSend"'), 'формы поста там нет');
 });
 
+test('редактор объекта: внизу «Опубликовать» и «Сохранить как черновик»; опубликованный — «Сохранить», «Снять», «В канал»', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push({ id: 'draft-1', status: 'hidden', reference: 'D-1', title: { ru: 'Черновик', en: '', es: '' }, images: [] });
+    data.objects.push({ id: 'live-1', status: 'active', reference: 'L-1', title: { ru: 'Живой', en: 'Live', es: 'Vivo' }, images: [] });
+  });
+  const { sandbox, requests } = await panelSandbox();
+  const original = sandbox.openDialog;
+  let dialog = null;
+  // Поддельная страница не хранит значения полей из разметки: статус, с которым
+  // открывается редактор, задаём сами — до того, как редактор его прочитает.
+  let presetStatus = '';
+  sandbox.openDialog = (options) => {
+    const ready = options.ready;
+    options.ready = (opened) => { if (presetStatus) opened.querySelector('#fStatus').value = presetStatus; ready(opened); };
+    dialog = original(options);
+    return dialog;
+  };
+
+  sandbox.openRecordEditor('objects', 'draft-1');
+  let foot = String(dialog.querySelector('#editorFoot').innerHTML);
+  assert.match(foot, /id="saveDraft"[^>]*>Сохранить как черновик</);
+  assert.match(foot, /id="publishNow"/);
+  assert.ok(!foot.includes('id="unpublish"'), 'у черновика нет «Снять с публикации»');
+  assert.ok(!String(dialog.innerHTML).includes('<label>Статус</label>'), 'поля «Статус» в форме нет');
+
+  presetStatus = 'active';
+  sandbox.openRecordEditor('objects', 'live-1');
+  foot = String(dialog.querySelector('#editorFoot').innerHTML);
+  for (const id of ['saveRecord', 'unpublish', 'postToChannel']) assert.ok(foot.includes('id="' + id + '"'), id + ' у опубликованного объекта');
+  assert.ok(!foot.includes('id="publishNow"'));
+
+  // «Снять с публикации» сохраняет объект скрытым.
+  requests.length = 0;
+  const unpublish = dialog.querySelector('#editorFoot').querySelector('#unpublish');
+  await unpublish.onclick.call(unpublish);
+  const saved = requests.find((request) => request.method === 'PATCH' && request.url.includes('/api/objects/live-1'));
+  assert.ok(saved, 'объект сохранён');
+  assert.equal(saved.body.status, 'hidden');
+});
+
 test('когда все отвечены, ноль везде', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, state } = await panelSandbox();
