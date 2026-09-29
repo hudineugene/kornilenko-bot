@@ -178,7 +178,8 @@ function doneRowsHtml() {
 function deedList() {
   var rank = { bad: 0, warn: 1 };
   return (state.notifications || [])
-    .filter(function (item) { return item.active && !item.handledAt; })
+    // «Нет связи с Telegram» — не дело менеджера: она в «Состоянии бота» и красной точкой в шапке.
+    .filter(function (item) { return item.active && !item.handledAt && String(item.id).indexOf("system:connection:") !== 0; })
     .slice()
     .sort(function (first, second) {
       var weight = (rank[first.severity] === undefined ? 2 : rank[first.severity]) - (rank[second.severity] === undefined ? 2 : rank[second.severity]);
@@ -219,7 +220,8 @@ function readinessItems(report) {
   var items = [];
   function fromCheck(id, title, route) {
     var check = checks[id];
-    if (check) items.push({ id: id, title: title, ok: check.status === "ok", detail: check.detail || "", route: route });
+    // Сбой связи с Telegram показывается один раз — в «Состоянии бота»; здесь только «!» и ссылка туда.
+    if (check) items.push({ id: id, title: title, ok: check.status === "ok", detail: id === "token" && check.status !== "ok" ? "Подробности — в «Состоянии бота»" : check.detail || "", route: route });
   }
   fromCheck("token", "Бот подключён к Telegram", ["settings", "telegram"]);
   fromCheck("admin", "Заявки приходят в ваш Telegram", ["settings", "team"]);

@@ -3817,3 +3817,31 @@ test('бейджи в меню подписаны: у «Сегодня» — д�
   await sandbox.el('botState').onclick();
   assert.deepEqual(routes, ['today']);
 });
+
+test('один сбой связи — одно место: в чек-листе короткое «!», в списке дел его нет, полный текст — в «Состоянии бота»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const long = 'связь: переподключается, неудачных попыток подряд: 7 (Telegram отклонил токен бота. Проверьте токен в настройках.)';
+  const items = sandbox.readinessItems({ checks: [{ id: 'token', status: 'bad', detail: long }] });
+  const token = items.find((item) => item.id === 'token');
+  assert.equal(token.ok, false);
+  assert.ok(!token.detail.includes('Telegram отклонил'), 'полного текста ошибки в чек-листе нет: ' + token.detail);
+  assert.match(token.detail, /«Состоянии бота»/);
+
+  const now = new Date().toISOString();
+  sandbox.state.notifications = [
+    { id: 'system:connection:Telegram отклонил токен', kind: 'system', severity: 'bad', title: 'Нет стабильной связи с Telegram', text: long, createdAt: now, active: true, handledAt: '' },
+    { id: 'catalog:empty', kind: 'catalog', severity: 'warn', title: 'В каталоге нет активных объектов', text: 'x', createdAt: now, active: true, handledAt: '' },
+  ];
+  assert.deepEqual(Array.from(sandbox.deedList(), (item) => item.id), ['catalog:empty'], 'сбой связи в делах не показывается');
+});
+
+test('число дел от бота тоже не считает сбой связи', async () => {
+  const { attentionCounts } = await import('../src/admin-notifications.mjs');
+  const list = [
+    { id: 'system:connection:x', active: true, handledAt: '' },
+    { id: 'catalog:empty', active: true, handledAt: '' },
+    { id: 'task:1', active: true, handledAt: '2026-09-29T10:00:00.000Z' },
+  ];
+  assert.equal(attentionCounts(list).deeds, 1);
+});

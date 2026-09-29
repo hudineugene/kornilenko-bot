@@ -215,7 +215,8 @@ function attentionCounts(notifications = adminNotifications(), now = Date.now())
     const since = Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0;
     if (since && now - since >= limit) late.add(userId);
   }
-  const deeds = notifications.filter((item) => item.active && !item.handledAt).length;
+  // Сбой связи с Telegram — не дело менеджера: он виден в «Состоянии бота» и точкой в шапке.
+  const deeds = notifications.filter((item) => item.active && !item.handledAt && !String(item.id).startsWith('system:connection:')).length;
   return { waitingClients: waiting.size, lateClients: late.size, deeds };
 }
 
