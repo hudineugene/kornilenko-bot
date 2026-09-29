@@ -257,6 +257,18 @@ test.describe('free viewing slots', () => {
     assert.deepEqual(shared.last.markup.keyboard[0].map((button) => button.text), [bot.text.menuLabels.ru.objects, bot.text.menuLabels.ru.selection], 'кнопка больше не нужна');
   });
 
+  test('чужой контакт после записи не сохраняется как телефон клиента', async () => {
+    enableSlots();
+    const chat = createChat();
+    let step = await chat.press('property:viewing:villa-marbella-01');
+    step = await chat.say(tomorrowLabel(step.last.buttons));
+    await chat.say('10:00');
+    await chat.say(ru.confirm);
+
+    await chat.shareContact('34600123123', { ownerId: 5550002 });
+    assert.notEqual(chat.user.phone, '34600123123', 'номер друга не записан клиенту');
+  });
+
   test('a client whose phone is known is not asked for it again', async () => {
     enableSlots();
     const chat = createChat();

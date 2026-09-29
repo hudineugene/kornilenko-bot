@@ -131,6 +131,24 @@ test.describe('callback request form', () => {
     assert.equal(chat.user.pendingAction.data.phone, '34600999888');
   });
 
+  test('чужая карточка контакта не становится телефоном клиента', async () => {
+    const chat = createChat();
+    await chat.press('contact:lead');
+    await chat.press('lead:call');
+    // Клиент переслал контакт друга вместо своего: user_id не его.
+    const step = await chat.shareContact('34611222333', { ownerId: 5550001 });
+    assert.equal(step.last.text, ru.invalidPhone, 'бот просит собственный номер');
+    assert.equal(chat.user.pendingAction.step, 'phone', 'анкета осталась на номере');
+    assert.notEqual(chat.user.pendingAction.data.phone, '34611222333');
+    // Контакт без user_id (карточка не из Telegram) — тоже чужой.
+    const none = await chat.shareContact('34611222333', { ownerId: null });
+    assert.equal(none.last.text, ru.invalidPhone);
+    // Свой контакт принимается как раньше.
+    const own = await chat.shareContact('34600999888');
+    assert.equal(own.last.text, ru.askTime);
+    assert.equal(chat.user.pendingAction.data.phone, '34600999888');
+  });
+
   test('editing one field from the review returns to the review and keeps the rest', async () => {
     const chat = createChat();
     await chat.press('contact:lead');

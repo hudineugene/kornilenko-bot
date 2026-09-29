@@ -85,6 +85,17 @@ function knownLeadPhone(user) {
   return validLeadPhone(user && user.phone);
 }
 
+// Номер из «Отправить мой номер» — только если контакт принадлежит самому
+// отправителю. Карточку чужого человека (переслал друг, выбрал из записной
+// книжки) считать телефоном клиента нельзя: менеджер позвонил бы не тому.
+function ownContactPhone(message) {
+  const contact = message && message.contact;
+  if (!contact || !contact.phone_number) return '';
+  const sender = message.from && message.from.id;
+  if (sender == null || contact.user_id == null || String(contact.user_id) !== String(sender)) return '';
+  return contact.phone_number;
+}
+
 function validLeadPhone(value) {
   const phone = cleanText(value, 80);
   const digits = phone.replace(/\D/g, '');
@@ -414,7 +425,9 @@ async function handleLeadFormMessage(message, user, token) {
   }
   if (pending.step === 'phone') {
     const savedPhone = savedLeadOption(user, language, 'phone');
-    const phone = validLeadPhone(message.contact && message.contact.phone_number ? message.contact.phone_number : savedPhone && text === savedPhone ? user.phone : text);
+    // Чужая карточка контакта не считается номером клиента: ждём его собственный.
+    const sharedPhone = ownContactPhone(message);
+    const phone = message.contact ? validLeadPhone(sharedPhone) : validLeadPhone(savedPhone && text === savedPhone ? user.phone : text);
     if (!phone) {
       await sendMessage(user.chatId, copy.invalidPhone, token, { reply_markup: leadFormKeyboard(language, 'phone', user) });
       return true;
@@ -901,7 +914,7 @@ function viewingMenuKeyboard(language, user) {
 async function saveViewingPhone(message, user, token) {
   const language = user.preferredLanguage || 'ru';
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
-  const phone = validLeadPhone(message.contact && message.contact.phone_number);
+  const phone = validLeadPhone(ownContactPhone(message));
   if (!phone) return false;
   user.phone = phone;
   scheduleSave();

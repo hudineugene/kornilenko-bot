@@ -100,9 +100,10 @@ function createChat({ language = 'ru', firstName = 'Анна' } = {}) {
       messageId += 1;
       return deliver({ message: { message_id: messageId, date: now(), from, chat, text } }, userId);
     },
-    shareContact(phone) {
+    // ownerId — чей это контакт: по умолчанию клиента, а можно подсунуть чужой.
+    shareContact(phone, { ownerId = userId } = {}) {
       messageId += 1;
-      return deliver({ message: { message_id: messageId, date: now(), from, chat, contact: { phone_number: phone, user_id: userId, first_name: firstName } } }, userId);
+      return deliver({ message: { message_id: messageId, date: now(), from, chat, contact: { phone_number: phone, user_id: ownerId, first_name: firstName } } }, userId);
     },
     // options.card = true — кнопка нажата под карточкой объекта, то есть под
     // сообщением с фотографией: именно такие сообщения бот меняет на месте.
