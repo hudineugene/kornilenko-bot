@@ -1609,6 +1609,71 @@ test('значки навигации — один набор линейных S
   for (const glyph of ['◉', '✉', '⌂', '➤', '✎', '⚙', '📅']) assert.ok(!shown.includes(glyph), 'старого глифа ' + glyph + ' на экране нет');
 });
 
+test('«Состояние бота» на «Сегодня»: здоровье одним блоком — Telegram, диск, копия, файлы, канал', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.state.groups = [{ id: '-1001', status: 'administrator' }, { id: '-1002', status: 'left' }];
+  const rows = sandbox.healthRows({ checks: [
+    { id: 'token', status: 'ok', detail: 'принят Telegram, связь есть' },
+    { id: 'disk', status: 'warn', detail: 'осталось 0,8 ГБ, папка бота занимает 580 МБ' },
+    { id: 'version', status: 'ok', detail: 'версия 43, копия bot-data-2026-09-29.json' },
+    { id: 'media', status: 'bad', detail: 'нет файлов: 2 из 84' },
+  ] });
+  const html = String(sandbox.healthHtml(rows));
+  assert.equal(rows.map((row) => row.title).join('|'), 'Telegram|Диск|Копия данных|Файлы картинок|Каналы и группы');
+  assert.match(html, /<span class="chip ok">✓<\/span><span>Telegram: принят Telegram, связь есть<\/span>/);
+  assert.match(html, /<span class="chip warn">!<\/span><span>Диск: осталось 0,8 ГБ/, 'предупреждение — со словами');
+  assert.match(html, /<span class="chip bad">✕<\/span><span>Файлы картинок: нет файлов: 2 из 84/, 'беда — красным');
+  assert.match(html, /Каналы и группы: подключено 1/, 'вышедший из группы бот не считается');
+  // Нет данных самопроверки — блока нет, а не пустая рамка.
+  assert.equal(String(sandbox.healthHtml(sandbox.healthRows({}))), '');
+});
+
+test('потеря связи панели с ботом: красная полоса на всех экранах, слова вместо «Failed to fetch», сама пропадает', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const alertBox = sandbox.el('linkAlert');
+  const shown = () => !alertBox.classList.contains('hidden');
+  sandbox.linkState.failures = 0;
+  sandbox.linkState.lastOkAt = Date.now() - 3 * 60000;
+
+  // Одна осечка — ещё не беда (перезапуск, сеть моргнула): полосы нет.
+  sandbox.noteLinkFailure(new TypeError('Failed to fetch'));
+  assert.equal(shown(), false, 'после одной осечки полосы нет');
+  // Вторая подряд — панель не достаёт до бота: полоса с объяснением.
+  sandbox.noteLinkFailure(new TypeError('Failed to fetch'));
+  assert.equal(shown(), true, 'после второй — красная полоса');
+  const text = String(sandbox.el('linkAlertText').textContent);
+  assert.match(text, /не достаёт до бота|бот остановлен|перезапускается/i);
+  assert.match(text, /start-bot\.ps1/, 'сказано, что делать');
+  assert.match(text, /3 мин/, 'и когда данные были свежими');
+  assert.equal(sandbox.el('botState').dataset.state, 'off', 'точка состояния тоже не «Бот работает»');
+
+  // Ответ сервера «вход не действует» — не потеря связи: полосу не трогаем, счёт не растёт.
+  const before = sandbox.linkState.failures;
+  sandbox.noteLinkFailure(Object.assign(new Error('Ошибка запроса'), { status: 401 }));
+  assert.equal(sandbox.linkState.failures, before);
+
+  // Связь вернулась — полоса уходит.
+  sandbox.noteLinkOk();
+  assert.equal(shown(), false);
+  assert.equal(sandbox.linkState.failures, 0);
+});
+
+test('запрос к боту без связи: человеческое сообщение вместо «Failed to fetch»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.fetch = () => Promise.reject(new TypeError('Failed to fetch'));
+  await assert.rejects(() => sandbox.api('/api/state'), (error) => {
+    assert.match(error.message, /Нет связи с ботом/, error.message);
+    assert.ok(!/Failed to fetch/.test(error.message), 'сырого текста браузера нет');
+    return true;
+  });
+  // Ошибка самого сервера остаётся его собственной.
+  sandbox.fetch = async () => ({ ok: false, status: 400, json: async () => ({ error: 'Укажите название' }) });
+  await assert.rejects(() => sandbox.api('/api/x', { method: 'PUT' }), /Укажите название/);
+});
+
 test('«Сегодня»: чек-лист «Готовность к запуску» — пункты с кнопками, пока не всё готово; при полной готовности блока нет', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();

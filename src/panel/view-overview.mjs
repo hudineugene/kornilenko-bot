@@ -206,6 +206,35 @@ function readinessCard(items) {
     }).join("") + "</div></div>";
 }
 
+// Здоровье бота одним списком в карточке «Состояние бота»: то, что ломается тихо —
+// связь с Telegram, диск, копия, файлы картинок, каналы. Берётся из той же
+// самопроверки, что и чек-лист.
+function healthRows(report) {
+  var checks = {};
+  ((report && report.checks) || []).forEach(function (check) { checks[check.id] = check; });
+  var rows = [];
+  function add(id, title) {
+    if (checks[id]) rows.push({ title: title, status: checks[id].status, detail: checks[id].detail || "" });
+  }
+  if (!Object.keys(checks).length) return rows;
+  add("token", "Telegram");
+  add("disk", "Диск");
+  add("version", "Копия данных");
+  add("media", "Файлы картинок");
+  var groups = (state.groups || []).filter(function (group) { return ["member", "administrator", "creator"].indexOf(group.status) >= 0; }).length;
+  rows.push({ title: "Каналы и группы", status: groups ? "ok" : "warn", detail: groups ? "подключено " + groups : "не подключены" });
+  return rows;
+}
+
+function healthHtml(rows) {
+  if (!rows.length) return "";
+  return '<div class="stack health">' + rows.map(function (row) {
+    var kind = row.status === "bad" ? "bad" : row.status === "warn" ? "warn" : "ok";
+    var mark = row.status === "bad" ? "✕" : row.status === "warn" ? "!" : "✓";
+    return '<div class="row"><span class="chip ' + kind + '">' + mark + "</span><span>" + esc(row.title + ": " + row.detail) + "</span></div>";
+  }).join("") + "</div>";
+}
+
 async function loadReadiness(host) {
   var box = host.querySelector("#readiness");
   if (!box) return;
@@ -214,6 +243,8 @@ async function loadReadiness(host) {
       readinessCache = { at: Date.now(), report: await api("/api/self-check") };
     }
     if (!Array.isArray(readinessCache.report.checks)) return;
+    var health = host.querySelector("#healthRows");
+    if (health) health.innerHTML = healthHtml(healthRows(readinessCache.report));
     box.innerHTML = readinessCard(readinessItems(readinessCache.report));
     box.querySelectorAll("[data-ready-go]").forEach(function (button) {
       button.onclick = function () { var parts = button.dataset.readyGo.split("/"); go(parts[0], parts[1] || "", parts[2] || ""); };
@@ -270,6 +301,7 @@ VIEWS.today = {
           '<div class="card"><header><h3>Состояние бота</h3></header><div class="card-body stack">' +
             '<label class="switch"><input type="checkbox" id="botActive"' + (state.config.active ? " checked" : "") + '><span class="track"></span><span>' + (state.config.active ? "Бот включён" : "Бот выключен") + "</span></label>" +
             '<div class="small muted">Связь: ' + esc(connectionText()) + "</div>" +
+            '<div id="healthRows"></div>' +
             '<div class="small muted">Клиентов в базе: ' + num(state.userCount) + " · им можно писать: " + num(state.activeUserCount) + " · согласились на рассылки: " + num(state.newsConsentCount) + "</div>" +
             '<div class="row wrap"><button class="btn secondary small" type="button" data-go="settings" data-tab="team">Настройки</button>' +
             '<button class="btn secondary small" type="button" data-go="settings" data-tab="reports">Отчёты</button></div>' +

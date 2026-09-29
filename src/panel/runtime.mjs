@@ -31,6 +31,7 @@ const PANEL_SHELL = String.raw`
 </section>
 
 <div id="app" class="app hidden">
+  <div id="linkAlert" class="link-alert hidden" role="alert"><div class="grow"><b>Нет связи с ботом</b><span id="linkAlertText"></span></div><button class="btn secondary small" id="linkAlertRetry" type="button">Проверить сейчас</button></div>
   <header class="app-head" id="appHead">
     <button class="btn ghost icon menu-toggle" id="menuToggle" type="button" aria-label="Открыть меню" aria-expanded="false">☰</button>
     <div class="app-brand">
@@ -171,6 +172,47 @@ function sessionExpired() {
   el("loginPassword").focus();
 }
 
+// Связь панели с ботом (не с Telegram: та видна в состоянии бота). Одна осечка — не
+// беда (перезапуск, сеть моргнула); вторая подряд — красная полоса на всех экранах.
+// Раньше обновление по таймеру молча проглатывало обрыв, точка оставалась «Бот
+// работает», а данные на экране тихо старели.
+var linkState = { failures: 0, lastOkAt: Date.now(), retryTimer: 0 };
+
+function noteLinkOk() {
+  var wasDown = linkState.failures >= 2;
+  linkState.failures = 0;
+  linkState.lastOkAt = Date.now();
+  if (linkState.retryTimer) { clearTimeout(linkState.retryTimer); linkState.retryTimer = 0; }
+  el("linkAlert").classList.add("hidden");
+  if (wasDown && state) renderBotState();
+}
+
+function noteLinkFailure(error) {
+  // Ответил сам бот (например, «вход не действует») — связь есть.
+  if (error && error.status && (error.status < 502 || error.status > 504)) return;
+  linkState.failures += 1;
+  if (linkState.failures >= 2) showLinkAlert();
+  // Пока связи нет, спрашиваем чаще, чем раз в 45 секунд: как только бот вернётся, полоса уйдёт.
+  if (!linkState.retryTimer) {
+    linkState.retryTimer = setTimeout(function () {
+      linkState.retryTimer = 0;
+      if (typeof refresh === "function" && appStarted && !sessionEnded) refresh().catch(function () {});
+    }, linkState.failures >= 2 ? 10000 : 6000);
+  }
+}
+
+function showLinkAlert() {
+  el("linkAlertText").textContent = "Панель не достаёт до бота: возможно, он остановлен или перезапускается. Данные на экране могут быть устаревшими (последнее обновление — " + ago(new Date(linkState.lastOkAt).toISOString()) + "). Запустите бота (start-bot.ps1) — панель подключится сама.";
+  el("linkAlert").classList.remove("hidden");
+  // Точка в шапке не может говорить «Бот работает», когда до него не достучаться.
+  var box = el("botState");
+  box.querySelector(".dot").className = "dot off";
+  el("botStateText").textContent = "Нет связи с ботом";
+  box.dataset.state = "off";
+  box.dataset.short = "Нет связи";
+  box.title = "Нет связи с ботом";
+}
+
 function api(url, options) {
   options = options || {};
   options.headers = Object.assign({ "content-type": "application/json" }, options.headers || {});
@@ -183,6 +225,9 @@ function api(url, options) {
     if (!response.ok) {
       var error = new Error(body.error || "Ошибка запроса");
       error.status = response.status;
+      // Бот ответил (пусть и отказом): связь есть. 502–504 — не он, а то, что перед ним.
+      if (response.status < 502 || response.status > 504) noteLinkOk();
+      else noteLinkFailure(error);
       // Вход перестал действовать: сессия истекла или бот перезапустили. Раньше
       // панель оставалась на экране со старыми данными и на каждое нажатие
       // показывала всплывающую ошибку — войти заново можно было только
@@ -190,7 +235,15 @@ function api(url, options) {
       if (response.status === 401 && !authRequest(url)) sessionExpired();
       throw error;
     }
+    noteLinkOk();
     return body;
+  }, function (failure) {
+    // До бота не достучались (остановлен, перезапускается, сеть). Браузер называет
+    // это «Failed to fetch» — по-русски и с подсказкой, что делать.
+    noteLinkFailure(failure);
+    var friendly = new Error("Нет связи с ботом. Проверьте, что он запущен (start-bot.ps1); панель повторит попытку сама.");
+    friendly.network = true;
+    throw friendly;
   }).finally(function () {
     if (changing) pendingChanges = Math.max(0, pendingChanges - 1);
   });
@@ -1172,6 +1225,7 @@ function bindShell() {
   };
   // Ввод на экране запоминается: пока он есть, автообновление экран не трогает.
   el("page").addEventListener("input", function () { pageTouched = true; });
+  el("linkAlertRetry").onclick = function () { refresh().catch(function () {}); };
   el("refreshHintApply").onclick = function () {
     hideRefreshHint();
     renderView({ keepScroll: true });

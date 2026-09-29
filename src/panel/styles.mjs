@@ -119,6 +119,7 @@ tbody tr.selected{background:var(--brand-soft)}
 /* Опасное действие рядом с обычными — контуром, а не сплошной заливкой. */
 .btn.danger-outline{background:none;border-color:var(--bad-line-strong);color:var(--bad)}
 .readiness{border-color:var(--warn-line)}
+.health{gap:6px;font-size:var(--fs-sm)}
 .danger-zone{border-color:var(--bad-line)}
 .danger-zone>header h3{color:var(--bad)}
 .btn.danger-outline:hover{background:var(--bad-soft, rgba(217,45,32,.08))}
@@ -570,6 +571,11 @@ code{padding:0px 4px;border-radius:5px;background:var(--surface-soft);border:1px
 .deed-body span{font-size:var(--fs-sm);color:var(--muted);overflow-wrap:anywhere}
 .deed-actions{flex:none;display:flex;align-items:center;gap:6px}
 @media (max-width:860px){.deed{flex-wrap:wrap}.deed-actions{width:100%;justify-content:flex-end}}
+/* Панель не достаёт до бота: красная полоса над шапкой, на любом экране; когда страницу
+   прокрутили, о том же говорит точка состояния в шапке. */
+.link-alert{position:relative;z-index:60;display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--bad);color:var(--surface);font-size:var(--fs-sm)}
+.link-alert>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.link-alert b{font-size:var(--fs)}
 .save-alert{position:fixed;left:20px;right:20px;top:14px;z-index:45;display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-radius:11px;background:var(--bad-soft);border:1px solid var(--bad);color:var(--bad);box-shadow:var(--shadow-lg);font-size:var(--fs)}
 .save-alert b{font-size:var(--fs)}
 @media (max-width:860px){.save-alert{left:10px;right:10px;top:8px}}
