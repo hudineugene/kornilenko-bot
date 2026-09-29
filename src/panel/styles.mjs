@@ -264,6 +264,10 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .chip.overdue{background:var(--bad);border-color:var(--bad);color:var(--surface);font-weight:700}
 .week-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;font-size:var(--fs-sm);color:var(--muted)}
 .week-line:empty{display:none}
+.source-table td:first-child{white-space:nowrap}
+.source-table th{white-space:normal}
+@media(max-width:860px){.source-table th,.source-table td{padding:8px 6px}}
+.source-total td{border-top:1px solid var(--line);font-weight:600}
 .week-line-text b{color:var(--text)}
 .late-note{color:var(--bad);font-weight:600}
 .nav-item .count.late{box-shadow:0 0 0 2px var(--bad-line)}

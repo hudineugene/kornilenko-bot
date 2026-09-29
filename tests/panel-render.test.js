@@ -1498,7 +1498,7 @@ test('числа на «Сегодня» и в «Отчётах» сходятс
   const html = String(reports.innerHTML).replace(/ /g, ' ');
   assert.match(html, /Заявок за 30 дней: <b>3<\/b>/, 'в строке цифр заявки списка за 30 дней');
   assert.match(html, /Заявки по типам, 30 дней/, 'и «по типам» — в том же окне');
-  const typeBars = Array.from(html.slice(html.indexOf('Заявки по типам')).split('Откуда приходят клиенты')[0].matchAll(/<b class="right">(\d+) /g)).map((match) => Number(match[1]));
+  const typeBars = Array.from(html.slice(html.indexOf('Заявки по типам')).split('Языки клиентов')[0].matchAll(/<b class="right">(\d+) /g)).map((match) => Number(match[1]));
   assert.equal(typeBars.reduce((sum, value) => sum + value, 0), 3, 'по типам сумма 3, как в плитке: старая заявка не считается');
   assert.ok(!/заявок: 99/.test(html), 'счётчик аналитики на экран не попадает');
   assert.match(html, /Заявок: <b>3<\/b>/, 'подпись под графиком — то же число');
@@ -2359,6 +2359,32 @@ test('«Отчёт» — отдельный пункт меню: открыва�
   const today = fakeElement('main');
   await sandbox.VIEWS.today.render(today);
   assert.match(String(today.innerHTML), /id="weekLine"/, 'на «Сегодня» есть место под строку недели');
+});
+
+test('«Отчёт»: реклама → сделки — одна таблица «источник → клиенты → заявки → просмотры → сделки» и конструктор ссылки рядом', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  sandbox.state.bot = { username: 'kornilenko_bot' };
+  sandbox.state.sources = [
+    { source: 'instagram', users: 10, recent: 4, withRequests: 4, inquiries: 6, viewings: 3, deals: 1 },
+    { source: '', users: 5, recent: 0, withRequests: 1, inquiries: 1, viewings: 0, deals: 0 },
+  ];
+  const html = String(sandbox.sourceTableCard());
+  for (const head of ['Источник', 'Клиентов', 'Заявок', 'Записались на просмотр', 'Сделок']) assert.ok(html.includes('>' + head + '<'), 'колонка: ' + head);
+  assert.match(html, /<td[^>]*><b>instagram<\/b><\/td><td class="right">10<\/td><td class="right">6<\/td><td class="right">3<\/td><td class="right"><b>1<\/b><\/td>/, 'строка источника: клиенты, заявки, просмотры, сделки');
+  assert.match(html, /без метки/, 'клиенты без метки — отдельной строкой');
+  assert.match(html, /Всего[\s\S]*?15[\s\S]*?7[\s\S]*?3[\s\S]*?1/, 'итог по всем источникам');
+  // Конструктор ссылки — в той же карточке.
+  assert.match(html, /id="sourceLabel"/);
+  assert.match(html, /id="makeSourceLink"/);
+  assert.match(html, /data-copy-source="instagram"/, 'у метки — кнопка «Копировать ссылку»');
+  assert.ok(!/data-copy-source=""/.test(html), 'для «без метки» ссылки нет');
+  // На странице отчёта карточка стоит сразу под неделей, а не спрятана под «Подробнее».
+  const host = fakeElement('main');
+  await sandbox.VIEWS.reports.render(host);
+  const page = String(host.innerHTML);
+  assert.ok(page.indexOf('id="sourceLabel"') > 0 && page.indexOf('id="sourceLabel"') < page.indexOf('<details'), 'таблица источников — над «Подробнее»');
+  assert.equal((page.match(/id="sourceLabel"/g) || []).length, 1, 'конструктор ссылки один');
 });
 
 test('«База клиентов»: кнопка «В Excel» выгружает тех, кто на экране', async () => {

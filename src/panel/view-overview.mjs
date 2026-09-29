@@ -429,27 +429,53 @@ function barList(rows, total) {
   }).join("") + "</div>";
 }
 
-function sourceLinkCard() {
+// Реклама → сделки: по каждой метке ссылки видно, сколько пришло клиентов и что
+// они дали — заявки, записи на просмотр, сделки. Конструктор ссылки — тут же:
+// собрал метку, разместил, через неделю смотришь в эту таблицу.
+function sourceLink(label) {
   var username = (state.bot || {}).username || "";
-  return '<div class="card"><header><h3>Ссылки с меткой источника</h3></header><div class="card-body stack">' +
-    '<p class="muted small">Разместите такую ссылку в рекламе или соцсетях — в карточке клиента, уведомлениях и выгрузке будет видно, откуда он пришёл.</p>' +
+  return username && label ? "https://t.me/" + username + "?start=src_" + label : "";
+}
+
+function sourceTableCard() {
+  var rows = (state.sources || []).slice().sort(function (a, b) { return (b.deals || 0) - (a.deals || 0) || (b.users || 0) - (a.users || 0); });
+  var total = { users: 0, inquiries: 0, viewings: 0, deals: 0 };
+  rows.forEach(function (row) {
+    total.users += row.users || 0; total.inquiries += row.inquiries || 0; total.viewings += row.viewings || 0; total.deals += row.deals || 0;
+  });
+  var username = (state.bot || {}).username || "";
+  return '<div class="card gap-bottom" id="sourceCard"><header><h3>Реклама: клиенты и сделки</h3><div class="actions"><span class="small faint">по метке ссылки, за всё время</span></div></header>' +
+    (rows.length ? '<div class="table-wrap"><table class="source-table"><thead><tr><th>Источник</th><th class="right">Клиентов</th><th class="right">Заявок</th><th class="right">Записались на просмотр</th><th class="right">Сделок</th><th></th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        var label = row.source || "";
+        return "<tr><td><b>" + esc(label || "без метки") + "</b></td><td class=\"right\">" + num(row.users) + "</td><td class=\"right\">" + num(row.inquiries) + "</td><td class=\"right\">" + num(row.viewings) + "</td><td class=\"right\">" + (row.deals ? "<b>" + num(row.deals) + "</b>" : "0") + "</td>" +
+          '<td class="right">' + (label && username ? '<button class="btn ghost small" type="button" title="Скопировать ссылку с этой меткой" data-copy-source="' + esc(label) + '">Ссылка</button>' : "") + "</td></tr>";
+      }).join("") +
+      '<tr class="source-total"><td>Всего</td><td class="right">' + num(total.users) + '</td><td class="right">' + num(total.inquiries) + '</td><td class="right">' + num(total.viewings) + '</td><td class="right">' + num(total.deals) + "</td><td></td></tr>" +
+    "</tbody></table></div>" : '<div class="empty"><b>Пока нет данных</b>Разместите ссылку с меткой ниже — здесь появится, сколько клиентов она привела</div>') +
+    '<div class="card-body stack"><div class="week-subtitle">Ссылка с меткой источника</div>' +
+    '<p class="muted small">Разместите такую ссылку в рекламе или соцсетях — в карточке клиента, уведомлениях и этой таблице будет видно, откуда он пришёл и что дал.</p>' +
     '<div class="row"><input id="sourceLabel" placeholder="instagram" class="field-md"><button class="btn secondary small" id="makeSourceLink" type="button">Собрать ссылку</button></div>' +
     '<div class="row"><input id="sourceLink" readonly value="' + (username ? esc("https://t.me/" + username + "?start=src_метка") : "Сначала подключите бота") + '"><button class="btn ghost small" id="copySourceLink" type="button">Копировать</button></div>' +
   "</div></div>";
 }
 
 function bindSourceLink(host) {
-  var username = (state.bot || {}).username || "";
   var make = host.querySelector("#makeSourceLink");
   if (!make) return;
   make.onclick = function () {
     var label = (host.querySelector("#sourceLabel").value || "").trim().replace(/[^A-Za-z0-9_-]/g, "");
     host.querySelector("#sourceLabel").value = label;
-    host.querySelector("#sourceLink").value = username && label ? "https://t.me/" + username + "?start=src_" + label : "Укажите метку латиницей";
+    host.querySelector("#sourceLink").value = sourceLink(label) || "Укажите метку латиницей";
   };
   host.querySelector("#copySourceLink").onclick = function () {
     navigator.clipboard.writeText(host.querySelector("#sourceLink").value).then(function () { toast("Скопировано"); });
   };
+  host.querySelectorAll("[data-copy-source]").forEach(function (button) {
+    button.onclick = function () {
+      navigator.clipboard.writeText(sourceLink(button.dataset.copySource)).then(function () { toast("Ссылка скопирована"); });
+    };
+  });
 }
 
 function recentReactions() {
@@ -561,7 +587,6 @@ VIEWS.reports = {
     var byType = {};
     monthInquiries.forEach(function (item) { byType[inquiryTypeName(item)] = (byType[inquiryTypeName(item)] || 0) + 1; });
     var typeRows = Object.keys(byType).map(function (name) { return [name, byType[name]]; }).sort(function (a, b) { return b[1] - a[1]; });
-    var sources = (state.sources || []).map(function (item) { return [item.source || "без метки", item.users || 0]; }).sort(function (a, b) { return b[1] - a[1]; });
     var properties = (state.objects || []).map(function (record) {
       var stats = (state.analytics && state.analytics.properties && state.analytics.properties[record.id]) || {};
       return { id: record.id, title: localized(record.title, "ru") || record.reference || record.id, views: Number(stats.impressions || stats.views || 0), details: Number(stats.details || 0), inquiries: catalogPropertyStats(record).inquiries };
@@ -572,6 +597,7 @@ VIEWS.reports = {
 
     host.innerHTML =
       '<div id="weeklyReport"><div class="card gap-bottom"><div class="empty">Считаем неделю…</div></div></div>' +
+      sourceTableCard() +
       '<details class="card gap-bottom report-more"><summary>Подробнее: 30 дней, источники, языки, рассылки, объекты</summary><div class="card-body">' +
       numberStrip([
         ["Всего клиентов", num(state.userCount), "", "+" + usersInRange(week) + " за 7 дней"],
@@ -585,10 +611,8 @@ VIEWS.reports = {
       "</div></div>" +
       '<div class="grid cols-2 gap-bottom">' +
         '<div class="card"><header><h3>Заявки по типам, 30 дней</h3></header>' + barList(typeRows, monthInquiries.length) + "</div>" +
-        '<div class="card"><header><h3>Откуда приходят клиенты</h3></header>' + barList(sources, state.userCount) + "</div>" +
       "</div>" +
       '<div class="grid cols-2 gap-bottom">' +
-        sourceLinkCard() +
         '<div class="card"><header><h3>Языки клиентов</h3></header>' + barList(Object.keys(languages).filter(function (code) { return languages[code]; }).map(function (code) {
           return [{ ru: "Русский", en: "English", es: "Español", unknown: "Язык не выбран" }[code] || code, languages[code]];
         }), counts.all) + "</div>" +

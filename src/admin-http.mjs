@@ -639,11 +639,21 @@ function sourceReport(now = Date.now()) {
   const rows = new Map();
   for (const user of Object.values(data.users)) {
     const source = cleanText(user.source, 40);
-    const row = rows.get(source) || { source, users: 0, recent: 0, withRequests: 0 };
+    const row = rows.get(source) || { source, users: 0, recent: 0, withRequests: 0, inquiries: 0, viewings: 0, deals: 0 };
     row.users += 1;
     if (Date.parse(user.firstSeenAt || user.sourceAt || '') >= recentSince) row.recent += 1;
     if (withRequests.has(String(user.id))) row.withRequests += 1;
     rows.set(source, row);
+  }
+  // Что дала метка: заявки, записи на просмотр и сделки клиентов, пришедших по ней.
+  // «Искал сам и получил каталог» заявкой не считается.
+  const sourceOf = new Map(Object.values(data.users).map((user) => [String(user.id), cleanText(user.source, 40)]));
+  for (const inquiry of data.inquiries) {
+    const row = rows.get(sourceOf.get(String(inquiry.userId)));
+    if (!row) continue;
+    if (!inquiry.searchLead) row.inquiries += 1;
+    if (inquiry.type === 'viewing') row.viewings += 1;
+    if (inquiry.pipelineStage === 'won') row.deals += 1;
   }
   return Array.from(rows.values()).sort((a, b) => (a.source ? 0 : 1) - (b.source ? 0 : 1) || b.users - a.users || a.source.localeCompare(b.source));
 }

@@ -128,16 +128,25 @@ test.describe('lead sources report', () => {
     data.users['503'] = { id: '503', chatId: 503, firstName: 'Olga', source: 'instagram', firstSeenAt: '2020-01-01T00:00:00.000Z', activity: [] };
     data.users['504'] = { id: '504', chatId: 504, firstName: 'Ivan', source: 'facebook', firstSeenAt: new Date().toISOString(), activity: [] };
     data.users['501'].firstSeenAt = new Date().toISOString();
+    // Что дала реклама: у Ольги (instagram) есть запись на просмотр и сделка,
+    // а «искал сам» — не заявка.
+    const mine = (id, extra) => ({ id, userId: '503', chatId: '503', language: 'ru', status: 'new', text: '', replies: [], createdAt: '2026-09-17T08:30:00.000Z', updatedAt: '2026-09-17T08:30:00.000Z', ...extra });
+    data.inquiries.push(
+      mine('src-view', { type: 'viewing' }),
+      mine('src-deal', { type: 'question', status: 'closed', pipelineStage: 'won' }),
+      mine('src-search', { type: 'general', searchLead: true }),
+    );
     try {
       const state = await (await call('GET', '/api/state')).json();
       assert.deepEqual(state.sources, [
-        { source: 'instagram', users: 2, recent: 1, withRequests: 1 },
-        { source: 'facebook', users: 1, recent: 1, withRequests: 0 },
-        { source: '', users: 1, recent: 0, withRequests: 1 },
+        { source: 'instagram', users: 2, recent: 1, withRequests: 2, inquiries: 3, viewings: 1, deals: 1 },
+        { source: 'facebook', users: 1, recent: 1, withRequests: 0, inquiries: 0, viewings: 0, deals: 0 },
+        { source: '', users: 1, recent: 0, withRequests: 1, inquiries: 1, viewings: 0, deals: 0 },
       ]);
     } finally {
       delete data.users['503'];
       delete data.users['504'];
+      data.inquiries = data.inquiries.filter((item) => !item.id.startsWith('src-'));
     }
   });
 });
