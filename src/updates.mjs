@@ -239,6 +239,14 @@ async function handleUpdate(update, token) {
   let answer = '';
   // Answers to what became an inquiry say when the manager will reply.
   let inquiryAnswer = false;
+  // Сообщение дописано к открытому обращению, и клиенту ничего не отвечали:
+  // молчание похоже на потерянное сообщение, поэтому ставим на него реакцию 👀.
+  let mergedIntoOpen = false;
+  const mergedAnswer = (inquiry) => {
+    const merged = inquiryWasMerged(inquiry);
+    if (merged) mergedIntoOpen = true;
+    return merged;
+  };
   const command = text.split(/\s+/)[0].split('@')[0].toLowerCase();
   const commandArgument = cleanText(text.split(/\s+/).slice(1).join(' '), 100);
   const sourceLabel = command === '/start'
@@ -418,7 +426,7 @@ async function handleUpdate(update, token) {
       return;
     }
     const inquiry = createInquiry(user, text || summary, { type: 'general', sourceMessage: message });
-    answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
+    answer = mergedAnswer(inquiry) ? '' : fillTemplate(messages.fallback, user);
     inquiryAnswer = true;
   }
   else if (user.pendingAction && text === (INTERACTION_TEXT[user.preferredLanguage] || INTERACTION_TEXT.ru).continueForm) {
@@ -450,7 +458,7 @@ async function handleUpdate(update, token) {
     user.pendingAction = null;
     const inquiry = createInquiry(user, text || summary, { type: 'question', sourceMessage: message });
     scheduleSave();
-    answer = inquiryWasMerged(inquiry) ? '' : (MANAGER_CONTACT_TEXT[user.preferredLanguage] || MANAGER_CONTACT_TEXT.ru).received;
+    answer = mergedAnswer(inquiry) ? '' : (MANAGER_CONTACT_TEXT[user.preferredLanguage] || MANAGER_CONTACT_TEXT.ru).received;
     inquiryAnswer = true;
   }
   else if (user.pendingAction && (!text || !menuItemForText(text, user.preferredLanguage))) {
@@ -584,11 +592,11 @@ async function handleUpdate(update, token) {
           const inquiry = createInquiry(user, propertyRequestText(found.record, user.preferredLanguage, 'question') + '\n\n' + text, { type: 'question', propertyId: found.record.id, sourceMessage: message });
           recordPropertyEvent(found.record.id, 'questions');
           const title = localizedExact(found.record.title, user.preferredLanguage) || found.record.reference || '';
-          answer = inquiryWasMerged(inquiry) ? '' : [(PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received, title ? '🏠 ' + title : ''].filter(Boolean).join('\n\n');
+          answer = mergedAnswer(inquiry) ? '' : [(PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received, title ? '🏠 ' + title : ''].filter(Boolean).join('\n\n');
           inquiryAnswer = true;
         } else {
           const inquiry = createInquiry(user, text, { type: 'general', sourceMessage: message });
-          answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
+          answer = mergedAnswer(inquiry) ? '' : fillTemplate(messages.fallback, user);
           inquiryAnswer = true;
         }
       }
@@ -598,8 +606,16 @@ async function handleUpdate(update, token) {
     return;
   } else {
     const inquiry = createInquiry(user, summary, { type: 'general', sourceMessage: message });
-    answer = inquiryWasMerged(inquiry) ? '' : fillTemplate(messages.fallback, user);
+    answer = mergedAnswer(inquiry) ? '' : fillTemplate(messages.fallback, user);
     inquiryAnswer = true;
+  }
+
+  if (!answer && mergedIntoOpen && message.message_id) {
+    try {
+      await telegramRequest(token, 'setMessageReaction', { chat_id: message.chat.id, message_id: message.message_id, reaction: [{ type: 'emoji', emoji: '👀' }] });
+    } catch {
+      // Реакция — добавка к тишине; если Telegram её не принял, ничего не теряется.
+    }
   }
 
   if (answer) {

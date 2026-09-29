@@ -92,3 +92,57 @@ test.describe('бюджет в подборе разбирается тем же
     assert.ok(shown.length >= 1, 'квартира за 250 000 попадает в бюджет');
   });
 });
+
+test.describe('обычные фразы клиента разбираются в поиск', () => {
+  const search = (text, language = 'ru') => bot.catalogRequest(text, { preferredLanguage: language });
+
+  test('короткие просьбы «тип + сделка» ясны без города и цены', () => {
+    for (const [text, language, deal, type] of [
+      ['apartment for rent', 'en', 'rent', 'apartment'],
+      ['снять квартиру', 'ru', 'rent', 'apartment'],
+      ['flat to rent', 'en', 'rent', 'apartment'],
+      ['buy a house', 'en', 'sale', 'house'],
+      ['quiero comprar una casa', 'es', 'sale', 'house'],
+    ]) {
+      const found = search(text, language);
+      assert.equal(found && found.kind, 'filter', text + ' — это поиск, а не вопрос менеджеру');
+      assert.deepEqual([found.filter.deal, found.filter.type], [deal, type], text);
+    }
+  });
+
+  test('«хочу купить дом у моря до 700 тысяч» и «3 bed villa up to 800k»', () => {
+    const ru = search('хочу купить дом у моря до 700 тысяч');
+    assert.equal(ru && ru.kind, 'filter');
+    assert.deepEqual([ru.filter.deal, ru.filter.type, ru.filter.maxPrice], ['sale', 'house', 700000]);
+
+    const en = search('3 bed villa up to 800k', 'en');
+    assert.equal(en && en.kind, 'filter');
+    assert.deepEqual([en.filter.type, en.filter.bedrooms, en.filter.maxPrice], ['villa', 3, 800000]);
+  });
+
+  test('вопросы и расплывчатые фразы по-прежнему уходят менеджеру', () => {
+    assert.equal(search('is there an apartment for rent?', 'en'), null, 'вопрос — менеджеру');
+    assert.equal(search('добрый день, как у вас дела'), null);
+    assert.equal(search('apartment for rent or sale', 'en'), null, 'и аренда, и продажа — неясно');
+  });
+});
+
+test('второе сообщение в открытом обращении получает реакцию 👀, а не тишину', async () => {
+  const chat = createChat();
+  await chat.say('Добрый день, интересует вопрос по оформлению документов');
+  telegram.calls = [];
+  await chat.say('И ещё вопрос про налоги');
+  const reactions = telegram.calls.filter((call) => call.method === 'setMessageReaction');
+  assert.equal(reactions.length, 1, 'одна реакция на принятое сообщение');
+  assert.equal(String(reactions[0].body.chat_id), String(chat.id));
+  assert.deepEqual(reactions[0].body.reaction, [{ type: 'emoji', emoji: '👀' }]);
+  const spoken = telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id));
+  assert.equal(spoken.length, 0, 'повторного «получено» нет — только реакция');
+
+  // Первое сообщение, наоборот, получает слова, а не реакцию.
+  const other = createChat();
+  telegram.calls = [];
+  await other.say('Здравствуйте, нужна консультация по ипотеке');
+  assert.equal(telegram.calls.filter((call) => call.method === 'setMessageReaction').length, 0);
+  assert.ok(telegram.calls.some((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(other.id)), 'ответ словами');
+});

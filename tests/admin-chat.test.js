@@ -402,7 +402,8 @@ test.describe('«В работу» — это «взял», а не «ответ
 
   test('без ответа клиент остаётся среди ждущих, даже когда дело взяли в работу', async () => {
     const chat = createChat();
-    await chat.say('Хочу купить дом');
+    // Не «купить дом»: такая фраза теперь понятна боту как поиск и менеджеру не нужна.
+    await chat.say('Подскажите по оформлению ипотеки');
     const inquiry = chat.inquiries[0];
     assert.equal(bot.awaitingReply(inquiry), true);
 

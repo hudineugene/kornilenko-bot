@@ -7,8 +7,8 @@ import { cleanText, parseMoneyAmount } from './util.mjs';
 import { localizedExact, publishedCatalog } from './catalog.mjs';
 
 const DEAL_TERMS = {
-  sale: ['купить', 'покупка', 'покупку', 'продажа', 'продажу', 'buy', 'purchase', 'sale', 'comprar', 'compra', 'venta'],
-  rent: ['аренда', 'аренду', 'снять', 'арендовать', 'rent', 'rental', 'alquilar', 'alquiler'],
+  sale: ['купить', 'покупка', 'покупку', 'покупать', 'продажа', 'продажу', 'buy', 'buying', 'purchase', 'sale', 'comprar', 'compra', 'venta'],
+  rent: ['аренда', 'аренду', 'аренды', 'снять', 'снимать', 'арендовать', 'rent', 'renting', 'rental', 'alquilar', 'alquiler'],
 };
 const TYPE_TERMS = {
   apartment: ['квартира', 'квартиру', 'квартиры', 'апартамент', 'апартаменты', 'апартаментов', 'apartment', 'apartments', 'flat', 'flats', 'apartamento', 'apartamentos', 'piso', 'pisos'],
@@ -19,7 +19,8 @@ const TYPE_TERMS = {
   commercial: ['коммерческая недвижимость', 'коммерческое помещение', 'офис', 'commercial property', 'commercial', 'office', 'local comercial', 'locales comerciales'],
   newbuild: ['новостройка', 'новостройку', 'новостройки', 'new build', 'newbuild', 'new development', 'obra nueva'],
 };
-const BEDROOM_WORDS = ['спальня', 'спальни', 'спален', 'bedroom', 'bedrooms', 'dormitorio', 'dormitorios', 'habitacion', 'habitaciones'];
+// «3 bed villa» — так пишут чаще, чем «3 bedroom»: короткие «bed»/«beds» тоже спальни.
+const BEDROOM_WORDS = ['спальня', 'спальню', 'спальней', 'спальни', 'спален', 'bedroom', 'bedrooms', 'beds', 'bed', 'dormitorio', 'dormitorios', 'habitacion', 'habitaciones'];
 const LOCATION_PREPOSITIONS = ['в', 'около', 'рядом с', 'in', 'near', 'around', 'en', 'cerca de'];
 
 // "REF-1024", "ref 1024" and "Ref1024" are the same reference.
@@ -222,6 +223,9 @@ function naturalCatalogFilter(message, records, language) {
   if (looksLikeQuestion) return null;
   if (count >= 3 && !mentionsUnknownLocation) return filter;
   if (count === 2 && (city || minPrice || maxPrice || bedrooms) && !mentionsUnknownLocation) return filter;
+  // «apartment for rent», «снять квартиру»: сделка и тип без города и цены — тоже ясная
+  // просьба, если фраза короткая и не задаёт незнакомого места.
+  if (count === 2 && deal && type && normalized.split(' ').length <= 6 && !mentionsUnknownLocation) return filter;
   if (count === 1 && city && normalized.split(' ').length <= 3) return filter;
   if (count === 1 && type && TYPE_TERMS[type].some((term) => normalized === placeKey(term))) return filter;
   return null;
