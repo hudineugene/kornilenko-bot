@@ -27,6 +27,11 @@ function dataFilePath() {
 function runningFilePath() {
   return path.join(path.dirname(dataFilePath()), 'bot-running.json');
 }
+// Сессии панели лежат рядом с данными (только хеши cookie); бот при запуске их поднимает.
+function sessionFilePaths() {
+  const base = path.join(path.dirname(dataFilePath()), 'bot-sessions.json');
+  return [base, base + '.tmp'];
+}
 
 function fail(message) {
   console.error('\n  ' + message + '\n');
@@ -74,9 +79,15 @@ function createPrompt() {
     ask(question) {
       output.write(question);
       return new Promise((resolve) => {
-        if (lines.length) return resolve(lines.shift());
-        if (finished) return resolve('');
-        waiting.push(resolve);
+        // Пока символы не печатаются, не печатается и перевод строки после
+        // Enter: второй вопрос вставал в ту же строку, что и первый.
+        const done = (answer) => {
+          if (interactive) output.write('\n');
+          resolve(answer);
+        };
+        if (lines.length) return done(lines.shift());
+        if (finished) return done('');
+        waiting.push(done);
       });
     },
     close() { rl.close(); },
@@ -115,7 +126,19 @@ async function runReset() {
   data.config.passwordHash = hash;
   fs.writeFileSync(dataFile, JSON.stringify(data));
 
+  // Пароль меняют, когда он мог попасть не в те руки. Тот, кто уже вошёл со
+  // старым, остаётся в панели, пока жива его сессия, — поэтому файл сессий
+  // удаляется: бот при запуске никого не «вспомнит», и входить придётся заново.
+  let endedSessions = false;
+  for (const file of sessionFilePaths()) {
+    if (fs.existsSync(file)) {
+      fs.rmSync(file, { force: true });
+      endedSessions = true;
+    }
+  }
+
   console.log('\n  Готово. Пароль изменён.');
+  console.log(endedSessions ? '  Все прежние входы в панель завершены: войти нужно заново.' : '  Сохранённых входов в панель не было.');
   console.log('  Копия прежних данных: ' + backup);
   console.log('  Запустите бота (start-bot.ps1) и войдите с новым паролем.\n');
 }

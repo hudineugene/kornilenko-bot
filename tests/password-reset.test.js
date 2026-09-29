@@ -60,6 +60,35 @@ for (const [name, script, args] of ways) {
       }
     });
 
+    test('все прежние входы в панель завершаются: файл сессий удалён', () => {
+      // Сброс пароля делают, когда пароль мог утечь. Вход по старому паролю сессия
+      // уже получила, и бот при запуске поднимает её из bot-sessions.json: без
+      // удаления файла тот, кто знал старый пароль, оставался бы в панели.
+      const { box, dataFile } = workspace();
+      try {
+        fs.writeFileSync(path.join(box, 'bot-sessions.json'), JSON.stringify({ sessions: [['хеш-чужой-сессии', { csrf: 'x', lastSeenAt: Date.now() }]] }));
+        fs.writeFileSync(path.join(box, 'bot-sessions.json.tmp'), '{}');
+        const result = run(script, args, dataFile, 'новый-надёжный-пароль\nновый-надёжный-пароль\n');
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.ok(!fs.existsSync(path.join(box, 'bot-sessions.json')), 'файл сессий удалён');
+        assert.ok(!fs.existsSync(path.join(box, 'bot-sessions.json.tmp')), 'и его временная копия тоже');
+        assert.match(result.stdout, /входы в панель завершены/, 'владельцу сказано, что старые входы больше не действуют');
+      } finally {
+        fs.rmSync(box, { recursive: true, force: true });
+      }
+    });
+
+    test('без файла сессий сброс проходит так же', () => {
+      const { box, dataFile } = workspace();
+      try {
+        const result = run(script, args, dataFile, 'новый-надёжный-пароль\nновый-надёжный-пароль\n');
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.match(result.stdout, /Пароль изменён/);
+      } finally {
+        fs.rmSync(box, { recursive: true, force: true });
+      }
+    });
+
     test('короткий пароль и несовпадение отклоняются, файл остаётся прежним', () => {
       const { box, dataFile } = workspace();
       try {
