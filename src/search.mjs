@@ -20,8 +20,30 @@ const TYPE_TERMS = {
   newbuild: ['новостройка', 'новостройку', 'новостройки', 'new build', 'newbuild', 'new development', 'obra nueva'],
 };
 // «3 bed villa» — так пишут чаще, чем «3 bedroom»: короткие «bed»/«beds» тоже спальни.
-const BEDROOM_WORDS = ['спальня', 'спальню', 'спальней', 'спальни', 'спален', 'bedroom', 'bedrooms', 'beds', 'bed', 'dormitorio', 'dormitorios', 'habitacion', 'habitaciones'];
+const BEDROOM_WORDS = ['спальня', 'спальню', 'спальней', 'спальни', 'спален', 'спальнями', 'спальне', 'habitacion', 'habitaciones', 'bedroom', 'bedrooms', 'beds', 'bed', 'dormitorio', 'dormitorios', 'habitacion', 'habitaciones'];
 const LOCATION_PREPOSITIONS = ['в', 'около', 'рядом с', 'in', 'near', 'around', 'en', 'cerca de'];
+
+// «Рядом с морем», «near the beach» — пожелание, а не название места: раньше «рядом с» / «near»
+// считались незнакомым городом, и вся фраза уходила менеджеру. Такие обороты выбрасываем
+// перед проверкой «упомянуто незнакомое место».
+const NEUTRAL_PLACE_PHRASES = [
+  'у моря', 'рядом с морем', 'около моря', 'возле моря', 'близко к морю', 'недалеко от моря', 'у пляжа', 'рядом с пляжем', 'около пляжа', 'на берегу моря', 'с видом на море',
+  'near the beach', 'near the sea', 'close to the beach', 'close to the sea', 'by the sea', 'by the beach', 'next to the beach', 'on the beach', 'with sea view', 'sea view',
+  'cerca de la playa', 'cerca del mar', 'junto a la playa', 'junto al mar', 'frente al mar', 'en primera linea', 'con vistas al mar',
+].sort((a, b) => b.length - a.length);
+
+function withoutNeutralPlaces(message) {
+  let text = ' ' + placeKey(message) + ' ';
+  for (const phrase of NEUTRAL_PLACE_PHRASES) text = text.split(' ' + placeKey(phrase) + ' ').join(' ');
+  return text.trim();
+}
+
+// Числа словами перед словом «спальни»: «две спальни», «two bedroom», «dos dormitorios».
+const NUMBER_WORDS = {
+  один: 1, одна: 1, одну: 1, одной: 1, два: 2, две: 2, двух: 2, двумя: 2, три: 3, трех: 3, тремя: 3, четыре: 4, четырех: 4, четырьмя: 4,
+  one: 1, two: 2, three: 3, four: 4,
+  un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4,
+};
 
 // "REF-1024", "ref 1024" and "Ref1024" are the same reference.
 function referenceKey(value) {
@@ -86,9 +108,11 @@ function mentionedPlaces(message, records, language, field) {
 function parseBedrooms(message) {
   const words = BEDROOM_WORDS.join('|');
   const normalized = placeKey(message);
-  const before = normalized.match(new RegExp('(\\d{1,2})\\s*(?:' + words + ')', 'u'));
+  const numberWords = Object.keys(NUMBER_WORDS).join('|');
+  const before = normalized.match(new RegExp('(?<![\\p{L}\\d])(\\d{1,2}|' + numberWords + ')\\s*(?:' + words + ')', 'u'));
   const after = normalized.match(new RegExp('(?:' + words + ')\\s*(?:от|from|desde)?\\s*(\\d{1,2})', 'u'));
-  const count = Number(before && before[1] || after && after[1] || 0);
+  const spoken = before && NUMBER_WORDS[before[1]];
+  const count = Number(spoken || before && before[1] || after && after[1] || 0);
   return count > 0 ? Math.min(4, count) : 0;
 }
 
@@ -216,7 +240,7 @@ function naturalCatalogFilter(message, records, language) {
 
   const filter = { deal, type, bedrooms, city, district, minPrice, maxPrice, sort: '' };
   const count = [deal, type, bedrooms, city, district, minPrice, maxPrice].filter(Boolean).length;
-  const mentionsUnknownLocation = !city && !district && phraseIncluded(message, LOCATION_PREPOSITIONS);
+  const mentionsUnknownLocation = !city && !district && phraseIncluded(withoutNeutralPlaces(message), LOCATION_PREPOSITIONS);
   const looksLikeQuestion = /[?？]/u.test(message)
     || phraseIncluded(message, ['есть ли', 'можно ли', 'сколько', 'какая цена', 'is there', 'are there', 'how much', 'what price', 'hay', 'cuánto', 'cuanto', 'qué precio', 'que precio']);
 

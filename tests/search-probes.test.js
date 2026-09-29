@@ -1,0 +1,103 @@
+'use strict';
+
+// Свободный поиск: клиент пишет своими словами, а не нажимает кнопки. Обещание «просто
+// напишите, что ищете» держится только если реалистичные фразы разбираются. Здесь —
+// набор таких фраз на трёх языках с ожидаемым фильтром. Цель этапа 34: русский ≥ 9 из 11,
+// английский и испанский ≥ 7 из 10; фразы, которые разбирать нельзя (вопросы, нет
+// признаков), по-прежнему уходят менеджеру.
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+// Сначала помощник: он направляет данные во временную папку. Импорт src/*.mjs без него читает живой bot-data.json.
+const { cleanup } = require('./helpers/chat');
+
+test.after(cleanup);
+
+const city = (ru, en, es) => ({ ru, en: en || ru, es: es || en || ru });
+const records = ['Бенидорм|Benidorm', 'Альтея|Altea', 'Финестрат|Finestrat', 'Кальпе|Calpe'].map((name, index) => {
+  const [ru, en] = name.split('|');
+  return { id: 'r' + index, city: city(ru, en, en), district: { ru: '', en: '', es: '' } };
+});
+
+// [фраза, ожидаемые поля фильтра] — null значит «должна уйти менеджеру».
+const PROBES = {
+  ru: [
+    ['хочу купить квартиру в Бенидорме', { deal: 'sale', type: 'apartment', city: 'Бенидорм' }],
+    ['ищу виллу до 500 тысяч', { type: 'villa', maxPrice: 500000 }],
+    ['аренда квартиры в Альтее', { deal: 'rent', type: 'apartment', city: 'Альтея' }],
+    ['две спальни в Кальпе', { bedrooms: 2, city: 'Кальпе' }],
+    ['снять дом у моря', { deal: 'rent', type: 'house' }],
+    ['квартира с двумя спальнями в Бенидорме до 300 000', { type: 'apartment', bedrooms: 2, city: 'Бенидорм', maxPrice: 300000 }],
+    ['вилла с бассейном в Финестрате', { type: 'villa', city: 'Финестрат' }],
+    ['3 спальни Альтея до 400к', { bedrooms: 3, city: 'Альтея', maxPrice: 400000 }],
+    ['участок в Кальпе', { type: 'land', city: 'Кальпе' }],
+    ['виллу с тремя спальнями рядом с морем', { type: 'villa', bedrooms: 3 }],
+    ['есть ли у вас что-нибудь недорогое?', null],
+  ],
+  en: [
+    ['I want to rent in Finestrat', { deal: 'rent', city: 'Finestrat' }],
+    ['two bedroom apartment in Benidorm', { type: 'apartment', bedrooms: 2, city: 'Benidorm' }],
+    ['3 bed villa near the beach', { type: 'villa', bedrooms: 3 }],
+    ['apartments for rent', { deal: 'rent', type: 'apartment' }],
+    ['buy a house in Calpe under 300k', { deal: 'sale', type: 'house', city: 'Calpe', maxPrice: 300000 }],
+    ['looking for a 2 bed flat to rent in Altea', { deal: 'rent', type: 'apartment', bedrooms: 2, city: 'Altea' }],
+    ['plot of land in Calpe', { type: 'land', city: 'Calpe' }],
+    ['houses for sale up to 500,000 euros', { deal: 'sale', type: 'house', maxPrice: 500000 }],
+    ['I need a three bedroom villa', { type: 'villa', bedrooms: 3 }],
+    ['is there anything cheap?', null],
+  ],
+  es: [
+    ['quiero comprar un piso en Benidorm', { deal: 'sale', type: 'apartment', city: 'Benidorm' }],
+    ['alquilar apartamento en Altea', { deal: 'rent', type: 'apartment', city: 'Altea' }],
+    ['dos dormitorios en Calpe', { bedrooms: 2, city: 'Calpe' }],
+    ['villa cerca de la playa en Finestrat', { type: 'villa', city: 'Finestrat' }],
+    ['casa hasta 400.000 euros', { type: 'house', maxPrice: 400000 }],
+    ['busco un adosado en Altea', { type: 'townhouse', city: 'Altea' }],
+    ['piso con dos habitaciones cerca de la playa en Altea', { type: 'apartment', bedrooms: 2, city: 'Altea' }],
+    ['piso de 3 dormitorios para alquilar', { type: 'apartment', bedrooms: 3, deal: 'rent' }],
+    ['apartamento de tres habitaciones en Altea', { type: 'apartment', bedrooms: 3, city: 'Altea' }],
+    ['¿tenéis algo barato?', null],
+  ],
+};
+const GOALS = { ru: 9, en: 7, es: 7 };
+
+async function parse(message, language) {
+  const { naturalCatalogFilter } = await import('../src/search.mjs');
+  return naturalCatalogFilter(message, records, language);
+}
+
+function matches(filter, expected) {
+  if (!expected) return filter === null;
+  if (!filter) return false;
+  return Object.entries(expected).every(([key, value]) => filter[key] === value);
+}
+
+for (const language of Object.keys(PROBES)) {
+  test('свободный поиск на языке «' + language + '»: разобрано не меньше ' + GOALS[language] + ' из ' + PROBES[language].length, async () => {
+    const failed = [];
+    let passed = 0;
+    for (const [message, expected] of PROBES[language]) {
+      const filter = await parse(message, language);
+      if (matches(filter, expected)) passed += 1;
+      else failed.push(message + ' → ' + JSON.stringify(filter));
+    }
+    assert.ok(passed >= GOALS[language], passed + ' из ' + PROBES[language].length + '; не разобраны: ' + failed.join(' | '));
+  });
+}
+
+test('вопросы и «ничего не понятно» по-прежнему уходят менеджеру, а не превращаются в фильтр', async () => {
+  for (const [language, list] of Object.entries(PROBES)) {
+    for (const [message, expected] of list) {
+      if (expected !== null) continue;
+      assert.equal(await parse(message, language), null, message);
+    }
+  }
+});
+
+test('«у моря / near the beach / cerca de la playa» — не неизвестное место: фраза не уходит менеджеру из-за него', async () => {
+  const filter = await parse('3 bed villa near the beach', 'en');
+  assert.ok(filter && filter.type === 'villa' && filter.bedrooms === 3, JSON.stringify(filter));
+  assert.equal(filter.city, '', 'пляж — не город: фильтр без города');
+  // А настоящее незнакомое место по-прежнему не угадывается.
+  assert.equal(await parse('3 bed villa near Madrid', 'en'), null, 'незнакомый город — менеджеру');
+});
