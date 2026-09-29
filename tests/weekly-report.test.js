@@ -114,6 +114,34 @@ test.describe('дата сделки', () => {
     assert.equal(inquiry().wonAt, '', 'вернули в работу — сделки нет');
   });
 
+  test('миграция v43: у прежних сделок дата проставляется один раз и дальше не двигается', () => {
+    // Сделки, записанные до появления wonAt, считались по updatedAt, а любая правка
+    // заметки двигала эту дату — и сделка уезжала в другую неделю отчёта.
+    const old = {
+      version: 42,
+      inquiries: [
+        { id: 'w1', userId: '1', type: 'lead', pipelineStage: 'won', createdAt: '2026-09-01T10:00:00.000Z', updatedAt: '2026-09-17T10:00:00.000Z' },
+        { id: 'w2', userId: '1', type: 'lead', pipelineStage: 'won', wonAt: '2026-09-10T10:00:00.000Z', createdAt: '2026-09-01T10:00:00.000Z', updatedAt: '2026-09-20T10:00:00.000Z' },
+        { id: 'o1', userId: '1', type: 'lead', pipelineStage: 'contact', createdAt: '2026-09-01T10:00:00.000Z', updatedAt: '2026-09-18T10:00:00.000Z' },
+        { id: 'w3', userId: '1', type: 'lead', pipelineStage: 'won', createdAt: '2026-09-05T10:00:00.000Z' },
+      ],
+    };
+    const migrated = bot.normalizeLoadedData(old);
+    const byId = (id) => migrated.inquiries.find((item) => item.id === id);
+    assert.equal(byId('w1').wonAt, '2026-09-17T10:00:00.000Z', 'дата сделки — последняя правка на момент обновления');
+    assert.equal(byId('w2').wonAt, '2026-09-10T10:00:00.000Z', 'записанная дата не трогается');
+    assert.equal(byId('o1').wonAt, '', 'не сделка — даты нет');
+    assert.equal(byId('w3').wonAt, '2026-09-05T10:00:00.000Z', 'нет и правки — дата создания');
+
+    // Дальше правка заметки дату не двигает: отчёт берёт wonAt.
+    byId('w1').updatedAt = '2026-09-28T10:00:00.000Z';
+    const again = bot.normalizeLoadedData(JSON.parse(JSON.stringify(migrated)));
+    assert.equal(again.inquiries.find((item) => item.id === 'w1').wonAt, '2026-09-17T10:00:00.000Z', 'повторная загрузка дату не сдвигает');
+    // Файл нынешней версии миграции не проходит: у сделки без даты она остаётся пустой.
+    const fresh = bot.normalizeLoadedData({ version: 43, inquiries: [{ id: 'n1', userId: '1', type: 'lead', pipelineStage: 'won', createdAt: '2026-09-01T10:00:00.000Z', updatedAt: '2026-09-17T10:00:00.000Z' }] });
+    assert.equal(fresh.inquiries[0].wonAt, '');
+  });
+
   test('переживает перезапуск', () => {
     const saved = bot.normalizeLoadedData({ version: 42, inquiries: [{ id: 'x', userId: '1', type: 'lead', pipelineStage: 'won', wonAt: '2026-09-17T10:00:00.000Z', createdAt: '2026-09-01T10:00:00.000Z' }] });
     assert.equal(saved.inquiries[0].wonAt, '2026-09-17T10:00:00.000Z');

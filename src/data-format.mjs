@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 42;
+const DATA_VERSION = 43;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -1128,7 +1128,11 @@ function normalizeLoadedData(parsed) {
       followUpTime: CLOCK_TIME_PATTERN.test(String(item.followUpTime || '')) ? String(item.followUpTime) : '',
       followUpNotifiedAt: cleanText(item.followUpNotifiedAt, 40),
       // Когда обращение стало сделкой (для недельного отчёта); у прежних — пусто.
-      wonAt: cleanText(item.wonAt, 40),
+      wonAt: cleanText(item.wonAt, 40)
+        // Версия 43: сделки, записанные до появления wonAt, получают дату один раз —
+        // по последней правке на момент обновления. Без неё отчёт считал их по
+        // updatedAt, а любая правка заметки двигала сделку в другую неделю.
+        || (storedVersion < 43 && normalizePipelineStage(item.pipelineStage, item) === 'won' ? cleanText(item.updatedAt || item.createdAt, 40) : ''),
       // Who took the inquiry: the admin or one of the managers.
       assignee: cleanText(item.assignee, 60),
       createdAt: item.createdAt || new Date().toISOString(),
