@@ -740,7 +740,7 @@ test.describe('property card', () => {
       assert.match(manager[0].callback_data, /^property:(viewing|price):villa-marbella-01$/, language + ': связаться стоит рядом с главным действием');
       assert.equal(manager.length, 2, language + ': в первом ряду две кнопки');
       assert.ok(secondary.every((button) => Array.from(button.text.replaceAll('\uFE0F', '')).length <= 18), language + ': paired labels remain compact');
-      assert.equal(filter[0].text, bot.text.catalogFilter[language].button + ' · 1', language + ': an active filter is compact');
+      assert.equal(filter[0].text, bot.text.catalogFilter[language].button + ' ✓', language + ': an active filter is compact');
 
       chat.user.favorites = ['villa-marbella-01'];
       const updatedMarkup = bot.contentButtons(bot.getData().objects[0], language, chat.user, 'property');
