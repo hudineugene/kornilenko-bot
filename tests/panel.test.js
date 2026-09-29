@@ -301,6 +301,22 @@ test('редкие действия убраны под «⋯»', async () => {
   assert.match(PANEL_HTML, /id="inquiryExtras"/);
 });
 
+test('на телефоне разделы — в нижней панели, а не за гамбургером; кнопки не ниже 44 px', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /<nav id="tabbar" class="tabbar"/, 'нижняя панель есть в разметке');
+  assert.match(PANEL_HTML, /id="moreSheet"/, 'и лист «Ещё»');
+  const style = PANEL_HTML.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
+  // Вне телефона нижняя панель скрыта, на телефоне — показана, а верхнее меню и гамбургер убраны.
+  assert.match(style, /\.tabbar,\.more-sheet\{display:none\}/, 'на компьютере панели нет');
+  const phone = style.slice(style.indexOf('/* Нижняя панель разделов'));
+  assert.match(phone, /@media\(max-width:860px\)\{[\s\S]*\.tabbar\{position:fixed;[^}]*bottom:0/, 'на телефоне — прижата к низу');
+  assert.match(phone, /\.menu-toggle,\.head-nav\{display:none !important\}/, 'гамбургера и выпадающего меню на телефоне нет');
+  assert.match(phone, /\.btn,\.btn\.small\{min-height:44px\}/, 'кнопки не ниже 44 px');
+  assert.match(phone, /\.tab\{[^}]*min-height:56px/, 'вкладки панели — крупные');
+  // Плашки сохранения и уведомления не прячутся под нижней панелью.
+  assert.match(phone, /\.savebar,\.refresh-hint\{bottom:calc\(66px/);
+});
+
 test.describe('стили панели', () => {
   async function css() {
     const { PANEL_HTML } = await import('../src/panel/index.mjs');

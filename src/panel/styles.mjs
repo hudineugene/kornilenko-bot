@@ -634,6 +634,30 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .viewing-history-row .viewing-event{display:flex;align-items:stretch}
 }
 @media(min-width:861px){.menu-toggle{display:none}}
+/* Нижняя панель разделов — только на телефоне. */
+.tabbar,.more-sheet{display:none}
+@media(max-width:860px){
+  .menu-toggle,.head-nav{display:none !important}
+  .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:55;display:flex;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -2px 10px rgba(16,24,40,.06);padding-bottom:env(safe-area-inset-bottom)}
+  .tab{position:relative;flex:1 1 0;min-width:0;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 2px;border:0;background:none;color:var(--muted);font:inherit;font-size:var(--fs-xs);cursor:pointer}
+  .tab-ico{font-size:20px;line-height:1}
+  .tab-title{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tab.active{color:var(--brand-dark);font-weight:600}
+  .tab.active::before{content:"";position:absolute;top:0;left:22%;right:22%;height:3px;border-radius:0 0 3px 3px;background:var(--brand)}
+  .tab-count{position:absolute;top:4px;left:calc(50% + 6px);min-width:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:var(--surface);font-size:var(--fs-xs);font-weight:700;text-align:center}
+  .more-sheet{position:fixed;left:10px;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));z-index:56;display:block;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-lg)}
+  .more-sheet.hidden{display:none}
+  .more-item{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;padding:10px 12px;border:0;border-radius:10px;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
+  .more-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
+  .more-item .ico{width:22px;text-align:center}
+  /* Всё, что висит над экраном, поднимаем выше нижней панели. */
+  .page{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  .savebar,.refresh-hint{bottom:calc(66px + env(safe-area-inset-bottom))}
+  .toast{bottom:calc(72px + env(safe-area-inset-bottom));right:14px;left:14px;max-width:none}
+  /* Кнопки под палец: не ниже 44 px. Мелкие кнопки редактора текста не трогаем. */
+  .btn,.btn.small{min-height:44px}
+  .markup-bar .btn,.toast-action,.reply-delivery .btn.small{min-height:0}
+}
 @media(max-width:1180px) and (min-width:861px){
   .app-brand b{display:none}
   .app-head{gap:6px;padding-left:12px;padding-right:12px}

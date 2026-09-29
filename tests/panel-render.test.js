@@ -1263,6 +1263,25 @@ test('панель считает «взял в работу без ответа
   assert.equal(sandbox.awaitsReply({ ...taken, messages: [{ direction: 'out' }] }), false, 'начатое менеджером — тоже');
 });
 
+test('нижняя панель: четыре главных раздела и «Ещё» с остальными; один щелчок — один раздел', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  sandbox.currentView = 'today';
+  sandbox.renderNav();
+  const bar = String(sandbox.document.getElementById('tabbar').innerHTML);
+  for (const title of ['Сегодня', 'Клиенты', 'Просмотры', 'Объекты', 'Ещё']) assert.ok(bar.includes('>' + title + '<'), title + ' на панели');
+  assert.match(bar, /data-tab-view="today"[^>]*aria-current="page"/, 'текущий раздел отмечен');
+  assert.match(bar, /<b class="tab-count">2<\/b>/, 'на «Сегодня» число ждущих клиентов');
+  const sheet = String(sandbox.document.getElementById('moreSheet').innerHTML);
+  for (const title of ['Публикации', 'Тексты бота', 'Настройки', 'Все события', 'Выйти']) assert.ok(sheet.includes(title), title + ' — в «Ещё»');
+  assert.ok(!sheet.includes('>Сегодня<'), 'главные разделы в «Ещё» не повторяются');
+
+  // Раздел из «Ещё» подсвечивает саму кнопку «Ещё».
+  sandbox.currentView = 'settings';
+  sandbox.renderNav();
+  assert.match(String(sandbox.document.getElementById('tabbar').innerHTML), /class="tab active" id="tabMore"/);
+});
+
 test('когда все отвечены, ноль везде', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, state } = await panelSandbox();

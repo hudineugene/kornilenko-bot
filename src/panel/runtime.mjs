@@ -44,6 +44,8 @@ const PANEL_SHELL = String.raw`
       <button class="btn ghost small" id="logoutBtn" type="button">Выйти</button>
     </div>
   </header>
+  <nav id="tabbar" class="tabbar" aria-label="Разделы"></nav>
+  <div id="moreSheet" class="more-sheet hidden" role="menu" aria-label="Остальные разделы"></div>
   <div class="main">
     <div class="topbar">
       <div><h1 id="pageTitle">Обзор</h1><div class="sub" id="pageSubtitle"></div></div>
@@ -592,6 +594,44 @@ function renderNav() {
       el("menuToggle").setAttribute("aria-expanded", "false");
     };
   });
+  renderTabBar();
+}
+
+// На телефоне разделы — внизу, под большим пальцем: четыре главных и «Ещё».
+// Раньше был гамбургер: любая смена раздела требовала двух нажатий, а список
+// закрывал половину экрана. Остальные разделы и «Выйти» — в листе «Ещё».
+var TAB_BAR_VIEWS = ["today", "clients", "viewings", "objects"];
+function renderTabBar() {
+  var items = navItems().filter(function (item) { return !item.hidden; });
+  var main = TAB_BAR_VIEWS.map(function (id) { return items.find(function (item) { return item.id === id; }); }).filter(Boolean);
+  var rest = navItems().filter(function (item) { return TAB_BAR_VIEWS.indexOf(item.id) < 0; });
+  var moreActive = TAB_BAR_VIEWS.indexOf(currentView) < 0;
+  el("tabbar").innerHTML = main.map(function (item) {
+    return '<button class="tab' + (item.id === currentView ? " active" : "") + '" data-tab-view="' + item.id + '" type="button"' + (item.id === currentView ? ' aria-current="page"' : "") + '>' +
+      '<span class="tab-ico">' + item.icon + '</span><span class="tab-title">' + esc(item.title) + '</span>' +
+      (item.count ? '<b class="tab-count">' + num(item.count) + '</b>' : "") + '</button>';
+  }).join("") + '<button class="tab' + (moreActive ? " active" : "") + '" id="tabMore" type="button" aria-haspopup="true" aria-expanded="false"><span class="tab-ico">⋯</span><span class="tab-title">Ещё</span></button>';
+  el("moreSheet").innerHTML = rest.map(function (item) {
+    return '<button class="more-item' + (item.id === currentView ? " active" : "") + '" data-tab-view="' + item.id + '" type="button"><span class="ico">' + item.icon + '</span><span>' + esc(item.title) + '</span></button>';
+  }).join("") + '<button class="more-item" id="moreLogout" type="button"><span class="ico">⏻</span><span>Выйти</span></button>';
+  function closeSheet() {
+    el("moreSheet").classList.add("hidden");
+    var more = el("tabMore");
+    if (more) more.setAttribute("aria-expanded", "false");
+  }
+  el("tabbar").querySelectorAll("[data-tab-view]").forEach(function (button) {
+    button.onclick = function () { closeSheet(); go(button.dataset.tabView, ""); };
+  });
+  el("moreSheet").querySelectorAll("[data-tab-view]").forEach(function (button) {
+    button.onclick = function () { closeSheet(); go(button.dataset.tabView, ""); };
+  });
+  el("moreLogout").onclick = function () { el("logoutBtn").onclick(); };
+  el("tabMore").onclick = function (event) {
+    if (event && event.stopPropagation) event.stopPropagation();
+    var open = el("moreSheet").classList.contains("hidden");
+    el("moreSheet").classList.toggle("hidden", !open);
+    el("tabMore").setAttribute("aria-expanded", String(open));
+  };
 }
 
 function renderNotificationBell() {
@@ -771,6 +811,10 @@ function bindShell() {
   // Колокольчик ведёт в «Сегодня»: там тот же список дел, но с кнопками.
   el("notificationBell").onclick = function () { go("today"); };
   document.addEventListener("click", function (event) {
+    if (event.target.closest && !event.target.closest("#moreSheet") && !event.target.closest("#tabMore")) {
+      el("moreSheet").classList.add("hidden");
+      if (el("tabMore")) el("tabMore").setAttribute("aria-expanded", "false");
+    }
     if (!event.target.closest(".nav-menu")) el("nav").querySelectorAll("details[open]").forEach(function (menu) { menu.open = false; });
     if (window.innerWidth <= 860 && !event.target.closest("#nav") && !event.target.closest("#menuToggle")) {
       el("nav").classList.remove("open");
