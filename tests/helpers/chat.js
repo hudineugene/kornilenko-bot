@@ -180,6 +180,10 @@ function calendarDate(date, language = 'ru') {
 function cleanup() {
   bot.server.close();
   fs.rmSync(workDirectory, { recursive: true, force: true });
+  // Бот сохраняет данные ещё раз при выходе из процесса и заново создаёт
+  // удалённую папку: за месяц работы их набралось почти девять тысяч. Убираем
+  // последним — после его обработчика выхода.
+  process.once('exit', () => fs.rmSync(workDirectory, { recursive: true, force: true }));
 }
 
 module.exports = {
