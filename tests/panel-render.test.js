@@ -730,6 +730,30 @@ test('«Объекты» и «База клиентов» на телефоне:
   }
 });
 
+test('карточка клиента: удаление данных — отдельным блоком в конце, а не красной кнопкой рядом с «Сохранить»', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const original = sandbox.openDialog;
+  let options = null;
+  sandbox.openDialog = (dialogOptions) => { options = dialogOptions; return original(dialogOptions); };
+  sandbox.openClient('720001');
+  assert.ok(options, 'карточка открылась');
+
+  // Нижняя полоса — только безопасное: выгрузить, закрыть, сохранить.
+  assert.ok(!options.footer.includes('eraseClient'), 'в нижней полосе кнопки удаления нет');
+  assert.ok(!/class="btn danger"/.test(options.footer), 'красных кнопок в нижней полосе нет');
+  assert.ok(options.footer.indexOf('exportClient') < options.footer.indexOf('data-close'), 'выгрузка — слева');
+  assert.ok(options.footer.indexOf('data-close') < options.footer.indexOf('saveClient'), 'Закрыть — левее «Сохранить»');
+
+  // Удаление — в конце содержимого, с объяснением и рамкой предупреждения.
+  const body = String(options.body);
+  const zone = body.indexOf('danger-zone');
+  assert.ok(zone > body.indexOf('История заявок'), 'блок удаления — после истории заявок, в самом конце');
+  assert.ok(body.indexOf('eraseClient') > zone, 'кнопка внутри этого блока');
+  assert.match(body, /без возможности восстановления/);
+  assert.match(body, /сначала нажмите «Выгрузить данные»/, 'подсказка выгрузить данные заранее');
+});
+
 test('точка состояния бота: у неё есть подпись для скринридера и короткая метка для телефона', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();
