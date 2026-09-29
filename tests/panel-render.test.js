@@ -819,6 +819,42 @@ test('«Команда»: одна полоса сохранения на чат
   assert.equal(managers.body.currentPassword, 'пароль-панели');
 });
 
+test('редактор объекта: «Готовность карточки» — одна строка «Не хватает: N полей», по языкам — по нажатию; причина рядом с «Опубликовать»', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push({ id: 'gaps-1', status: 'hidden', reference: '', title: { ru: 'Вилла', en: '', es: 'Villa' }, imagesByLanguage: { ru: [], en: [], es: [] } });
+  });
+  const { sandbox } = await panelSandbox();
+  const original = sandbox.openDialog;
+  let dialog = null;
+  // Поддельная страница отдаёт во все поля «1»: пробелы задаём сами.
+  sandbox.openDialog = (options) => {
+    const ready = options.ready;
+    options.ready = (opened) => {
+      opened.querySelector('#fReference').value = '';
+      opened.querySelector('#fArea').value = '0';
+      opened.querySelector('[data-tr="title"][data-lang="en"]').value = '';
+      ready(opened);
+    };
+    dialog = original(options);
+    return dialog;
+  };
+  sandbox.openRecordEditor('objects', 'gaps-1');
+  const check = String(dialog.querySelector('#publicationCheck').innerHTML);
+
+  // Один список сверху, а не три одинаковых подряд.
+  assert.match(check, /<summary class="warn-text">Не хватает: 3 поля \(номер объекта, площадь, название\)<\/summary>/, 'одна строка с числом и первыми названиями');
+  assert.equal((check.match(/<summary/g) || []).length, 1, 'общая строка одна, а не по строке на язык');
+  assert.ok(check.indexOf('<details') < check.indexOf('publication-rows'), 'разбор по языкам — внутри раскрывающегося блока');
+  assert.match(check, /<b>EN<\/b>[\s\S]*?название, номер объекта, площадь/, 'у английского не хватает и названия');
+
+  // Причина неактивной «Опубликовать» — текстом рядом, а не подсказкой title.
+  const foot = String(dialog.querySelector('#editorFoot').innerHTML);
+  assert.match(foot, /id="publishWhy">Опубликовать нельзя\. Не хватает: 3 поля/, 'причина видна без наведения мыши');
+  assert.ok(foot.indexOf('publishWhy') < foot.indexOf('id="publishNow"'), 'подпись стоит перед кнопкой');
+  assert.match(foot, /id="publishNow"[^>]*disabled/, 'кнопка недоступна');
+});
+
 test('карточка клиента: удаление данных — отдельным блоком в конце, а не красной кнопкой рядом с «Сохранить»', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();

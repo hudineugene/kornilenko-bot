@@ -474,11 +474,20 @@ function openRecordEditor(kind, id) {
           : live ? { text: status === "reserved" ? "виден клиентам · забронирован" : "виден клиентам", chip: "ok" }
             : status === "sold" ? { text: "продан — снят с показа", chip: "" }
               : { text: "черновик — клиенты не видят", chip: "warn" };
+        // Один список на три языка повторялся трижды и занимал первый экран телефона.
+        // Теперь — одна строка «Не хватает: N полей (что именно)», а разбор по языкам
+        // раскрывается по нажатию.
+        var missing = [];
+        rows.forEach(function (row) { row.issues.forEach(function (issue) { if (missing.indexOf(issue) < 0) missing.push(issue); }); });
+        var missingWords = counted(missing.length, "поле", "поля", "полей");
+        var missingLine = missing.length ? "Не хватает: " + missingWords + " (" + missing.slice(0, 3).join(", ") + (missing.length > 3 ? "…" : "") + ")" : "";
         dialog.querySelector("#publicationCheck").innerHTML =
           '<div class="publication-head"><div><b>Готовность карточки</b><span>Единый стандарт для всех языков</span></div><span class="chip ' + state.chip + '">' + state.text + "</span></div>" +
-          '<div class="publication-rows">' + rows.map(function (row) {
-            return '<div class="publication-row"><b>' + row.code.toUpperCase() + '</b><span class="grow">' + esc(row.name) + '</span><span class="' + (row.issues.length ? "warn-text" : "ok-text") + '">' + (row.issues.length ? "не хватает: " + esc(row.issues.join(", ")) : "готово") + "</span></div>";
-          }).join("") + "</div>" +
+          (missing.length
+            ? '<details class="publication-details"><summary class="warn-text">' + esc(missingLine) + '</summary><div class="publication-rows">' + rows.map(function (row) {
+                return '<div class="publication-row"><b>' + row.code.toUpperCase() + '</b><span class="grow">' + esc(row.name) + '</span><span class="' + (row.issues.length ? "warn-text" : "ok-text") + '">' + (row.issues.length ? esc(row.issues.join(", ")) : "готово") + "</span></div>";
+              }).join("") + "</div></details>"
+            : '<div class="publication-ready ok-text">Все поля заполнены на трёх языках</div>') +
           // Состояние объекта на рынке: бронь и продажа — отдельные пометки, а не
           // поле «Статус», которое дублировало кнопку «Опубликовать».
           (live || status === "sold" ? '<div class="publication-actions">' +
@@ -503,6 +512,7 @@ function openRecordEditor(kind, id) {
               '<button class="btn secondary" id="postToChannel" type="button"' + (record ? "" : " disabled") + ' title="' + (record ? "Пост с фотографией, ценой и кнопкой «Смотреть в боте»" : "Сначала сохраните объект") + '">➤ Опубликовать в канал</button>' +
               '<button class="btn" id="saveRecord" type="button">Сохранить</button>'
             : '<button class="btn secondary" id="saveDraft" type="button">' + (status === "sold" ? "Сохранить" : "Сохранить как черновик") + '</button>' +
+              (status === "sold" || ready ? "" : '<span class="small warn-text publish-why" id="publishWhy">Опубликовать нельзя. ' + esc(missingLine) + "</span>") +
               (status === "sold" ? "" : '<button class="btn" id="publishNow" type="button"' + (ready ? "" : " disabled") + ' title="' + (ready ? "Объект сразу появится в каталоге у клиентов" : "Сначала заполните то, чего не хватает") + '">Опубликовать</button>');
           var bind = function (id, handler) { var button = foot.querySelector(id); if (button) button.onclick = handler; };
           bind("#saveRecord", saveRecord);

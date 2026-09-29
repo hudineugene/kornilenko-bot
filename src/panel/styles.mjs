@@ -614,6 +614,9 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
 .publication-head>div{display:flex;flex-direction:column;min-width:0}
 .publication-head>div span{font-size:var(--fs-sm);color:var(--muted)}
 .publication-head>.chip{margin-left:auto;white-space:nowrap}
+.publication-details>summary{padding:8px 12px;cursor:pointer;font-size:var(--fs-sm);font-weight:600}
+.publication-ready{padding:8px 12px;font-size:var(--fs-sm)}
+.publish-why{align-self:center;max-width:100%}
 .publication-rows{padding:4px 12px}
 .publication-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--warn-soft);font-size:var(--fs-sm)}
 .publication-row:last-child{border-bottom:0}
