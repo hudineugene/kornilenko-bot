@@ -9,7 +9,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 // Сначала помощник: он направляет данные во временную папку. Импорт src/*.mjs без него читает живой bot-data.json.
-const { callbacksOf, createChat, resetData, cleanup } = require('./helpers/chat');
+const { callbacksOf, createChat, property, resetData, cleanup } = require('./helpers/chat');
 
 test.after(cleanup);
 
@@ -112,4 +112,21 @@ test('клиент с открытой заявкой перечислил ус�
   // Обычная реплика без признаков поиска — по-прежнему тихая реакция, без ответа.
   const quiet = await chat.say('Спасибо, жду звонка');
   assert.ok(!/Не совсем понял/.test((quiet.last && quiet.last.text) || ''), 'обычные реплики не задеваем');
+});
+
+test('бюджет можно задать первым, до «Продажа / Аренда»: в смешанном каталоге кнопка цены есть, выбор цены сам ставит «Продажа»', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('sale-villa', 'Вилла на продажу', 'active', { dealType: 'sale', propertyType: 'villa', priceValue: 350000, currency: 'EUR', bedrooms: 3 }));
+    data.objects.push(property('rent-flat', 'Квартира в аренду', 'active', { dealType: 'rent', propertyType: 'apartment', priceValue: 1200, pricePeriod: 'month', currency: 'EUR', bedrooms: 2 }));
+  });
+  const chat = createChat();
+  const panel = await chat.press('cfilter:open');
+  const buttons = panel.last.markup.inline_keyboard.flat();
+  assert.ok(buttons.some((button) => button.callback_data === 'cfilter:prices:0'), 'кнопка бюджета есть без выбора сделки');
+  assert.equal(chat.user.catalogFilter && chat.user.catalogFilter.deal || '', '', 'сделка пока не выбрана');
+  await chat.press('cfilter:prices:0');
+  await chat.press('cfilter:price:400000');
+  assert.equal(chat.user.catalogFilter.deal, 'sale', 'выбор бюджета ставит «Продажа»');
+  assert.equal(chat.user.catalogFilter.maxPrice, 400000);
 });

@@ -538,7 +538,10 @@ function catalogDistricts(records, language, city = '') {
 function catalogPriceDeal(filter, records) {
   if (filter.deal) return filter.deal;
   const deals = new Set(records.map((record) => (record.dealType === 'rent' ? 'rent' : 'sale')));
-  return deals.size === 1 ? Array.from(deals)[0] : '';
+  if (deals.size === 1) return Array.from(deals)[0];
+  // Бюджет клиент хочет задать первым, до «Продажа / Аренда»: пока сделка не выбрана, в смешанном
+  // каталоге показываем пороги продажи, а выбор цены сам ставит «Продажа» (это видно в подписи фильтра).
+  return deals.size > 1 ? 'sale' : '';
 }
 
 // Build the exact filter that a facet button would produce. Counts in the
@@ -567,6 +570,7 @@ function catalogFacetFilter(value, facet, choice, records, language) {
     filter.minPrice = 0;
     filter.maxPrice = 0;
   }
+  if ((facet === 'minPrice' || facet === 'maxPrice') && !filter.deal) filter.deal = catalogPriceDeal(filter, records);
   if (facet === 'minPrice') filter.minPrice = normalizedCatalogFilter({ minPrice: choice }).minPrice;
   if (facet === 'maxPrice') {
     filter.maxPrice = normalizedCatalogFilter({ maxPrice: choice }).maxPrice;
@@ -649,6 +653,7 @@ async function handleCatalogPriceInputMessage(message, user, token) {
     return true;
   }
   user.catalogFilter = normalizedCatalogFilter({ ...current, [bound === 'min' ? 'minPrice' : 'maxPrice']: price });
+  if (!user.catalogFilter.deal) user.catalogFilter.deal = catalogPriceDeal(user.catalogFilter, publishedCatalog(user));
   user.pendingAction = null;
   scheduleSave();
   const formatted = formattedPriceLimit(price, language);
@@ -1868,6 +1873,8 @@ async function handleCatalogFilterCallback(query, token) {
     else if (filter.minPrice > filter.maxPrice) filter.minPrice = 0;
   }
   if (action === 'minprice') filter.minPrice = normalizedCatalogFilter({ minPrice: value }).minPrice;
+  // Бюджет задан до выбора сделки: в смешанном каталоге это пороги продажи, и «Продажа» ставится сама.
+  if ((action === 'price' || action === 'minprice') && (filter.maxPrice || filter.minPrice) && !filter.deal) filter.deal = catalogPriceDeal(filter, publishedCatalog(user));
   if (action === 'sort') filter.sort = ['asc', 'desc'].includes(value) ? value : '';
   if (['deal', 'type', 'bed', 'city', 'district', 'price', 'minprice', 'sort'].includes(action)) {
     user.catalogFilter = catalogFilterActive(filter) ? filter : null;
