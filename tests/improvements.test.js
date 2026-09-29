@@ -1480,3 +1480,42 @@ test('длинное описание приходит отдельным соо
   assert.equal(buttons.includes('property:manager:details-02'), false, 'кнопки карточки не повторяются');
   assert.equal(buttons.includes('property:viewing:details-02'), false, 'и запись на просмотр тоже');
 });
+
+test.describe('возврат к карточке не теряет навигацию', () => {
+  const callbacksIn = (calls) => calls
+    .filter((call) => ['editMessageCaption', 'editMessageMedia', 'editMessageReplyMarkup'].includes(call.method))
+    .flatMap((call) => (call.body.reply_markup ? call.body.reply_markup.inline_keyboard.flat() : []))
+    .map((button) => button.callback_data || button.url);
+  const texts = () => resetData((data) => {
+    for (const [index, name] of ['Первый', 'Второй', 'Третий'].entries()) {
+      data.objects.push(property('nav-0' + (index + 1), name + ' дом', 'active', { priceValue: 200000 + index * 1000, currency: 'EUR', area: 80 }));
+    }
+  });
+
+  test('после «Подробнее → Свернуть» остаются стрелки, номер и «Списком»', async () => {
+    texts();
+    const chat = createChat();
+    await chat.say(bot.text.menuLabels.ru.objects);
+    await chat.press('catalog:all:1', { card: true });
+
+    await chat.press('property:details:nav-02', { card: true });
+    const back = await chat.press('property:card:nav-02', { card: true });
+    const buttons = callbacksIn(back.calls);
+    assert.ok(buttons.includes('catalog:all:0') && buttons.includes('catalog:all:2'), 'стрелки к соседним объектам на месте');
+    assert.ok(buttons.includes('catalog:none:0'), 'номер «2 / 3» на месте');
+  });
+
+  test('после «Фото → к карточке» тоже, и режим «избранное» не забывается', async () => {
+    texts();
+    const chat = createChat();
+    chat.user.favorites = ['nav-01', 'nav-03'];
+    await chat.say(bot.text.menuLabels.ru.objects);
+    await chat.press('catalog:favorites:1', { card: true });
+
+    await chat.press('property:gallery:nav-03', { card: true });
+    const back = await chat.press('property:card:nav-03', { card: true });
+    const buttons = callbacksIn(back.calls);
+    assert.ok(buttons.some((data) => /^catalog:favorites:/.test(data)), 'листание идёт по избранному, а не по всему каталогу');
+    assert.ok(!buttons.some((data) => /^catalog:all:/.test(data)), 'в общий каталог клиента не выбрасывает');
+  });
+});

@@ -871,6 +871,27 @@ function catalogPageFromContext(user, mode = 'all') {
   return Math.min(Math.max(0, Number(context.page) || 0), records.length - 1);
 }
 
+// Where the client is in the list, taken from what the bot remembers rather
+// than from the card text: the position was removed from the caption, and a
+// context parsed from it came out as «page 1 of 1» — the «⬅️ 3/4 ➡️» row, the
+// filter and «list» buttons vanished after «Details → Collapse» or
+// «Photos → back to the card».
+function catalogViewContext(user, record, language) {
+  const remembered = catalogMode(user && user.catalogContext && user.catalogContext.mode);
+  let mode = 'all';
+  let records = catalogRecords(user, remembered);
+  if (records.some((item) => item.id === record.id)) mode = remembered;
+  else records = catalogRecords(user, 'all');
+  const index = records.findIndex((item) => item.id === record.id);
+  return {
+    mode,
+    page: Math.max(0, index),
+    totalPages: Math.max(1, records.length),
+    heading: catalogHeading(mode, language),
+    filter: mode === 'all' ? catalogFilterState(user) : null,
+  };
+}
+
 function rememberCatalogPosition(user, mode, page, record = null) {
   user.catalogContext = {
     mode: catalogMode(mode),
@@ -1828,6 +1849,7 @@ export {
   catalogCities,
   catalogDistricts,
   catalogHeading,
+  catalogViewContext,
   catalogMode,
   catalogPageFromContext,
   catalogPriceDeal,

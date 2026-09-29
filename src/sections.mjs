@@ -13,7 +13,7 @@ import { knownLeadPhone, startLeadEdit, startLeadForm, startViewingForm } from '
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { replyPromise, withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
-import { CATALOG_MODES, catalogHeading, escapeTelegramHtml, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { CATALOG_MODES, catalogHeading, catalogViewContext, escapeTelegramHtml, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
 import { similarPropertyRanking } from './similar.mjs';
 
@@ -376,18 +376,6 @@ function propertyRequestText(record, language, type) {
   return copy.interestPrefix + ' ' + title;
 }
 
-function catalogContextFromMessage(message, language) {
-  const source = String(message && (message.caption || message.text) || '');
-  const position = source.match(/·\s*(\d+)\s*\/\s*(\d+)/);
-  const mode = ['favorites', 'matches', 'similar', 'recent', 'comparison'].find((candidate) => source.startsWith(catalogHeading(candidate, language))) || 'all';
-  return {
-    mode,
-    page: Math.max(0, Number(position && position[1] || 1) - 1),
-    totalPages: Math.max(1, Number(position && position[2] || 1)),
-    heading: catalogHeading(mode, language),
-  };
-}
-
 // The list the client was browsing, if the property is still in it.
 function browsingMode(user, record) {
   const mode = catalogMode(user.catalogContext && user.catalogContext.mode);
@@ -475,7 +463,7 @@ async function handlePropertyCallback(query, token) {
     if (query.message && query.message.message_id) {
       // Возврат из просмотра фотографий: вернуть нужно и первую картинку, и
       // подпись, и кнопки карточки, а не только кнопки.
-      const context = catalogContextFromMessage(query.message, language);
+      const context = catalogViewContext(user, record, language);
       const restored = await editPropertyCard(chatId, user, token, query.message, record, context);
       if (!restored) {
         try {
@@ -641,7 +629,7 @@ async function handlePropertyCallback(query, token) {
         await telegramRequest(token, 'editMessageReplyMarkup', {
           chat_id: chatId,
           message_id: query.message.message_id,
-          reply_markup: contentButtons(record, language, user, 'property', catalogContextFromMessage(query.message, language)),
+          reply_markup: contentButtons(record, language, user, 'property', catalogViewContext(user, record, language)),
         });
       } catch {
         // The comparison is saved even when an older card cannot be edited.
@@ -682,7 +670,7 @@ async function handlePropertyCallback(query, token) {
       return;
     }
     if (query.message && query.message.message_id && query.message.reply_markup && Array.isArray(query.message.reply_markup.inline_keyboard)) {
-      const markup = contentButtons(record, language, user, 'property', catalogContextFromMessage(query.message, language));
+      const markup = contentButtons(record, language, user, 'property', catalogViewContext(user, record, language));
       try {
         await telegramRequest(token, 'editMessageReplyMarkup', {
           chat_id: chatId,
@@ -716,7 +704,7 @@ async function handlePropertyCallback(query, token) {
     if (!shown) {
       // Сообщение не редактируется (например, слишком старое) — показываем
       // карточку заново, с неё фотографии откроются обычным путём.
-      await sendPropertyCard(chatId, user, token, record, catalogContextFromMessage(query.message, language));
+      await sendPropertyCard(chatId, user, token, record, catalogViewContext(user, record, language));
     }
     return;
   }
@@ -756,7 +744,6 @@ async function handlePropertyCallback(query, token) {
 export {
   aboutPreview,
   acknowledgeCallback,
-  catalogContextFromMessage,
   configuredWhatsappUrl,
   handleAboutCallback,
   handleCatalogCallback,
