@@ -399,6 +399,52 @@ test.describe('стили панели', () => {
     return variables;
   }
 
+  // Контраст по формуле WCAG: отношение яркостей двух цветов.
+  // #fff → #ffffff: короткая запись цвета тоже настоящий цвет.
+  function fullHex(value) {
+    const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(value);
+    return short ? '#' + short[1] + short[1] + short[2] + short[2] + short[3] + short[3] : value;
+  }
+  function luminance(hex) {
+    const [red, green, blue] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255)
+      .map((value) => (value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  }
+  function contrast(first, second) {
+    const [light, dark] = [luminance(first), luminance(second)].sort((a, b) => b - a);
+    return (light + 0.05) / (dark + 0.05);
+  }
+
+  test('серый и цветной текст читается на всех фонах панели (контраст не меньше 4,5:1)', async () => {
+    // Раньше «слабый» текст (даты, подсказки, «панель бота») был 2,4:1, зелёный «↑ +6»
+    // — 2,5:1: на экране ноутбука они сливались с фоном.
+    const variables = rootVariables(await css());
+    const color = (name) => {
+      const value = fullHex(variables.get(name));
+      assert.match(value, /^#[0-9a-f]{6}$/i, name + ' — настоящий цвет');
+      return value;
+    };
+    const backgrounds = ['--surface', '--bg', '--surface-soft', '--brand-soft'];
+    const texts = ['--text', '--muted', '--faint', '--brand', '--ok', '--warn', '--bad'];
+    const weak = [];
+    for (const text of texts) {
+      for (const background of backgrounds) {
+        const ratio = contrast(color(text), color(background));
+        if (ratio < 4.5) weak.push(text + ' на ' + background + ' = ' + ratio.toFixed(2));
+      }
+    }
+    assert.deepEqual(weak, [], 'текст слабее 4,5:1');
+  });
+
+  test('границы полей ввода различимы (не меньше 3:1), а «живой» зелёный не используется как цвет текста', async () => {
+    const sheet = await css();
+    const variables = rootVariables(sheet);
+    assert.ok(contrast(fullHex(variables.get('--field-line')), fullHex(variables.get('--surface'))) >= 3, 'граница поля на белом слабее 3:1');
+    assert.match(sheet, /input,textarea,select\{[^}]*border:1px solid var\(--field-line\)/, 'поля используют эту границу');
+    // --live — цвет заливки (точка, переключатель): 2,6:1, как текст он не читается.
+    assert.ok(!/[^-]color:var\(--live\)/.test(sheet), 'var(--live) стоит в color: текст должен быть --ok');
+  });
+
   test('ни одна переменная не задана через саму себя', async () => {
     // --surface:var(--surface) недействительна: диалоги и карточки остаются
     // без фона, а текст и рамки теряют цвет. Именно так панель «побелела».

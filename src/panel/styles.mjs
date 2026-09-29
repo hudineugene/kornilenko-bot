@@ -4,8 +4,8 @@ const PANEL_CSS = String.raw`
 *{box-sizing:border-box}
 html,body{max-width:100%;overflow-x:clip}
 :root{
-  --bg:#f5f6f8; --surface:#fff; --surface-soft:#fafbfc; --line:#e4e7ec; --line-soft:#eef1f4;
-  --text:#101828; --muted:#667085; --faint:#98a2b3;
+  --bg:#f5f6f8; --surface:#fff; --surface-soft:#fafbfc; --line:#e4e7ec; --line-soft:#eef1f4; --field-line:#7d8798;
+  --text:#101828; --muted:#525d70; --faint:#616c80;
   --brand:#2f56d9; --brand-soft:#eef2ff; --brand-dark:#2344b5;
   --brand-soft-line:#c7d7fe; --warn-line:#fedf89; --live:#12b76a; --amber:#f79009; --bad-line:#fecdca; --bad-line-strong:#fda29b; --warn-tint:#fffcf5; --ok-line:#abefc6; --stage-contact:#6172f3; --stage-selection:#7f56d9; --today-line:#9db4ff; --chat-bg:#e8ecf1; --chat-text:#222; --ink:#1d2939; --ink-soft:#475467; --stage-lost:#ee46bc; --alarm:#f04438; --tint:#f8fafc; --ok:#067647; --ok-soft:#ecfdf3; --warn:#b54708; --warn-soft:#fffaeb; --bad:#b42318; --bad-soft:#fef3f2;
   --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.06); --shadow-lg:0 12px 32px rgba(16,24,40,.14);
@@ -127,7 +127,7 @@ tbody tr.selected{background:var(--brand-soft)}
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .field>label,.field-label{font-size:var(--fs-sm);font-weight:600;color:var(--muted)}
 .hint{font-size:var(--fs-sm);color:var(--faint)}
-input,textarea,select{width:100%;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:var(--fs)}
+input,textarea,select{width:100%;padding:6px 10px;border:1px solid var(--field-line);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:var(--fs)}
 input:focus,textarea:focus,select:focus{outline:0;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
 button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 textarea{min-height:76px;resize:vertical;line-height:1.45}
@@ -517,7 +517,7 @@ code{padding:0px 4px;border-radius:5px;background:var(--surface-soft);border:1px
 .week-label{color:var(--muted);font-size:var(--fs-sm)}
 .week-value{font-size:var(--fs-xl);line-height:1.1}
 .week-trend{font-size:var(--fs-xs);color:var(--muted)}
-.week-trend.up{color:var(--live)}
+.week-trend.up{color:var(--ok)}
 .week-trend.down{color:var(--bad)}
 .week-subtitle{margin-bottom:6px;color:var(--muted);font-size:var(--fs-sm);font-weight:600}
 .report-more>summary{padding:12px 16px;cursor:pointer;font-weight:600}
