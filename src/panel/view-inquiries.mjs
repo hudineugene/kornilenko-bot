@@ -581,6 +581,13 @@ async function exportInquiries() {
   } catch (error) { fail(error); }
 }
 
+// Шаблон ответа добавляется к набранному, а не заменяет его: менеджер мог уже
+// начать писать. Между набранным и шаблоном — пустая строка.
+function withTemplate(current, text) {
+  var typed = String(current || "").replace(/\s+$/, "");
+  return typed ? typed + "\n\n" + text : text;
+}
+
 // Выгрузка клиентов: те, кто сейчас на экране (этап и поиск учтены), а не вся база.
 async function exportClients(ids) {
   try {
@@ -697,8 +704,15 @@ function renderInquiryCard(host) {
             ? '<div class="empty"><b>Не удалось загрузить переписку</b>' + esc(conversationFailed[String(item.userId)]) + '<button class="btn secondary small" id="retryConversation" type="button">Повторить</button></div>'
             : '<div class="empty"><b>Сообщений пока нет</b></div>') + "</div>" +
       '<div class="reply-box"><div class="reply-box-head"><b>Ответить в Telegram</b>' +
-        (state.replyTemplates && state.replyTemplates.length ? '<select id="replyTemplate"><option value="">Вставить шаблон ответа…</option>' + state.replyTemplates.map(function (template) { return '<option value="' + esc(template.id) + '">' + esc(template.title) + "</option>"; }).join("") + "</select>" : "") +
-      '</div><div class="reply-quote hidden" id="replyQuote"><div><span>Ответ на сообщение клиента</span><b id="replyQuoteText"></b></div><button class="reply-quote-remove" id="clearReplyQuote" type="button" aria-label="Убрать цитату">×</button></div>' +
+        '<span class="small muted">' + ((state.replyTemplates || []).length ? "Шаблон — одним нажатием" : "") + "</span>" +
+      '</div>' +
+      // Шаблоны — кнопками, а не списком: на телефоне список открывался отдельным
+      // окном, а выбранный шаблон стирал набранное. Кнопка вставляет текст и
+      // ничего не затирает.
+      ((state.replyTemplates || []).length ? '<div class="reply-templates" id="replyTemplates">' + state.replyTemplates.map(function (template) {
+        return '<button class="btn secondary small template-chip" type="button" data-template="' + esc(template.id) + '" title="' + esc(String(localized(template.text, "ru") || "").slice(0, 120)) + '">' + esc(template.title) + "</button>";
+      }).join("") + "</div>" : "") +
+      '<div class="reply-quote hidden" id="replyQuote"><div><span>Ответ на сообщение клиента</span><b id="replyQuoteText"></b></div><button class="reply-quote-remove" id="clearReplyQuote" type="button" aria-label="Убрать цитату">×</button></div>' +
       '<textarea id="replyText" maxlength="3800" placeholder="Напишите сообщение клиенту…"></textarea>' +
       '<div class="reply-attachments"><input class="hidden" id="replyFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,application/pdf,text/plain"><label class="btn secondary small" for="replyFile">📎 Добавить файл</label><span class="reply-file-name muted" id="replyFileName">Фотография до 5 МБ или документ до 10 МБ</span><button class="btn ghost small hidden" id="clearReplyFile" type="button">Убрать</button></div>' +
       '<details class="conversation-details"><summary><span><b>Кнопка-ссылка</b><small>клиент увидит её под сообщением</small></span><i>⌄</i></summary><div class="conversation-details-body"><div class="grid cols-2"><div class="field"><label for="replyButtonText">Текст кнопки</label><input id="replyButtonText" placeholder="Посмотреть объект"></div><div class="field"><label for="replyButtonUrl">Ссылка</label><input id="replyButtonUrl" placeholder="https://…"></div></div></div></details>' +
@@ -862,11 +876,19 @@ function renderInquiryCard(host) {
   host.querySelector("#sendReply").onclick = sendReply;
   retryReply.onclick = sendReply;
   replyText.oninput = freshRequest;
-  var templates = host.querySelector("#replyTemplate");
-  if (templates) templates.onchange = function () {
-    var template = (state.replyTemplates || []).find(function (entry) { return entry.id === templates.value; });
-    if (template) { replyText.value = localized(template.text, item.language || "ru") || template.text.ru || ""; freshRequest(); }
-  };
+  host.querySelectorAll("#replyTemplates [data-template]").forEach(function (button) {
+    button.onclick = function () {
+      var template = (state.replyTemplates || []).find(function (entry) { return entry.id === button.dataset.template; });
+      if (!template) return;
+      var text = localized(template.text, item.language || "ru") || template.text.ru || "";
+      if (!text) return;
+      replyText.value = withTemplate(replyText.value, text);
+      freshRequest();
+      if (replyText.focus) replyText.focus();
+      // Курсор — в конец вставленного: можно сразу дописать своё.
+      if (replyText.setSelectionRange) replyText.setSelectionRange(replyText.value.length, replyText.value.length);
+    };
+  });
   host.querySelector("#openClientCard").onclick = function () { openClient(String(item.userId)); };
   host.querySelector("#saveInq").onclick = async function () {
     try {

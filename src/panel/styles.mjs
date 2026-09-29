@@ -140,6 +140,10 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .switch .track::after{content:"";display:block;width:18px;height:18px;margin:2px;border-radius:50%;background:var(--surface);box-shadow:var(--shadow);transition:transform .15s}
 .switch input:checked+.track{background:var(--live)}
 .switch input:checked+.track::after{transform:translateX(16px)}
+/* Шаблоны ответа: кнопки в ряд; на телефоне ряд листается вбок. */
+.reply-templates{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.template-chip{flex:none;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:860px){.reply-templates{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}.template-chip{min-height:38px}}
 .deeds-scope{padding:10px 16px 0;align-items:center;gap:8px}
 .tabs{display:flex;gap:2px;padding:2px;background:var(--surface-soft);border:1px solid var(--line);border-radius:9px;overflow:auto}
 .tabs button{padding:6px 10px;border:0;border-radius:7px;background:none;color:var(--muted);font:inherit;font-size:var(--fs-sm);font-weight:600;cursor:pointer;white-space:nowrap}

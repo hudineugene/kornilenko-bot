@@ -697,6 +697,36 @@ test('отвеченная беседа остаётся открытой, а н
   assert.match(String(after.innerHTML), /Ольга/, 'и она по-прежнему видна в списке');
 });
 
+test('шаблоны ответа — кнопками в один ряд, а вставка не стирает набранное', async () => {
+  twoWaitingConversations();
+  const { sandbox, state } = await panelSandbox();
+  state.replyTemplates = [
+    { id: 't-view', title: 'Просмотр', text: { ru: 'Когда вам удобно посмотреть объект?', en: 'When would you like to view it?', es: '' } },
+    { id: 't-price', title: 'Цена', text: { ru: 'Актуальную цену пришлю сегодня.', en: '', es: '' } },
+  ];
+  sandbox.selectConversation('inq-olga');
+  const host = fakeElement('main');
+  await sandbox.VIEWS.clients.render(host, '');
+  const html = String(host.innerHTML) + String(host.querySelector('#inquiryCard').innerHTML);
+  assert.match(html, /id="replyTemplates"/, 'ряд шаблонов есть');
+  assert.match(html, /<button class="btn secondary small template-chip" type="button" data-template="t-view"[^>]*>Просмотр<\/button>/, 'шаблон — кнопка с названием');
+  assert.match(html, /data-template="t-price"/);
+  assert.ok(!html.includes('id="replyTemplate"'), 'списка «Вставить шаблон…» больше нет');
+  assert.ok(html.indexOf('id="replyTemplates"') < html.indexOf('id="replyText"'), 'шаблоны — над полем ответа');
+
+  // Без шаблонов ряда нет.
+  state.replyTemplates = [];
+  const empty = fakeElement('main');
+  await sandbox.VIEWS.clients.render(empty, '');
+  assert.ok(!(String(empty.innerHTML) + String(empty.querySelector('#inquiryCard').innerHTML)).includes('id="replyTemplates"'));
+
+  // Вставка: пустое поле — просто текст; набранное — остаётся, шаблон ниже.
+  assert.equal(sandbox.withTemplate('', 'Шаблон'), 'Шаблон');
+  assert.equal(sandbox.withTemplate('   ', 'Шаблон'), 'Шаблон', 'одни пробелы — как пусто');
+  assert.equal(sandbox.withTemplate('Здравствуйте, Ольга!', 'Шаблон'), 'Здравствуйте, Ольга!\n\nШаблон');
+  assert.equal(sandbox.withTemplate('Начал писать  \n', 'Шаблон'), 'Начал писать\n\nШаблон', 'хвостовые пробелы не копятся');
+});
+
 test('в переписке видно ответы бота, а запись на просмотр выделена карточкой', async () => {
   const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
   resetData((data) => {
