@@ -614,6 +614,7 @@ function navIcon(id) {
     objects: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-6h4v6"/>',
     posts: '<path d="M21 3 10.5 13.5"/><path d="M21 3l-6.5 18-4-7.5L3 9.5z"/>',
     texts: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+    reports: '<path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 16v-4M12 16V8M16 16v-6"/>',
     settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   };
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (bodies[id] || "") + "</svg>";
@@ -626,8 +627,9 @@ function navItems() {
     { id: "viewings", icon: navIcon("viewings"), title: "Просмотры" },
     { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
     { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"]] },
+    { id: "reports", icon: navIcon("reports"), title: "Отчёт" },
     { id: "texts", icon: navIcon("texts"), title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["sections", "Если раздел пуст"], ["rules", "Автоответы и шаблоны"]] },
-    { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["reports", "Отчёты"], ["service", "Обслуживание"]] },
+    { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["service", "Обслуживание"]] },
   ];
 }
 
@@ -637,11 +639,11 @@ var LEGACY_ROUTES = {
   "overview": ["today", ""],
   // Отдельной страницы уведомлений нет: лента одна — «Список дел» на «Сегодня».
   "notifications": ["today", ""],
-  "stats": ["settings", "reports"],
+  "stats": ["reports", ""],
   "inquiries": { "": ["clients", "inbox"], "inbox": ["clients", "inbox"], "tasks": ["clients", "tasks"], "pipeline": ["clients", "pipeline"], "viewings": ["viewings", ""], "clients": ["clients", "base"] },
   "catalog": { "": ["objects", "list"], "objects": ["objects", "list"], "offers": ["objects", "offers"], "feed": ["settings", "service"] },
   "reach": { "": ["posts", "broadcast"], "campaigns": ["posts", "broadcast"], "group": ["posts", "channel"], "style": ["posts", "style"] },
-  "settings": { "connection": ["settings", "service"], "telegram": ["settings", "service"], "work": ["settings", "company"], "data": ["settings", "service"], "access": ["settings", "service"] },
+  "settings": { "reports": ["reports", ""], "connection": ["settings", "service"], "telegram": ["settings", "service"], "work": ["settings", "company"], "data": ["settings", "service"], "access": ["settings", "service"] },
   "texts": { "interface": ["settings", "service"] },
 };
 

@@ -540,10 +540,9 @@ function renderService(host) {
 }
 
 VIEWS.settings = {
-  subtitle: function () { return "Компания, команда, отчёты и обслуживание"; },
+  subtitle: function () { return "Компания, команда и обслуживание"; },
   render: function (host, tab) {
     if (tab === "team") return renderConnection(host);
-    if (tab === "reports") return VIEWS.reports.render(host);
     if (tab === "service") return renderService(host);
     renderWork(host);
   },

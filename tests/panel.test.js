@@ -55,7 +55,7 @@ test('старые адреса панели и ссылки из уведомл
   assert.match(PANEL_HTML, /var LEGACY_ROUTES = \{/);
   assert.match(PANEL_HTML, /"inquiries": \{ "": \["clients", "inbox"\]/);
   assert.match(PANEL_HTML, /"catalog": \{ "": \["objects", "list"\]/);
-  assert.match(PANEL_HTML, /"stats": \["settings", "reports"\]/);
+  assert.match(PANEL_HTML, /"stats": \["reports", ""\]/);
   assert.match(PANEL_HTML, /function normalizeRoute\(view, tab\)/);
 });
 

@@ -297,6 +297,7 @@ VIEWS.today = {
         '<span><b>' + num(inquiriesInRange(week).length) + '</b> ' + plural(inquiriesInRange(week).length, "заявка", "заявки", "заявок") + ' за 7 дней · ' + num(inquiriesInRange(today).length) + ' сегодня</span>' +
         '<span><b>' + num(state.userCount) + '</b> ' + plural(state.userCount, "клиент", "клиента", "клиентов") + ' в базе · +' + usersInRange(week) + ' за неделю</span>' +
       '</div>' +
+      '<div class="week-line" id="weekLine"></div>' +
       '<div class="split">' +
         '<div class="stack">' +
           '<div id="readiness"></div>' +
@@ -328,7 +329,7 @@ VIEWS.today = {
             '<div id="healthRows"></div>' +
             '<div class="small muted">Клиентов в базе: ' + num(state.userCount) + " · им можно писать: " + num(state.activeUserCount) + " · согласились на рассылки: " + num(state.newsConsentCount) + "</div>" +
             '<div class="row wrap"><button class="btn secondary small" type="button" data-go="settings" data-tab="team">Настройки</button>' +
-            '<button class="btn secondary small" type="button" data-go="settings" data-tab="reports">Отчёты</button></div>' +
+            '<button class="btn secondary small" type="button" data-go="reports">Отчёт</button></div>' +
           "</div></div>" +
           '<div class="card"><header><h3>Быстрые действия</h3></header><div class="card-body row wrap">' +
             '<button class="btn secondary small" type="button" id="quickObject">Добавить объект</button>' +
@@ -342,6 +343,7 @@ VIEWS.today = {
       node.onclick = function () { go(node.dataset.go, node.dataset.tab || ""); };
     });
     loadReadiness(host);
+    loadWeekLine(host);
     host.querySelectorAll("[data-feed-filter]").forEach(function (button) {
       button.onclick = function () { feedFilter = button.dataset.feedFilter; VIEWS.today.render(host); };
     });
@@ -462,7 +464,9 @@ function recentReactions() {
 // Главное для владельца — итоги недели: сколько пришло, сколько записалось и
 // сколько сделок, откуда клиенты. Цифры считает бот (те же, что он присылает по
 // понедельникам), панель их только показывает. Всё остальное — под «Подробнее».
-var reportWeek = "last";
+// Открываем на идущей неделе: итоги нужны именно сейчас, а прошлая во вторник
+// почти пуста. Переключатель «Прошлая» рядом.
+var reportWeek = "current";
 
 function weekTrend(current, previous) {
   if (current === previous) return '<span class="week-trend">как раньше</span>';
@@ -484,7 +488,7 @@ function weeklyCard(payload) {
       '<div class="week-grid">' +
         weekTile("Новых клиентов", report.users.count, weekTrend(report.users.count, report.users.previous)) +
         weekTile("Заявок", report.inquiries.count, weekTrend(report.inquiries.count, report.inquiries.previous)) +
-        weekTile("Просмотров", report.viewings.booked, '<span class="week-trend">записались · прошло ' + num(report.viewings.held) + "</span>") +
+        weekTile("Записались на просмотр", report.viewings.booked, '<span class="week-trend">прошло ' + num(report.viewings.held) + "</span>") +
         weekTile("Сделок", report.deals.count, weekTrend(report.deals.count, report.deals.previous)) +
         weekTile("Без ответа сейчас", report.waiting, report.waiting ? '<span class="week-trend down">ждут ответа</span>' : '<span class="week-trend up">все отвечены</span>') +
       "</div>" +
@@ -518,9 +522,32 @@ async function loadWeekly(host) {
   }
 }
 
-// «Отчёты» живут в настройках: это не ежедневная работа.
+// Строка недели на «Сегодня»: главное числами и ссылка в «Отчёт».
+function weekLineHtml(payload) {
+  var report = payload.report;
+  return '<span class="week-line-text"><b>Неделя ' + esc(report.label) + (report.which === "current" ? " (идёт)" : "") + ':</b> ' +
+    num(report.users.count) + " " + plural(report.users.count, "новый клиент", "новых клиента", "новых клиентов") + " · " +
+    num(report.inquiries.count) + " " + plural(report.inquiries.count, "заявка", "заявки", "заявок") + " · " +
+    num(report.deals.count) + " " + plural(report.deals.count, "сделка", "сделки", "сделок") + "</span>" +
+    '<button class="btn ghost small" type="button" data-go="reports">Открыть отчёт →</button>';
+}
+
+async function loadWeekLine(host) {
+  var box = host.querySelector("#weekLine");
+  if (!box) return;
+  try {
+    box.innerHTML = weekLineHtml(await api("/api/weekly-report?week=current"));
+    box.querySelectorAll("[data-go]").forEach(function (node) {
+      node.onclick = function () { go(node.dataset.go, node.dataset.tab || ""); };
+    });
+  } catch (error) {
+    // Строка — подсказка: не вышло, «Сегодня» остаётся как было.
+  }
+}
+
+// Итоги недели и цифры за 30 дней — отдельный пункт меню «Отчёт».
 VIEWS.reports = {
-  subtitle: function () { return "Аудитория, заявки, объекты и рассылки"; },
+  subtitle: function () { return "Итоги недели, заявки, источники, объекты и рассылки"; },
   render: function (host) {
     var days = lastDays(30);
     // Заявки считаем по самому списку заявок и в одном окне — 30 дней: и плитка,
@@ -550,7 +577,7 @@ VIEWS.reports = {
         ["Всего клиентов", num(state.userCount), "", "+" + usersInRange(week) + " за 7 дней"],
         ["Сообщений за 30 дней", num(sumDays(days, "received"))],
         ["Заявок за 30 дней", num(monthInquiries.length)],
-        ["Конверсия в заявку", (state.userCount ? Math.round((inquiryUsers / state.userCount) * 100) : 0) + "%", "", "клиенты, оставившие заявку"],
+        ["Конверсия в заявку", (state.userCount ? Math.round((inquiryUsers / state.userCount) * 100) : 0) + "% (" + inquiryUsers + " из " + state.userCount + " клиентов в базе)", "", "Какая доля клиентов в базе хоть раз оставила заявку"],
       ]) +
       '<div class="card gap-bottom"><header><h3>Активность за 30 дней</h3></header><div class="card-body">' +
         sparkline(days, "received", "var(--brand)") +
@@ -579,7 +606,7 @@ VIEWS.reports = {
         }).join("") + "</div>" : '<div class="empty">Клиенты ещё не ставили реакции на сообщения бота</div>') +
       "</div>" +
       '<div class="card"><header><h3>Эффективность объектов</h3><div class="actions"><span class="small faint">видели в каталоге · открыли карточку · заявки</span></div></header>' +
-        (properties.length ? '<div class="table-wrap"><table><thead><tr><th>Объект</th><th class="right">Показы</th><th class="right">Подробнее</th><th class="right">Заявки</th><th class="right" title="Какая доля показов закончилась открытой карточкой">Открыли карточку</th></tr></thead><tbody>' +
+        (properties.length ? '<div class="table-wrap"><table><thead><tr><th>Объект</th><th class="right" title="Сколько раз объект показался клиенту в каталоге бота">Видели в каталоге</th><th class="right" title="Сколько раз открыли его карточку">Открыли карточку</th><th class="right">Заявки</th><th class="right" title="Какая доля увидевших открыла карточку">Доля открывших</th></tr></thead><tbody>' +
           properties.map(function (row) {
             var rate = row.views ? Math.round((row.details / row.views) * 100) : 0;
             return '<tr class="clickable" data-property-insights="' + esc(row.id) + '"><td><b>' + esc(row.title) + '</b><br><span class="small faint">открыть клиентов и действия</span></td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + '%</td></tr>';
