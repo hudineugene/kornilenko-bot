@@ -256,6 +256,21 @@ test.describe('conversation center', () => {
     assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { pipelineStage: 'negotiation' })).status, 200);
     assert.deepEqual([inquiry.pipelineStage, inquiry.status], ['negotiation', 'in_progress'], 'returning to an active stage reopens the inquiry');
   });
+
+  test('«Выиграно» из карточки клиента не откатывается, даже если вместе пришёл статус', async () => {
+    const inquiry = bot.getData().inquiries.find((item) => item.id === 'inq-lead');
+    // Карточка клиента шлёт статус и этап одним запросом.
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { status: 'in_progress', pipelineStage: 'won' })).status, 200);
+    assert.deepEqual([inquiry.pipelineStage, inquiry.status], ['won', 'closed'], 'этап «Выиграно» победил');
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { status: 'in_progress', pipelineStage: 'lost' })).status, 200);
+    assert.deepEqual([inquiry.pipelineStage, inquiry.status], ['lost', 'closed']);
+    // Вернуть в работу одним статусом — этап «Проиграно» сбрасывается.
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { status: 'in_progress' })).status, 200);
+    assert.deepEqual([inquiry.pipelineStage, inquiry.status], ['contact', 'in_progress']);
+    // Явное «закрыто» с активным этапом остаётся закрытым.
+    assert.equal((await call('PATCH', '/api/inquiries/inq-lead', { status: 'closed', pipelineStage: 'negotiation' })).status, 200);
+    assert.deepEqual([inquiry.pipelineStage, inquiry.status], ['negotiation', 'closed']);
+  });
 });
 
 test.describe('Excel export', () => {

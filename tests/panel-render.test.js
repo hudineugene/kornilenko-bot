@@ -765,6 +765,36 @@ test('состояние заявки бот считает сам, руками
   assert.equal(saved.body.status, 'closed');
 });
 
+test('«Сохранить» шлёт этап и статус только когда их изменили', async () => {
+  twoWaitingConversations();
+  const { sandbox, requests } = await panelSandbox();
+  sandbox.selectConversation('inq-olga');
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  await sandbox.VIEWS.clients.render(host, '');
+  const patchOf = async () => {
+    const before = requests.length;
+    await card.querySelector('#saveInq').onclick();
+    return requests.slice(before).find((request) => request.method === 'PATCH' && request.url.includes('/api/inquiries/')).body;
+  };
+
+  // Ничего не менял, кроме заметки: ни статус, ни этап не уходят и не затирают друг друга.
+  // (у поддельного DOM выбранное значение списка надо задать самому)
+  const item = sandbox.state.inquiries.find((entry) => entry.id === 'inq-olga');
+  card.querySelector('#inqStatusValue').value = 'open';
+  card.querySelector('#inqPipeline').value = sandbox.pipelineStageOf(item);
+  card.querySelector('#inqNote').value = 'позвонить';
+  const plain = await patchOf();
+  assert.ok(!('status' in plain), 'статус не менялся — не отправляется');
+  assert.ok(!('pipelineStage' in plain), 'этап не менялся — не отправляется');
+
+  // Выбрал этап «Выиграно» — уходит только этап.
+  card.querySelector('#inqPipeline').value = 'won';
+  const won = await patchOf();
+  assert.equal(won.pipelineStage, 'won');
+  assert.ok(!('status' in won), 'статус вместе с этапом не уходит и не откатывает его');
+});
+
 test('сопровождение заявки собрано в одной панели и сохраняется одной кнопкой', async () => {
   twoWaitingConversations();
   const { sandbox, requests } = await panelSandbox();

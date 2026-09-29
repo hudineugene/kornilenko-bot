@@ -913,14 +913,19 @@ function renderInquiryCard(host) {
   host.querySelector("#openClientCard").onclick = function () { openClient(String(item.userId)); };
   host.querySelector("#saveInq").onclick = async function () {
     try {
-      await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", {
-        status: host.querySelector("#inqStatusValue").value === "closed" ? "closed" : (item.status === "closed" ? "in_progress" : item.status || "new"),
+      // Статус и этап шлём, только если человек их изменил: неизменный этап
+      // «Выиграно» вместе со статусом «Открыта» затирал бы одно другим.
+      var patch = {
         note: host.querySelector("#inqNote").value,
         followUpDate: host.querySelector("#followDate").value,
         followUpTime: host.querySelector("#followTime").value,
         assignee: host.querySelector("#inqAssignee").value,
-        pipelineStage: host.querySelector("#inqPipeline").value,
-      });
+      };
+      var wantClosed = host.querySelector("#inqStatusValue").value === "closed";
+      if (wantClosed !== (item.status === "closed")) patch.status = wantClosed ? "closed" : "in_progress";
+      var wantStage = host.querySelector("#inqPipeline").value;
+      if (wantStage !== pipelineStageOf(item)) patch.pipelineStage = wantStage;
+      await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", patch);
       await send("/api/users/" + encodeURIComponent(user.id), "PATCH", {
         note: host.querySelector("#clientNoteInq").value,
         tags: host.querySelector("#clientTagsInq").value.split(",").map(function (tag) { return tag.trim(); }).filter(Boolean),

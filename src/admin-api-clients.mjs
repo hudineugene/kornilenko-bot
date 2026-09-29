@@ -391,16 +391,20 @@ async function handleClientsApi(req, res, url) {
       inquiry.followUpDate = date;
       inquiry.followUpTime = date ? time : '';
     }
-    if (body.pipelineStage != null) {
-      inquiry.pipelineStage = body.pipelineStage;
-      if (['won', 'lost'].includes(body.pipelineStage)) inquiry.status = 'closed';
-      else if (body.pipelineStage && inquiry.status === 'closed') inquiry.status = 'in_progress';
-    }
+    // Сначала статус, потом этап: если пришли оба, выбранный этап остаётся
+    // последним словом. Раньше порядок был обратным, и «Выиграно» из карточки
+    // клиента тут же откатывалось на «Общение» — работало только перетаскивание.
     if (body.status != null) {
       inquiry.status = body.status;
       if (body.status !== 'closed' && ['won', 'lost'].includes(inquiry.pipelineStage)) {
         inquiry.pipelineStage = body.status === 'new' ? 'new' : 'contact';
       }
+    }
+    if (body.pipelineStage != null) {
+      inquiry.pipelineStage = body.pipelineStage;
+      if (['won', 'lost'].includes(body.pipelineStage)) inquiry.status = 'closed';
+      // Этап сам заявку открывает, только если статус не задан явно.
+      else if (body.pipelineStage && inquiry.status === 'closed' && body.status == null) inquiry.status = 'in_progress';
     }
     if (body.note != null) inquiry.note = cleanText(body.note, 2000);
     if (assignee != null) inquiry.assignee = assignee;
