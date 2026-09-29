@@ -54,12 +54,34 @@ test('/stats и сводка спрашивают статистику по ме
   }
 });
 
-test('панель и бот теперь называют один и тот же день одинаково', async () => {
+test('панель называет день по часам бота, а не браузера: из другого часового пояса столбики не съезжают', async () => {
   const { localDayKey } = await import('../src/util.mjs');
+  assert.equal(localDayKey(NIGHT), localKey(NIGHT), 'бот считает по местному времени своего компьютера');
+
+  // Панель в браузере с чужим часовым поясом: бот присылает своё время и сдвиг пояса.
+  const vm = require('node:vm');
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
-  // Панель строит ключ дня по местному времени браузера — так же, как бот.
-  assert.match(PANEL_HTML, /function dayKeyOf\(date\) \{\s*return date\.getFullYear\(\)/, 'панель считает день по местному времени');
-  assert.equal(localDayKey(NIGHT), localKey(NIGHT), 'бот считает так же');
+  const script = PANEL_HTML.match(/<script[^>]*>([\s\S]*?)<\/script>/)[1];
+  const start = script.indexOf('function serverOffsetMinutes()');
+  const end = script.indexOf('function dailyValue(');
+  const context = { state: null, Date, Number, String };
+  vm.createContext(context);
+  const startOfDayStart = script.indexOf('function startOfDay(key)');
+  const startOfDayEnd = script.indexOf('function startOfToday()');
+  vm.runInContext(script.slice(start, end) + '\n' + script.slice(startOfDayStart, startOfDayEnd), context);
+
+  // У бота 00:30 15 июля в Мадриде (UTC+2, сдвиг -120), а у человека браузер в Нью-Йорке: там ещё 14 июля.
+  const botNow = Date.UTC(2026, 6, 14, 22, 30);
+  context.state = { serverTime: botNow, serverTzOffset: -120, receivedAt: Date.now() };
+  context.Date = Date;
+  const days = vm.runInContext('lastDays(3)', context);
+  assert.deepEqual(Array.from(days), ['2026-07-13', '2026-07-14', '2026-07-15'], 'сегодня — 15 июля по часам бота');
+  assert.equal(vm.runInContext('dayKeyOf(new Date(serverNow()))', context), '2026-07-15');
+  // Полночь суток бота: 15 июля 00:00 по Мадриду — это 14 июля 22:00 UTC.
+  assert.equal(vm.runInContext('startOfDay("2026-07-15")', context), Date.UTC(2026, 6, 14, 22, 0));
+  // Без сведений от бота (старый ответ) — прежнее поведение, по часам браузера.
+  context.state = {};
+  assert.match(vm.runInContext('lastDays(1)[0]', context), /^\d{4}-\d{2}-\d{2}$/);
 });
 
 test('ежедневная копия и «раз в сутки» тоже считаются по времени бота', () => {

@@ -2,16 +2,33 @@
 // последние заявки. И раздел «Статистика» — вся аналитика в одном месте.
 
 const OVERVIEW_JS = String.raw`
+// Дни считаем по времени бота, а не браузера: сервер раскладывает статистику по своим
+// суткам (по часам компьютера, где работает бот), и при входе из другого пояса столбики
+// графика съезжали на день. Бот присылает своё время и сдвиг пояса вместе с состоянием.
+function serverOffsetMinutes() {
+  var offset = state && Number(state.serverTzOffset);
+  return Number.isFinite(offset) ? offset : new Date().getTimezoneOffset();
+}
+// «Сейчас» по часам бота: время из состояния плюс сколько прошло с тех пор, как оно пришло.
+function serverNow() {
+  var base = state && Number(state.serverTime);
+  if (!Number.isFinite(base) || !base) return Date.now();
+  if (!state.receivedAt) state.receivedAt = Date.now();
+  return base + (Date.now() - state.receivedAt);
+}
 function dayKeyOf(date) {
-  return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+  var shifted = new Date(date.getTime() - serverOffsetMinutes() * 60000);
+  return shifted.getUTCFullYear() + "-" + String(shifted.getUTCMonth() + 1).padStart(2, "0") + "-" + String(shifted.getUTCDate()).padStart(2, "0");
+}
+function shiftDayKey(key, delta) {
+  var parts = key.split("-").map(Number);
+  var date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + delta));
+  return date.getUTCFullYear() + "-" + String(date.getUTCMonth() + 1).padStart(2, "0") + "-" + String(date.getUTCDate()).padStart(2, "0");
 }
 function lastDays(count) {
+  var today = dayKeyOf(new Date(serverNow()));
   var days = [];
-  for (var index = count - 1; index >= 0; index -= 1) {
-    var date = new Date();
-    date.setDate(date.getDate() - index);
-    days.push(dayKeyOf(date));
-  }
+  for (var index = count - 1; index >= 0; index -= 1) days.push(shiftDayKey(today, -index));
   return days;
 }
 function dailyValue(key, field) {
@@ -27,8 +44,13 @@ function usersInRange(from) {
 function inquiriesInRange(from) {
   return (state.inquiries || []).filter(function (item) { return (Date.parse(item.createdAt) || 0) >= from; });
 }
-function startOfToday() { var date = new Date(); date.setHours(0, 0, 0, 0); return date.getTime(); }
-function startOfWeek() { var date = new Date(); date.setDate(date.getDate() - 6); date.setHours(0, 0, 0, 0); return date.getTime(); }
+// Полночь суток бота, в миллисекундах.
+function startOfDay(key) {
+  var parts = key.split("-").map(Number);
+  return Date.UTC(parts[0], parts[1] - 1, parts[2]) + serverOffsetMinutes() * 60000;
+}
+function startOfToday() { return startOfDay(dayKeyOf(new Date(serverNow()))); }
+function startOfWeek() { return startOfDay(shiftDayKey(dayKeyOf(new Date(serverNow())), -6)); }
 
 function viewingList() {
   return (state.inquiries || []).filter(function (item) { return item.type === "viewing" && item.viewing && item.status !== "closed" && !item.viewing.cancelledAt; });

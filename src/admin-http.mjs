@@ -758,6 +758,8 @@ function stateFingerprint(state, now = Date.now()) {
     : state && state.notifications;
   const steady = {
     ...state,
+    // Часы бота меняются каждую секунду и версию состояния менять не должны.
+    serverTime: 0,
     notifications,
     runtime: {
       ...botRuntime,
@@ -885,6 +887,9 @@ function safeState(session) {
       lastMessage: lastMessagePreview(messages),
     })),
     replyTemplates: data.replyTemplates || [],
+    // Часы бота: по ним панель считает «сегодня» и дни графиков, где бы ни была открыта.
+    serverTime: Date.now(),
+    serverTzOffset: new Date().getTimezoneOffset(),
     // Одно место для всех «чисел ожидания»: значок меню, колокольчик, шапка, заголовок вкладки.
     attention: attentionCounts(notifications),
     waitingConversationCount: waitingConversationCount(),
