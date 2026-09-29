@@ -969,7 +969,7 @@ function checkPlateWidth(row, index, onPad) {
     note.innerHTML = picture.naturalWidth + "×" + picture.naturalHeight + " (" + ratio.toFixed(1) + ":1)" +
       (narrow ? " — узкая: текст под ней будет сжат." : small ? " — для чёткости лучше 1280 точек по ширине." : "") +
       (flat ? ' — слишком вытянутая: Telegram добавит размытый фон сверху и снизу. <select data-padratio="' + index + '" class="chip-inline"><option value="3">до 3:1</option><option value="2.5">до 2,5:1</option><option value="2">до 2:1</option><option value="1.78">до 16:9</option></select> <input type="color" data-padcolor="' + index + '" value="#ffffff" class="switch-inline"> <label class="check inline-flex"><input type="checkbox" data-padtransparent="' + index + '"> прозрачный</label> <button class="btn ghost small" data-pad="' + index + '" type="button">Дорисовать фон</button>' : "");
-    note.style.color = narrow || flat ? "var(--warn)" : "var(--faint)";
+    note.style.color = narrow || flat ? "var(--warn)" : "var(--muted)";
     var padButton = note.querySelector("[data-pad]");
     if (padButton) {
       padButton.onclick = function () {

@@ -363,7 +363,6 @@ test('шрифт: основной текст не мельче 14 px, мелк�
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   const style = PANEL_HTML.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
   const size = (name) => Number((style.match(new RegExp('--' + name + ':\\s*(\\d+(?:\\.\\d+)?)px')) || [])[1]);
-  assert.ok(size('fs') >= 14, 'основной шрифт: ' + size('fs'));
   assert.ok(size('fs-sm') >= 14, 'вторичный текст, кнопки и вкладки: ' + size('fs-sm'));
   assert.ok(size('fs-xs') >= 13, 'мелкие подписи: ' + size('fs-xs'));
   // Прямых значений мельче 13 px в стилях нет.
@@ -426,7 +425,7 @@ test.describe('стили панели', () => {
       return value;
     };
     const backgrounds = ['--surface', '--bg', '--surface-soft', '--brand-soft'];
-    const texts = ['--text', '--muted', '--faint', '--brand', '--ok', '--warn', '--bad'];
+    const texts = ['--text', '--muted', '--brand', '--ok', '--warn', '--bad'];
     const weak = [];
     for (const text of texts) {
       for (const background of backgrounds) {
@@ -505,8 +504,8 @@ test.describe('стили панели', () => {
   test('на телефоне страница и окна не шире экрана', async () => {
     const sheet = await css();
     // Всё, что касается узкого экрана, лежит в одном блоке @media.
-    const mobile = sheet.slice(sheet.lastIndexOf('@media', sheet.indexOf('.topbar{padding:10px 14px')));
-    assert.match(mobile, /\.topbar\{padding:10px 14px;flex-wrap:wrap\}/, 'верхняя полоса переносится, а не выталкивает кнопки за экран');
+    const mobile = sheet.slice(sheet.lastIndexOf('@media', sheet.indexOf('.topbar{padding:var(--sp-3) var(--sp-4)')));
+    assert.match(mobile, /\.topbar\{padding:var\(--sp-3\) var\(--sp-4\);flex-wrap:wrap\}/, 'верхняя полоса переносится, а не выталкивает кнопки за экран');
     assert.match(mobile, /\.topbar #pageActions\{flex-wrap:wrap;width:100%\}/, 'кнопки действий делят строку');
     assert.match(mobile, /\.drawer,\.drawer\.wide\{left:0;right:0;width:100%;max-width:100%\}/, 'выдвижное окно прижато к левому краю и занимает экран');
     // Страховка от горизонтальной прокрутки всей страницы.
@@ -516,7 +515,7 @@ test.describe('стили панели', () => {
   test('основные цвета — настоящие цвета, а не ссылки', async () => {
     const variables = rootVariables(await css());
     const color = /^#[0-9a-f]{3,8}$|^rgba?\(|^hsla?\(/i;
-    for (const name of ['--surface', '--line', '--line-soft', '--text', '--muted', '--faint', '--brand', '--brand-dark']) {
+    for (const name of ['--surface', '--line', '--line-soft', '--text', '--muted', '--brand', '--brand-dark']) {
       assert.ok(variables.has(name), name + ' объявлена');
       assert.match(variables.get(name), color, name + ' должна быть цветом, а не ' + variables.get(name));
     }
@@ -708,4 +707,24 @@ test('в подписях панели один словарь и нет тех�
   assert.match(screens, /Видели в каталоге/);
   assert.match(screens, /Открыли карточку/);
   assert.match(screens, /function timeZoneName\(\)/);
+});
+
+test('набор токенов оформления: 22 цвета, четыре размера текста, отступы 4/8/12/16/24, три радиуса, слои по шкале', async () => {
+  const { PANEL_CSS } = await import('../src/panel/styles.mjs');
+  const root = PANEL_CSS.match(/:root\{([\s\S]*?)\n\}/)[1];
+  const colours = Array.from(root.matchAll(/(--[a-z-]+):\s*#[0-9a-f]{3,6}/g)).map((match) => match[1]);
+  assert.equal(colours.length, 22, 'цветов в наборе: ' + colours.join(' '));
+  for (const gone of ['--faint', '--amber', '--alarm', '--tint', '--ink', '--ink-soft', '--stage-contact', '--stage-selection', '--stage-lost', '--today-line', '--warn-tint', '--bad-line-strong', '--chat-bg', '--chat-text']) {
+    assert.ok(!PANEL_CSS.includes(gone + ':') && !PANEL_CSS.includes('var(' + gone + ')'), gone + ' убран из набора');
+  }
+  assert.ok(!/--fs:|--fs-2xl|var\(--fs\)/.test(PANEL_CSS), 'один основной размер текста, без дубля');
+  // Отступы: только из шкалы (плюс 2 px для волосяных зазоров и 0), радиусы — только токены, круг и ноль.
+  const spaces = Array.from(PANEL_CSS.matchAll(/(?:padding|margin|gap)(?:-[a-z]+)?:([^;}]*)/g)).map((match) => match[1]);
+  const offScale = spaces.flatMap((value) => Array.from(value.replace(/\([^)]*\)/g, '').matchAll(/(?<![\w.-])-?(\d+)px/g)).map((m) => Number(m[1]))).filter((n) => ![0, 1, 2].includes(n) && n < 28);
+  assert.deepEqual(offScale, [], 'отступы вне шкалы: ' + offScale.join(', '));
+  const radii = Array.from(PANEL_CSS.matchAll(/border-radius:([^;}]*)/g)).map((match) => match[1]);
+  assert.ok(radii.every((value) => /^(var\(--radius(-sm)?\)|50%|0|999px)( |$)/.test(value) || /^(var\(--radius(-sm)?\)|0)( (var\(--radius(-sm)?\)|0)){1,3}$/.test(value)), 'радиусы вне шкалы: ' + radii.filter((value) => !/var\(--radius/.test(value) && !/^(50%|0|999px)$/.test(value)).join(', '));
+  // Слои — только токены (кроме 4 у липкой подписи языка внутри формы).
+  const layers = Array.from(PANEL_CSS.matchAll(/z-index:([^;}]*)/g)).map((match) => match[1]).filter((value) => !/var\(--z-|calc\(var\(--z-/.test(value));
+  assert.deepEqual(layers, ['4'], 'слои вне шкалы: ' + layers.join(', '));
 });
