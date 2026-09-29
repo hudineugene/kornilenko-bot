@@ -10,7 +10,8 @@ import { normalizeUser } from './users.mjs';
 import { knownFileId, rememberFileId, sendMessage, sendPhotoMessage, telegramMultipartRequest, telegramRequest } from './telegram.mjs';
 import { menuKeyboard, sendLanguagePicker } from './menus.mjs';
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
-import { acknowledgeCallback } from './sections.mjs';
+import { acknowledgeCallback, whatsappRow } from './sections.mjs';
+import { searchMessage } from './whatsapp-hot.mjs';
 import { start } from './lifecycle.mjs';
 
 function localized(value, language) {
@@ -1148,6 +1149,7 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
       [{ text: copy.reset, callback_data: 'cfilter:reset' }],
       [{ text: notify, callback_data: 'saved:save' }],
       [{ text: '💬 ' + copy.sendToManager, callback_data: 'cfilter:manager' }],
+      ...(whatsappRow(searchMessage(filterState.summary, language)) ? [whatsappRow(searchMessage(filterState.summary, language))] : []),
       [{ text: labels.selection, callback_data: 'selection:start' }],
       [{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }],
     ] } });

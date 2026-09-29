@@ -413,8 +413,17 @@ function browsingMode(user, record) {
 }
 
 function configuredWhatsappUrl(message = '') {
+  // Выключен в «Контактах» — не предлагаем нигде (раньше выключатель действовал
+  // только на экране связи, а на карточке объекта кнопка оставалась).
+  if (data.contacts && data.contacts.whatsappEnabled === false) return '';
   const phone = (String(data.contacts && data.contacts.phone || '').match(/\+?\d[\d\s().-]{5,}\d/) || [])[0] || '';
   return whatsappContactUrl(data.contacts && data.contacts.whatsapp, phone, message);
+}
+
+// Ряд с кнопкой «🟢 WhatsApp» для «горячих» экранов; null, если WhatsApp не настроен.
+function whatsappRow(message = '') {
+  const url = configuredWhatsappUrl(message);
+  return url ? [{ text: '🟢 WhatsApp', url }] : null;
 }
 
 // «Интересует объект: Вилла (DEMO-001)» — то, что клиент увидит в поле ввода WhatsApp.
@@ -460,10 +469,12 @@ async function sendSimilarProperty(chatId, user, record, token) {
     // бюджету (если рядом по цене хоть что-то есть).
     const deadEnd = DEAD_END_TEXT[language] || DEAD_END_TEXT.ru;
     const nearby = nearestByBudget(record, candidates);
+    const whatsapp = whatsappRow(whatsappPropertyMessage(record, language));
     await sendUiMessage(chatId, user, copy.noSimilar, token, { reply_markup: { inline_keyboard: [
       [{ text: deadEnd.notify, callback_data: 'saved:similar:' + record.id }],
       ...(nearby.length ? [[{ text: deadEnd.budget, callback_data: 'property:nearprice:' + record.id }]] : []),
       [{ text: (MENU_LABELS[language] || MENU_LABELS.ru).contacts, callback_data: 'contact:question' }],
+      ...(whatsapp ? [whatsapp] : []),
       [{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:return:' + record.id }],
     ] } });
     return;
@@ -805,6 +816,8 @@ export {
   aboutPreview,
   acknowledgeCallback,
   configuredWhatsappUrl,
+  whatsappPropertyMessage,
+  whatsappRow,
   handleAboutCallback,
   handleCatalogCallback,
   handleContactCallback,

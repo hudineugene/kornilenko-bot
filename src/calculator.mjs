@@ -9,7 +9,7 @@ import { normalizeCalculator } from './data-format.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { normalizeUser } from './users.mjs';
 import { localizedExact, propertyReadyForLanguage, sendUiMessage } from './catalog.mjs';
-import { acknowledgeCallback } from './sections.mjs';
+import { acknowledgeCallback, whatsappPropertyMessage, whatsappRow } from './sections.mjs';
 
 function calculatorSettings() {
   return normalizeCalculator(data.config && data.config.calculator);
@@ -127,8 +127,11 @@ async function handleCalculatorCallback(query, token) {
   await acknowledgeCallback(query, token);
   recordPropertyEvent(record.id, 'calculator');
   const copy = CALCULATOR_TEXT[language] || CALCULATOR_TEXT.ru;
+  // Тот, кто досчитал до конца, почти готов писать: WhatsApp рядом с «Обсудить».
+  const whatsapp = whatsappRow(whatsappPropertyMessage(record, language));
   await sendUiMessage(chatId, user, estimateText(record, language), token, { reply_markup: { inline_keyboard: [
     [{ text: copy.discuss, callback_data: 'property:manager:' + record.id }],
+    ...(whatsapp ? [whatsapp] : []),
     [{ text: '✕ ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).close, callback_data: 'nav:close' }],
   ] } });
 }

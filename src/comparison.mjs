@@ -5,6 +5,8 @@ import { cleanText } from './util.mjs';
 import { scheduleSave } from './store.mjs';
 import { normalizeUser } from './users.mjs';
 import { telegramRequest } from './telegram.mjs';
+import { whatsappRow } from './sections.mjs';
+import { compareMessage } from './whatsapp-hot.mjs';
 import {
   COMPARISON_LIMIT,
   catalogRecords,
@@ -135,6 +137,10 @@ function comparisonMarkup(user) {
     rows.push([{ text: INDEX_MARKS[index] + ' ' + copy.open + ': ' + title, callback_data: 'catalog:comparison:' + index }]);
     rows.push([{ text: '✕ ' + copy.remove + ': ' + title, callback_data: 'compare:remove:' + record.id }]);
   });
+  if (records.length) {
+    const whatsapp = whatsappRow(compareMessage(records.map((record) => localizedExact(record.title, language, 80) || record.reference || record.id), language));
+    if (whatsapp) rows.push(whatsapp);
+  }
   if (records.length < COMPARISON_LIMIT) rows.push([{ text: '🏘 ' + copy.browse, callback_data: 'catalog:all:0' }]);
   if (records.length) rows.push([{ text: '🗑 ' + copy.clear, callback_data: 'compare:clear' }]);
   rows.push([{ text: '⬅️ ' + labels.more, callback_data: 'nav:my' }]);
