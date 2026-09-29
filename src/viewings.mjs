@@ -8,7 +8,8 @@ import { INTERACTION_TEXT, MY_REQUESTS_TEXT, PROPERTY_ACTION_TEXT, VIEWING_FORM_
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { markUnavailable, normalizeUser, userByChatId, userById } from './users.mjs';
-import { sendMessage, telegramRequest } from './telegram.mjs';
+import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
+import { imageExists } from './media.mjs';
 import { menuKeyboard } from './menus.mjs';
 import { adminCallbackAllowed, createInquiry, inquiryStatusMarkup, notifyAdministratorAction } from './inquiries.mjs';
 import { localized, localizedExact, validHttpUrl } from './catalog.mjs';
@@ -164,7 +165,22 @@ function viewingPlaceLines(property, language, copy) {
   return [title ? '🏠 ' + title : '', address ? '📍 ' + copy.address + ': ' + address : ''].filter(Boolean);
 }
 
-function viewingDetailsText(inquiry, property, language, heading, footer) {
+// Карточка встречи: кто встретит, по какому телефону связаться, что взять с собой
+// и что делать, если задерживаешься. Самый большой страх приезжего — приехать и
+// никого не найти. Строки про имя и телефон — только если владелец их заполнил.
+function meetingLines(language, copy) {
+  const contacts = data.contacts || {};
+  const name = cleanText(contacts.managerName, 160);
+  const phone = (String(contacts.phone || '').match(/\+?\d[\d\s().-]{5,}\d/g) || [])[0];
+  return [
+    name ? copy.meets + name : '',
+    phone ? copy.phone + cleanText(phone, 80) : '',
+    copy.bringId,
+    copy.runningLate,
+  ].filter(Boolean);
+}
+
+function viewingDetailsText(inquiry, property, language, heading, footer, extraLines = []) {
   const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
   const when = viewingWhen(inquiry, language);
   const [titleLine, ...addressLines] = viewingPlaceLines(property, language, copy);
@@ -179,6 +195,7 @@ function viewingDetailsText(inquiry, property, language, heading, footer) {
     when.date ? '📅 ' + copy.date + ': ' + when.date : '',
     when.time ? '🕒 ' + copy.time + ': ' + when.time : '',
     ...placeLines,
+    ...(extraLines.length ? ['', ...extraLines] : []),
     '',
     footer,
   ].filter((line, index, lines) => line !== '' || (lines[index - 1] !== '' && index > 0)).join('\n').trim();
@@ -198,7 +215,21 @@ async function sendViewingConfirmation(inquiry, user, token = data.config.botTok
   const property = viewingProperty(inquiry);
   // На онлайн-показ карта не нужна.
   const map = property && !(inquiry.viewing && inquiry.viewing.online) ? validHttpUrl(property.mapUrl) : '';
-  const text = viewingDetailsText(inquiry, property, language, options.heading || copy.confirmed, copy.confirmedFooter);
+  // Онлайн-показ проходит по видеосвязи — приезжать не нужно, карточка встречи ни к чему.
+  const online = Boolean(inquiry.viewing && inquiry.viewing.online);
+  const text = viewingDetailsText(inquiry, property, language, options.heading || copy.confirmed, copy.confirmedFooter, online ? [] : meetingLines(language, copy));
+  // Фото агента идёт отдельным сообщением перед карточкой. Не вышло — карточка всё
+  // равно приходит. Если итог заменяет вопрос записи, фото не шлём: оно встало бы
+  // ниже заменённого сообщения.
+  const contacts = data.contacts || {};
+  if (!online && !options.editMessageId && imageExists(contacts.photo)) {
+    const name = cleanText(contacts.managerName, 160);
+    try {
+      await sendPhotoMessage(user.chatId, contacts.photo, name ? '👨‍💼 ' + name : '', token, null);
+    } catch (error) {
+      recordError('Фото агента в подтверждении просмотра', error);
+    }
+  }
   // Запись кнопками шла в одном сообщении — итог заменяет его же, а не
   // добавляется четвёртым. Если изменить не получилось, шлём новым.
   if (options.editMessageId) {

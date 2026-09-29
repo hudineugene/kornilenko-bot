@@ -956,6 +956,10 @@ const VIEWING_NOTICE_TEXT = {
     questionsReply: 'Напишите ваш вопрос — менеджер ответит в этом чате.',
     dislikedReply: 'Спасибо за честный ответ! Посмотрите похожий вариант:',
     openMap: '📍 Как добраться',
+    meets: '👨‍💼 Вас встретит: ',
+    phone: '☎️ Телефон: ',
+    bringId: '🪪 Возьмите с собой документ, удостоверяющий личность.',
+    runningLate: '⏳ Задерживаетесь? Позвоните или напишите в этот чат — предупредите нас заранее.',
   },
   en: {
     confirmed: '✅ Your viewing is confirmed',
@@ -974,6 +978,10 @@ const VIEWING_NOTICE_TEXT = {
     questionsReply: 'Send your question — an agent will reply in this chat.',
     dislikedReply: 'Thank you for your honest answer! Take a look at a similar option:',
     openMap: '📍 How to get there',
+    meets: '👨‍💼 Meeting you: ',
+    phone: '☎️ Phone: ',
+    bringId: '🪪 Bring a photo ID with you.',
+    runningLate: '⏳ Running late? Call us or message this chat so we know in advance.',
   },
   es: {
     confirmed: '✅ Visita confirmada',
@@ -992,6 +1000,10 @@ const VIEWING_NOTICE_TEXT = {
     questionsReply: 'Escribe tu pregunta: un asesor responderá en este chat.',
     dislikedReply: '¡Gracias por tu sinceridad! Echa un vistazo a una opción similar:',
     openMap: '📍 Cómo llegar',
+    meets: '👨‍💼 Te recibe: ',
+    phone: '☎️ Teléfono: ',
+    bringId: '🪪 Lleva un documento de identidad.',
+    runningLate: '⏳ ¿Llegas tarde? Llámanos o escribe en este chat para avisarnos.',
   },
 };
 
