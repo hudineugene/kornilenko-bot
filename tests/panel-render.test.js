@@ -816,6 +816,7 @@ test('«Команда»: одна полоса сохранения на чат
   const managers = requests.find((request) => request.url === '/api/managers' && request.method === 'PUT');
   assert.ok(settings && managers, 'сохранились и настройки чата, и менеджеры');
   assert.equal(settings.body.currentPassword, 'пароль-панели');
+  assert.ok(!('messages' in settings.body) && !('active' in settings.body), 'настройки команды не тянут за собой приветствие и включение бота');
   assert.equal(managers.body.currentPassword, 'пароль-панели');
 });
 
@@ -1606,6 +1607,33 @@ test('значки навигации — один набор линейных S
   assert.ok(String(sandbox.el('nav').innerHTML).includes('<svg viewBox="0 0 24 24"'), 'значки видны в верхнем меню');
   assert.ok(String(sandbox.el('tabbar').innerHTML).includes('<svg viewBox="0 0 24 24"'), 'и в нижней панели телефона');
   for (const glyph of ['◉', '✉', '⌂', '➤', '✎', '⚙', '📅']) assert.ok(!shown.includes(glyph), 'старого глифа ' + glyph + ' на экране нет');
+});
+
+test('переключатели «Бот включён» на «Сегодня» и в «Подключении» шлют одно поле active, а не все настройки', async () => {
+  twoWaitingConversations();
+  const { sandbox, requests } = await panelSandbox();
+
+  // Тексты в состоянии панели «устарели»: если бы они уходили с запросом, они перетёрли бы свежие.
+  sandbox.state.config.messages = { ru: { greeting: 'устаревшее', help: 'устаревшее', fallback: '' } };
+
+  const today = fakeElement('main');
+  sandbox.VIEWS.today.render(today);
+  const toggle = today.querySelector('#botActive');
+  toggle.checked = true;
+  requests.length = 0;
+  await toggle.onchange();
+  const fromToday = requests.find((request) => request.url === '/api/settings' && request.method === 'PUT');
+  assert.ok(fromToday, 'запрос ушёл');
+  assert.equal(JSON.stringify(fromToday.body), JSON.stringify({ active: true }), 'только active');
+
+  const service = fakeElement('main');
+  sandbox.renderTelegramConnection(service);
+  const setActive = service.querySelector('#setActive');
+  setActive.checked = false;
+  requests.length = 0;
+  await setActive.onchange.call(setActive);
+  const fromService = requests.find((request) => request.url === '/api/settings' && request.method === 'PUT');
+  assert.equal(JSON.stringify(fromService.body), JSON.stringify({ active: false }), 'и здесь только active');
 });
 
 test('адреса: вкладки «Просмотров», разделы «Обслуживания» и открытый диалог открываются по ссылке и в истории браузера', async () => {

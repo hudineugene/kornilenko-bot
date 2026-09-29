@@ -4,17 +4,12 @@ const SETTINGS_JS = String.raw`
 var WEEKDAYS = [[1, "Пн"], [2, "Вт"], [3, "Ср"], [4, "Чт"], [5, "Пт"], [6, "Сб"], [0, "Вс"]];
 var TIME_ZONE_OPTIONS = [["Europe/Madrid", "Испания — материк"], ["Atlantic/Canary", "Испания — Канарские острова"], ["Europe/Kyiv", "Украина"], ["Europe/Moscow", "Москва"], ["UTC", "UTC"]];
 
-// Настройки сохраняются одним запросом, поэтому неизменные поля посылаем как есть.
+// Настройки сохраняются по полям: каждая правка присылает только то, что она
+// меняет. Раньше уходил весь набор из состояния панели (с приветствием), а оно
+// могло быть старше на 45 секунд, и переключатель «Бот включён» молча
+// перезаписывал приветствие, изменённое в другой вкладке.
 function settingsPayload() {
-  return {
-    messages: state.config.messages,
-    adminChatId: state.config.adminChatId,
-    notifyMode: state.config.notifyMode,
-    reminderHours: state.config.reminderHours,
-    timeZone: state.config.timeZone,
-    statusNotices: state.config.statusNotices,
-    active: state.config.active,
-  };
+  return {};
 }
 
 function renderConnection(host) {
@@ -65,7 +60,7 @@ function renderConnection(host) {
       if (!password) throw new Error("Сохранение отменено");
     }
     if (settingsChanged) {
-      var payload = Object.assign(settingsPayload(), { adminChatId: adminChatId, notifyMode: notifyMode, statusNotices: statusNotices, active: state.config.active });
+      var payload = Object.assign(settingsPayload(), { adminChatId: adminChatId, notifyMode: notifyMode, statusNotices: statusNotices });
       if (chatChanged) payload.currentPassword = password;
       await send("/api/settings", "PUT", payload);
     }

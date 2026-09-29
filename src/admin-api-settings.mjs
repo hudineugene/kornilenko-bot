@@ -129,11 +129,15 @@ function refreshStaffCommands(previousChatIds = []) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const body = await readJson(req);
-    let nextMessages;
-    try {
-      nextMessages = messagesInput(body.messages);
-    } catch (error) {
-      return json(res, 400, { error: error.message });
+    // Каждое поле необязательно: правка присылает только то, что человек изменил,
+    // а не весь набор настроек из состояния панели, которое могло устареть.
+    let nextMessages = null;
+    if (body.messages != null) {
+      try {
+        nextMessages = messagesInput(body.messages);
+      } catch (error) {
+        return json(res, 400, { error: error.message });
+      }
     }
 
     // Смена админ-чата отдаёт заявки клиентов в другой Telegram-чат, поэтому
@@ -203,9 +207,9 @@ function refreshStaffCommands(previousChatIds = []) {
       // A manager who became the main admin is not listed twice.
       data.config.managers = (data.config.managers || []).filter((manager) => manager.chatId !== adminChatId);
     }
-    data.config.messages = nextMessages;
-    const activeChanged = data.config.active !== Boolean(body.active);
-    data.config.active = Boolean(body.active);
+    if (nextMessages) data.config.messages = nextMessages;
+    const activeChanged = typeof body.active === 'boolean' && data.config.active !== body.active;
+    if (typeof body.active === 'boolean') data.config.active = body.active;
     applyConfiguredTimeZone();
     saveDataNow();
     if (activeChanged || tokenChanged) restartPolling();
