@@ -5,6 +5,8 @@
 
 import { data } from './store.mjs';
 import { normalizeWorkingHours } from './data-format.mjs';
+import { whatsappContactUrl } from './catalog.mjs';
+import { cleanText } from './util.mjs';
 
 const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
 // Without office hours set, admin messages keep the old daytime window.
@@ -87,11 +89,52 @@ function replyPromise(language, now = new Date()) {
   return 'Обычно отвечаем в течение ' + (inHours === 1 ? 'часа' : inHours + ' ' + plural(inHours, 'часа', 'часов', 'часов')) + '.';
 }
 
+// «пн–пт», «пн, ср, пт»: подряд идущие дни — диапазоном, остальные списком.
+function workingDaysLabel(days, language) {
+  const locale = LOCALES[language] || LOCALES.ru;
+  // Порядок недели с понедельника: пн … сб, вс.
+  const order = [1, 2, 3, 4, 5, 6, 0].filter((day) => days.includes(day));
+  const name = (day) => new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(new Date(2026, 0, 4 + day)).replace(/\.$/, '');
+  const runs = [];
+  for (const day of order) {
+    const last = runs[runs.length - 1];
+    const position = (value) => [1, 2, 3, 4, 5, 6, 0].indexOf(value);
+    if (last && position(day) === position(last[last.length - 1]) + 1) last.push(day);
+    else runs.push([day]);
+  }
+  return runs.map((run) => (run.length >= 3 ? name(run[0]) + '–' + name(run[run.length - 1]) : run.map(name).join(', '))).join(', ');
+}
+
+const WHAT_NEXT_TEXT = {
+  ru: { contact: '👨‍💼 На связи: ', hours: '🕘 Часы работы: ', whatsapp: '🟢 Быстрее — в WhatsApp: ' },
+  en: { contact: '👨‍💼 Your contact: ', hours: '🕘 Working hours: ', whatsapp: '🟢 Faster on WhatsApp: ' },
+  es: { contact: '👨‍💼 Tu contacto: ', hours: '🕘 Horario: ', whatsapp: '🟢 Más rápido por WhatsApp: ' },
+};
+
+// Что клиент видит после заявки помимо «спасибо»: кто на связи, в какие часы
+// работают и где можно написать быстрее. Берётся из настроек владельца; что не
+// заполнено — строки нет (выдуманных обещаний бот не даёт).
+function whatNextLines(language, now = new Date()) {
+  const lang = ['ru', 'en', 'es'].includes(language) ? language : 'ru';
+  const copy = WHAT_NEXT_TEXT[lang];
+  const contacts = data.contacts || {};
+  const hours = workingHours();
+  const lines = [];
+  const manager = cleanText(contacts.managerName, 160);
+  if (manager) lines.push(copy.contact + manager);
+  if (hours.enabled) lines.push(copy.hours + workingDaysLabel(hours.days, lang) + ' ' + hours.from.replace(/^0/, '') + '–' + hours.to.replace(/^0/, ''));
+  const chat = contacts.whatsappEnabled === false ? '' : whatsappContactUrl(contacts.whatsapp);
+  const details = lines.join('\n');
+  return { details, whatsapp: chat ? copy.whatsapp + chat : '' };
+}
+
 function withOffHoursNote(text, language, now = new Date()) {
+  if (!text) return text;
   const note = offHoursNote(language, now);
-  if (text && note) return text + '\n\n🌙 ' + note;
-  const promise = replyPromise(language, now);
-  return text && promise ? text + '\n\n⏱ ' + promise : text;
+  const next = whatNextLines(language, now);
+  const promise = note ? '' : replyPromise(language, now);
+  const parts = [text, next.details, next.whatsapp, note ? '🌙 ' + note : '', promise ? '⏱ ' + promise : ''].filter(Boolean);
+  return parts.join('\n\n');
 }
 
 // When admin reminders may be sent: office hours if set, otherwise daytime.

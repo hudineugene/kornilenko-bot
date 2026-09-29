@@ -81,7 +81,8 @@ test('a client writing outside office hours is told when to expect an answer', a
   step = await chat.press('lead:call');
   await chat.say('+34 600 000 000');
   step = await chat.say(bot.text.lead.ru.timeOptions[2]);
-  assert.ok(step.last.text.startsWith(bot.text.lead.ru.success + '\n\n🌙 '));
+  assert.ok(step.last.text.startsWith(bot.text.lead.ru.success + '\n\n'));
+  assert.match(step.last.text, /\n\n🌙 /, 'после «спасибо» — часы работы и пометка о нерабочем времени');
 });
 
 test('during office hours the answer is as before', async () => {
