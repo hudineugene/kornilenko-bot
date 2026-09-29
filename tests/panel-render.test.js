@@ -2497,6 +2497,82 @@ test('«Отчёт»: цели новых клиентов — в воронке
   assert.ok(!/Цели:/.test(String(sandbox.funnelBlock({ ...funnel, goals: { live: 0, invest: 0, browse: 0, answered: 0, mostlyBrowsing: false } }))), 'никто не отвечал — строки нет');
 });
 
+test('«Клиенты»: один общий фильтр на все виды — менеджер, шаг «сегодня / просрочено», поиск; при смене вида не теряется', async () => {
+  const dayKey = (offset) => {
+    const date = new Date(); date.setDate(date.getDate() + offset);
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+  };
+  const minutesAgo = (count) => new Date(Date.now() - count * 60000).toISOString();
+  resetData((data) => {
+    data.config.active = true;
+    data.config.adminName = 'Олег';
+    data.config.managers = [{ id: 'm1', name: 'Мария', chatId: '8880001', verifiedAt: '' }];
+    for (const [id, name] of [['1', 'Анна'], ['2', 'Борис'], ['3', 'Вера']]) data.users[id] = { id, chatId: Number(id), firstName: name, preferredLanguage: 'ru', activity: [], lastSeenAt: minutesAgo(5) };
+    const inquiry = (id, userId, extra) => ({ id, userId, chatId: userId, language: 'ru', type: 'question', text: 'Вопрос ' + id, status: 'in_progress', pipelineStage: 'contact', replies: [], messages: [], createdAt: minutesAgo(90), updatedAt: minutesAgo(60), clientMessageAt: minutesAgo(60), ...extra });
+    data.inquiries.push(
+      inquiry('qa', '1', { assignee: 'Мария', followUpDate: dayKey(-1) }),
+      inquiry('qb', '2', { assignee: 'Олег', followUpDate: dayKey(0) }),
+      inquiry('qc', '3', {}),
+    );
+  });
+  const { sandbox } = await panelSandbox();
+  sandbox.inquiryFilter.status = '';
+  const render = async (tab) => {
+    const host = fakeElement('main');
+    await sandbox.VIEWS.clients.render(host, tab);
+    return { host, html: String(host.innerHTML) };
+  };
+  const names = (html) => ['Анна', 'Борис', 'Вера'].filter((name) => html.includes(name));
+
+  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.clientFilter)), { search: '', assignee: '', step: '' }, 'вначале фильтра нет');
+
+  // Панель фильтра есть на каждом виде; у воронки и «шагов» — ещё и поле поиска.
+  for (const tab of ['inbox', 'pipeline', 'base', 'tasks']) {
+    const { html } = await render(tab);
+    assert.match(html, /id="cfAssignee"/, tab + ': выбор менеджера');
+    assert.ok(!/id="(pipelineSearch|pipelineAssignee|taskSearch|taskAssignee)"/.test(html), tab + ': прежних отдельных полей нет');
+  }
+  assert.match((await render('pipeline')).html, /id="cfSearch"/);
+  assert.match((await render('tasks')).html, /id="cfSearch"/);
+  assert.ok(!/id="cfSearch"/.test((await render('inbox')).html), 'в диалогах поиск — в шапке, второго поля нет');
+  const inbox = await render('inbox');
+  assert.match(inbox.html, /data-step="today"[^>]*>Шаг сегодня · 1</);
+  assert.match(inbox.html, /data-step="overdue"[^>]*>Просрочено · 1</);
+  assert.ok(!/data-step=/.test((await render('tasks')).html), 'в «Следующих шагах» свои вкладки «Просроченные / К выполнению»: дублей нет');
+
+  // «Просрочено» — общий для всех видов.
+  sandbox.clientFilter.step = 'overdue';
+  for (const tab of ['inbox', 'pipeline', 'base']) assert.deepEqual(names((await render(tab)).html), ['Анна'], tab + ': только просроченные');
+  sandbox.clientFilter.step = 'today';
+  for (const tab of ['inbox', 'pipeline', 'base']) assert.deepEqual(names((await render(tab)).html), ['Борис'], tab + ': только на сегодня');
+
+  // Менеджер — тоже общий.
+  sandbox.clientFilter.step = '';
+  sandbox.clientFilter.assignee = 'Мария';
+  for (const tab of ['inbox', 'pipeline', 'base', 'tasks']) assert.deepEqual(names((await render(tab)).html), ['Анна'], tab + ': клиенты Марии');
+  sandbox.clientFilter.assignee = 'none';
+  for (const tab of ['inbox', 'pipeline', 'base']) assert.deepEqual(names((await render(tab)).html), ['Вера'], tab + ': без менеджера');
+
+  // Поиск из воронки действует и в остальных видах (а сбросить его можно кнопкой).
+  sandbox.clientFilter.assignee = '';
+  sandbox.clientFilter.search = 'борис';
+  for (const tab of ['inbox', 'pipeline', 'base', 'tasks']) assert.deepEqual(names((await render(tab)).html), ['Борис'], tab + ': по поиску');
+  assert.match((await render('inbox')).html, /id="cfReset"/, 'фильтр включён — есть «Сбросить»');
+  sandbox.clientFilter.search = '';
+
+  // Нажатие на кнопку включает фильтр, повторное — снимает.
+  const view = await render('inbox');
+  view.host.querySelector('[data-step="today"]').onclick();
+  assert.equal(sandbox.clientFilter.step, 'today');
+  view.host.querySelector('[data-step="today"]').onclick();
+  assert.equal(sandbox.clientFilter.step, '');
+  sandbox.clientFilter.assignee = 'Мария';
+  const filtered = await render('pipeline');
+  filtered.host.querySelector('#cfReset').onclick();
+  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.clientFilter)), { search: '', assignee: '', step: '' }, '«Сбросить» очищает всё');
+  assert.ok(!/id="cfReset"/.test((await render('inbox')).html), 'фильтра нет — и «Сбросить» не нужна');
+});
+
 test('«Отчёт»: реклама → сделки — одна таблица «источник → клиенты → заявки → просмотры → сделки» и конструктор ссылки рядом', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();

@@ -264,6 +264,9 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .chip.overdue{background:var(--bad);border-color:var(--bad);color:var(--surface);font-weight:700}
 .week-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;font-size:var(--fs-sm);color:var(--muted)}
 .week-line:empty{display:none}
+.client-filter{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}
+.client-filter .search{flex:1 1 220px;min-width:160px}
+.messenger-toolbar .client-filter{margin:0}
 .trust-review{background:var(--surface-soft)}
 .funnel-report{display:flex;flex-direction:column;gap:8px}
 .funnel-table th,.funnel-table td{padding:6px 8px}

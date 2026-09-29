@@ -23,8 +23,101 @@ function selectConversation(id, silent) {
 }
 var clientSearch = "";
 var clientStageFilter = "";
-var pipelineFilter = { search: "", assignee: "" };
-var taskFilter = { scope: "action", search: "", assignee: "" };
+var taskFilter = { scope: "action" };
+
+// Один фильтр на все виды «Клиентов» (диалоги, воронка, база, следующие шаги):
+// менеджер, шаг «сегодня / просрочено» и поиск. Раньше у воронки и «шагов» были
+// свои отдельные поля, у диалогов и базы — никаких, и при смене вида фильтр
+// терялся. Теперь выбранное остаётся, а «Сбросить» очищает всё.
+var clientFilter = { search: "", assignee: "", step: "" };
+
+function clientFilterActive() {
+  return Boolean(clientFilter.search || clientFilter.assignee || clientFilter.step);
+}
+
+// Шаг открытой заявки: «просрочен» (дата прошла), «сегодня» или пусто.
+function stepScopeOf(inquiry, today) {
+  if (!inquiry || inquiry.status === "closed" || !inquiry.followUpDate) return "";
+  return inquiry.followUpDate < today ? "overdue" : inquiry.followUpDate === today ? "today" : "";
+}
+
+function assigneeMatches(assignee) {
+  if (!clientFilter.assignee) return true;
+  return clientFilter.assignee === "none" ? !assignee : assignee === clientFilter.assignee;
+}
+
+function filterHaystack(user, inquiries) {
+  var parts = [userName(user), user.username, user.phone, user.id];
+  inquiries.forEach(function (item) {
+    var property = item.propertyId ? (state.objects || []).find(function (record) { return record.id === item.propertyId; }) : null;
+    parts.push(item.text, item.assignee, item.note, property && localized(property.title, "ru"));
+  });
+  parts.push(user.note);
+  return parts.filter(Boolean).join(" ").toLowerCase();
+}
+
+// Клиент целиком: подходит, если под условия попадает хоть одна его открытая заявка.
+// options.steps === false — шаг не учитываем (у «Следующих шагов» свои вкладки).
+function userFilterMatches(user, inquiries, options) {
+  var open = inquiries.filter(function (item) { return item.status !== "closed"; });
+  if (clientFilter.assignee && !open.some(function (item) { return assigneeMatches(item.assignee); })) return false;
+  if (clientFilter.step && !(options && options.steps === false)) {
+    var today = pipelineToday();
+    if (!inquiries.some(function (item) { return stepScopeOf(item, today) === clientFilter.step; })) return false;
+  }
+  return !clientFilter.search || filterHaystack(user, inquiries).indexOf(clientFilter.search.toLowerCase()) >= 0;
+}
+
+// Одна заявка (карточка воронки, задача): условия применяются к ней самой.
+function itemFilterMatches(user, item, options) {
+  if (!assigneeMatches(item.assignee)) return false;
+  if (clientFilter.step && !(options && options.steps === false) && stepScopeOf(item, pipelineToday()) !== clientFilter.step) return false;
+  return !clientFilter.search || filterHaystack(user, [item]).indexOf(clientFilter.search.toLowerCase()) >= 0;
+}
+
+// Сколько клиентов с шагом на сегодня и с просроченным — для кнопок фильтра.
+function filterStepCounts() {
+  var today = pipelineToday(), byScope = { today: {}, overdue: {} };
+  (state.inquiries || []).forEach(function (item) {
+    var scope = stepScopeOf(item, today);
+    if (scope) byScope[scope][String(item.userId)] = true;
+  });
+  return { today: Object.keys(byScope.today).length, overdue: Object.keys(byScope.overdue).length };
+}
+
+function clientFilterBar(options) {
+  var counts = filterStepCounts();
+  var names = transferStaff().concat((state.inquiries || []).map(function (item) { return item.assignee; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
+  var showManagers = transferStaff().length > 1 || Boolean(clientFilter.assignee);
+  return '<div class="client-filter">' +
+    (options.search ? '<div class="search"><input id="cfSearch" placeholder="Найти клиента, объект или сообщение" value="' + esc(clientFilter.search) + '"></div>' : "") +
+    (showManagers ? '<select id="cfAssignee" aria-label="Менеджер"><option value="">Все менеджеры</option>' +
+      (transferStaff().length > 1 || clientFilter.assignee === "none" ? '<option value="none"' + (clientFilter.assignee === "none" ? " selected" : "") + ">Без менеджера</option>" : "") +
+      names.map(function (name) { return '<option value="' + esc(name) + '"' + (clientFilter.assignee === name ? " selected" : "") + ">" + esc(name) + "</option>"; }).join("") + "</select>" : "") +
+    (options.steps ? '<div class="tabs" id="cfSteps">' +
+      '<button type="button" data-step="today" class="' + (clientFilter.step === "today" ? "active" : "") + '">Шаг сегодня · ' + counts.today + "</button>" +
+      '<button type="button" data-step="overdue" class="' + (clientFilter.step === "overdue" ? "active" : "") + '">Просрочено · ' + counts.overdue + "</button></div>" : "") +
+    (clientFilterActive() ? '<button class="btn ghost small" id="cfReset" type="button">Сбросить</button>' : "") +
+    (options.note ? '<span class="small muted">' + esc(options.note) + "</span>" : "") +
+  "</div>";
+}
+
+function bindClientFilterBar(host, rerender) {
+  var search = host.querySelector("#cfSearch");
+  if (search) search.oninput = function () {
+    clientFilter.search = search.value.trim();
+    clearTimeout(search._timer);
+    search._timer = setTimeout(function () { rerender(); var next = host.querySelector("#cfSearch"); if (next) next.focus(); }, 250);
+  };
+  var assignee = host.querySelector("#cfAssignee");
+  if (assignee) assignee.onchange = function (event) { clientFilter.assignee = event.target.value; rerender(); };
+  ["today", "overdue"].forEach(function (step) {
+    var button = host.querySelector('[data-step="' + step + '"]');
+    if (button) button.onclick = function () { clientFilter.step = clientFilter.step === step ? "" : step; rerender(); };
+  });
+  var reset = host.querySelector("#cfReset");
+  if (reset) reset.onclick = function () { clientFilter.search = ""; clientFilter.assignee = ""; clientFilter.step = ""; rerender(); };
+}
 var viewingMode = "calendar";
 // Пока человек сам не выбрал вкладку, «Просмотры» открываются на очереди «Ждут
 // подтверждения», если она не пуста: именно там менеджеру есть что делать.
@@ -165,7 +258,7 @@ function conversationMatches(group) {
   if (inquiryFilter.status === "waiting" && !group.waiting) return false;
   if (inquiryFilter.status === "answered" && !group.answered) return false;
   if (inquiryFilter.status === "closed" && !group.closed) return false;
-  return true;
+  return userFilterMatches(group.user, group.inquiries);
 }
 
 function openInquiry(id) {
@@ -229,15 +322,7 @@ function pipelineCardHtml(row) {
 function renderPipeline(host) {
   screenSettled();
   var allRows = pipelineOpportunityRows();
-  var managers = [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).concat(allRows.map(function (row) { return row.item.assignee; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
-  var searchText = pipelineFilter.search.toLowerCase();
-  var rows = allRows.filter(function (row) {
-    if (pipelineFilter.assignee === "none" && row.item.assignee) return false;
-    if (pipelineFilter.assignee && pipelineFilter.assignee !== "none" && row.item.assignee !== pipelineFilter.assignee) return false;
-    if (!searchText) return true;
-    var property = row.item.propertyId ? (state.objects || []).find(function (record) { return record.id === row.item.propertyId; }) : null;
-    return [userName(row.user), row.user.username, row.user.phone, row.item.text, row.item.assignee, property && localized(property.title, "ru")].filter(Boolean).join(" ").toLowerCase().indexOf(searchText) >= 0;
-  });
+  var rows = allRows.filter(function (row) { return itemFilterMatches(row.user, row.item); });
   var today = pipelineToday();
   var active = allRows.filter(function (row) { return row.stage !== "won" && row.stage !== "lost"; });
   var due = active.filter(function (row) { return row.item.followUpDate && row.item.followUpDate <= today; }).length;
@@ -248,18 +333,12 @@ function renderPipeline(host) {
       ["Активные клиенты", num(active.length), "", "Без «Выиграно» и «Проиграно»"],
       ["Ждут ответа", num(waiting), waiting ? "bad" : ""],
       ["Связаться", num(due), due ? "bad" : "", "Сегодня или просрочено"],
-    ].concat(canAssign ? [["Без менеджера", num(unassigned), unassigned ? "bad" : ""]] : [])) + '<div class="funnel-toolbar"><div class="search"><input id="pipelineSearch" placeholder="Найти клиента, объект или сообщение" value="' + esc(pipelineFilter.search) + '"></div><select id="pipelineAssignee"><option value="">Все менеджеры</option>' + (canAssign ? '<option value="none"' + (pipelineFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' : "") + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (pipelineFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select><span class="small muted">На доске: ' + rows.length + " из " + allRows.length + ' (вместе с завершёнными)</span></div>' +
+    ].concat(canAssign ? [["Без менеджера", num(unassigned), unassigned ? "bad" : ""]] : [])) + clientFilterBar({ search: true, steps: true, note: "На доске: " + rows.length + " из " + allRows.length + " (вместе с завершёнными)" }) +
     '<div class="funnel-board">' + PIPELINE_STAGES.map(function (stage) {
       var stageRows = rows.filter(function (row) { return row.stage === stage[0]; });
       return '<section class="funnel-column stage-' + stage[0] + '"><header><div><h3>' + stage[1] + '</h3><span>' + stage[2] + '</span></div><b>' + stageRows.length + '</b></header><div class="funnel-column-body">' + (stageRows.length ? stageRows.map(pipelineCardHtml).join("") : '<div class="funnel-empty">Нет клиентов</div>') + "</div></section>";
     }).join("") + "</div>";
-  var search = host.querySelector("#pipelineSearch");
-  search.oninput = function () {
-    pipelineFilter.search = search.value.trim();
-    clearTimeout(search._timer);
-    search._timer = setTimeout(function () { renderPipeline(host); var next = host.querySelector("#pipelineSearch"); if (next) next.focus(); }, 250);
-  };
-  host.querySelector("#pipelineAssignee").onchange = function (event) { pipelineFilter.assignee = event.target.value; renderPipeline(host); };
+  bindClientFilterBar(host, function () { renderPipeline(host); });
   host.querySelectorAll("[data-inquiry]").forEach(function (button) {
     button.onclick = function () { selectConversation(button.dataset.inquiry); go("inquiries", "inbox"); };
   });
@@ -328,15 +407,10 @@ function renderTasks(host) {
     none: allRows.filter(function (row) { return row.taskScope === "none"; }).length,
     all: allRows.length,
   };
-  var managers = [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).concat(allRows.map(function (row) { return row.item.assignee; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
-  var searchText = taskFilter.search.toLowerCase();
   var rows = allRows.filter(function (row) {
     if (taskFilter.scope === "action" && row.taskScope !== "overdue" && row.taskScope !== "today") return false;
     if (!["", "action", "all"].includes(taskFilter.scope) && row.taskScope !== taskFilter.scope) return false;
-    if (taskFilter.assignee === "none" && row.item.assignee) return false;
-    if (taskFilter.assignee && taskFilter.assignee !== "none" && row.item.assignee !== taskFilter.assignee) return false;
-    if (!searchText) return true;
-    return [userName(row.user), row.user.username, row.user.phone, row.item.text, row.user.note, row.item.note, row.item.assignee].filter(Boolean).join(" ").toLowerCase().indexOf(searchText) >= 0;
+    return itemFilterMatches(row.user, row.item, { steps: false });
   }).sort(function (a, b) {
     if (!a.item.followUpDate && b.item.followUpDate) return 1;
     if (a.item.followUpDate && !b.item.followUpDate) return -1;
@@ -349,12 +423,10 @@ function renderTasks(host) {
       ["Без следующего шага", num(counts.none), counts.none ? "bad" : "", "Активные клиенты без даты"],
     ]) + '<div class="task-toolbar"><div class="tabs" id="taskScope">' +
       [["action", "К выполнению", counts.action], ["overdue", "Просроченные", counts.overdue], ["future", "Будущие", counts.future], ["none", "Без даты", counts.none], ["all", "Все", counts.all]].map(function (entry) { return '<button type="button" data-scope="' + entry[0] + '" class="' + (taskFilter.scope === entry[0] ? "active" : "") + '">' + entry[1] + " · " + entry[2] + "</button>"; }).join("") +
-      '</div><div class="task-controls"><div class="search"><input id="taskSearch" placeholder="Найти клиента или задачу" value="' + esc(taskFilter.search) + '"></div><select id="taskAssignee"><option value="">Все менеджеры</option><option value="none"' + (taskFilter.assignee === "none" ? " selected" : "") + '>Без менеджера</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (taskFilter.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div></div>' +
+      '</div></div>' + clientFilterBar({ search: true, steps: false }) +
     '<div class="task-list">' + (rows.length ? rows.map(function (row) { return taskCardHtml(row, row.taskScope); }).join("") : '<div class="card empty"><b>Дел в этой группе нет</b>Можно перейти к другим задачам или открыть воронку</div>') + "</div>";
   host.querySelectorAll("[data-scope]").forEach(function (button) { button.onclick = function () { taskFilter.scope = button.dataset.scope; renderTasks(host); }; });
-  var search = host.querySelector("#taskSearch");
-  search.oninput = function () { taskFilter.search = search.value.trim(); clearTimeout(search._timer); search._timer = setTimeout(function () { renderTasks(host); var next = host.querySelector("#taskSearch"); if (next) next.focus(); }, 250); };
-  host.querySelector("#taskAssignee").onchange = function (event) { taskFilter.assignee = event.target.value; renderTasks(host); };
+  bindClientFilterBar(host, function () { renderTasks(host); });
   host.querySelectorAll("[data-task-open]").forEach(function (button) { button.onclick = function () { selectConversation(button.dataset.taskOpen); go("inquiries", "inbox"); }; });
   host.querySelectorAll("[data-task-plan]").forEach(function (button) { button.onclick = function () { var row = allRows.find(function (entry) { return entry.item.id === button.dataset.taskPlan; }); if (row) openTaskSchedule(row.item); }; });
   host.querySelectorAll("[data-task-done]").forEach(function (button) {
@@ -498,6 +570,7 @@ function renderInquiryList(host) {
         '<button type="button" data-status="closed" class="' + (inquiryFilter.status === "closed" ? "active" : "") + '">Закрытые' + (counts.closed ? " · " + counts.closed : "") + "</button>" +
         '<button type="button" data-status="" class="' + (inquiryFilter.status === "" ? "active" : "") + '">Все · ' + counts.all + "</button>" +
       "</div>" +
+      clientFilterBar({ search: false, steps: true }) +
     "</div>" +
     '<div class="messenger-shell' + (selectedInquiry ? " chat-open" : "") + '"><aside class="card conversation-list-panel"><header><div><h3>Диалоги</h3><span class="small muted">Один клиент — одна переписка' + noConversation + '</span></div><span class="chip">' + rows.length + " из " + counts.all + '</span></header><div class="conversation-list">' +
       (conversationItems || '<div class="empty"><b>Диалогов не найдено</b>Измените фильтр или поисковый запрос</div>') +
@@ -509,6 +582,7 @@ function renderInquiryList(host) {
   host.querySelectorAll("#inqStatus button").forEach(function (button) {
     button.onclick = function () { inquiryFilter.status = button.dataset.status; renderInquiryList(host); };
   });
+  bindClientFilterBar(host, function () { renderInquiryList(host); });
   var compact = host.querySelector("#inqStatusCompact");
   if (compact) compact.onchange = function () {
     inquiryFilter.status = compact.value;
@@ -1288,11 +1362,12 @@ function renderClients(host) {
   }).filter(function (row) {
     var user = row.user;
     if (clientStageFilter && pipelineStageOf(row.latest) !== clientStageFilter) return false;
+    if (!userFilterMatches(user, row.inquiries)) return false;
     if (!clientSearch) return true;
     var haystack = (userName(user) + " " + (user.username || "") + " " + (user.phone || "") + " " + (user.id || "")).toLowerCase();
     return haystack.indexOf(clientSearch.toLowerCase()) >= 0;
   });
-  host.innerHTML = '<div class="toolbar">' +
+  host.innerHTML = clientFilterBar({ search: false, steps: true }) + '<div class="toolbar">' +
       '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) + " из " + num(state.userCount) + " · активных " + num(state.activeUserCount) + '</span><div class="grow"></div><button class="btn secondary small" id="exportClients" type="button" title="Таблица с теми, кого вы видите на экране: для обзвона, отчёта или переноса">⬇ В Excel</button></div>' +
     '<div class="card"><div class="table-wrap"><table class="table-cards clients-table"><thead><tr><th>Клиент</th><th>Источник и язык</th><th>Этап работы</th><th>Следующий шаг</th><th class="right">Последняя активность</th></tr></thead><tbody>' +
     (rows.length ? rows.slice(0, clientsShown).map(function (row) {
@@ -1313,6 +1388,7 @@ function renderClients(host) {
   host.querySelector("#exportClients").onclick = function () { exportClients(rows.map(function (row) { return row.user.id; })); };
   var moreClients = host.querySelector("#moreClients");
   if (moreClients) moreClients.onclick = function () { clientsShown += CLIENTS_PAGE; renderClients(host); };
+  bindClientFilterBar(host, function () { clientsShown = CLIENTS_PAGE; renderClients(host); });
   host.querySelector("#clientStage").onchange = function (event) { clientStageFilter = event.target.value; clientsShown = CLIENTS_PAGE; renderClients(host); };
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     row.onclick = function () { openClient(row.dataset.id); };
