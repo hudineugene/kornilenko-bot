@@ -488,6 +488,12 @@ async function handleUpdate(update, token) {
         await clearUiMessages(message.chat.id, user, token);
         await clearGalleryMessages(message.chat.id, user, token);
         if (!['objects', 'favorites', 'promotions'].includes(menuItem)) await clearCatalogMessages(message.chat.id, user, token);
+        // «Объекты» из меню — всегда весь каталог: фильтр, оставшийся от мастера
+        // подбора, «прилипал» и отвечал «ничего не найдено».
+        if (menuItem === 'objects') {
+          user.catalogFilter = null;
+          scheduleSave();
+        }
         if (menuItem === 'objects' && await sendCatalog(message.chat.id, user, token)) return;
         if (menuItem === 'promotions' && await sendPromotions(message.chat.id, user, token)) return;
         if (menuItem === 'favorites') {

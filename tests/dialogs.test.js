@@ -717,7 +717,8 @@ test.describe('property card', () => {
     for (const language of ['ru', 'en', 'es']) {
       const chat = createChat({ language });
       chat.user.catalogFilter = { deal: 'sale' };
-      const step = await chat.say(MENU[language].objects);
+      // «Объекты» из меню фильтр сбрасывает, поэтому каталог с фильтром открываем кнопкой.
+      const step = await chat.press('catalog:all:0');
       const card = step.calls.find((call) => call.method === 'sendPhoto');
       assert.match(card.body.caption, /🛏 \d+ · 🚿 \d+ · 📐 \d+/, language + ': характеристики значками одной строкой');
       const rows = card.body.reply_markup.inline_keyboard;
@@ -841,7 +842,7 @@ test.describe('property card', () => {
 
   test('приветствие говорит, что в каталоге и что боту можно просто написать', async () => {
     resetData((data) => {
-      data.objects.push(property('welcome-1', 'Вилла в Альтеа', 'active', { city: { ru: 'Альтеа', en: 'Altea', es: 'Altea' } }));
+      data.objects.push(property('welcome-1', 'Вилла в Альтеа', 'active', { city: { ru: 'Альтеа', en: 'Altea', es: 'Altea' }, dealType: 'sale', bedrooms: 3, priceValue: 320000, currency: 'EUR' }));
       data.objects.push(property('welcome-2', 'Квартира в Кальпе', 'active', { city: { ru: 'Кальпе', en: 'Calpe', es: 'Calpe' } }));
     });
     // Приветствие видит новый клиент — тот, кто пишет боту впервые.
@@ -851,7 +852,7 @@ test.describe('property card', () => {
     const text = step.last.text || step.last.caption || '';
     assert.match(text, /Сейчас в каталоге: 2 объекта — Альтеа, Кальпе/, 'видно, что бот не пустой и где есть дома');
     assert.match(text, /Можно просто написать, что ищете/, 'и что искать можно словами');
-    assert.match(text, /2 спальни в Альтеа до 400 000 €/, 'с примером');
+    assert.match(text.replace(/\u00a0/g, ' '), /«Альтеа, 3 спальни, до 350 000 €»/, 'с примером из настоящего каталога');
     assert.equal(step.last.markup.input_field_placeholder, 'Напишите, что ищете', 'тот же пример в поле ввода');
   });
 

@@ -1078,6 +1078,44 @@ async function handleCatalogListCallback(query, token) {
   return true;
 }
 
+// Условия чуть мягче тех, под которые ничего не нашлось. Пробуем по одному, от
+// самого безобидного: бюджет +20 %, без района, без города, на спальню меньше,
+// без типа. Возвращаем первое, где что-то есть.
+function relaxedCatalogFilter(user) {
+  const language = user.preferredLanguage || 'ru';
+  const filter = normalizedCatalogFilter(user.catalogFilter);
+  const published = publishedCatalog(user);
+  const steps = [];
+  if (filter.maxPrice) steps.push({ ...filter, maxPrice: Math.ceil((filter.maxPrice * 1.2) / 1000) * 1000 });
+  if (filter.district) steps.push({ ...filter, district: '' });
+  if (filter.city) steps.push({ ...filter, city: '', district: '' });
+  if (filter.bedrooms > 1) steps.push({ ...filter, bedrooms: filter.bedrooms - 1 });
+  if (filter.type) steps.push({ ...filter, type: '' });
+  for (const step of steps) {
+    const count = applyCatalogFilter(published, step, language).length;
+    if (count) return { filter: step, count, summary: catalogFilterSummary(step, language) };
+  }
+  return null;
+}
+
+// Пример запроса для приветствия берём из настоящего каталога: чтобы клиент,
+// написавший его слово в слово, что-то получил. Пока подходящего объекта нет,
+// примера просто нет.
+function searchExampleText(user, language) {
+  const record = publishedCatalog(user).find((item) => item.status === 'active' && item.dealType !== 'rent'
+    && Number(item.bedrooms) > 0 && Number(item.priceValue) > 0 && localizedExact(item.city, language, 80));
+  if (!record) return '';
+  const city = localizedExact(record.city, language, 80);
+  const price = Number(record.priceValue);
+  const step = price < 100000 ? 10000 : price < 500000 ? 50000 : 100000;
+  const limit = formatMoney(Math.ceil(price / step) * step, '€', language, 0);
+  const bedrooms = Number(record.bedrooms);
+  if (language === 'en') return bedrooms + (bedrooms === 1 ? ' bedroom' : ' bedrooms') + ' in ' + city + ' under ' + limit;
+  if (language === 'es') return bedrooms + (bedrooms === 1 ? ' dormitorio' : ' dormitorios') + ' en ' + city + ' hasta ' + limit;
+  const word = bedrooms % 10 === 1 && bedrooms % 100 !== 11 ? 'спальня' : [2, 3, 4].includes(bedrooms % 10) && ![12, 13, 14].includes(bedrooms % 100) ? 'спальни' : 'спален';
+  return city + ', ' + bedrooms + ' ' + word + ', до ' + limit;
+}
+
 async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
   const language = user.preferredLanguage || 'ru';
   await clearUiMessages(chatId, user, token);
@@ -1090,9 +1128,17 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
     rememberCatalogPosition(user, 'all', 0);
     const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
     const labels = MENU_LABELS[language] || MENU_LABELS.ru;
-    await sendUiMessage(chatId, user, copy.empty + '\n\n🔎 ' + filterState.summary, token, { reply_markup: { inline_keyboard: [
+    // Пустой ответ — не тупик: показываем, что найдётся при небольшом смягчении
+    // условий (бюджет чуть выше, без района или города), и предлагаем следить
+    // за новыми объектами или передать запрос менеджеру.
+    const nearby = relaxedCatalogFilter(user);
+    const nearbyLine = nearby ? '\n\n' + copy.nearby.replace('{count}', String(nearby.count)).replace('{summary}', nearby.summary) : '';
+    const notify = (SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru).wizardNotify;
+    await sendUiMessage(chatId, user, copy.empty + '\n\n🔎 ' + filterState.summary + nearbyLine, token, { reply_markup: { inline_keyboard: [
+      ...(nearby ? [[{ text: copy.showNearby, callback_data: 'cfilter:nearby' }]] : []),
       [{ text: copy.button, callback_data: 'cfilter:open' }],
       [{ text: copy.reset, callback_data: 'cfilter:reset' }],
+      [{ text: notify, callback_data: 'saved:save' }],
       [{ text: '💬 ' + copy.sendToManager, callback_data: 'cfilter:manager' }],
       [{ text: labels.selection, callback_data: 'selection:start' }],
       [{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }],
@@ -1754,6 +1800,16 @@ async function handleCatalogFilterCallback(query, token) {
     await sendUiMessage(chatId, user, done.text, token, { reply_markup: done.markup });
     return;
   }
+  if (action === 'nearby') {
+    const nearby = relaxedCatalogFilter(user);
+    await acknowledgeCallback(query, token);
+    if (nearby) {
+      user.catalogFilter = nearby.filter;
+      scheduleSave();
+    }
+    await sendCatalogPage(chatId, user, token, 0, 'all');
+    return;
+  }
   if (action === 'show' || action === 'reset') {
     if (action === 'reset') user.catalogFilter = null;
     scheduleSave();
@@ -1908,6 +1964,7 @@ export {
   sendCatalogList,
   handleSelectionWizardCallback,
   sendSelectionWizard,
+  searchExampleText,
   catalogFilterState,
   catalogFilterSummary,
   catalogRecords,

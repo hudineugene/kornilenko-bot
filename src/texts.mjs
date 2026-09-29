@@ -38,9 +38,9 @@ const LEGACY_MENU_LABELS = {
   es: { objects: 'Nuestros inmuebles', contacts: 'Contactos', promotions: 'Promociones', favorites: 'Favoritos', request: 'Contactar con un agente', about: 'Sobre nosotros', language: 'Cambiar idioma' },
 };
 const MENU_HINTS = {
-  ru: 'Можно просто написать, что ищете: «2 спальни в Альтеа до 400 000 €». Или выберите раздел в меню ниже 👇',
-  en: 'You can simply write what you are looking for: “2 bedrooms in Altea under €400,000”. Or choose a section below 👇',
-  es: 'Puedes escribir lo que buscas: «2 dormitorios en Altea hasta 400 000 €». O elige una sección abajo 👇',
+  ru: 'Можно просто написать, что ищете{example}. Или выберите раздел в меню ниже 👇',
+  en: 'You can simply write what you are looking for{example}. Or choose a section below 👇',
+  es: 'Puedes escribir lo que buscas{example}. O elige una sección abajo 👇',
 };
 // Живая строка в приветствии: сколько объектов сейчас в каталоге и где они.
 const CATALOG_SUMMARY_TEXT = {
@@ -1027,6 +1027,8 @@ const CATALOG_FILTER_TEXT = {
     sortDesc: 'Сначала дороже',
     sendToManager: 'Передать параметры менеджеру',
     sentToManager: 'Параметры переданы менеджеру. Он ответит в этом чате.',
+    nearby: 'Ближайшие варианты: {count} — {summary}',
+    showNearby: '👀 Показать ближайшие',
     handedOver: '✅ Передали менеджеру:\n{summary}\n\nОтветим в этом чате.',
     requestHeading: 'Запрос из фильтра каталога',
     anyDistrict: 'Любой район',
@@ -1072,6 +1074,8 @@ const CATALOG_FILTER_TEXT = {
     sortDesc: 'Most expensive first',
     sendToManager: 'Send criteria to an agent',
     sentToManager: 'Your criteria have been sent to an agent. They will reply in this chat.',
+    nearby: 'Closest options: {count} — {summary}',
+    showNearby: '👀 Show closest',
     handedOver: '✅ Passed to an agent:\n{summary}\n\nWe will reply in this chat.',
     requestHeading: 'Request from the catalogue filter',
     anyDistrict: 'Any area',
@@ -1117,6 +1121,8 @@ const CATALOG_FILTER_TEXT = {
     sortDesc: 'Más caros primero',
     sendToManager: 'Enviar criterios al asesor',
     sentToManager: 'Tus criterios se han enviado a un asesor. Responderá en este chat.',
+    nearby: 'Opciones más cercanas: {count} — {summary}',
+    showNearby: '👀 Ver las más cercanas',
     handedOver: '✅ Enviado a un asesor:\n{summary}\n\nTe responderemos en este chat.',
     requestHeading: 'Solicitud desde el filtro del catálogo',
     anyDistrict: 'Cualquier zona',

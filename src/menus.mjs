@@ -5,7 +5,7 @@ import { imageExists } from './media.mjs';
 import { BOT_COMMAND_DESCRIPTIONS, CATALOG_SUMMARY_TEXT, COMPARISON_TEXT, PRIVACY_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, EARLIER_CONTACT_LABELS, EARLIER_FAVORITES_LABELS, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
-import { catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, localizedExact, normalizedSavedSearch, promotionIsActive, sendUiMessage } from './catalog.mjs';
+import { catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, localizedExact, normalizedSavedSearch, promotionIsActive, searchExampleText, sendUiMessage } from './catalog.mjs';
 import { tunnelInstalled } from './remote.mjs';
 import { inquiryChats } from './inquiries.mjs';
 import { ADMIN_COMMAND_DESCRIPTIONS } from './admin-commands.mjs';
@@ -117,7 +117,8 @@ async function sendWelcome(chatId, user, token, options = {}) {
   const greeting = [
     fillTemplate(languageMessages(language).greeting, user),
     catalogSummaryLine(user, language),
-    MENU_HINTS[language],
+    // Пример запроса — из настоящего каталога; в текст владельца без {example} ничего не подставляется.
+    MENU_HINTS[language].replace('{example}', searchExampleText(user, language) ? ': «' + searchExampleText(user, language) + '»' : ''),
   ].filter(Boolean).join('\n\n');
   const menu = menuKeyboard(language);
   // Язык выбран за клиента — значит первым делом даём его сменить.

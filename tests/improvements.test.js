@@ -728,7 +728,9 @@ test.describe('catalog filter', () => {
     await chat.press('cfilter:deal:sale');
     const shown = await chat.press('cfilter:show');
     assert.ok(shown.last.text.startsWith(FILTER.empty));
-    assert.deepEqual(callbacksOf(shown.last.markup), ['cfilter:open', 'cfilter:reset', 'cfilter:manager', 'selection:start', 'nav:menu']);
+    // Пустой ответ не тупик: есть «ближайшие» (без типа), слежение за новыми и менеджер.
+    assert.deepEqual(callbacksOf(shown.last.markup), ['cfilter:nearby', 'cfilter:open', 'cfilter:reset', 'saved:save', 'cfilter:manager', 'selection:start', 'nav:menu']);
+    assert.match(shown.last.text, /Ближайшие варианты: \d+ — /);
     await chat.press('cfilter:reset');
     assert.equal(chat.user.catalogFilter, null);
     assert.equal(bot.catalogRecords(chat.user).length, 7);
@@ -980,7 +982,7 @@ test.describe('catalog filter', () => {
     withCatalog(catalog.slice(0, 3));
     const chat = createChat();
     chat.user.catalogFilter = { deal: 'sale', type: '', bedrooms: 0, city: '', maxPrice: 0, sort: 'desc' };
-    await chat.say(MENU.ru.objects);
+    await chat.press('catalog:all:0');
     await chat.press('catalog:all:1');
     const targetId = chat.user.catalogContext.propertyId;
     const target = bot.getData().objects.find((record) => record.id === targetId);
@@ -1000,7 +1002,7 @@ test.describe('catalog filter', () => {
     const reopened = await chat.say(MENU.ru.objects);
     const reopenedCard = reopened.calls.find((call) => call.method === 'sendPhoto');
     assert.ok(reopenedCard.body.caption.includes('<b>' + target.title.ru + '</b>'), 'the object id, not an obsolete page number, anchors the catalog');
-    assert.equal(chat.user.catalogFilter.sort, 'desc');
+    assert.equal(chat.user.catalogFilter, null, '«Объекты» из меню открывает весь каталог: фильтр сброшен');
   });
 
   test('My space combines personal sections and keeps a clean recent history', async () => {
@@ -1061,7 +1063,7 @@ test.describe('catalog filter', () => {
     });
     const chat = createChat();
     chat.user.catalogFilter = { deal: 'sale', type: '', bedrooms: 0, city: 'Марбелья', district: 'Золотая Миля', maxPrice: 0, sort: 'asc' };
-    await chat.say(MENU.ru.objects);
+    await chat.press('catalog:all:0');
     // Фотографии листаются в самой карточке: отдельного альбома и сообщения
     // «Что вы хотите сделать дальше?» больше нет.
     const gallery = await chat.press('property:gallery:gallery-home-01', { card: true });
@@ -1619,4 +1621,50 @@ test('клиент, застрявший в старой форме подбор
   assert.equal(chat.user.pendingAction, null, 'висящее действие снято');
   const texts = step.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id)).map((call) => call.body.text).join(' ');
   assert.ok(!/уже недоступен/.test(texts), 'вопрос не принят за ответ старой формы');
+});
+
+test('«Объекты» из меню открывает весь каталог, а «ближайшие» смягчают условия', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('near-villa', 'Вилла у моря', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 3, priceValue: 450000, currency: 'EUR', city: { ru: 'Альтеа', en: 'Altea', es: 'Altea' } }));
+    data.objects.push(property('near-flat', 'Квартира', 'active', { dealType: 'sale', propertyType: 'apartment', bedrooms: 2, priceValue: 200000, currency: 'EUR', city: { ru: 'Кальпе', en: 'Calpe', es: 'Calpe' } }));
+  });
+  const chat = createChat();
+
+  // Прилипший фильтр (например, от мастера подбора) не должен прятать каталог.
+  chat.user.catalogFilter = { deal: 'rent', type: '', bedrooms: 0, city: '', maxPrice: 0 };
+  const opened = await chat.say(bot.text.menuLabels.ru.objects);
+  assert.equal(chat.user.catalogFilter, null, 'фильтр сброшен');
+  assert.ok(opened.calls.some((call) => call.method === 'sendPhoto'), 'клиент видит карточку, а не «ничего не найдено»');
+
+  // Бюджет чуть ниже цены виллы: ничего нет, но при бюджете +20 % вилла находится.
+  chat.user.catalogFilter = { deal: 'sale', type: '', bedrooms: 0, city: 'Альтеа', maxPrice: 400000 };
+  const empty = await chat.press('catalog:all:0');
+  assert.match(empty.last.text, /Ближайшие варианты: 1 — /, 'видно, что найдётся при небольшом смягчении');
+  assert.ok(callbacksOf(empty.last.markup).includes('cfilter:nearby'));
+  assert.ok(callbacksOf(empty.last.markup).includes('saved:save'), '«Сообщать о новых»');
+  assert.ok(callbacksOf(empty.last.markup).includes('cfilter:manager'), '«Передать менеджеру»');
+
+  const shown = await chat.press('cfilter:nearby');
+  assert.ok(shown.calls.some((call) => call.method === 'sendPhoto'), 'показана ближайшая карточка');
+  assert.equal(chat.user.catalogFilter.maxPrice, 480000, 'бюджет +20 % округлён вверх до тысячи');
+  assert.equal(chat.user.catalogFilter.city, 'Альтеа', 'город остался');
+});
+
+test('пример в приветствии берётся из настоящего каталога и находит объект', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('example-villa', 'Вилла в Альтее', 'active', { dealType: 'sale', propertyType: 'villa', bedrooms: 3, priceValue: 320000, currency: 'EUR', city: { ru: 'Альтеа', en: 'Altea', es: 'Altea' } }));
+  });
+  // Новый клиент видит приветствие с примером из каталога.
+  const newcomer = createChat();
+  newcomer.user.preferredLanguage = '';
+  const welcome = await newcomer.say('/start');
+  const text = String(welcome.last.text || welcome.last.caption || '').replace(/ /g, ' ');
+  assert.ok(text.includes('«Альтеа, 3 спальни, до 350 000 €»'), 'пример собран из каталога: ' + text);
+
+  // Английский пример из того же каталога, написанный слово в слово, находит объект.
+  const english = createChat({ language: 'en' });
+  const found = await english.say('3 bedrooms in Altea under €350,000');
+  assert.ok(found.calls.some((call) => call.method === 'sendPhoto'), 'запрос из примера находит объект');
 });
