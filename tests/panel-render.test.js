@@ -510,11 +510,30 @@ test.describe('автообновление панели раз в 45 секун
     dialog.closeClean();
   });
 
-  test('переход между разделами прокручивает наверх, как и раньше', async () => {
+  test('наверх прокручивает только переход на другой экран; перерисовка после действия остаётся на месте', async () => {
     const { sandbox } = await screen('today');
+    // Первая отрисовка экрана — переход: страница наверху.
+    sandbox.__scrolls.length = 0;
+    sandbox.lastRenderKey = '';
+    sandbox.renderView();
+    assert.equal(sandbox.__scrolls.length, 1, 'при входе на экран страница прокручивается наверх');
+    // «Выполнено», смена этапа, удаление: тот же экран перерисован — прокрутка не сбрасывается.
     sandbox.__scrolls.length = 0;
     sandbox.renderView();
-    assert.equal(sandbox.__scrolls.length, 1, 'при обычной отрисовке страница прокручивается наверх');
+    assert.equal(sandbox.__scrolls.length, 0, 'тот же экран после действия остаётся на месте');
+    await sandbox.reload();
+    assert.equal(sandbox.__scrolls.length, 0, 'и после reload() тоже');
+    // Другая вкладка или другой открытый диалог — новый экран.
+    sandbox.currentView = 'clients';
+    sandbox.currentTab = 'inbox';
+    sandbox.renderView();
+    assert.equal(sandbox.__scrolls.length, 1, 'смена раздела прокручивает наверх');
+    sandbox.__scrolls.length = 0;
+    sandbox.currentSub = 'inq-1';
+    sandbox.renderView();
+    assert.equal(sandbox.__scrolls.length, 1, 'открытый диалог — другой экран');
+    sandbox.renderView({ top: true });
+    assert.equal(sandbox.__scrolls.length, 2, 'по явной просьбе — наверх');
   });
 });
 
@@ -536,7 +555,7 @@ test('беседа помечается прочитанной только ко
   // Обновление по таймеру и вход в раздел диалог сами не открывают и ничего не
   // помечают: раньше вход открывал первую беседу и тут же «читал» её.
   requests.length = 0;
-  sandbox.renderView({ keepScroll: true, auto: true });
+  sandbox.renderView({ auto: true });
   sandbox.renderView();
   assert.equal(sandbox.selectedInquiry, '', 'первый диалог сам не открывается');
   assert.deepEqual(readRequests(), [], 'ничего не помечено прочитанным');
@@ -1380,7 +1399,7 @@ test('панель не открывает беседу сама даже во �
   sandbox.currentTab = 'inbox';
   requests.length = 0;
 
-  sandbox.renderView({ keepScroll: true, auto: true });
+  sandbox.renderView({ auto: true });
   sandbox.renderView();
   sandbox.renderView();
   assert.equal(sandbox.selectedInquiry, '', 'беседа не выбрана без человека');
@@ -3038,7 +3057,7 @@ test('быстрый ответ со «Сегодня»: окно с после�
   sandbox.go = async (view, tab) => { routes.push([view, tab]); return true; };
   await sandbox.runDeed(sandbox.deedList().find((item) => item.kind === 'message' && /Николай/.test(item.title)));
   await dialogs[2].dialog.querySelector('#qrOpen').onclick();
-  assert.deepEqual(JSON.parse(JSON.stringify(routes)), [['inquiries', 'inbox']]);
+  assert.deepEqual(JSON.parse(JSON.stringify(routes)), [['clients', 'inbox']]);
 });
 
 test('быстрый ответ: очередь «по очереди» начинается с ждущего дольше всех; ошибка отправки не двигает очередь', async () => {
@@ -3580,4 +3599,27 @@ test('«Диалоги» рисуются порциями по 100; откры�
   sandbox.renderInquiryList(host);
   assert.equal(rows(host), 101, 'сто строк и открытая беседа');
   assert.ok(String(host.innerHTML).includes('data-id="i240"'));
+});
+
+test('маршруты уведомлений и переходов из кода ведут на существующие экраны, а не на старые имена', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const items = sandbox.navItems();
+  const exists = (view, tab) => {
+    const item = items.find((entry) => entry.id === view);
+    if (!item) return false;
+    return !item.tabs ? !tab : item.tabs.some((entry) => entry[0] === tab);
+  };
+  const bad = [];
+  // Сервер: route('вид', 'вкладка', …) в списке дел.
+  const server = fs.readFileSync(path.join(__dirname, '..', 'src', 'admin-notifications.mjs'), 'utf8');
+  for (const match of server.matchAll(/route\('([a-z]+)', '([a-z]*)'/g)) if (!exists(match[1], match[2])) bad.push('сервер: ' + match[1] + '/' + match[2]);
+  // Панель: go("вид", "вкладка").
+  for (const file of fs.readdirSync(path.join(__dirname, '..', 'src', 'panel'))) {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'panel', file), 'utf8');
+    for (const match of source.matchAll(/\bgo\("([a-z]+)", "([a-z]*)"/g)) if (!exists(match[1], match[2])) bad.push(file + ': go(' + match[1] + ', ' + match[2] + ')');
+  }
+  assert.deepEqual(bad, [], 'старые или несуществующие адреса: ' + bad.join('; '));
 });

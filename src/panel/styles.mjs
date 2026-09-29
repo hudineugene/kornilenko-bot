@@ -451,30 +451,6 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .object-client-copy>small{color:var(--muted);font-size:var(--fs-sm)}
 .object-client-copy .chip{font-size:var(--fs-xs)}
 /* --- Центр уведомлений ----------------------------------------------------- */
-.notification-kpis{margin-bottom:var(--sp-3)}
-.notification-toolbar{display:flex;align-items:center;gap:var(--sp-3);justify-content:space-between;margin-bottom:var(--sp-2)}
-.notification-toolbar .tabs button span{display:inline-flex;min-width:18px;justify-content:center;margin-left:var(--sp-1);padding:0 var(--sp-1);border-radius:var(--radius);background:var(--surface-soft);color:var(--muted);font-size:var(--fs-xs)}
-.notification-toolbar .tabs button.active span{background:var(--brand-soft);color:var(--brand-dark)}
-.notification-toolbar select{width:auto;min-width:180px}
-.notification-help{margin-bottom:var(--sp-3);padding:var(--sp-2) var(--sp-3);border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--surface-soft);color:var(--muted);font-size:var(--fs-sm)}
-.notification-list{display:flex;flex-direction:column;gap:var(--sp-2)}
-.notification-card{position:relative;display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-3);overflow:hidden}
-.notification-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line)}
-.notification-card.bad::before{background:var(--bad)}
-.notification-card.warn::before{background:var(--warn)}
-.notification-card.unread{border-color:var(--brand-soft-line);background:linear-gradient(90deg,var(--brand-soft),var(--surface) 22%)}
-.notification-icon{display:flex;width:36px;height:36px;align-items:center;justify-content:center;border-radius:var(--radius);background:var(--surface-soft);color:var(--brand-dark);font-size:var(--fs-lg);font-weight:700}
-.notification-card.bad .notification-icon{background:var(--bad-soft);color:var(--bad)}
-.notification-card.warn .notification-icon{background:var(--warn-soft);color:var(--warn)}
-.notification-copy{min-width:0}
-.notification-card-head{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:2px}
-.notification-kind{color:var(--muted);font-size:var(--fs-xs);font-weight:700;text-transform:uppercase;letter-spacing:.035em}
-.notification-card-head time{color:var(--muted);font-size:var(--fs-xs)}
-.notification-card-head .chip{margin-left:auto}
-.notification-copy h3{font-size:var(--fs-sm)}
-.notification-copy p{margin-top:2px;overflow:hidden;color:var(--muted);font-size:var(--fs-sm);text-overflow:ellipsis;white-space:nowrap}
-.notification-copy small{display:block;margin-top:2px;color:var(--ok);font-size:var(--fs-xs)}
-.notification-actions{display:flex;align-items:center;gap:var(--sp-1);justify-content:flex-end}
 /* --- Календарь просмотров -------------------------------------------------- */
 .viewing-kpis{margin-bottom:var(--sp-3)}
 .viewing-toolbar{display:flex;align-items:center;gap:var(--sp-3);justify-content:space-between;margin-bottom:var(--sp-3)}
@@ -745,13 +721,6 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .object-path i{transform:rotate(90deg);text-align:center}
   .object-path>div{min-width:0}
   .object-client{align-items:flex-start;flex-direction:column}
-  .notification-toolbar{align-items:stretch;flex-direction:column}
-  .notification-toolbar .tabs{width:100%}
-  .notification-toolbar select{width:100%}
-  .notification-card{grid-template-columns:34px minmax(0,1fr);align-items:start}
-  .notification-icon{width:32px;height:32px}
-  .notification-actions{grid-column:1/-1;justify-content:flex-start;padding-left:48px;flex-wrap:wrap}
-  .notification-copy p{white-space:normal}
   .viewing-toolbar{align-items:stretch;flex-direction:column}
   .viewing-toolbar>.small{padding-left:var(--sp-1)}
   .viewing-calendar{grid-template-columns:repeat(7,220px);min-width:1588px}

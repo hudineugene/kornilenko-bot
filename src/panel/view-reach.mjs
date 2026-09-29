@@ -1170,7 +1170,6 @@ VIEWS.posts = {
   render: function (host, tab) {
     if (tab === "channel") return renderGroups(host, "post");
     if (tab === "channels") return renderGroups(host, "manage");
-    if (tab === "style") return renderPostStyle(host);
     renderPublications(host);
   },
 };

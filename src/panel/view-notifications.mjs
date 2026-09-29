@@ -20,10 +20,12 @@ async function openNotification(item, button) {
       await reload(false);
     }
     var target = item.route || {};
-    if (target.inquiryId && target.view === "inquiries" && target.tab === "inbox") {
+    // Старые записи в «Выполненном» хранят прежние адреса разделов: приводим к нынешним.
+    var moved = normalizeRoute(target.view, target.tab || "");
+    if (target.inquiryId && moved[0] === "clients" && moved[1] === "inbox") {
       selectConversation(target.inquiryId);
-      await go("inquiries", "inbox");
-    } else if (target.view) await go(target.view, target.tab || "");
+      await go("clients", "inbox");
+    } else if (moved[0]) await go(moved[0], moved[1] || "");
   } catch (error) { if (button) button.disabled = false; fail(error); }
 }
 `;

@@ -57,7 +57,7 @@ test('каталог, которого клиент не видит, попад�
   assert.ok(all, 'повод найден');
   assert.equal(all.severity, 'bad', 'это серьёзно: каталог у клиента пустой');
   assert.match(all.title, /не видят ни одного объекта/);
-  assert.equal(all.route.view, 'catalog', 'ведёт в каталог');
+  assert.equal(all.route.view, 'objects', 'ведёт в каталог');
 
   // Один из трёх заполнен — тогда это предупреждение с числами.
   data.objects.push(property('good-1', 'Вилла у моря', 'active'));
@@ -116,7 +116,8 @@ test('заявки на вступление в группу видны в сп�
   const item = attention().find((entry) => entry.kind === 'group');
   assert.ok(item, 'повод появился');
   assert.match(item.title, /2 заявок на вступление/);
-  assert.equal(item.route.view, 'reach');
+  assert.equal(item.route.view, 'posts');
+  assert.equal(item.route.tab, 'channels', 'заявки на вступление одобряют там, где управление группой');
 });
 
 test('«ждут ответа» считается по клиентам, а не по заявкам', () => {

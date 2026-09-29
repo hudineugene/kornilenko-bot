@@ -636,7 +636,7 @@ async function refresh() {
   if (document.hidden) { staleWhileHidden = true; return; }
   if (pageBusy()) return showRefreshHint();
   hideRefreshHint();
-  renderView({ keepScroll: true, auto: true });
+  renderView({ auto: true });
 }
 
 // Сколько клиентов ждут ответа. Число приходит от бота и одинаково на всех
@@ -1336,6 +1336,11 @@ async function handleHashChange() {
   location.hash = requestedHash;
 }
 
+// Экран, который нарисован сейчас: раздел, вкладка и открытый диалог. Наверх страницу
+// прокручиваем, только когда сменился он; перерисовка после действия («Выполнено»,
+// смена этапа, удаление) оставляет человека там, где он был.
+var lastRenderKey = "";
+
 function renderView(options) {
   if (!state) return;
   pageTouched = false;
@@ -1357,9 +1362,12 @@ function renderView(options) {
     button.onclick = function () { go(currentView, button.dataset.tab); };
   });
   view.render(el("viewBody"), currentTab);
-  // Наверх прокручиваем только при переходе: обновление по таймеру не должно
-  // выдёргивать страницу из-под рук.
-  if (!(options && options.keepScroll)) window.scrollTo({ top: 0 });
+  // Наверх прокручиваем только при переходе на другой экран: обновление по таймеру и
+  // перерисовка после действия не должны выдёргивать страницу из-под рук.
+  var renderKey = currentView + "/" + currentTab + "/" + currentSub;
+  var moved = renderKey !== lastRenderKey;
+  lastRenderKey = renderKey;
+  if (moved || (options && options.top)) window.scrollTo({ top: 0 });
 }
 
 // Кнопка в шапке экрана. Экран может перерисовать себя (выбрали клиента, сменили
@@ -1428,7 +1436,7 @@ function bindShell() {
       if (!staleWhileHidden) return;
       staleWhileHidden = false;
       if (pageBusy()) showRefreshHint();
-      else renderView({ keepScroll: true, auto: true });
+      else renderView({ auto: true });
     }).catch(function () {});
   });
   bindAlerts();
@@ -1456,7 +1464,7 @@ function bindShell() {
   el("linkAlertRetry").onclick = function () { refresh().catch(function () {}); };
   el("refreshHintApply").onclick = function () {
     hideRefreshHint();
-    renderView({ keepScroll: true });
+    renderView();
   };
   el("savebarSave").onclick = saveDirty;
   el("savebarReset").onclick = function () { clearDirty(); renderView(); };

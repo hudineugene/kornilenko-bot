@@ -262,7 +262,7 @@ function conversationMatches(group) {
 
 function openInquiry(id) {
   selectConversation(id);
-  go("inquiries", "inbox");
+  go("clients", "inbox");
 }
 
 function inquiryRows() {
@@ -364,7 +364,7 @@ function renderPipeline(host) {
     }).join("") + "</div>";
   bindClientFilterBar(host, function () { renderPipeline(host); });
   host.querySelectorAll("[data-inquiry]").forEach(function (button) {
-    button.onclick = function () { selectConversation(button.dataset.inquiry); go("inquiries", "inbox"); };
+    button.onclick = function () { selectConversation(button.dataset.inquiry); go("clients", "inbox"); };
   });
   host.querySelectorAll("[data-pipeline-stage]").forEach(function (select) {
     select.onchange = async function () {
@@ -455,7 +455,7 @@ function renderTasks(host) {
     '<div class="task-list">' + (rows.length ? rows.map(function (row) { return taskCardHtml(row, row.taskScope); }).join("") : '<div class="card empty"><b>Дел в этой группе нет</b>Можно перейти к другим задачам или открыть воронку</div>') + "</div>";
   host.querySelectorAll("[data-scope]").forEach(function (button) { button.onclick = function () { taskFilter.scope = button.dataset.scope; renderTasks(host); }; });
   bindClientFilterBar(host, function () { renderTasks(host); });
-  host.querySelectorAll("[data-task-open]").forEach(function (button) { button.onclick = function () { selectConversation(button.dataset.taskOpen); go("inquiries", "inbox"); }; });
+  host.querySelectorAll("[data-task-open]").forEach(function (button) { button.onclick = function () { selectConversation(button.dataset.taskOpen); go("clients", "inbox"); }; });
   host.querySelectorAll("[data-task-plan]").forEach(function (button) { button.onclick = function () { var row = allRows.find(function (entry) { return entry.item.id === button.dataset.taskPlan; }); if (row) openTaskSchedule(row.item); }; });
   host.querySelectorAll("[data-task-done]").forEach(function (button) {
     button.onclick = async function () {
@@ -710,7 +710,7 @@ async function openTransferDialog(mode, item) {
             var result = await send("/api/inquiries/" + encodeURIComponent(item.id) + "/transfer", "POST", { to: to });
             dialog.closeClean();
             toast(result.moved ? transferDoneText(result, to) : "Клиент уже у этого менеджера");
-            await reload(true, { keepScroll: true });
+            await reload();
           } catch (error) { fail(error); }
         };
       },
@@ -748,7 +748,7 @@ async function openTransferDialog(mode, item) {
           var result = await send("/api/inquiries/transfer", "POST", { from: from, to: to });
           dialog.closeClean();
           toast(result.moved ? transferDoneText(result, to) : "Нечего передавать: у " + (from || "«без менеджера»") + " нет открытых заявок");
-          await reload(true, { keepScroll: true });
+          await reload();
         } catch (error) { fail(error); }
       };
     },
@@ -904,7 +904,7 @@ function openQuickReply(inquiryId, handledBefore) {
       dialog.querySelector("#qrOpen").onclick = async function () {
         dialog.closeClean();
         selectConversation(item.id);
-        await go("inquiries", "inbox");
+        await go("clients", "inbox");
       };
       if (text.focus) text.focus();
     },
@@ -1201,7 +1201,7 @@ function renderInquiryCard(host) {
       replyDeliveryText.textContent = result.duplicate ? "✓ Сообщение уже было доставлено" : "✓ Доставлено в Telegram";
       toast(result.duplicate ? "Сообщение уже было доставлено" : "Ответ доставлен");
       // Остаёмся в той же беседе и на том же месте страницы.
-      await reload(true, { keepScroll: true });
+      await reload();
     } catch (error) {
       replyDelivery.classList.add("bad");
       replyDeliveryText.textContent = "Не отправлено: " + (error.message || "неизвестная ошибка");
@@ -1257,7 +1257,7 @@ function renderInquiryCard(host) {
     try {
       var undo = await saveInquiryPanel();
       toast("Сохранено", false, undo || undefined);
-      await reload(true, { keepScroll: true });
+      await reload();
     } catch (error) { fail(error); }
   };
   host.querySelector("#inquiryExtras").onclick = function () {
@@ -1605,7 +1605,7 @@ function openClient(id) {
         if (!(await confirmNavigation("Перейти без сохранения?", "Перейти"))) return;
         dialog.closeClean();
         selectConversation(inquiryId);
-        await go("inquiries", "inbox");
+        await go("clients", "inbox");
       }
       dialog.querySelectorAll("[data-client-inquiry]").forEach(function (button) { button.onclick = function () { openConversation(button.dataset.clientInquiry); }; });
       var openTask = dialog.querySelector("#clientOpenTask");

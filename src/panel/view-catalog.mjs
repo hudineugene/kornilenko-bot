@@ -117,7 +117,7 @@ function renderObjects(host) {
     return !catalogStatus || record.status === catalogStatus;
   });
   pageAction("＋ Объект", function () { openRecordEditor("objects", null); });
-  pageAction("⇩ Загрузить с сайта", function () { go("catalog", "feed"); }, "secondary");
+  pageAction("⇩ Загрузить с сайта", function () { go("settings", "feed"); }, "secondary");
   host.innerHTML = '<div class="toolbar">' +
       '<select id="catalogStatus" class="field-sm"><option value="">Все статусы</option>' + PROPERTY_STATUS.map(function (item) {
         return '<option value="' + item[0] + '"' + (catalogStatus === item[0] ? " selected" : "") + ">" + item[1] + "</option>";
@@ -326,7 +326,7 @@ async function openObjectInsights(id) {
           button.onclick = async function () {
             root.closeClean();
             selectConversation(button.dataset.insightConversation);
-            await go("inquiries", "inbox");
+            await go("clients", "inbox");
           };
         });
       },

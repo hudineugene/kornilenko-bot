@@ -62,7 +62,7 @@ function currentAdminNotifications() {
       kind: 'message', severity: 'bad', title: 'Новое сообщение от ' + userName(user),
       text: cleanText(latest && latest.text || inquiry.text || 'Клиент ждёт ответа', 300),
       createdAt: new Date(moment || Date.now()).toISOString(),
-      route: route('inquiries', 'inbox', inquiry.id),
+      route: route('clients', 'inbox', inquiry.id),
     });
   }
 
@@ -76,7 +76,7 @@ function currentAdminNotifications() {
       title: overdue ? 'Просрочен контакт с клиентом' : 'Контакт с клиентом сегодня',
       text: userName(user) + ' · ' + inquiry.followUpDate + (inquiry.followUpTime ? ' в ' + inquiry.followUpTime : '') + (inquiry.assignee ? ' · ' + inquiry.assignee : ''),
       createdAt: inquiry.updatedAt || inquiry.createdAt || new Date().toISOString(),
-      route: route('inquiries', 'inbox', inquiry.id),
+      route: route('clients', 'inbox', inquiry.id),
     });
   }
 
@@ -90,7 +90,7 @@ function currentAdminNotifications() {
       kind: 'viewing', severity: 'warn', title: 'Просмотр ждёт подтверждения',
       text: userName(user) + ' · ' + propertyName(inquiry.propertyId) + ' · ' + requested,
       createdAt: inquiry.updatedAt || inquiry.createdAt || new Date().toISOString(),
-      route: route('inquiries', 'viewings', inquiry.id),
+      route: route('viewings', '', inquiry.id),
     });
   }
 
@@ -104,7 +104,7 @@ function currentAdminNotifications() {
       title: broadcast.status === 'failed' ? 'Рассылка не выполнена' : 'Рассылка завершена с ошибками',
       text: failures + ' не доставлено' + (sample ? ' · ' + cleanText(sample, 220) : ''),
       createdAt: broadcast.finishedAt || broadcast.startedAt || broadcast.scheduledAt || broadcast.createdAt || new Date().toISOString(),
-      route: route('reach', 'campaigns'),
+      route: route('posts', 'broadcast'),
     });
   }
 
@@ -118,20 +118,20 @@ function currentAdminNotifications() {
     items.push({
       id: 'catalog:empty', kind: 'catalog', severity: 'warn', title: 'В каталоге нет активных объектов',
       text: data.objects.length ? 'Все объекты скрыты — клиент видит пустой каталог.' : 'Добавьте первый объект, иначе боту нечего показывать.',
-      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('catalog', 'objects'),
+      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('objects', 'list'),
     });
   } else if (invisible.length >= active.length) {
     items.push({
       id: 'catalog:invisible:all:' + active.length, kind: 'catalog', severity: 'bad', title: 'Клиенты не видят ни одного объекта',
       text: 'В карточках не хватает обязательных полей, поэтому каталог у клиента пустой.',
-      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('catalog', 'objects'),
+      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('objects', 'list'),
     });
   } else if (invisible.length) {
     items.push({
       id: 'catalog:invisible:' + invisible.length + ':' + active.length, kind: 'catalog', severity: 'warn',
       title: invisible.length + ' из ' + active.length + ' объектов не показываются клиентам',
       text: 'В карточках не хватает обязательных полей — клиент их не найдёт.',
-      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('catalog', 'objects'),
+      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('objects', 'list'),
     });
   }
 
@@ -142,14 +142,14 @@ function currentAdminNotifications() {
       id: 'group:requests:' + joinRequests, kind: 'group', severity: 'warn',
       title: joinRequests + ' заявок на вступление в группу',
       text: 'Люди ждут одобрения — пока их не пустили, они не видят постов.',
-      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('reach', 'group'),
+      createdAt: data.stats.lastUpdateAt || data.stats.startedAt || '', route: route('posts', 'channels'),
     });
   }
 
   if (!data.config.active) {
-    items.push({ id: 'system:bot-disabled', kind: 'system', severity: 'bad', title: 'Бот выключен', text: 'Клиенты не получают автоматические ответы.', createdAt: data.stats.startedAt || data.stats.lastUpdateAt || '', route: route('settings', 'connection') });
+    items.push({ id: 'system:bot-disabled', kind: 'system', severity: 'bad', title: 'Бот выключен', text: 'Клиенты не получают автоматические ответы.', createdAt: data.stats.startedAt || data.stats.lastUpdateAt || '', route: route('settings', 'telegram') });
   } else if (!data.config.adminNotificationVerifiedAt) {
-    items.push({ id: 'system:admin-chat', kind: 'system', severity: 'warn', title: 'Админ-чат не проверен', text: 'Уведомления о клиентах могут не приходить в Telegram.', createdAt: data.stats.startedAt || data.stats.lastUpdateAt || '', route: route('settings', 'connection') });
+    items.push({ id: 'system:admin-chat', kind: 'system', severity: 'warn', title: 'Админ-чат не проверен', text: 'Уведомления о клиентах могут не приходить в Telegram.', createdAt: data.stats.startedAt || data.stats.lastUpdateAt || '', route: route('settings', 'team') });
   }
   const connectionShown = data.config.active && (runtime.status === 'error' || runtime.consecutiveFailures > 0);
   if (connectionShown) {
