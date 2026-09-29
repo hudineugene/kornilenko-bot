@@ -278,6 +278,31 @@ function pipelineStageOf(item) {
   if (item.type === "selection") return "selection";
   return item.status === "in_progress" ? "contact" : "new";
 }
+// Смена этапа с «Вернуть»: запоминаем статус и этап, какими они были, и кнопка в
+// уведомлении возвращает оба (закрытие сделки закрывает и заявку).
+function inquiryStateBefore(item) {
+  return { status: item.status, pipelineStage: item.pipelineStage || "" };
+}
+
+async function restoreInquiryState(id, before) {
+  try {
+    await send("/api/inquiries/" + encodeURIComponent(id), "PATCH", { status: before.status, pipelineStage: before.pipelineStage });
+    toast("Возвращено");
+    await reload();
+  } catch (error) { fail(error); }
+}
+
+function undoInquiryState(id, before) {
+  return { label: "Вернуть", run: function () { return restoreInquiryState(id, before); } };
+}
+
+async function changeStageWithUndo(item, stage) {
+  var before = inquiryStateBefore(item);
+  await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", { pipelineStage: stage });
+  toast("Этап обновлён", false, undoInquiryState(item.id, before));
+  await reload();
+}
+
 function pipelineStageOptions(current, includeEmpty) {
   return (includeEmpty ? '<option value=""' + (!current ? " selected" : "") + '>Этап не задан</option>' : "") + PIPELINE_STAGES.map(function (stage) {
     return '<option value="' + stage[0] + '"' + (current === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>";
@@ -347,9 +372,13 @@ function renderPipeline(host) {
       if (!select.value) return;
       select.disabled = true;
       try {
-        await send("/api/inquiries/" + encodeURIComponent(select.dataset.pipelineStage), "PATCH", { pipelineStage: select.value });
-        toast("Этап обновлён");
-        await reload();
+        var moved = (state.inquiries || []).find(function (entry) { return entry.id === select.dataset.pipelineStage; });
+        if (moved) await changeStageWithUndo(moved, select.value);
+        else {
+          await send("/api/inquiries/" + encodeURIComponent(select.dataset.pipelineStage), "PATCH", { pipelineStage: select.value });
+          toast("Этап обновлён");
+          await reload();
+        }
       } catch (error) { select.disabled = false; fail(error); }
     };
   });
@@ -1201,13 +1230,15 @@ function renderInquiryCard(host) {
     var wantStage = host.querySelector("#inqPipeline").value;
     if (wantStage !== pipelineStageOf(item)) patch.pipelineStage = wantStage;
     await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", patch);
+    // Статус или этап менялись — их можно вернуть; правку заметки «возвращать» не предлагаем.
+    return "status" in patch || "pipelineStage" in patch ? undoInquiryState(item.id, inquiryStateBefore(item)) : null;
   }
   var sidePanel = host.querySelector(".conversation-side");
   if (sidePanel) watchForm(sidePanel, async function () { await saveInquiryPanel(); }, "Есть несохранённые изменения по заявке и клиенту");
   host.querySelector("#saveInq").onclick = async function () {
     try {
-      await saveInquiryPanel();
-      toast("Сохранено");
+      var undo = await saveInquiryPanel();
+      toast("Сохранено", false, undo || undefined);
       await reload(true, { keepScroll: true });
     } catch (error) { fail(error); }
   };

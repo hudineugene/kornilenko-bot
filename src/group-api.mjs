@@ -198,6 +198,20 @@ async function handleGroupApi(req, res, url) {
     return true;
   }
 
+  // «Вернуть» отменённый пост: снова в очереди, если время публикации не прошло
+  // (иначе он ушёл бы в канал сразу, о чём никто не просил).
+  const restorePostMatch = url.pathname.match(/^\/api\/group-posts\/([A-Za-z0-9-]{8,60})\/restore$/);
+  if (restorePostMatch && req.method === 'POST') {
+    const post = (data.groupPosts || []).find((item) => item.id === restorePostMatch[1]);
+    if (!post) return json(res, 404, { error: 'Публикация не найдена' }), true;
+    if (post.status !== 'cancelled') return json(res, 409, { error: 'Эта публикация не отменена — возвращать нечего' }), true;
+    if (!(Date.parse(post.sendAt) > Date.now())) return json(res, 409, { error: 'Время публикации уже прошло: создайте пост заново с новой датой' }), true;
+    post.status = 'scheduled';
+    saveDataNow();
+    json(res, 200, { ok: true });
+    return true;
+  }
+
   // Объект в канал: подпись, фотография и кнопка с ссылкой на карточку в боте.
   // Собираем на стороне бота — в панели нет ни файлов фотографий, ни адреса
   // бота, а текст должен совпадать с тем, что клиент видит в карточке.

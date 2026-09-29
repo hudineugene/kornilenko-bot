@@ -58,6 +58,23 @@ function translatedField(name, label, value, multiline, placeholder, required) {
       : '<input data-tr="' + name + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" placeholder="' + esc(placeholder || language[1]) + '" value="' + esc(text) + '">';
   }).join("") + "</div>";
 }
+// Удаление с «Вернуть»: бот несколько минут хранит удалённую запись вместе с
+// фотографиями, и кнопка в уведомлении возвращает её на прежнее место.
+async function removeWithUndo(kind, id, doneText) {
+  await api("/api/" + kind + "/" + encodeURIComponent(id), { method: "DELETE" });
+  toast(doneText, false, {
+    label: "Вернуть",
+    run: async function () {
+      try {
+        await send("/api/" + kind + "/" + encodeURIComponent(id) + "/restore", "POST", {});
+        toast("Возвращено");
+        await reload();
+      } catch (error) { fail(error); }
+    },
+  });
+  await reload();
+}
+
 function languageTabs() {
   return '<div class="tabs" data-langtabs="1">' + LANGUAGES.map(function (language, index) {
     return '<button type="button" data-lang="' + language[0] + '" class="' + (index ? "" : "active") + '">' + language[1] + "</button>";
@@ -147,7 +164,7 @@ function renderObjects(host) {
     }; });
     row.querySelectorAll("[data-delete]").forEach(function (button) { button.onclick = async function () {
       if (!(await confirmDialog("Удалить объект?", "Карточка исчезнет из каталога бота.", "Удалить", true))) return;
-      try { await api("/api/objects/" + encodeURIComponent(id), { method: "DELETE" }); toast("Удалено"); await reload(); } catch (error) { fail(error); }
+      try { await removeWithUndo("objects", id, "Объект удалён"); } catch (error) { fail(error); }
     }; });
   });
 }
@@ -194,10 +211,8 @@ function openObjectExtras(id) {
       dialog.querySelector("[data-delete]").onclick = async function () {
         if (!(await confirmDialog("Удалить объект?", "Карточка исчезнет из каталога бота.", "Удалить", true))) return;
         try {
-          await api("/api/objects/" + encodeURIComponent(id), { method: "DELETE" });
           dialog.closeClean();
-          toast("Удалено");
-          await reload();
+          await removeWithUndo("objects", id, "Объект удалён");
         } catch (error) { fail(error); }
       };
     },
@@ -770,7 +785,7 @@ function renderOffers(host) {
     row.querySelector("[data-edit]").onclick = function () { openRecordEditor("promotions", id); };
     row.querySelector("[data-delete]").onclick = async function () {
       if (!(await confirmDialog("Удалить акцию?", "Она исчезнет из раздела «Акции».", "Удалить", true))) return;
-      try { await api("/api/promotions/" + encodeURIComponent(id), { method: "DELETE" }); await reload(); } catch (error) { fail(error); }
+      try { await removeWithUndo("promotions", id, "Акция удалена"); } catch (error) { fail(error); }
     };
   });
 }

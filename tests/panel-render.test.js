@@ -3091,6 +3091,67 @@ test('диалог на телефоне: сведения — выезжающ�
   assert.equal(scrolled, 0, 'прокрутки страницы к полю ответа нет: переписка сама открывается на последнем сообщении');
 });
 
+test('«Вернуть»: смена этапа, закрытие заявки, удаление акции и объекта, отмена поста — тост с кнопкой и обратный запрос', async () => {
+  twoWaitingConversations();
+  const { sandbox, requests } = await panelSandbox();
+  const toasts = [];
+  sandbox.toast = (message, bad, action) => toasts.push({ message: String(message), action });
+  const last = () => toasts[toasts.length - 1];
+  const bodyOf = (method, urlPart) => requests.filter((request) => request.method === method && request.url.includes(urlPart)).pop();
+
+  // Этап: перенесли карточку — можно вернуть прежние этап и статус.
+  const item = sandbox.state.inquiries.find((entry) => entry.id === 'inq-olga');
+  requests.length = 0;
+  await sandbox.changeStageWithUndo(item, 'won');
+  assert.deepEqual(bodyOf('PATCH', '/api/inquiries/inq-olga').body, { pipelineStage: 'won' });
+  assert.match(last().message, /Этап обновлён/);
+  assert.equal(last().action.label, 'Вернуть');
+  requests.length = 0;
+  await last().action.run();
+  assert.deepEqual(bodyOf('PATCH', '/api/inquiries/inq-olga').body, { status: 'new', pipelineStage: 'new' }, 'вернулись и статус, и этап');
+  assert.match(last().message, /Возвращено/);
+
+  // Закрытие заявки в панели сопровождения — тем же образом; правка одной заметки «Вернуть» не предлагает.
+  sandbox.selectConversation('inq-olga');
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  await sandbox.VIEWS.clients.render(host, '');
+  card.querySelector('#inqStatusValue').value = 'closed';
+  card.querySelector('#inqPipeline').value = sandbox.pipelineStageOf(item);
+  requests.length = 0;
+  await card.querySelector('#saveInq').onclick();
+  assert.match(last().message, /Сохранено/);
+  assert.ok(last().action && /Вернуть/.test(last().action.label), 'закрытие можно отменить');
+  requests.length = 0;
+  await last().action.run();
+  assert.deepEqual(bodyOf('PATCH', '/api/inquiries/inq-olga').body, { status: 'new', pipelineStage: 'new' });
+  card.querySelector('#inqStatusValue').value = 'open';
+  card.querySelector('#inqNote').value = 'Только заметка';
+  await card.querySelector('#saveInq').onclick();
+  assert.ok(!last().action, 'заметку «возвращать» не предлагаем');
+
+  // Акция, объект: удалили — вернули.
+  for (const [kind, id, done] of [['promotions', 'promo-1', 'Акция удалена'], ['objects', 'villa-1', 'Объект удалён']]) {
+    requests.length = 0;
+    await sandbox.removeWithUndo(kind, id, done);
+    assert.equal(bodyOf('DELETE', '/api/' + kind + '/' + id).method, 'DELETE');
+    assert.equal(last().message, done);
+    assert.equal(last().action.label, 'Вернуть');
+    requests.length = 0;
+    await last().action.run();
+    assert.equal(bodyOf('POST', '/api/' + kind + '/' + id + '/restore').method, 'POST', kind + ': запрос на возврат ушёл');
+  }
+
+  // Пост: отменили — вернули.
+  requests.length = 0;
+  await sandbox.cancelPostWithUndo('post-aaaa-1111');
+  assert.equal(bodyOf('DELETE', '/api/group-posts/post-aaaa-1111').method, 'DELETE');
+  assert.match(last().message, /Публикация убрана/);
+  requests.length = 0;
+  await last().action.run();
+  assert.equal(bodyOf('POST', '/api/group-posts/post-aaaa-1111/restore').method, 'POST');
+});
+
 test('старые адреса подключения к Telegram ведут на «Обслуживание → Подключение к Telegram»', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();

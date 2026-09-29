@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { cleanText, clone } from './util.mjs';
 import { normalizeBuyPlan, normalizeGuidePages, pruneOrphanPropertyAnalytics } from './data-format.mjs';
 import { imageExists } from './media.mjs';
+import { peekDeleted, rememberDeleted, takeDeleted } from './trash.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordImages } from './catalog.mjs';
 import { binaryImage, json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
@@ -191,10 +192,30 @@ async function handleContentApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const kind = contentMatch[1];
-    const before = data[kind].length;
-    data[kind] = data[kind].filter((item) => item.id !== decodeURIComponent(contentMatch[2]));
-    if (data[kind].length === before) return json(res, 404, { error: 'Запись не найдена' });
+    const id = decodeURIComponent(contentMatch[2]);
+    const index = data[kind].findIndex((item) => item.id === id);
+    if (index < 0) return json(res, 404, { error: 'Запись не найдена' });
+    // Несколько минут запись можно вернуть кнопкой «Вернуть»: вместе с фотографиями
+    // и счётчиками просмотров (их «чистка сирот» ниже стирает вместе с объектом).
+    const analytics = kind === 'objects' && data.analytics.properties[id] ? { ...data.analytics.properties[id] } : null;
+    rememberDeleted(kind, data[kind][index], index, { analytics });
+    data[kind] = data[kind].filter((item) => item.id !== id);
     pruneOrphanPropertyAnalytics(data);
+    saveDataNow();
+    return json(res, 200, { ok: true, undo: true });
+  }
+
+  const restoreMatch = url.pathname.match(/^\/api\/(objects|promotions)\/([^/]+)\/restore$/);
+  if (restoreMatch && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const kind = restoreMatch[1];
+    const id = decodeURIComponent(restoreMatch[2]);
+    if (!peekDeleted(kind, id)) return json(res, 404, { error: 'Время для отмены вышло: запись уже не вернуть' });
+    if (data[kind].some((item) => item.id === id)) return json(res, 409, { error: 'Запись с таким номером уже есть — вернуть нечего' });
+    const entry = takeDeleted(kind, id);
+    data[kind].splice(Math.min(entry.index, data[kind].length), 0, entry.record);
+    if (entry.extra && entry.extra.analytics) data.analytics.properties[id] = entry.extra.analytics;
     saveDataNow();
     return json(res, 200, { ok: true });
   }

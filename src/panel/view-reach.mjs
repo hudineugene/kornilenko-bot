@@ -44,6 +44,23 @@ function campaignAudienceLabel(entry) {
 // Одна страница на все публикации: две кнопки сверху, общая очередь и общая
 // история. Рассылка клиентам и пост в канал — разные вещи, но планируются и
 // смотрятся вместе.
+// Отмена публикации с «Вернуть»: пост остаётся у бота отменённым, и кнопка ставит его
+// обратно в очередь, если время публикации ещё не прошло.
+async function cancelPostWithUndo(id) {
+  await api("/api/group-posts/" + encodeURIComponent(id), { method: "DELETE" });
+  toast("Публикация убрана", false, {
+    label: "Вернуть",
+    run: async function () {
+      try {
+        await send("/api/group-posts/" + encodeURIComponent(id) + "/restore", "POST", {});
+        toast("Публикация возвращена в очередь");
+        await reload();
+      } catch (error) { fail(error); }
+    },
+  });
+  await reload();
+}
+
 function publicationRows() {
   var rows = [];
   (state.broadcasts || []).forEach(function (entry) {
@@ -126,8 +143,10 @@ function renderPublications(host) {
         true
       ))) return;
       try {
-        await api((isBroadcast ? "/api/broadcasts/" : "/api/group-posts/") + encodeURIComponent(id), { method: "DELETE" });
-        await reload();
+        if (isBroadcast) {
+          await api("/api/broadcasts/" + encodeURIComponent(id), { method: "DELETE" });
+          await reload();
+        } else await cancelPostWithUndo(id);
       } catch (error) { fail(error); }
     };
   });
@@ -819,9 +838,7 @@ function renderGroupCard(host, group, mode) {
       // Спрашиваем: отменённую публикацию не вернуть, а текст поста пропадёт.
       if (!(await confirmDialog("Отменить публикацию?", "Запланированный пост будет удалён вместе с текстом. Восстановить его будет нельзя.", "Отменить публикацию", true))) return;
       try {
-        await api("/api/group-posts/" + encodeURIComponent(button.dataset.cancelPost), { method: "DELETE" });
-        toast("Публикация убрана");
-        await reload();
+        await cancelPostWithUndo(button.dataset.cancelPost);
       } catch (error) { fail(error); }
     };
   });

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA_FILE, MEDIA_DIRECTORY } from './config.mjs';
+import { deletedForMedia } from './trash.mjs';
 
 function storedImageFile(image) {
   const fileName = image && typeof image.storageFile === 'string' ? image.storageFile.trim() : '';
@@ -181,10 +182,13 @@ function externalizeImages(root) {
 
 function referencedImageFiles(root) {
   const referenced = new Set();
-  forEachStoredImage(root, (image) => {
+  const collect = (image) => {
     const fileName = storedImageFile(image);
     if (fileName) referenced.add(fileName.toLocaleLowerCase('en-US'));
-  });
+  };
+  forEachStoredImage(root, collect);
+  // Удалённое, но ещё возвращаемое кнопкой «Вернуть»: файлы пока нужны.
+  forEachStoredImage(deletedForMedia(), collect);
   return referenced;
 }
 
