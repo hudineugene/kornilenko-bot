@@ -9,9 +9,9 @@ const LANGUAGE_SELECTED = {
   es: 'Listo — has seleccionado español',
 };
 const MENU_LABELS = {
-  ru: { objects: '🏘 Объекты', selection: '✨ Подбор', promotions: '🔥 Акции', favorites: '❤️ Избранное', contacts: '💬 Связаться', request: '📞 Позвоните мне', about: 'ℹ️ О компании', help: '❓ Помощь', more: '👤 Моё', language: '🌐 Сменить язык', placeholder: 'Напишите, что ищете' },
-  en: { objects: '🏘 Properties', selection: '✨ Find for me', promotions: '🔥 Offers', favorites: '❤️ Favourites', contacts: '💬 Contact us', request: '📞 Call me back', about: 'ℹ️ About', help: '❓ Help', more: '👤 My space', language: '🌐 Change language', placeholder: 'Write what you are looking for' },
-  es: { objects: '🏘 Inmuebles', selection: '✨ Búsqueda', promotions: '🔥 Promociones', favorites: '❤️ Favoritos', contacts: '💬 Contactar', request: '📞 Llámame', about: 'ℹ️ La empresa', help: '❓ Ayuda', more: '👤 Mi espacio', language: '🌐 Cambiar idioma', placeholder: 'Escribe qué buscas' },
+  ru: { objects: '🏘 Объекты', selection: '✨ Подбор', promotions: '🔥 Акции', favorites: '❤️ Избранное', contacts: '💬 Связаться', request: '📞 Позвоните мне', about: 'ℹ️ О компании', help: '❓ Помощь', more: '👤 Моё', guide: '🇪🇸 Как купить', language: '🌐 Сменить язык', placeholder: 'Напишите, что ищете' },
+  en: { objects: '🏘 Properties', selection: '✨ Find for me', promotions: '🔥 Offers', favorites: '❤️ Favourites', contacts: '💬 Contact us', request: '📞 Call me back', about: 'ℹ️ About', help: '❓ Help', more: '👤 My space', guide: '🇪🇸 Buying in Spain', language: '🌐 Change language', placeholder: 'Write what you are looking for' },
+  es: { objects: '🏘 Inmuebles', selection: '✨ Búsqueda', promotions: '🔥 Promociones', favorites: '❤️ Favoritos', contacts: '💬 Contactar', request: '📞 Llámame', about: 'ℹ️ La empresa', help: '❓ Ayuda', more: '👤 Mi espacio', guide: '🇪🇸 Cómo comprar', language: '🌐 Cambiar idioma', placeholder: 'Escribe qué buscas' },
 };
 // Labels from earlier keyboards: clients may still tap those messages, so
 // both the long labels from before version 17 and "More" from version 17 work.

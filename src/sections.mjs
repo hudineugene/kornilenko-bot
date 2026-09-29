@@ -90,16 +90,22 @@ async function sendContacts(chatId, user, token) {
   const telegram = /^[A-Za-z0-9_]{5,}$/.test(telegramName)
     ? 'https://t.me/' + telegramName
     : validHttpUrl(contact.telegram);
-  if (whatsapp) buttons.push([{ text: '🟢 ' + copy.whatsapp, url: whatsapp }]);
-  if (telegram) buttons.push([{ text: '✈️ ' + copy.telegram, url: telegram }]);
-  if (site) buttons.push([{ text: '🌐 ' + copy.website, url: site }]);
-  if (map) buttons.push([{ text: '📍 ' + copy.map, url: map }]);
+  // Экран связи — пять рядов вместо девяти: мессенджеры вместе, «О компании» и
+  // сайт вместе, карта рядом с возвратом в меню. Гид переехал в главное меню.
+  const messengers = [];
+  if (whatsapp) messengers.push({ text: '🟢 ' + copy.whatsapp, url: whatsapp });
+  if (telegram) messengers.push({ text: '✈️ ' + copy.telegram, url: telegram });
+  if (messengers.length) buttons.push(messengers);
   buttons.push([{ text: copy.request, callback_data: 'contact:lead' }]);
   buttons.push([{ text: copy.question, callback_data: 'contact:question' }]);
   // «О компании» — там же, где клиент решает, довериться ли фирме.
-  buttons.push([{ text: (MENU_LABELS[language] || MENU_LABELS.ru).about, callback_data: 'nav:about' }]);
-  buttons.push([{ text: (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).guide, callback_data: 'guide:0' }]);
-  buttons.push([{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }]);
+  const aboutRow = [{ text: (MENU_LABELS[language] || MENU_LABELS.ru).about, callback_data: 'nav:about' }];
+  if (site) aboutRow.push({ text: '🌐 ' + copy.website, url: site });
+  buttons.push(aboutRow);
+  const closing = [];
+  if (map) closing.push({ text: '📍 ' + copy.map, url: map });
+  closing.push({ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' });
+  buttons.push(closing);
   await sendUiMessage(chatId, user, text, token, {
     ...(entities.length ? { entities } : {}),
     reply_markup: { inline_keyboard: buttons },

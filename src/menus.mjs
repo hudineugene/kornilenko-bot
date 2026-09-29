@@ -34,7 +34,9 @@ function menuKeyboard(language) {
     promotions
       ? [{ text: labels.contacts }, { text: labels.promotions + ' · ' + promotions }]
       : [{ text: labels.contacts }],
-    [{ text: labels.more }],
+    // Гид «Как купить в Испании» — на виду, в главном меню: раньше он был
+    // седьмым рядом экрана «Связаться», и покупатель его не находил.
+    [{ text: labels.guide }, { text: labels.more }],
   ];
   return {
     keyboard: rows,
@@ -51,7 +53,7 @@ function menuItemForText(text, language) {
   // У «Акций» на кнопке стоит число — отрезаем его перед сравнением.
   const value = String(text || '').replace(/\s+·\s+\d+$/, '');
   const earlierContacts = EARLIER_CONTACT_LABELS[language] || EARLIER_CONTACT_LABELS.ru;
-  return ['objects', 'selection', 'contacts', 'promotions', 'favorites', 'request', 'about', 'help', 'more'].find((key) => {
+  return ['objects', 'selection', 'contacts', 'promotions', 'favorites', 'request', 'about', 'help', 'more', 'guide'].find((key) => {
     return labels[key] === value || legacy[key] === value || previous[key] === value
       || (key === 'contacts' && earlierContacts.includes(value))
       || (key === 'favorites' && (EARLIER_FAVORITES_LABELS[language] || []).includes(value));

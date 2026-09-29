@@ -195,7 +195,7 @@ test.describe('callback request form', () => {
     await chat.press('lead:call');
     const step = await chat.say(ru.cancel);
     assert.equal(step.last.text, ru.cancelled);
-    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.contacts }], [{ text: MENU.ru.more }]] }));
+    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.contacts }], [{ text: MENU.ru.guide }, { text: MENU.ru.more }]] }));
     assert.equal(chat.user.pendingAction, null);
     assert.equal(chat.inquiries.length, 0);
   });
@@ -827,9 +827,9 @@ test.describe('property card', () => {
   test('the main menu is five buttons at most and still understands the old ones', async () => {
     const chat = createChat();
     const step = await chat.say('/menu');
-    // Без акций — четыре кнопки: объекты, подбор, связаться, «Моё».
-    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 1, 1]);
-    assert.deepEqual(step.last.buttons, [MENU.ru.objects, MENU.ru.selection, MENU.ru.contacts, MENU.ru.more]);
+    // Без акций — пять кнопок: объекты, подбор, связаться, «Как купить», «Моё».
+    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 1, 2]);
+    assert.deepEqual(step.last.buttons, [MENU.ru.objects, MENU.ru.selection, MENU.ru.contacts, MENU.ru.guide, MENU.ru.more]);
     assert.ok(!step.last.buttons.includes(MENU.ru.promotions), 'пустой раздел акций в меню не висит');
     assert.ok(!step.last.buttons.includes(MENU.ru.favorites), 'избранное живёт в «Моё»');
 
@@ -838,6 +838,28 @@ test.describe('property card', () => {
     assert.equal(old.last.text, LEAD.ru.chooseMethod);
     const manager = await chat.say('💬 Менеджер');
     assert.match(manager.last.text, /./, 'старая кнопка «Менеджер» открывает связь');
+  });
+
+  test('экран связи короткий: мессенджеры в один ряд, «О компании» и сайт в один ряд', async () => {
+    Object.assign(bot.getData().contacts, { phone: '+34 600 111 222', whatsapp: '+34 600 111 222', whatsappEnabled: true, telegram: '@kornilenko_agent', website: 'https://example.com', mapUrl: 'https://maps.example.com/office' });
+    const chat = createChat();
+    const screen = await chat.say(MENU.ru.contacts);
+    const rows = screen.last.markup.inline_keyboard;
+    assert.ok(rows.length <= 5, 'не больше пяти рядов, а было девять: ' + rows.length);
+    const rowOf = (predicate) => rows.find((row) => row.some(predicate));
+    assert.equal(rowOf((button) => /WhatsApp/.test(button.text)).length, 2, 'WhatsApp и Telegram вместе');
+    assert.equal(rowOf((button) => button.callback_data === 'nav:about').length, 2, '«О компании» и сайт вместе');
+    assert.ok(rowOf((button) => button.callback_data === 'nav:menu').some((button) => /example\.com\/office|maps/.test(button.url || '')), 'карта рядом с возвратом в меню');
+  });
+
+  test('«Как купить в Испании» — кнопка главного меню на трёх языках, старые клавиатуры тоже работают', async () => {
+    for (const language of ['ru', 'en', 'es']) {
+      assert.equal(bot.menuItemForText(MENU[language].guide, language), 'guide', language);
+      assert.ok(createChat({ language }).user, language);
+    }
+    const chat = createChat();
+    const step = await chat.say(MENU.ru.guide);
+    assert.match(step.last.text, /NIE/, 'кнопка открывает первый экран гида');
   });
 
   test('приветствие говорит, что в каталоге и что боту можно просто написать', async () => {
@@ -887,10 +909,11 @@ test.describe('property card', () => {
 
   test('гид «Как купить в Испании» листается одним сообщением', async () => {
     const chat = createChat();
+    // Гид — кнопка главного меню, а не седьмой ряд экрана связи.
     const contacts = await chat.say(MENU.ru.contacts);
-    assert.ok(callbacksOf(contacts.last.markup).includes('guide:0'), 'гид открывается с экрана связи');
-
-    const first = await chat.press('guide:0');
+    assert.ok(!callbacksOf(contacts.last.markup).includes('guide:0'), 'с экрана связи гид убран');
+    assert.ok(contacts.last.markup.inline_keyboard.length <= 5, 'экран связи — не длиннее пяти рядов');
+    const first = await chat.say(MENU.ru.guide);
     assert.match(first.last.text, /NIE/, 'первый экран — про NIE');
     const callbacks = callbacksOf(first.last.markup);
     assert.ok(callbacks.includes('guide:page:1'), 'есть следующий экран');
