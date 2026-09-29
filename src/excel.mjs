@@ -164,8 +164,74 @@ function inquiryExportRows(inquiries) {
   });
 }
 
+// --- Клиенты ------------------------------------------------------------------
+// Одна строка — один человек: то, что менеджер хочет видеть в таблице для
+// обзвона или рассылки по почте, а не переписка (она в выгрузке обращений).
+const CLIENT_EXPORT_COLUMNS = [
+  { title: 'Клиент', width: 24 },
+  { title: 'Username', width: 18 },
+  { title: 'Телефон', width: 18 },
+  { title: 'Имя для связи', width: 20 },
+  { title: 'Удобное время', width: 18 },
+  { title: 'Язык', width: 6 },
+  { title: 'Источник', width: 14 },
+  { title: 'Этап работы', width: 14 },
+  { title: 'Следующий шаг', width: 14 },
+  { title: 'Обращений', width: 10 },
+  { title: 'Последнее обращение', width: 30 },
+  { title: 'Избранных объектов', width: 11 },
+  { title: 'Согласие на рассылки', width: 12 },
+  { title: 'Бот доступен', width: 12 },
+  { title: 'Теги', width: 22 },
+  { title: 'Заметка', width: 40 },
+  { title: 'Первый визит', width: 17 },
+  { title: 'Последняя активность', width: 17 },
+  { title: 'ID клиента', width: 14 },
+];
+
+const PIPELINE_STAGE_LABELS = { new: 'Новый', contact: 'Связались', selection: 'Подбор', viewing: 'Просмотр', negotiation: 'Переговоры', won: 'Сделка', lost: 'Неактуально' };
+
+function clientExportRows(users) {
+  const byUser = new Map();
+  for (const inquiry of data.inquiries) {
+    const key = String(inquiry.userId || '');
+    if (!byUser.has(key)) byUser.set(key, []);
+    byUser.get(key).push(inquiry);
+  }
+  const time = (value) => Date.parse(value) || 0;
+  const dateOrBlank = (value) => (time(value) ? new Date(value) : '');
+  return users.map((user) => {
+    const inquiries = (byUser.get(String(user.id)) || []).slice().sort((a, b) => time(b.updatedAt || b.createdAt) - time(a.updatedAt || a.createdAt));
+    const current = inquiries.find((item) => item.status !== 'closed') || inquiries[0] || null;
+    const lead = (current && current.lead) || {};
+    return [
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени',
+      user.username ? '@' + user.username : '',
+      user.phone || lead.phone || '',
+      user.contactName || lead.name || '',
+      user.preferredContactTime || lead.preferredTime || '',
+      String(user.preferredLanguage || '').toUpperCase(),
+      user.source || '',
+      current ? PIPELINE_STAGE_LABELS[current.pipelineStage] || '' : '',
+      current && current.status !== 'closed' && current.followUpDate ? current.followUpDate + (current.followUpTime ? ' ' + current.followUpTime : '') : '',
+      inquiries.length,
+      inquiries[0] ? inquiryTypeLabel(inquiries[0]) + ', ' + (INQUIRY_STATUS_LABELS[inquiries[0].status] || inquiries[0].status) : '',
+      Array.isArray(user.favorites) ? user.favorites.length : 0,
+      user.newsConsentAt && !user.broadcastsOptOut ? 'да' : 'нет',
+      user.blocked ? 'нет (заблокировал бота)' : 'да',
+      Array.isArray(user.tags) ? user.tags.join(', ') : '',
+      user.note || '',
+      dateOrBlank(user.firstSeenAt),
+      dateOrBlank(user.lastSeenAt),
+      String(user.id),
+    ];
+  });
+}
+
 export {
+  CLIENT_EXPORT_COLUMNS,
   INQUIRY_EXPORT_COLUMNS,
+  clientExportRows,
   excelColumn,
   excelDate,
   inquiryExportRows,

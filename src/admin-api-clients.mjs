@@ -14,7 +14,7 @@ import { validHttpUrl } from './catalog.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
 import { json, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
 import { replyTemplateInput } from './admin-input.mjs';
-import { INQUIRY_EXPORT_COLUMNS, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
+import { CLIENT_EXPORT_COLUMNS, INQUIRY_EXPORT_COLUMNS, clientExportRows, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { confirmViewing } from './viewings.mjs';
 
 // Сколько бесед вернуть в ответ на поиск: больше в списке всё равно не читают,
@@ -200,6 +200,25 @@ async function handleClientsApi(req, res, url) {
       'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'content-length': file.length,
       'content-disposition': 'attachment; filename="inquiries-' + localDayKey() + '.xlsx"; filename*=UTF-8\'\'' + encodeURIComponent(name),
+    });
+    return res.end(file);
+  }
+
+  // Клиенты одним файлом: панель присылает номера тех, кого показывает (с учётом
+  // выбранного этапа и поиска); без номеров выгружаются все.
+  if (url.pathname === '/api/users/export' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const ids = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 20000) : null;
+    const users = ids ? ids.map((id) => data.users[id]).filter(Boolean) : Object.values(data.users);
+    const file = xlsxWorkbook('Клиенты', CLIENT_EXPORT_COLUMNS, clientExportRows(users));
+    const name = 'Клиенты ' + localDayKey() + '.xlsx';
+    securityHeaders(res);
+    res.writeHead(200, {
+      'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'content-length': file.length,
+      'content-disposition': 'attachment; filename="clients-' + localDayKey() + '.xlsx"; filename*=UTF-8\'\'' + encodeURIComponent(name),
     });
     return res.end(file);
   }

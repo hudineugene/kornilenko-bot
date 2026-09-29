@@ -1475,6 +1475,22 @@ test('группа с темами: в форме поста выбираетс�
   assert.ok(!String(off.innerHTML).includes('createTopic'), 'создавать тему негде');
 });
 
+test('«База клиентов»: кнопка «В Excel» выгружает тех, кто на экране', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.users['601'] = { id: '601', chatId: 601, firstName: 'Анна', activity: [] };
+    data.users['602'] = { id: '602', chatId: 602, firstName: 'Борис', activity: [] };
+  });
+  const { sandbox } = await panelSandbox();
+  const host = fakeElement('main');
+  sandbox.renderClients(host);
+  assert.match(String(host.innerHTML), /id="exportClients"[^>]*>⬇ В Excel</);
+  let sent = null;
+  sandbox.exportClients = (ids) => { sent = ids; };
+  host.querySelector('#exportClients').onclick();
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)).sort(), ['601', '602'], 'в файл идут те, кого показывает таблица');
+});
+
 test('контакты: фото менеджера с миниатюрой и «Убрать»; без срока ответа — напоминание', async () => {
   resetData((data) => {
     data.config.active = true;

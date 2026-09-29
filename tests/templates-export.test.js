@@ -273,6 +273,64 @@ test.describe('conversation center', () => {
   });
 });
 
+test.describe('Excel: клиенты', () => {
+  const clientsFile = async (body) => {
+    const response = await call('POST', '/api/users/export', body);
+    assert.equal(response.status, 200);
+    return { response, rows: sheetCells(unzip(Buffer.from(await response.arrayBuffer()))['xl/worksheets/sheet1.xml']) };
+  };
+
+  test('одна строка на человека: контакты, этап, согласие, доступность бота', async () => {
+    const data = bot.getData();
+    Object.assign(data.users['501'], { contactName: 'Анна П.', preferredContactTime: 'Утром', tags: ['vip', 'море'], note: 'Ищет у моря', favorites: ['villa-1', 'villa-2'], newsConsentAt: '2026-09-01T10:00:00.000Z', firstSeenAt: '2026-08-01T10:00:00.000Z', lastSeenAt: '2026-09-20T10:00:00.000Z' });
+    Object.assign(data.users['502'], { blocked: true, newsConsentAt: '', broadcastsOptOut: false });
+    const { response, rows } = await clientsFile({ ids: ['501', '502', 'missing'] });
+    assert.match(response.headers.get('content-disposition'), /^attachment; filename="clients-\d{4}-\d{2}-\d{2}\.xlsx"; filename\*=UTF-8''/);
+    const [header, anna, john, none] = rows;
+    assert.equal(header.A, 'Клиент');
+    assert.equal(header.M, 'Согласие на рассылки');
+    assert.equal(none, undefined, 'неизвестный номер пропущен');
+
+    assert.equal(anna.A, 'Анна Петрова');
+    assert.equal(anna.B, '@anna');
+    assert.equal(anna.C, data.users['501'].phone, 'телефон из профиля');
+    assert.equal(anna.D, 'Анна П.');
+    assert.equal(anna.E, 'Утром');
+    assert.equal(anna.G, 'instagram');
+    assert.equal(anna.J, 1, 'одно обращение');
+    assert.match(anna.K, /, (новое|в работе|закрыто)$/, 'последнее обращение: вид и статус');
+    assert.equal(anna.L, 2, 'избранных объектов');
+    assert.equal(anna.M, 'да', 'согласие на рассылки есть');
+    assert.equal(anna.N, 'да');
+    assert.equal(anna.O, 'vip, море');
+    assert.equal(anna.P, 'Ищет у моря');
+    assert.equal(typeof anna.Q, 'number', 'даты — настоящие даты Excel');
+    assert.equal(anna.S, '501');
+
+    assert.equal(john.A, 'John');
+    assert.equal(john.M, 'нет', 'согласия нет — писать в рассылке нельзя');
+    assert.equal(john.N, 'нет (заблокировал бота)');
+    assert.equal(john.Q, undefined, 'даты нет — ячейка пустая, а не «1970»');
+  });
+
+  test('без списка выгружаются все; по выбранным — в том порядке, что на экране', async () => {
+    assert.equal((await clientsFile({})).rows.length, Object.keys(bot.getData().users).length + 1);
+    const { rows } = await clientsFile({ ids: ['502', '501'] });
+    assert.deepEqual(rows.slice(1).map((row) => row.S), ['502', '501']);
+  });
+
+  test('текст, похожий на формулу, остаётся текстом', async () => {
+    bot.getData().users['502'].note = '=HYPERLINK("http://evil")';
+    const { rows } = await clientsFile({ ids: ['502'] });
+    assert.equal(rows[1].P, '=HYPERLINK(&quot;http://evil&quot;)');
+  });
+
+  test('нужны вход и токен защиты', async () => {
+    assert.equal((await fetch(baseUrl + '/api/users/export', { method: 'POST', body: '{}' })).status, 401);
+    assert.equal((await call('POST', '/api/users/export', {}, { 'x-csrf-token': 'wrong' })).status, 403);
+  });
+});
+
 test.describe('Excel export', () => {
   test('the selected inquiries are exported in the order shown', async () => {
     const response = await call('POST', '/api/inquiries/export', { ids: ['inq-question', 'inq-lead', 'missing'] });

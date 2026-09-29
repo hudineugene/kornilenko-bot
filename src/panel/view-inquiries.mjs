@@ -581,6 +581,21 @@ async function exportInquiries() {
   } catch (error) { fail(error); }
 }
 
+// Выгрузка клиентов: те, кто сейчас на экране (этап и поиск учтены), а не вся база.
+async function exportClients(ids) {
+  try {
+    var response = await fetch("/api/users/export", { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, body: JSON.stringify({ ids: ids }) });
+    if (!response.ok) throw new Error("Не удалось выгрузить");
+    var blob = await response.blob();
+    var link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "Клиенты.xlsx";
+    link.click();
+    URL.revokeObjectURL(link.href);
+    toast("Выгружено клиентов: " + ids.length);
+  } catch (error) { fail(error); }
+}
+
 // Переписка беседы приходит отдельным запросом: в общем состоянии её нет,
 // иначе панель тянула бы переписку всех клиентов каждые 45 секунд.
 // Загруженное помним, пока открыта страница; при обновлении экрана и после
@@ -1129,7 +1144,7 @@ function renderClients(host) {
     return haystack.indexOf(clientSearch.toLowerCase()) >= 0;
   });
   host.innerHTML = '<div class="toolbar">' +
-      '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) + " из " + num(state.userCount) + " · активных " + num(state.activeUserCount) + "</span></div>" +
+      '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) + " из " + num(state.userCount) + " · активных " + num(state.activeUserCount) + '</span><div class="grow"></div><button class="btn secondary small" id="exportClients" type="button" title="Таблица с теми, кого вы видите на экране: для обзвона, отчёта или переноса">⬇ В Excel</button></div>' +
     '<div class="card"><div class="table-wrap"><table><thead><tr><th>Клиент</th><th>Источник и язык</th><th>Этап работы</th><th>Следующий шаг</th><th class="right">Последняя активность</th></tr></thead><tbody>' +
     (rows.length ? rows.slice(0, clientsShown).map(function (row) {
       var user = row.user, latest = row.latest, active = row.active;
@@ -1146,6 +1161,7 @@ function renderClients(host) {
       ? '<div class="card-body row"><span class="small faint">Показаны первые ' + num(clientsShown) + " из " + num(rows.length) + '</span><div class="grow"></div><button class="btn secondary small" id="moreClients" type="button">Показать ещё ' + num(Math.min(CLIENTS_PAGE, rows.length - clientsShown)) + "</button></div>"
       : "") +
     "</div>";
+  host.querySelector("#exportClients").onclick = function () { exportClients(rows.map(function (row) { return row.user.id; })); };
   var moreClients = host.querySelector("#moreClients");
   if (moreClients) moreClients.onclick = function () { clientsShown += CLIENTS_PAGE; renderClients(host); };
   host.querySelector("#clientStage").onchange = function (event) { clientStageFilter = event.target.value; clientsShown = CLIENTS_PAGE; renderClients(host); };
