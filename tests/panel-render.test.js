@@ -1169,6 +1169,16 @@ test('числа на «Сегодня» и в «Отчётах» сходятс
   assert.match(text, /2 заявки<\/span>/, 'под графиком то же число, а не 99');
 });
 
+test('панель считает «взял в работу без ответа» так же, как бот', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const taken = { status: 'in_progress', replies: [], messages: [{ direction: 'in' }], createdAt: new Date().toISOString() };
+  assert.equal(sandbox.awaitsReply(taken), true, 'без ответа клиент ждёт, хотя дело в работе');
+  assert.equal(sandbox.inquiryState(taken).text, 'Ждёт ответа');
+  assert.equal(sandbox.awaitsReply({ ...taken, viewing: { confirmedAt: new Date().toISOString() } }), false, 'подтверждённый просмотр ответа не ждёт');
+  assert.equal(sandbox.awaitsReply({ ...taken, messages: [{ direction: 'out' }] }), false, 'начатое менеджером — тоже');
+});
+
 test('когда все отвечены, ноль везде', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, state } = await panelSandbox();

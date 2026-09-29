@@ -562,7 +562,13 @@ function awaitsReply(inquiry) {
   // Клиент искал сам и получил каталог — ответа никто не ждёт.
   if (inquiry.searchLead) return false;
   var replies = inquiry.replies || [];
-  if (!replies.length) return inquiry.status === "new";
+  if (!replies.length) {
+    if (inquiry.status === "new") return true;
+    // «В работу» — это «взял», а не «ответил»; так же считает и бот.
+    var confirmedViewing = Boolean(inquiry.viewing && inquiry.viewing.confirmedAt);
+    var clientWrote = (inquiry.messages || []).some(function (message) { return message.direction === "in"; });
+    return inquiry.status === "in_progress" && clientWrote && !confirmedViewing;
+  }
   var lastReply = Math.max.apply(null, replies.map(function (reply) { return Date.parse(reply.createdAt) || 0; }));
   return (Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0) > lastReply;
 }

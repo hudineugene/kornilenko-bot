@@ -396,3 +396,59 @@ test('the admin chat gets its own command menu', async () => {
   assert.deepEqual(scoped.map((call) => call.body.scope.chat_id), [ADMIN_CHAT, '-100500600']);
   assert.deepEqual(scoped[0].body.commands.slice(0, 3).map((command) => command.command), ['inbox', 'viewings', 'stats']);
 });
+
+test.describe('«В работу» — это «взял», а не «ответил»', () => {
+  const { adminPress } = require('./helpers/chat');
+
+  test('без ответа клиент остаётся среди ждущих, даже когда дело взяли в работу', async () => {
+    const chat = createChat();
+    await chat.say('Хочу купить дом');
+    const inquiry = chat.inquiries[0];
+    assert.equal(bot.awaitingReply(inquiry), true);
+
+    await adminPress('inq:in_progress:' + inquiry.id, 777);
+    assert.equal(inquiry.status, 'in_progress');
+    assert.equal(bot.awaitingReply(inquiry), true, 'взял, но не ответил — клиент всё ещё ждёт');
+  });
+
+  test('запись в свободное окно подтверждена сразу — ответа не ждут', () => {
+    const inquiry = { status: 'in_progress', type: 'viewing', viewing: { confirmedAt: new Date().toISOString() }, replies: [], messages: [{ direction: 'in' }] };
+    assert.equal(bot.awaitingReply(inquiry), false);
+  });
+
+  test('обращение, начатое самим менеджером, ответа не ждёт', () => {
+    const inquiry = { status: 'in_progress', replies: [], messages: [{ direction: 'out' }] };
+    assert.equal(bot.awaitingReply(inquiry), false);
+  });
+
+  test('ответ менеджера из Telegram двигает этап «Новая» → «Связались»', async () => {
+    const chat = createChat();
+    await chat.say('Есть ли парковка?');
+    const inquiry = chat.inquiries[0];
+    assert.equal(inquiry.pipelineStage, 'new');
+    await adminSays('Да, парковка есть', { replyTo: notificationFor(chat.id) });
+    assert.equal(inquiry.pipelineStage, 'contact');
+    assert.equal(bot.awaitingReply(inquiry), false, 'после ответа клиент не ждёт');
+
+    // Этап дальше «Связались» ответ не трогает.
+    inquiry.pipelineStage = 'negotiation';
+    await chat.say('А цена?');
+    await adminSays('Цена в карточке', { replyTo: notificationFor(chat.id) });
+    assert.equal(inquiry.pipelineStage, 'negotiation');
+  });
+
+  test('«Открыть снова» снимает «Выиграно» и «Проиграно»', async () => {
+    const chat = createChat();
+    await chat.say('Хочу купить дом');
+    const inquiry = chat.inquiries[0];
+    inquiry.pipelineStage = 'won';
+    inquiry.status = 'closed';
+    await adminPress('inq:new:' + inquiry.id, 777);
+    assert.deepEqual([inquiry.status, inquiry.pipelineStage], ['new', 'new']);
+
+    inquiry.pipelineStage = 'lost';
+    inquiry.status = 'closed';
+    await adminPress('inq:in_progress:' + inquiry.id, 777);
+    assert.deepEqual([inquiry.status, inquiry.pipelineStage], ['in_progress', 'contact']);
+  });
+});

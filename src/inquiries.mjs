@@ -320,7 +320,15 @@ function awaitingReply(inquiry) {
   // The client searched on their own and got the catalog: nobody is waiting.
   if (inquiry.searchLead) return false;
   const replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
-  if (!replies.length) return inquiry.status === 'new';
+  if (!replies.length) {
+    if (inquiry.status === 'new') return true;
+    // «⏳ В работу» значит «я взял», а не «я ответил»: пока ответа не было,
+    // клиент всё ещё ждёт. Исключение — просмотр, записанный в свободное окно:
+    // он подтверждён сразу, и ответа от менеджера никто не ждёт.
+    const confirmedViewing = Boolean(inquiry.viewing && inquiry.viewing.confirmedAt);
+    const clientWrote = (Array.isArray(inquiry.messages) ? inquiry.messages : []).some((message) => message.direction === 'in');
+    return inquiry.status === 'in_progress' && clientWrote && !confirmedViewing;
+  }
   const lastReply = Math.max(...replies.map((reply) => Date.parse(reply.createdAt) || 0));
   return (Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0) > lastReply;
 }
@@ -411,6 +419,9 @@ async function handleInquiryStatusCallback(query, token) {
     inquiry.status = status;
     // "In progress" means "I take it".
     if (status === 'in_progress') inquiry.assignee = pressedBy.name;
+    // «Открыть снова» на выигранном или проигранном деле снимает этот итог,
+    // иначе заявка открыта, а этап всё ещё «Выиграно».
+    if (status !== 'closed' && ['won', 'lost'].includes(inquiry.pipelineStage)) inquiry.pipelineStage = status === 'new' ? 'new' : 'contact';
   }
   inquiry.updatedAt = new Date().toISOString();
   saveDataNow();
@@ -859,6 +870,9 @@ async function handleAdministratorReply(message, token) {
           replyToText: ((inquiry.messages || []).find((entry) => entry.direction === 'in' && Number(entry.telegramMessageId) === Number(target.sourceMessageId)) || {}).text || '',
         }));
         if (inquiry.status === 'new') inquiry.status = 'in_progress';
+        // Ответ менеджера из Telegram тоже двигает воронку «Новая» → «Связались»,
+        // как ответ из панели.
+        if (!inquiry.pipelineStage || inquiry.pipelineStage === 'new') inquiry.pipelineStage = 'contact';
         if (!inquiry.assignee) inquiry.assignee = adminChat.name;
         inquiry.updatedAt = new Date().toISOString();
       }
