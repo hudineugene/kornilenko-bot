@@ -77,7 +77,7 @@ test('версия 39: сохранённые прежние тексты уст
   const saved = bot.normalizeLoadedData({
     version: 38,
     config: { messages: {
-      ru: { help: '👋 Чем я могу помочь?\n\n❤️ Избранное — вернуться к сохранённым объектам\n📞 Позвоните мне — менеджер перезвонит', fallback: 'Спасибо' },
+      ru: { help: bot.previousHelpDefaults.ru },
       en: { help: 'Our own help text', fallback: 'Thank you! Your message has been received. A manager will reply in this chat.' },
       es: { fallback: '¡Gracias! Hemos recibido tu mensaje. Un gestor responderá en este chat.' },
     } },
@@ -115,6 +115,25 @@ test('версия 39: сохранённые прежние тексты уст
   // Миграция выполняется один раз: свежие данные версии 39 она не трогает.
   const again = bot.normalizeLoadedData({ version: 39, interfaceText: { menuLabels: { en: { contacts: '💬 Manager' } } } });
   assert.equal(effectiveTexts(again).menuLabels.en.contacts, '💬 Manager', 'то, что владелец задал после миграции, остаётся');
+});
+
+test('версия 39: помощь заменяется, только если она целиком равна прежней заводской; своя — остаётся, даже со старой строкой', () => {
+  const previous = bot.previousHelpDefaults;
+  const migrate = (help) => bot.normalizeLoadedData({ version: 38, config: { messages: { ru: { help }, en: { help: previous.en }, es: { help: previous.es } } } }).config.messages;
+
+  // Заводская помощь прежних версий заменяется нынешней.
+  const replaced = migrate(previous.ru);
+  assert.notEqual(replaced.ru.help, previous.ru, 'заводская прежняя заменена');
+  assert.match(replaced.ru.help, /💬 Связаться —/);
+  assert.notEqual(replaced.en.help, previous.en);
+  assert.notEqual(replaced.es.help, previous.es);
+
+  // Владелец переписал помощь по-своему, но оставил одну прежнюю строку, — это его текст.
+  const custom = 'Здравствуйте! Мы отвечаем с 9 до 19.\n\n❤️ Избранное — ваши сохранённые объекты\n\nПишите в любое время.';
+  assert.equal(migrate(custom).ru.help, custom, 'своя помощь не тронута');
+  // Заводская помощь, к которой владелец дописал свою строку, — уже его текст.
+  const extended = previous.ru + '\n\nЗвоните нам: +34 600 000 000';
+  assert.equal(migrate(extended).ru.help, extended, 'заводская с приписанной строкой — уже своя');
 });
 
 test('панель хранит только отличия от словаря, поэтому новые формулировки доходят до клиента', async () => {

@@ -280,11 +280,31 @@ function migrateDefaultTexts(messages) {
 // убираем строки, равные прежним или нынешним значениям по умолчанию; всё,
 // что владелец написал сам, остаётся. Прежняя подмена «агент → менеджер» при
 // загрузке (managerTerminology) убрана — она перекрывала словарь так же.
-const OBSOLETE_HELP_LINES = {
-  ru: ['❤️ Избранное —', '📞 Позвоните мне —', '🔥 Акции —'],
-  en: ['❤️ Favorites —', '📞 Call me back —', '🔥 Offers —'],
-  es: ['❤️ Favoritos —', '📞 Llámame —', '🔥 Promociones —'],
-};
+// Тексты помощи, которые бот сам записывал в прежних версиях (заводские значения
+// всех трёх языков), — по отпечаткам. Заменяется только помощь, ЦЕЛИКОМ равная
+// одному из них: раньше заменялась любая, где встречалась хотя бы одна прежняя
+// строка вроде «❤️ Избранное —», и правки владельца, оставившего эту строку рядом
+// со своими, пропадали.
+const OBSOLETE_HELP_HASHES = new Set([
+  'bd3bace420b2',
+  '786a39f7a115',
+  'a82a9493e102',
+  '60cf498acefe',
+  'b6da5ba6f618',
+  'a4f05a836c29',
+  'a19b9feb0d69',
+  'a815969e6310',
+  '778d6d9628f1',
+  '7251fec1b856',
+  '87f2e4278220',
+  '868cefb9d998',
+  '819bd0a718ae',
+  'b81345b512d7',
+  '55afec8125d1',
+  '830b95eb287a',
+  '44427f9107af',
+  'be206e3580cb',
+]);
 // Приветствие на английском и испанском было презентацией компании из четырёх
 // абзацев (350–400 знаков), а русское — короткое. Презентация живёт в «О
 // компании» (menu.*.about), приветствию она не нужна: клиент видит её вместе с
@@ -322,7 +342,7 @@ function migrateStaleTexts(interfaceText, messages) {
     const current = messages[language];
     if (!current) continue;
     const help = String(current.help || '');
-    if (OBSOLETE_HELP_LINES[language].some((line) => help.includes(line))) current.help = defaultData.config.messages[language].help;
+    if (help && OBSOLETE_HELP_HASHES.has(textFingerprint(help))) current.help = defaultData.config.messages[language].help;
     if (language !== 'ru' && OBSOLETE_GREETINGS[language] === String(current.greeting || '')) current.greeting = defaultData.config.messages[language].greeting;
     if (language !== 'ru' && OBSOLETE_FALLBACKS[language].includes(String(current.fallback || ''))) current.fallback = defaultData.config.messages[language].fallback;
   }
