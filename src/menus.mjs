@@ -164,20 +164,25 @@ async function sendMoreMenu(chatId, user, token) {
   await clearCatalogMessages(chatId, user, token);
   await sendUiMessage(chatId, user, copy.title + '\n\n' + copy.intro, token, {
     reply_markup: {
-      // Шесть строк вместо одиннадцати: избранное, сравнение, заявки,
-      // подписки (туда же ушёл сохранённый поиск), мои данные и служебный ряд.
-      // «Недавно просмотренные» убраны — клиент и так помнит, что смотрел, а
-      // список занимал строку в каждом заходе.
+      // Шесть рядов вместо десяти: избранное и сравнение, заявки и подписки, план покупки,
+      // «цель» с «Почему мы», служебный ряд из трёх коротких кнопок и главное меню.
+      // Подписи в парах короткие: Telegram делит ряд поровну и обрезает длинное.
       inline_keyboard: [
-        [{ text: labels.favorites + count(favorites), callback_data: 'catalog:favorites:0' }],
-        [{ text: (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).menuButton + count(comparison), callback_data: 'compare:view' }],
-        [{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton + count(requests), callback_data: 'myreq:list' }],
-        [{ text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).menuButton, callback_data: 'subs:menu' }],
+        [
+          { text: labels.favorites + count(favorites), callback_data: 'catalog:favorites:0' },
+          { text: (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).menuButton + count(comparison), callback_data: 'compare:view' },
+        ],
+        [
+          { text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton + count(requests), callback_data: 'myreq:list' },
+          { text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).menuButton, callback_data: 'subs:menu' },
+        ],
         planMenuRow(user, language),
-        goalMenuRow(language),
-        ...(trustButtonRow(language) ? [trustButtonRow(language)] : []),
-        [{ text: (PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).menuButton, callback_data: 'privacy:open' }],
-        [{ text: labels.help, callback_data: 'nav:help' }, { text: labels.language, callback_data: 'nav:language' }],
+        [...goalMenuRow(language), ...(trustButtonRow(language) || [])],
+        [
+          { text: (PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).menuButton, callback_data: 'privacy:open' },
+          { text: labels.help, callback_data: 'nav:help' },
+          { text: '🌐 ' + ({ ru: 'Язык', en: 'Language', es: 'Idioma' }[language] || 'Язык'), callback_data: 'nav:language' },
+        ],
         [{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }],
       ],
     },

@@ -160,3 +160,15 @@ test('«Подробнее», открытое не с карточки (пос�
   assert.ok(buttons.includes('property:viewing:details-x') && buttons.includes('property:manager:details-x'), 'есть «Записаться» и «Связаться»: ' + buttons.join(', '));
   assert.ok(buttons.includes('property:return:details-x'), 'и возврат к карточке');
 });
+
+test('«Моё» — не больше шести рядов; «Помощь», «Язык» и «Мои данные» в одном ряду, «цель» рядом с «Почему мы»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const chat = createChat();
+  const step = await chat.press('nav:my');
+  const rows = step.last.markup.inline_keyboard;
+  assert.ok(rows.length <= 6, 'рядов: ' + rows.length + ' — ' + rows.map((row) => row.map((button) => button.text).join(' | ')).join(' / '));
+  const flat = rows.flat().map((button) => button.callback_data);
+  for (const expected of ['catalog:favorites:0', 'compare:view', 'myreq:list', 'subs:menu', 'goal:menu', 'privacy:open', 'nav:help', 'nav:language', 'nav:menu']) assert.ok(flat.includes(expected), 'кнопка на месте: ' + expected);
+  const service = rows.find((row) => row.some((button) => button.callback_data === 'nav:help'));
+  assert.deepEqual(service.map((button) => button.callback_data), ['privacy:open', 'nav:help', 'nav:language']);
+});
