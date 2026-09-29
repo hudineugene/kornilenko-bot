@@ -55,13 +55,13 @@ async function renderWelcome(host) {
   host.innerHTML = '<div class="split"><div class="card"><header><h3>Приветствие и меню</h3></header><div class="card-body stack" id="welcomeForm">' +
       languageTabs() +
       '<div class="field"><label>Приветствие (/start)</label>' + LANGUAGES.map(function (language) {
-        return '<textarea data-tr="greeting" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-sm">' + esc((messages[language[0]] || {}).greeting || "") + "</textarea>";
+        return '<textarea data-tr="greeting" data-lang="' + language[0] + '" class="lang-input area-sm' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((messages[language[0]] || {}).greeting || "") + "</textarea>";
       }).join("") + '<div class="hint">{first_name} подставит имя клиента, {last_name} — фамилию, {username} — ник в Telegram.</div></div>' +
       '<div class="field"><label>Подсказка под приветствием</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-hint="text" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((hints[language[0]] || {}).text || "") + "</textarea>";
       }).join("") + '<div class="hint">Строку о том, сколько объектов в каталоге, бот добавляет сам. {example} подставит пример запроса из вашего каталога — «: Альтеа, 3 спальни, до 350 000 €»; если {example} не писать, бот ничего не подставит.</div></div>' +
       '<div class="field"><label>Помощь (/help)</label>' + LANGUAGES.map(function (language) {
-        return '<textarea data-tr="help" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-lg">' + esc((messages[language[0]] || {}).help || "") + "</textarea>";
+        return '<textarea data-tr="help" data-lang="' + language[0] + '" class="lang-input area-lg' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((messages[language[0]] || {}).help || "") + "</textarea>";
       }).join("") + "</div>" +
       '<div class="field"><label>Если бот не понял сообщение</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-tr="fallback" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((messages[language[0]] || {}).fallback || "") + "</textarea>";
@@ -255,7 +255,7 @@ function renderContacts(host) {
         return '<textarea data-tr="text" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((contacts.text || {})[language[0]] || "") + "</textarea>";
       }).join("") + "</div>" +
       '<div class="field"><label>О компании</label>' + LANGUAGES.map(function (language) {
-        return '<textarea data-about="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-lg">' + esc(((state.config.menu || {})[language[0]] || {}).about || "") + "</textarea>";
+        return '<textarea data-about="1" data-lang="' + language[0] + '" class="lang-input area-lg' + (language[0] === "ru" ? "" : " hidden") + '">' + esc(((state.config.menu || {})[language[0]] || {}).about || "") + "</textarea>";
       }).join("") + '<div class="hint">Открывается кнопкой «ℹ️ О компании» на этом же экране у клиента.</div></div>' +
       '<div class="field"><span class="field-label">Как купить в Испании</span>' +
         '<div class="hint">Пять коротких экранов для покупателя из другой страны. Клиент открывает их кнопкой «🇪🇸 Как купить в Испании» на этом же экране.</div>' +

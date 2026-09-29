@@ -178,7 +178,7 @@ function openCampaignEditor(id) {
       '<div class="editor-language"><div class="row wrap">' + languageTabs() + '<span class="hint">Сообщение для выбранного языка</span></div></div>' +
       '<details class="editor-section" open><summary><b>Сообщение</b><span>текст, изображение и кнопка</span></summary><div class="editor-section-body stack">' +
         '<div class="field"><label>Текст сообщения</label>' + LANGUAGES.map(function (language) {
-          return '<textarea data-tr="messages" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-lg" placeholder="Введите текст для ' + esc(language[1]) + '">' + esc((entry && entry.messages && entry.messages[language[0]]) || "") + "</textarea>";
+          return '<textarea data-tr="messages" data-lang="' + language[0] + '" class="lang-input area-lg' + (language[0] === "ru" ? "" : " hidden") + '" placeholder="Введите текст для ' + esc(language[1]) + '">' + esc((entry && entry.messages && entry.messages[language[0]]) || "") + "</textarea>";
         }).join("") + '<div class="hint">Подстановка <b>{first_name}</b> заменится именем клиента.</div></div>' +
         '<div class="grid cols-2"><div class="field"><label>Текст кнопки</label>' + LANGUAGES.map(function (language) {
           return '<input data-tr="buttonText" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc((entry && entry.buttonText && entry.buttonText[language[0]]) || "") + '" placeholder="Например: Посмотреть объект">';
@@ -347,7 +347,7 @@ function groupCan(group, right) {
 
 // Группу, где бот уже состоит, Telegram сам не покажет: подключаем по ID.
 function connectGroupCard(compact) {
-  return '<div class="card"' + (compact ? ' class="gap-bottom"' : "") + '><header><h3>Подключить группу или канал</h3></header><div class="card-body stack">' +
+  return '<div class="card' + (compact ? " gap-bottom" : "") + '"><header><h3>Подключить группу или канал</h3></header><div class="card-body stack">' +
     '<div class="row wrap"><input id="newGroupId" placeholder="-1001234567890 или @channel" class="field-xl">' +
     '<button class="btn secondary" id="connectGroup" type="button">Подключить</button></div>' +
     '<div class="hint">Бот уже должен состоять там администратором. ID начинается с -100; у канала подойдёт и @имя. Новую группу или канал, куда бота добавят позже, панель увидит сама.</div>' +
@@ -710,7 +710,7 @@ function renderGroupCard(host, group, mode) {
       return;
     }
     var signatureHtml = view.signature
-      ? '<div class="' + (view.quote ? "tg-quote" : "") + '" ' + (view.quote ? "" : 'class="gap-top"') + ">" +
+      ? '<div class="' + (view.quote ? "tg-quote" : "gap-top") + '">' +
         (view.divider ? esc(view.divider) + "\n" : "") + linkedPreview(view.signature) + "</div>"
       : "";
     var textHtml = (view.body || signatureHtml)
@@ -1047,7 +1047,7 @@ function renderPostStyle(host) {
           '<b>Над текстом</b> — плашка становится картинкой поста, текст под ней.</p>' +
         '<div id="plateSizes" class="hint"></div>' +
         (rubrics.length ? rubrics.map(function (rubric, index) {
-          return '<div class="row wrap" data-rubric="' + index + '" class="divided">' +
+          return '<div class="row wrap divided" data-rubric="' + index + '">' +
             (rubric.pendingImage ? '<img class="thumb thumb-sm" src="' + rubric.pendingImage + '" alt="">' : rubric.image && rubric.image.exists ? '<img class="thumb thumb-sm" src="/api/media/rubrics/' + encodeURIComponent(rubric.id) + "?rev=" + encodeURIComponent(rubric.image.updatedAt || "") + '" alt="">' : '<span class="thumb thumb-sm"></span>') +
             '<input data-field="name" value="' + esc(rubric.name || "") + '" placeholder="Название рубрики" class="field-lg">' +
             '<select data-field="placement" class="field-lg">' +
@@ -1095,7 +1095,7 @@ function renderPostStyle(host) {
       var tooLong = visible.filter(function (button) { return [...button.text].length > limit; });
       box.innerHTML = (visible.map(function (button) {
         var long = [...button.text].length > limit;
-        return '<span class="chip ' + (long ? "warn" : "brand") + '" class="pad-sm">' + esc(button.text) + "</span>";
+        return '<span class="chip ' + (long ? "warn" : "brand") + ' pad-sm">' + esc(button.text) + "</span>";
       }).join("") || '<span class="muted small">кнопок нет</span>') +
         (tooLong.length ? '<div class="hint warn-line">При ' + perRow + ' кнопках в ряд на телефоне помещается около ' + limit + ' знаков — подписи длиннее обрежутся многоточием. Уменьшите число кнопок в ряд или сократите названия.</div>' : "");
     };

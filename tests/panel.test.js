@@ -732,3 +732,14 @@ test('набор токенов оформления: 22 цвета, четыр�
   const layers = Array.from(PANEL_CSS.matchAll(/z-index:([^;}]*)/g)).map((match) => match[1]).filter((value) => !/var\(--z-|calc\(var\(--z-/.test(value));
   assert.deepEqual(layers, ['4'], 'слои вне шкалы: ' + layers.join(', '));
 });
+
+test('в одном теге разметки один атрибут class: второй браузер молча отбрасывает', async () => {
+  // Раньше у восьми тегов было по два class="…": `area-lg`, `gap-bottom`, `divided`, `pad-sm`
+  // не применялись никогда, и никто этого не замечал.
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const doubled = [];
+  for (const match of PANEL_HTML.matchAll(/<[a-zA-Z][a-zA-Z0-9]*\b(?:[^<>]|\\")*?>/g)) {
+    if ((match[0].match(/\sclass=/g) || []).length > 1) doubled.push(match[0].slice(0, 90));
+  }
+  assert.deepEqual(doubled, [], 'теги с двумя class=: ' + doubled.join(' | '));
+});
