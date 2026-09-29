@@ -335,6 +335,19 @@ test('the Spanish and English wording matches how agencies actually speak', () =
   assert.equal(bot.menuItemForText('💬 Contact a manager', 'en'), 'contacts');
 });
 
+test('язык меняют названием языка, а не страной или кодом', () => {
+  for (const [word, language] of [['Русский', 'ru'], ['English', 'en'], ['Español', 'es'], ['испанский', 'es'], ['🇪🇸', 'es']]) {
+    assert.equal(bot.languageFromText(word, { exact: true }), language, word);
+  }
+  // Страна и короткий код — это место поиска или обычное слово, а не смена языка.
+  for (const word of ['Испания', 'Россия', 'es', 'en', 'ru', 'ES', 'eng', 'spa', 'rus']) {
+    assert.equal(bot.languageFromText(word, { exact: true }), '', word);
+    assert.equal(bot.languageFromText(word), '', word + ' (язык ещё не выбран)');
+  }
+  assert.equal(bot.languageFromText('en Marbella'), '', 'испанское «en» — это «в»');
+  assert.equal(bot.languageFromText('es bonito'), '', 'испанское «es» — это «есть»');
+});
+
 test('кнопка «Связаться» узнаётся под всеми прежними названиями', () => {
   // Клиент, не обновивший чат, нажимает то, что осталось у него на клавиатуре.
   for (const [label, language] of [['💬 Менеджер', 'ru'], ['💬 Manager', 'en'], ['💬 Agent', 'en'], ['💬 Gestor', 'es'], ['💬 Asesor', 'es']]) {

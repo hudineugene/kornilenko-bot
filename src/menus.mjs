@@ -58,12 +58,16 @@ function menuItemForText(text, language) {
 }
 
 // The picker is inline buttons, but people type the answer too: "Русский",
-// "English", "es", a flag. A typed name counts as a choice, so the picker is
+// "English", "Español", a flag. A typed name counts as a choice, so the picker is
 // not sent again and again.
+// Только названия самих языков и флаги. Названия стран («Испания», «Россия») и
+// короткие коды («es», «en», «ru») сюда не входят: «es» по-испански значит
+// «есть», «en» — «в», и клиент, написавший «en Marbella» или просто «Испания»
+// про место поиска, оказывался на другом языке интерфейса.
 const LANGUAGE_TEXT_ALIASES = {
-  ru: ['русский', 'руский', 'россия', 'russian', 'ru', 'rus', '🇷🇺'],
-  en: ['english', 'английский', 'англ', 'en', 'eng', '🇬🇧', '🇺🇸'],
-  es: ['español', 'espanol', 'espanol', 'испанский', 'испания', 'spanish', 'es', 'spa', '🇪🇸'],
+  ru: ['русский', 'руский', 'russian', '🇷🇺'],
+  en: ['english', 'английский', 'англ', '🇬🇧', '🇺🇸'],
+  es: ['español', 'espanol', 'испанский', 'spanish', '🇪🇸'],
 };
 
 function languageFromText(text, options = {}) {

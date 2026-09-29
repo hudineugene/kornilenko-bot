@@ -12,7 +12,7 @@ import { getData, loadData, looksEmpty, onSaveFailure, pruneOldSnapshots, replac
 import { recordError } from './analytics.mjs';
 import { eraseUserData, leadSourceFromPayload, normalizeUser, rebuildUserIndex, userByChatId, userById, userDataExport, userTraces } from './users.mjs';
 import { splitTelegramText, telegramRequest } from './telegram.mjs';
-import { configureBotCommands, menuItemForText } from './menus.mjs';
+import { configureBotCommands, languageFromText, menuItemForText } from './menus.mjs';
 import { formReminderDue, runFormReminders, viewingDateValue } from './forms.mjs';
 import { awaitingReply, createInquiry } from './inquiries.mjs';
 import { catalogFilterPanel, catalogRecords, contentButtons, objectCaption, objectCaptionHtml, propertyIdFromStartPayload, propertyPublicationIssues, recordImages, sourceFromStartPayload, propertyPublicationReadiness, propertyReadyForLanguage } from './catalog.mjs';
@@ -117,6 +117,7 @@ export {
   looksEmpty,
   loginAttempts,
   locationMatches,
+  languageFromText,
   menuItemForText,
   monthlyPayment,
   myRequestsView,

@@ -1531,3 +1531,14 @@ test('«💬 Менеджер» со старой клавиатуры откр�
   assert.ok(replies.length > 0, 'клиенту ответили');
   assert.ok(!/получен/i.test(replies.map((call) => call.body.text).join(' ')), 'ответ не «ваше сообщение получено»');
 });
+
+test('слово «Испания» или «es» не меняет язык клиента', async () => {
+  resetData();
+  const chat = createChat();
+  await chat.say(bot.text.menuLabels.ru.objects);
+  assert.equal(chat.user.preferredLanguage, 'ru');
+  for (const word of ['Испания', 'es', 'en']) {
+    await chat.say(word);
+    assert.equal(chat.user.preferredLanguage, 'ru', word + ' — не выбор языка');
+  }
+});
