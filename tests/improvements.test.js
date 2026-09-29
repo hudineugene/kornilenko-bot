@@ -715,7 +715,7 @@ test.describe('catalog filter', () => {
     await chat.press('cfilter:show');
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['rent-flat-2', 'rent-house-5']);
     const filterButton = cardMarkup().inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:open');
-    assert.equal(filterButton.text, FILTER.button + ' · 2');
+    assert.equal(filterButton.text, FILTER.button + ' ✓');
 
     await chat.say('Добрый день');
     assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2, city: '', district: '', minPrice: 0, maxPrice: 0, sort: '' }, 'kept after other messages');
@@ -792,7 +792,7 @@ test.describe('catalog filter', () => {
     assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => withoutCount(button.text).replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 1 200 €', 'до 2 000 €', 'до 3 000 €', '✎ ' + FILTER.customPrice]);
     await chat.press('cfilter:show');
     const filterButton = cardMarkup().inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:open');
-    assert.equal(filterButton.text, FILTER.button + ' · 2');
+    assert.equal(filterButton.text, FILTER.button + ' ✓');
 
     const english = createChat({ language: 'en' });
     english.user.catalogFilter = { city: 'Marbella' };
@@ -1608,4 +1608,15 @@ test('«message is not modified» — не сбой для любой правк
   } finally {
     global.fetch = working;
   }
+});
+
+test('клиент, застрявший в старой форме подбора, больше не получает «объект недоступен»', async () => {
+  resetData();
+  const chat = createChat();
+  await chat.say(bot.text.menuLabels.ru.objects);
+  chat.user.pendingAction = { type: 'property_selection', step: 'budget', createdAt: new Date().toISOString() };
+  const step = await chat.say('Здравствуйте, есть ли парковка?');
+  assert.equal(chat.user.pendingAction, null, 'висящее действие снято');
+  const texts = step.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id)).map((call) => call.body.text).join(' ');
+  assert.ok(!/уже недоступен/.test(texts), 'вопрос не принят за ответ старой формы');
 });

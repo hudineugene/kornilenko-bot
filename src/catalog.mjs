@@ -171,7 +171,9 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
   if (kind === 'property' && catalog && catalog.mode === 'all' && catalog.filter && catalog.filter.available) {
     const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
     const filterCount = catalog.filter.summary ? catalogFilterCriteriaCount(user && user.catalogFilter) : 0;
-    const filterRow = [{ text: shortenedText(copy.button, 24) + (filterCount ? ' · ' + filterCount : ''), callback_data: 'cfilter:open' }];
+    // Отметка, а не число: «Фильтр · 4» читалось как «4 объекта», а это было
+    // число заданных условий. Какие именно условия — видно в заголовке.
+    const filterRow = [{ text: shortenedText(copy.button, 24) + (filterCount ? ' ✓' : ''), callback_data: 'cfilter:open' }];
     if (catalog.filter.summary) filterRow.push({ text: mobileButtonText('💬', copy.sendToManager), callback_data: 'cfilter:manager' });
     rows.push(filterRow);
   }
@@ -192,14 +194,22 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
   return rows.length ? { inline_keyboard: rows } : null;
 }
 
+const START_PAYLOAD_LIMIT = 64;
+
 function propertyDeepLink(record, source = '') {
   const username = cleanText(data.bot && data.bot.username, 80).replace(/^@/, '');
   const id = cleanText(record && record.id, 100);
   if (!username || !/^[A-Za-z0-9_]{5,}$/.test(username) || !/^[A-Za-z0-9_-]{8,100}$/.test(id)) return '';
+  // Telegram принимает после ?start= не больше 64 знаков: длиннее — ссылка
+  // просто не открывается. Код объекта сокращать нельзя, поэтому такая ссылка
+  // невозможна, а метка источника занимает только то, что осталось.
+  const prefix = 'property_' + id;
+  if (prefix.length > START_PAYLOAD_LIMIT) return '';
   // Метка источника едет тем же адресом: Telegram отдаёт боту только одно
   // значение после ?start=, поэтому объект и метку разделяем двумя знаками
   // подчёркивания.
-  const label = cleanText(source, 40).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const room = START_PAYLOAD_LIMIT - prefix.length - '__src_'.length;
+  const label = room > 0 ? cleanText(source, 40).toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, room) : '';
   return 'https://t.me/' + username + '?start=property_' + id + (label ? '__src_' + label : '');
 }
 

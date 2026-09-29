@@ -161,6 +161,30 @@ test('объект публикуется в канал одним запрос�
   assert.equal(bot.propertyIdFromStartPayload('property_from-feed'), 'from-feed', 'прежние ссылки работают');
 });
 
+test('метка источника в ссылке на объект не выводит её за лимит Telegram в 64 знака', () => {
+  bot.getData().bot = { ...(bot.getData().bot || {}), username: 'kornilenko_bot' };
+  const start = (link) => link.split('?start=')[1];
+  const record = { id: 'villa-marbella-01' };
+
+  const short = bot.propertyDeepLink(record, 'channel');
+  assert.equal(start(short), 'property_villa-marbella-01__src_channel', 'короткая метка остаётся целой');
+
+  // Длинная метка обрезается так, чтобы вся ссылка уложилась в 64.
+  const long = bot.propertyDeepLink(record, 'a'.repeat(40));
+  assert.ok(start(long).length <= 64, 'длина после ?start=: ' + start(long).length);
+  assert.equal(bot.propertyIdFromStartPayload(start(long)), 'villa-marbella-01', 'ссылка по-прежнему открывает тот же объект');
+  assert.match(bot.sourceFromStartPayload(start(long)), /^a+$/, 'а метка читается');
+
+  // Когда код объекта почти съел лимит, метка отбрасывается, а ссылка остаётся рабочей.
+  const tight = { id: 'x'.repeat(50) };
+  const tightLink = bot.propertyDeepLink(tight, 'instagram');
+  assert.ok(start(tightLink).length <= 64);
+  assert.equal(bot.propertyIdFromStartPayload(start(tightLink)), 'x'.repeat(50));
+
+  // Код, который сам не помещается, ссылки не даёт: такая всё равно не открылась бы.
+  assert.equal(bot.propertyDeepLink({ id: 'y'.repeat(60) }, 'channel'), '');
+});
+
 test('фотографии загружаются один раз на все языки', async () => {
   const record = objectById('from-feed');
   // У объекта фотографии только в русском наборе.

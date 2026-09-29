@@ -962,7 +962,9 @@ function normalizeLoadedData(parsed) {
           page: Math.max(0, Number(user.catalogContext.page) || 0),
           propertyId: cleanText(user.catalogContext.propertyId, 100),
         } : { mode: 'all', page: 0, propertyId: '' },
-        pendingAction: user.pendingAction && typeof user.pendingAction === 'object' ? user.pendingAction : null,
+        // Форма подбора «property_selection» давно заменена мастером: клиент,
+        // застрявший в ней, не должен висеть с незавершённым действием.
+        pendingAction: user.pendingAction && typeof user.pendingAction === 'object' && user.pendingAction.type !== 'property_selection' ? user.pendingAction : null,
         expiredAction: user.expiredAction && typeof user.expiredAction === 'object' ? {
           type: cleanText(user.expiredAction.type, 40),
           propertyId: cleanText(user.expiredAction.propertyId, 100),

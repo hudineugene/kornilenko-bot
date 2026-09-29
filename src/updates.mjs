@@ -283,6 +283,12 @@ async function handleUpdate(update, token) {
       return;
     }
   }
+  // Старая форма подбора отменена: без этой проверки клиент, застрявший в ней,
+  // получал «объект недоступен» на любое сообщение до истечения срока действия.
+  if (user.pendingAction && user.pendingAction.type === 'property_selection') {
+    user.pendingAction = null;
+    scheduleSave();
+  }
   // Клиент может назвать язык словом вместо кнопки — например, когда бот
   // угадал язык неверно. Тому, у кого язык уже выбран, засчитываем только
   // точное «Русский», «English», «Español».
