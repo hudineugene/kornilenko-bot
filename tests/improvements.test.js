@@ -1097,12 +1097,22 @@ test.describe('catalog filter', () => {
     assert.deepEqual(chat.user.catalogFilter, { deal: 'sale', type: '', bedrooms: 0, city: 'Marbella', district: 'Golden Mile', minPrice: 0, maxPrice: 0, sort: 'asc' });
   });
 
-  test('typing a city changes only the city and keeps the other catalog choices', async () => {
+  test('typing a city keeps the other catalog choices while they still find something', async () => {
     withCatalog(catalog);
     const chat = createChat();
-    chat.user.catalogFilter = { deal: 'sale', type: 'apartment', bedrooms: 2, city: '', maxPrice: 250000, sort: 'desc' };
+    chat.user.catalogFilter = { deal: 'sale', type: 'apartment', bedrooms: 2, city: '', sort: 'desc' };
     await chat.say('Бенидорм');
-    assert.deepEqual(chat.user.catalogFilter, { deal: 'sale', type: 'apartment', bedrooms: 2, city: 'Бенидорм', district: '', minPrice: 0, maxPrice: 250000, sort: 'desc' });
+    assert.deepEqual(chat.user.catalogFilter, { deal: 'sale', type: 'apartment', bedrooms: 2, city: 'Бенидорм', district: '', minPrice: 0, maxPrice: 0, sort: 'desc' });
+  });
+
+  test('a city typed after a search that finds nothing in it starts a new search: the city alone, not «no properties match»', async () => {
+    withCatalog(catalog);
+    const chat = createChat();
+    // «Продажа, дом» — в каталоге таких нет: вместе с любым городом выдача пуста.
+    chat.user.catalogFilter = { deal: 'sale', type: 'house', bedrooms: 0, city: 'Финестрат' };
+    await chat.say('Бенидорм');
+    assert.deepEqual(chat.user.catalogFilter, { deal: '', type: '', bedrooms: 0, city: 'Бенидорм', district: '', minPrice: 0, maxPrice: 0, sort: '' }, 'фильтр заменён городом');
+    assert.ok(bot.catalogRecords(chat.user, 'all').length > 0, 'и клиент видит объекты Бенидорма');
   });
 
   test('favourites are never filtered', () => {

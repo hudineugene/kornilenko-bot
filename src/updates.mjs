@@ -578,8 +578,13 @@ async function handleUpdate(update, token) {
           return;
         }
         if (found && found.kind === 'city') {
-          // A city name alone: the catalog in that city, the filter can be reset.
+          // A city name alone: the catalog in that city. Choices made earlier (deal,
+          // type, budget) stay while they still find something. If the combination
+          // is empty («rent in Finestrat», then «Benidorm»), the client meant a new
+          // search: the filter is replaced by the city alone, not left to answer
+          // «nothing found» for a reason the client cannot see.
           user.catalogFilter = normalizedCatalogFilter({ ...(user.catalogFilter || {}), city: found.city, district: '' });
+          if (!catalogRecords(user, 'all').length) user.catalogFilter = normalizedCatalogFilter({ city: found.city });
           scheduleSave();
           void notifyAdministratorAction(user, 'Искал объекты в городе', found.city);
           await clearUiMessages(message.chat.id, user, token);
