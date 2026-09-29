@@ -494,7 +494,7 @@ test('карточка клиента объединяет профиль, ин�
   assert.match(PANEL_HTML, /id="clientContactTime"/);
   // Писать клиенту можно в одном месте — на экране переписки.
   assert.match(PANEL_HTML, /id="clientWrite"/);
-  assert.match(PANEL_HTML, /Открыть переписку/);
+  assert.match(PANEL_HTML, /Открыть диалог/);
   assert.ok(!/id="clientMessageText"/.test(PANEL_HTML), 'второй формы отправки в карточке больше нет');
 });
 
