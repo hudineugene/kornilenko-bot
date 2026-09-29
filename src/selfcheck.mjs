@@ -131,6 +131,17 @@ function folderSize(directory, budget = { files: 20000 }) {
   return total;
 }
 
+// «Сегодня» спрашивает самопроверку каждые 20 секунд, а обход папки бота — до 20 000
+// вызовов statSync. Размер папки за минуту почти не меняется: считаем не чаще раза в минуту.
+const FOLDER_SIZE_TTL_MS = 60000;
+let folderSizeCache = { folder: '', at: 0, size: 0 };
+function cachedFolderSize(folder, now = Date.now()) {
+  if (folderSizeCache.folder === folder && now - folderSizeCache.at < FOLDER_SIZE_TTL_MS) return folderSizeCache.size;
+  const size = folderSize(folder);
+  folderSizeCache = { folder, at: now, size };
+  return size;
+}
+
 function diskReport() {
   const folder = path.dirname(DATA_FILE);
   try {
@@ -138,7 +149,7 @@ function diskReport() {
     return {
       free: Number(stat.bsize) * Number(stat.bavail),
       total: Number(stat.bsize) * Number(stat.blocks),
-      used: folderSize(folder),
+      used: cachedFolderSize(folder),
     };
   } catch {
     return null;

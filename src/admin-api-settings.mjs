@@ -266,8 +266,13 @@ function refreshStaffCommands(previousChatIds = []) {
     if (before !== after && !(await passwordAccepted(req, res, body.currentPassword))) return;
     const adminChatId = cleanText(data.config.adminChatId, 40);
     const seen = new Set();
+    // Ответственный в заявке записан именем: два человека с одним именем не различить,
+    // и заявки одного попадали бы в «Мои» другого. Имя главного администратора — тоже занято.
+    const takenNames = new Set([(cleanText(body.adminName, 60) || 'Администратор').toLowerCase()]);
     for (const item of list) {
       const name = cleanText(item && item.name, 60);
+      if (name && takenNames.has(name.toLowerCase())) return json(res, 400, { error: 'Имя «' + name + '» уже занято: у каждого человека в команде своё имя' });
+      takenNames.add(name.toLowerCase());
       const chatId = cleanText(item && item.chatId, 40);
       if (!name) return json(res, 400, { error: 'Укажите имя каждого менеджера' });
       if (!/^-?\d{4,20}$/.test(chatId)) return json(res, 400, { error: 'Chat ID менеджера «' + name + '» должен состоять из цифр' });

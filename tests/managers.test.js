@@ -168,6 +168,11 @@ test('the panel saves the managers and checks their chats', async () => {
     assert.equal((await save({ managers: [{ name: 'Иван', chatId: 'abc' }] })).status, 400);
     assert.equal((await save({ managers: [{ name: 'Иван', chatId: ADMIN_CHAT }] })).status, 400, 'not the admin chat');
     assert.equal((await save({ managers: [{ name: 'Иван', chatId: '12345' }, { name: 'Пётр', chatId: '12345' }] })).status, 400, 'no duplicates');
+    // Ответственный хранится именем: два человека с одним именем не различить.
+    const sameName = await save({ adminName: 'Олег', managers: [{ name: 'Иван', chatId: '12345' }, { name: ' иван ', chatId: '54321' }] });
+    assert.equal(sameName.status, 400, 'two managers with one name');
+    assert.match((await sameName.json()).error, /уже занято/);
+    assert.equal((await save({ adminName: 'Олег', managers: [{ name: 'олег', chatId: '12345' }] })).status, 400, 'a manager cannot take the main admin name');
 
     data.config.managers[0].verifiedAt = '2026-09-18T10:00:00.000Z';
     assert.equal((await save({ adminName: 'Олег', managers: [{ name: 'Мария Л.', chatId: MANAGER_CHAT }, { name: 'Иван', chatId: '12345' }] })).status, 200);

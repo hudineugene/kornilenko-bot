@@ -80,3 +80,20 @@ test('отметка о предупреждении переживает пер
   const restored = bot.normalizeLoadedData({ version: 14, lastDiskWarningFor: '2026-09-27' });
   assert.equal(restored.lastDiskWarningFor, '2026-09-27');
 });
+
+test('размер папки бота считается не чаще раза в минуту: «Сегодня» спрашивает самопроверку каждые 20 секунд', async () => {
+  const { diskReport } = await import('../src/selfcheck.mjs');
+  freeSpace(40 * GB);
+  diskReport(); // первый раз — обход папки
+  const realStat = fs.statSync;
+  let calls = 0;
+  fs.statSync = (...args) => { calls += 1; return realStat(...args); };
+  try {
+    const again = diskReport();
+    diskReport();
+    assert.ok(again && again.used >= 0, 'отчёт есть');
+    assert.equal(calls, 0, 'повторный отчёт не обходит папку заново');
+  } finally {
+    fs.statSync = realStat;
+  }
+});

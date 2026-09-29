@@ -204,9 +204,23 @@ function securityHeaders(res) {
   res.setHeader('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
 }
 
+// «Accept-Encoding: gzip;q=0» — отказ, а не согласие; «*» — согласие; явное «gzip» сильнее «*».
+function requestAcceptsGzip(request) {
+  const header = String((request && request.headers && request.headers['accept-encoding']) || '');
+  let quality = null;
+  for (const part of header.split(',')) {
+    const [name, ...params] = part.trim().toLowerCase().split(';');
+    if (name !== 'gzip' && name !== 'x-gzip' && name !== '*') continue;
+    const q = params.map((item) => item.trim()).find((item) => item.startsWith('q='));
+    const value = q ? Number(q.slice(2)) : 1;
+    const quoted = Number.isFinite(value) ? value : 1;
+    if (name === '*') { if (quality === null) quality = quoted; } else quality = quoted;
+  }
+  return quality !== null && quality > 0;
+}
+
 function acceptsGzip(res) {
-  const request = res.req;
-  return Boolean(request && request.headers && /\bgzip\b/i.test(String(request.headers['accept-encoding'] || '')));
+  return requestAcceptsGzip(res.req);
 }
 
 // Крупные ответы (состояние панели — сотни килобайт) сжимаются, если браузер
@@ -263,7 +277,7 @@ function html(res, content, req = null) {
   securityHeaders(res);
   res.setHeader('content-security-policy', meta.csp);
   // Сжатая и обычная версии — разные ответы с разными отпечатками.
-  const zipped = Boolean(req && /\bgzip\b/i.test(String(req.headers['accept-encoding'] || '')));
+  const zipped = requestAcceptsGzip(req);
   const etag = zipped ? meta.etag.slice(0, -1) + '-gzip"' : meta.etag;
   res.setHeader('etag', etag);
   res.setHeader('vary', 'Accept-Encoding');
@@ -904,6 +918,7 @@ function safeState(session) {
 }
 
 export {
+  requestAcceptsGzip,
   ownPageRequest,
   DOWNLOAD_TICKET_MS,
   headerPassword,

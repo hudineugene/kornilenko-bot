@@ -3,7 +3,7 @@
 import { markMessageNotificationsRead } from './admin-notifications.mjs';
 import crypto from 'node:crypto';
 import { cleanText, localDayKey } from './util.mjs';
-import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAGES } from './data-format.mjs';
+import { CLIENT_NOTE_LIMIT, CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAGES } from './data-format.mjs';
 import { MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
@@ -179,7 +179,7 @@ async function handleClientsApi(req, res, url) {
     const user = userById(decodeURIComponent(userMatch[1]));
     if (!user) return json(res, 404, { error: 'Пользователь не найден' });
     const body = await readJson(req);
-    if (body.note != null) user.note = cleanText(body.note, 2000);
+    if (body.note != null) user.note = cleanText(body.note, CLIENT_NOTE_LIMIT);
     if (Array.isArray(body.tags)) user.tags = body.tags.map((tag) => cleanText(tag, 40)).filter(Boolean).slice(0, 20);
     if (body.contactName != null) user.contactName = cleanText(body.contactName, 120);
     if (body.phone != null) user.phone = cleanText(body.phone, 80);
@@ -535,14 +535,18 @@ async function handleClientsApi(req, res, url) {
     // (все проверки — выше, до первой правки).
     const owner = userById(inquiry.userId) || userByChatId(inquiry.chatId);
     if (body.note != null) {
-      if (owner) owner.note = cleanText(body.note, 2000);
-      else inquiry.note = cleanText(body.note, 2000);
+      if (owner) owner.note = cleanText(body.note, CLIENT_NOTE_LIMIT);
+      else inquiry.note = cleanText(body.note, CLIENT_NOTE_LIMIT);
     }
     if (owner && Array.isArray(body.tags)) owner.tags = body.tags.map((tag) => cleanText(tag, 40)).filter(Boolean).slice(0, 20);
     if (assignee != null) inquiry.assignee = assignee;
     inquiry.updatedAt = new Date().toISOString();
     // Дата сделки: ставится один раз, когда обращение стало «Сделкой», и снимается, если его вернули в работу.
-    if (inquiry.pipelineStage === 'won' && !wasWon) inquiry.wonAt = inquiry.updatedAt;
+    // «Вернуть» смены этапа присылает прежнюю дату сделки: старая сделка не переезжает в
+    // текущую неделю отчёта. Принимаем её только как дату в прошлом, не позже «сейчас».
+    const restoredWonAt = Date.parse(String(body.wonAt || ''));
+    const keptWonAt = Number.isFinite(restoredWonAt) && restoredWonAt <= Date.now() ? new Date(restoredWonAt).toISOString() : '';
+    if (inquiry.pipelineStage === 'won' && !wasWon) inquiry.wonAt = keptWonAt || inquiry.updatedAt;
     else if (inquiry.pipelineStage !== 'won') inquiry.wonAt = '';
     saveDataNow();
     return json(res, 200, { ok: true });

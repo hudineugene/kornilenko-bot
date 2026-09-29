@@ -118,3 +118,20 @@ test.describe('токен защиты отдельно', () => {
     assert.equal(response.status, 401);
   });
 });
+
+test('Accept-Encoding: «gzip;q=0» — отказ, а не согласие; «*» — согласие, явный отказ сильнее «*»', async () => {
+  const { requestAcceptsGzip } = await import('../src/admin-http.mjs');
+  const accepts = (header) => requestAcceptsGzip({ headers: header === undefined ? {} : { 'accept-encoding': header } });
+  assert.equal(accepts('gzip, deflate, br'), true);
+  assert.equal(accepts('deflate, gzip;q=0.8'), true);
+  assert.equal(accepts('gzip;q=0'), false, 'q=0 — браузер сжатие не принимает');
+  assert.equal(accepts('gzip;q=0.0, br'), false);
+  assert.equal(accepts('*'), true);
+  assert.equal(accepts('*;q=0'), false);
+  assert.equal(accepts('gzip;q=0, *'), false, 'явный отказ от gzip сильнее «*»');
+  assert.equal(accepts('*;q=0, gzip'), true);
+  assert.equal(accepts('br, deflate'), false);
+  assert.equal(accepts(''), false);
+  assert.equal(accepts(undefined), false);
+  assert.equal(requestAcceptsGzip(null), false);
+});

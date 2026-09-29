@@ -114,6 +114,29 @@ test.describe('дата сделки', () => {
     assert.equal(inquiry().wonAt, '', 'вернули в работу — сделки нет');
   });
 
+  test('«Вернуть» смены этапа возвращает прежнюю дату сделки, а не сегодняшнюю', async () => {
+    await login();
+    const patch = (body) => realFetch(base + '/api/inquiries/q6', { method: 'PATCH', headers, body: JSON.stringify(body) });
+    const inquiry = () => bot.getData().inquiries.find((item) => item.id === 'q6');
+    const wonDate = new Date(Date.now() - 20 * 86400000).toISOString();
+    inquiry().pipelineStage = 'won';
+    inquiry().status = 'closed';
+    inquiry().wonAt = wonDate;
+    // Ошибочно сдвинули этап — дата сделки снялась.
+    assert.equal((await patch({ pipelineStage: 'negotiation' })).status, 200);
+    assert.equal(inquiry().wonAt, '');
+    // «Вернуть»: панель присылает прежний этап вместе с прежней датой.
+    assert.equal((await patch({ status: 'closed', pipelineStage: 'won', wonAt: wonDate })).status, 200);
+    assert.equal(inquiry().wonAt, wonDate, 'старая сделка осталась в своей неделе отчёта');
+    // Дата из будущего или мусор — не принимаются: ставится «сейчас».
+    assert.equal((await patch({ pipelineStage: 'negotiation' })).status, 200);
+    assert.equal((await patch({ pipelineStage: 'won', wonAt: new Date(Date.now() + 5 * 86400000).toISOString() })).status, 200);
+    assert.ok(Date.parse(inquiry().wonAt) <= Date.now(), 'дата из будущего не принята');
+    assert.equal((await patch({ pipelineStage: 'negotiation' })).status, 200);
+    assert.equal((await patch({ pipelineStage: 'won', wonAt: 'вчера' })).status, 200);
+    assert.ok(Date.parse(inquiry().wonAt) > Date.now() - 60000, 'мусор вместо даты — ставится сегодняшняя');
+  });
+
   test('миграция v43: у прежних сделок дата проставляется один раз и дальше не двигается', () => {
     // Сделки, записанные до появления wonAt, считались по updatedAt, а любая правка
     // заметки двигала эту дату — и сделка уезжала в другую неделю отчёта.

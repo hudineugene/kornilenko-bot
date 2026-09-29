@@ -1009,13 +1009,18 @@ function normalizeTrust(value) {
 // Заметки по заявкам переезжают в заметку клиента строкой «По заявке от ДД.ММ: …»
 // (что уже есть в заметке — не повторяем). Не помещается в 2000 знаков — заметка
 // остаётся у заявки: терять написанное нельзя.
+// Заметка о клиенте — одна на все его заявки; в ней помещается около трёх страниц.
+const CLIENT_NOTE_LIMIT = 6000;
+
+// Порядок слияния — от старых заявок к новым; не поместилось в лимит — заметка остаётся у заявки.
 function mergeInquiryNotes(normalized) {
   const pad = (value) => String(value).padStart(2, '0');
-  for (const inquiry of normalized.inquiries) {
-    const note = cleanText(inquiry.note, 2000);
+  const oldestFirst = [...normalized.inquiries].sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
+  for (const inquiry of oldestFirst) {
+    const note = cleanText(inquiry.note, CLIENT_NOTE_LIMIT);
     const user = normalized.users[String(inquiry.userId)];
     if (!note || !user) continue;
-    const existing = cleanText(user.note, 2000);
+    const existing = cleanText(user.note, CLIENT_NOTE_LIMIT);
     if (existing.includes(note)) {
       inquiry.note = '';
       continue;
@@ -1023,7 +1028,7 @@ function mergeInquiryNotes(normalized) {
     const created = new Date(inquiry.createdAt);
     const label = Number.isFinite(created.getTime()) ? ' от ' + pad(created.getDate()) + '.' + pad(created.getMonth() + 1) : '';
     const merged = (existing ? existing + '\n\n' : '') + 'По заявке' + label + ': ' + note;
-    if (merged.length > 2000) continue;
+    if (merged.length > CLIENT_NOTE_LIMIT) continue;
     user.note = merged;
     inquiry.note = '';
   }
@@ -1185,7 +1190,7 @@ function normalizeLoadedData(parsed) {
         phone: cleanText(user.phone, 80),
         preferredContactTime: cleanText(user.preferredContactTime, 160),
         tags: Array.isArray(user.tags) ? user.tags.map((tag) => cleanText(tag, 40)).filter(Boolean).slice(0, 20) : [],
-        note: cleanText(user.note, 2000),
+        note: cleanText(user.note, CLIENT_NOTE_LIMIT),
         favorites: Array.isArray(user.favorites) ? user.favorites.map(String).slice(0, 500) : [],
         comparisonIds: Array.isArray(user.comparisonIds)
           ? user.comparisonIds.map(String).filter((value, index, values) => value && values.indexOf(value) === index).slice(0, 3)
@@ -1279,7 +1284,7 @@ function normalizeLoadedData(parsed) {
       text: cleanText(item.text, 4000),
       status: ['new', 'in_progress', 'closed'].includes(item.status) ? item.status : 'new',
       pipelineStage: normalizePipelineStage(item.pipelineStage, item),
-      note: cleanText(item.note, 2000),
+      note: cleanText(item.note, CLIENT_NOTE_LIMIT),
       type: ['question', 'interest', 'selection', 'viewing', 'lead', 'general'].includes(item.type) ? item.type : 'general',
       propertyId: cleanText(item.propertyId, 100),
       sourceMessageId: Number.isFinite(Number(item.sourceMessageId)) ? Number(item.sourceMessageId) : null,
@@ -1457,6 +1462,7 @@ function normalizeLoadedData(parsed) {
 }
 
 export {
+  CLIENT_NOTE_LIMIT,
   CLOCK_TIME_PATTERN,
   DEFAULT_BUY_PLAN,
   normalizeBuyPlan,

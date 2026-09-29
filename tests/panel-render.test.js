@@ -3137,6 +3137,16 @@ test('«Вернуть»: смена этапа, закрытие заявки, 
   assert.deepEqual(bodyOf('PATCH', '/api/inquiries/inq-olga').body, { status: 'new', pipelineStage: 'new' }, 'вернулись и статус, и этап');
   assert.match(last().message, /Возвращено/);
 
+  // Сделку сдвинули с «Сделки» — «Вернуть» несёт и прежнюю дату сделки.
+  const won = { ...item, pipelineStage: 'won', status: 'closed', wonAt: '2026-09-01T10:00:00.000Z' };
+  sandbox.state.inquiries.push(won);
+  won.id = 'inq-won';
+  requests.length = 0;
+  await sandbox.changeStageWithUndo(won, 'contact');
+  requests.length = 0;
+  await last().action.run();
+  assert.deepEqual(bodyOf('PATCH', '/api/inquiries/inq-won').body, { status: 'closed', pipelineStage: 'won', wonAt: '2026-09-01T10:00:00.000Z' }, 'дата сделки едет обратно вместе с этапом');
+
   // Закрытие заявки в панели сопровождения — тем же образом; правка одной заметки «Вернуть» не предлагает.
   sandbox.selectConversation('inq-olga');
   const host = fakeElement('main');

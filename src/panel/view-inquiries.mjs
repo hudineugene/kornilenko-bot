@@ -280,12 +280,14 @@ function pipelineStageOf(item) {
 // Смена этапа с «Вернуть»: запоминаем статус и этап, какими они были, и кнопка в
 // уведомлении возвращает оба (закрытие сделки закрывает и заявку).
 function inquiryStateBefore(item) {
-  return { status: item.status, pipelineStage: item.pipelineStage || "" };
+  return { status: item.status, pipelineStage: item.pipelineStage || "", wonAt: item.wonAt || "" };
 }
 
 async function restoreInquiryState(id, before) {
   try {
-    await send("/api/inquiries/" + encodeURIComponent(id), "PATCH", { status: before.status, pipelineStage: before.pipelineStage });
+    var body = { status: before.status, pipelineStage: before.pipelineStage };
+    if (before.wonAt) body.wonAt = before.wonAt;
+    await send("/api/inquiries/" + encodeURIComponent(id), "PATCH", body);
     toast("Возвращено");
     await reload();
   } catch (error) { fail(error); }

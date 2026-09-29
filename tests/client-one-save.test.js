@@ -78,8 +78,8 @@ test.describe('один запрос', () => {
   });
 
   test('пустая заметка стирает заметку клиента; слишком длинная обрезается', async () => {
-    await patch({ note: 'x'.repeat(3000) });
-    assert.equal(user().note.length, 2000);
+    await patch({ note: 'x'.repeat(7000) });
+    assert.equal(user().note.length, 6000);
     await patch({ note: '' });
     assert.equal(user().note, '');
   });
@@ -114,14 +114,34 @@ test.describe('одна заметка', () => {
     assert.equal(again.users['1'].note, migrated.users['1'].note);
   });
 
-  test('не помещается в 2000 знаков — заметка остаётся у заявки, а не обрезается', () => {
+  test('не помещается в лимит (6000 знаков) — заметка остаётся у заявки, а не обрезается', () => {
     const migrated = bot.normalizeLoadedData({
       version: 46,
-      users: { 1: { id: '1', chatId: 1, firstName: 'Анна', note: 'a'.repeat(1990) } },
+      users: { 1: { id: '1', chatId: 1, firstName: 'Анна', note: "a".repeat(5990) } },
       inquiries: [{ id: 'a', userId: '1', type: 'question', createdAt: '2026-09-10T10:00:00.000Z', note: 'Длинная важная заметка по заявке' }],
     });
-    assert.equal(migrated.users['1'].note.length, 1990);
+    assert.equal(migrated.users['1'].note.length, 5990);
     assert.equal(migrated.inquiries[0].note, 'Длинная важная заметка по заявке');
+  });
+
+  test('слияние идёт от старых заявок к новым, как бы они ни лежали в списке', () => {
+    const migrated = bot.normalizeLoadedData({
+      version: 46,
+      users: { 1: { id: '1', chatId: 1, firstName: 'Анна' } },
+      inquiries: [
+        { id: 'new', userId: '1', type: 'question', createdAt: '2026-09-20T10:00:00.000Z', note: 'Свежая заметка' },
+        { id: 'old', userId: '1', type: 'question', createdAt: '2026-09-10T10:00:00.000Z', note: 'Старая заметка' },
+      ],
+    });
+    const note = migrated.users['1'].note;
+    assert.ok(note.indexOf('Старая заметка') < note.indexOf('Свежая заметка'), 'старая раньше свежей: ' + note);
+  });
+
+  test('длинная заметка клиента (до 6000 знаков) сохраняется целиком', async () => {
+    const long = 'Просил не звонить утром. '.repeat(120);
+    assert.ok(long.length > 2000 && long.length <= 6000);
+    assert.equal((await patch({ note: long })).status, 200);
+    assert.equal(user().note.length, long.trim().length);
   });
 
   test('напоминание «пора связаться» берёт заметку клиента', async () => {
