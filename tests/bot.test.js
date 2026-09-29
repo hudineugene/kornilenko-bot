@@ -768,3 +768,20 @@ test('вычитка EN/ES: британское написание, «Beach», 
   assert.ok(!/Novedades y ofertas/.test(only(['subscriptions'], 'es')), 'одно название рассылки: «Novedades y promociones»');
   assert.ok(!/[Rr]eservar/.test(only(['propertyActions', 'viewingForm', 'myRequests'], 'es')), 'клиенту не предлагают «reservar» визит');
 });
+
+test('«/start» и «Помощь» на английском и испанском — без «manager/gestor» и без исчезнувших кнопок', async () => {
+  const { INTERFACE_TEXT_DEFAULTS: texts } = await import('../src/texts.mjs');
+  const fresh = bot.normalizeLoadedData({ version: 39 });
+  for (const [language, banned] of [['en', /\bmanager\b/i], ['es', /\bgestor\b/i]]) {
+    const messages = fresh.config.messages[language];
+    const screen = [messages.greeting, messages.help, messages.fallback, texts.menuHints[language].text].join('\n');
+    assert.ok(!banned.test(screen), language + ': нет слова ' + banned);
+    // Кнопки, которых в главном меню больше нет, в помощи не описаны.
+    assert.ok(!/❤️|🔥|📞/.test(messages.help), language + ': помощь не рассказывает про исчезнувшие кнопки');
+    // Зато названа настоящая кнопка связи и «Моё».
+    assert.ok(messages.help.includes(bot.text.menuLabels[language].contacts.replace(/^[^\p{L}]+/u, '')), language + ': в помощи — настоящая кнопка связи');
+    assert.ok(messages.help.includes(bot.text.menuLabels[language].more.replace(/^[^\p{L}]+/u, '')), language + ': и «Моё»');
+  }
+  const russian = fresh.config.messages.ru;
+  assert.ok(!/❤️|🔥|📞/.test(russian.help), 'ru: то же');
+});

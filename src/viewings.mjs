@@ -199,6 +199,19 @@ async function sendViewingConfirmation(inquiry, user, token = data.config.botTok
   // На онлайн-показ карта не нужна.
   const map = property && !(inquiry.viewing && inquiry.viewing.online) ? validHttpUrl(property.mapUrl) : '';
   const text = viewingDetailsText(inquiry, property, language, options.heading || copy.confirmed, copy.confirmedFooter);
+  // Запись кнопками шла в одном сообщении — итог заменяет его же, а не
+  // добавляется четвёртым. Если изменить не получилось, шлём новым.
+  if (options.editMessageId) {
+    const rows = [];
+    if (map) rows.push([{ text: copy.openMap, url: map }]);
+    rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton, callback_data: 'myreq:list' }]);
+    try {
+      await telegramRequest(token, 'editMessageText', { chat_id: user.chatId, message_id: options.editMessageId, text, reply_markup: { inline_keyboard: rows } });
+      return { message_id: options.editMessageId };
+    } catch {
+      // ниже отправим обычным сообщением
+    }
+  }
   // Сразу после записи клиенту важнее вернуть главное меню, чем показать две
   // кнопки: карта уходит ссылкой в текст, «Мои заявки» названы в подписи.
   if (options.keyboard) {

@@ -5,8 +5,8 @@ import { cleanText } from './util.mjs';
 import { CATALOG_FILTER_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, PRIVACY_TEXT, MANAGER_CONTACT_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
-import { markUnavailable } from './users.mjs';
-import { sendMessage } from './telegram.mjs';
+import { markUnavailable, normalizeUser } from './users.mjs';
+import { sendMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard, sendMainMenu } from './menus.mjs';
 import { createInquiry } from './inquiries.mjs';
 import { localizedExact, publishedCatalog, sendCatalogPage, sendUiMessage, showCatalogPricePrompt, startCatalogPriceInput } from './catalog.mjs';
@@ -572,17 +572,28 @@ function viewingKeyboard(language, step, pending = null) {
   return optionReplyKeyboard([], copy.cancel, step === 'custom_time' ? copy.askCustomTime : copy.askCustom);
 }
 
+// Те же варианты ответа, но кнопками под сообщением: вся запись идёт в одном
+// сообщении, которое меняется на месте. Нажатие равно набранной подписи, поэтому
+// вся проверка ответа общая и для кнопок, и для набранного текста.
+function viewingInlineRows(language, step, pending) {
+  const rows = viewingKeyboard(language, step, pending).keyboard;
+  let index = 0;
+  return rows.map((row) => row.map((button) => ({ text: button.text, callback_data: 'vf:' + step + ':' + (index++) })));
+}
+
 function viewingReviewText(copy, property, pending, language) {
   const labels = copy.reviewLabels;
   const title = localizedExact(property && property.title, language) || (property && property.reference) || '';
   return [copy.review, '', labels[0] + ': ' + title, labels[1] + ': ' + cleanText(pending.data.date, 160), labels[2] + ': ' + cleanText(pending.data.time, 160)].join('\n');
 }
 
-async function sendViewingReview(user, pending, property, token, language) {
+async function sendViewingReview(user, pending, property, token, language, say = null) {
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
   pending.step = 'confirm';
   scheduleSave();
-  await sendMessage(user.chatId, viewingReviewText(copy, property, pending, language), token, { reply_markup: viewingKeyboard(language, 'confirm', pending) });
+  const text = viewingReviewText(copy, property, pending, language);
+  if (say) return say(text, 'confirm');
+  await sendMessage(user.chatId, text, token, { reply_markup: viewingKeyboard(language, 'confirm', pending) });
 }
 
 // Slot mode only when there is something to choose from.
@@ -597,7 +608,13 @@ async function startViewingForm(user, record, token) {
   user.pendingAction = pending;
   scheduleSave();
   const title = localizedExact(record.title, language) || record.reference || '';
-  await sendMessage(user.chatId, [title ? '🏠 ' + title : '', copy.askDate].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, 'date', pending) });
+  // Первый вопрос — кнопками под сообщением, а не сменой всей клавиатуры чата:
+  // день, время и итог потом меняют это же сообщение.
+  const sent = await sendMessage(user.chatId, [title ? '🏠 ' + title : '', copy.askDate].filter(Boolean).join('\n\n'), token, { reply_markup: { inline_keyboard: viewingInlineRows(language, 'date', pending) } });
+  if (sent && sent.message_id) {
+    pending.inlineMessageId = Number(sent.message_id);
+    scheduleSave();
+  }
 }
 
 // Ответ с клавиатуры приходит буква в букву, а написанный от руки — как
@@ -684,7 +701,7 @@ function invalidWithOptions(copy, options) {
   return list.length ? copy.invalid + '\n\n' + list.join(' · ') : copy.invalid;
 }
 
-async function handleViewingFormMessage(message, user, token) {
+async function handleViewingFormMessage(message, user, token, context = null) {
   const pending = user.pendingAction;
   if (!pending || pending.type !== 'viewing_form') return false;
   const language = user.preferredLanguage || 'ru';
@@ -692,16 +709,51 @@ async function handleViewingFormMessage(message, user, token) {
   const property = data.objects.find((item) => item.id === pending.propertyId && item.status === 'active');
   const text = typeof message.text === 'string' ? message.text.trim() : '';
   const keyboard = (step) => viewingKeyboard(language, step, pending);
+  // Ответ кнопкой меняет сообщение с вопросом; набранный текст, как и прежде,
+  // приходит новым сообщением с клавиатурой ответов.
+  const inline = context && context.inline ? context.inline : null;
+  const say = async (body, step) => {
+    if (inline) {
+      const markup = { inline_keyboard: viewingInlineRows(language, step, pending) };
+      try {
+        await telegramRequest(token, 'editMessageText', { chat_id: user.chatId, message_id: inline.messageId, text: body, reply_markup: markup });
+        return;
+      } catch (error) {
+        if (/message is not modified/i.test(String(error && error.message))) return;
+        // Сообщение уже не изменить: шлём вопрос заново и дальше меняем новое.
+        const sent = await sendMessage(user.chatId, body, token, { reply_markup: markup });
+        if (sent && sent.message_id) {
+          pending.inlineMessageId = Number(sent.message_id);
+          inline.messageId = pending.inlineMessageId;
+          scheduleSave();
+        }
+        return;
+      }
+    }
+    await sendMessage(user.chatId, body, token, { reply_markup: keyboard(step) });
+  };
+  // Конец записи: сообщение остаётся итогом, без кнопок; главное меню чата на месте.
+  const finish = async (body) => {
+    if (inline) {
+      try {
+        await telegramRequest(token, 'editMessageText', { chat_id: user.chatId, message_id: inline.messageId, text: body, reply_markup: { inline_keyboard: [] } });
+        return;
+      } catch {
+        // отправим обычным сообщением ниже
+      }
+    }
+    await sendMessage(user.chatId, body, token, { reply_markup: menuKeyboard(language) });
+  };
   if (!property) {
     user.pendingAction = null;
     scheduleSave();
-    await sendMessage(user.chatId, copy.unavailable, token, { reply_markup: menuKeyboard(language) });
+    await finish(copy.unavailable);
     return true;
   }
   if (text === copy.cancel) {
     user.pendingAction = null;
     scheduleSave();
-    await sendMessage(user.chatId, copy.cancelled, token, { reply_markup: menuKeyboard(language) });
+    await finish(copy.cancelled);
     return true;
   }
   pending.data = pending.data && typeof pending.data === 'object' ? pending.data : {};
@@ -715,7 +767,7 @@ async function handleViewingFormMessage(message, user, token) {
       pending.data.slotMode = false;
       pending.step = 'custom';
       scheduleSave();
-      await sendMessage(user.chatId, copy.onlineChosen + '\n\n' + copy.askCustom, token, { reply_markup: keyboard('custom') });
+      await say(copy.onlineChosen + '\n\n' + copy.askCustom, 'custom');
       return true;
     }
     const chosenDate = copy.dateOptions.includes(text) ? text : optionFromText(text, copy.dateOptions);
@@ -723,7 +775,7 @@ async function handleViewingFormMessage(message, user, token) {
       pending.data.slotMode = false;
       pending.step = 'custom';
       scheduleSave();
-      await sendMessage(user.chatId, copy.askCustom, token, { reply_markup: keyboard('custom') });
+      await say(copy.askCustom, 'custom');
       return true;
     }
     if (pending.data.slotMode) {
@@ -740,16 +792,16 @@ async function handleViewingFormMessage(message, user, token) {
           pending.data.date = text;
           pending.data.day = typedDay;
           pending.data.time = copy.asSpecified;
-          await sendViewingReview(user, pending, property, token, language);
+          await sendViewingReview(user, pending, property, token, language, say);
           return true;
         }
-        await sendMessage(user.chatId, invalidWithOptions(copy, days.map((item) => item.label).concat(copy.dateOptions[3])), token, { reply_markup: keyboard('date') });
+        await say(invalidWithOptions(copy, days.map((item) => item.label).concat(copy.dateOptions[3])), 'date');
         return true;
       }
       pending.data.day = day.key;
       pending.data.date = day.label;
       if (pending.editing === 'date' && day.times.includes(pending.data.time)) {
-        await sendViewingReview(user, pending, property, token, language);
+        await sendViewingReview(user, pending, property, token, language, say);
         return true;
       }
       pending.data.time = '';
@@ -763,10 +815,10 @@ async function handleViewingFormMessage(message, user, token) {
           pending.data.date = text;
           pending.data.day = typedDay;
           pending.data.time = copy.asSpecified;
-          await sendViewingReview(user, pending, property, token, language);
+          await sendViewingReview(user, pending, property, token, language, say);
           return true;
         }
-        await sendMessage(user.chatId, invalidWithOptions(copy, copy.dateOptions), token, { reply_markup: keyboard('date') });
+        await say(invalidWithOptions(copy, copy.dateOptions), 'date');
         return true;
       }
       pending.data.date = viewingDateValue(chosenDate, copy, language);
@@ -774,13 +826,13 @@ async function handleViewingFormMessage(message, user, token) {
       // "As specified" belonged to the free-text date that was just replaced.
       if (pending.data.time === copy.asSpecified) pending.data.time = '';
       if (pending.editing === 'date' && pending.data.time) {
-        await sendViewingReview(user, pending, property, token, language);
+        await sendViewingReview(user, pending, property, token, language, say);
         return true;
       }
     }
     pending.step = 'time';
     scheduleSave();
-    await sendMessage(user.chatId, copy.askTime, token, { reply_markup: keyboard('time') });
+    await say(copy.askTime, 'time');
     return true;
   }
   if (pending.step === 'time') {
@@ -790,7 +842,7 @@ async function handleViewingFormMessage(message, user, token) {
       pending.data.slotMode = false;
       pending.step = 'custom_time';
       scheduleSave();
-      await sendMessage(user.chatId, copy.askCustomTime, token, { reply_markup: keyboard('custom_time') });
+      await say(copy.askCustomTime, 'custom_time');
       return true;
     }
     if (!chosenTime) {
@@ -798,19 +850,19 @@ async function handleViewingFormMessage(message, user, token) {
       // оно не встанет, но менеджеру уйдёт как пожелание.
       if (!pending.data.slotMode && text.length >= 2 && /\d/.test(text)) {
         pending.data.time = text;
-        await sendViewingReview(user, pending, property, token, language);
+        await sendViewingReview(user, pending, property, token, language, say);
         return true;
       }
-      await sendMessage(user.chatId, invalidWithOptions(copy, times.concat(pending.data.slotMode ? [copy.timeOptions[3]] : [])), token, { reply_markup: keyboard('time') });
+      await say(invalidWithOptions(copy, times.concat(pending.data.slotMode ? [copy.timeOptions[3]] : [])), 'time');
       return true;
     }
     pending.data.time = chosenTime;
-    await sendViewingReview(user, pending, property, token, language);
+    await sendViewingReview(user, pending, property, token, language, say);
     return true;
   }
   if (pending.step === 'custom' || pending.step === 'custom_time') {
     if (text.length < 3) {
-      await sendMessage(user.chatId, copy.invalid, token, { reply_markup: keyboard(pending.step) });
+      await say(copy.invalid, pending.step);
       return true;
     }
     if (pending.step === 'custom') {
@@ -820,7 +872,7 @@ async function handleViewingFormMessage(message, user, token) {
     } else {
       pending.data.time = text;
     }
-    await sendViewingReview(user, pending, property, token, language);
+    await sendViewingReview(user, pending, property, token, language, say);
     return true;
   }
   if (pending.step === 'confirm') {
@@ -833,7 +885,7 @@ async function handleViewingFormMessage(message, user, token) {
       pending.editing = editStep;
       scheduleSave();
       const prompt = editStep === 'date' ? copy.askDate : copy.askTime;
-      await sendMessage(user.chatId, prompt, token, { reply_markup: keyboard(editStep) });
+      await say(prompt, editStep);
       return true;
     }
     if (text === copy.restart) {
@@ -842,11 +894,11 @@ async function handleViewingFormMessage(message, user, token) {
       pending.editing = '';
       pending.createdAt = new Date().toISOString();
       scheduleSave();
-      await sendMessage(user.chatId, copy.askDate, token, { reply_markup: keyboard('date') });
+      await say(copy.askDate, 'date');
       return true;
     }
     if (text !== copy.confirm) {
-      await sendMessage(user.chatId, viewingReviewText(copy, property, pending, language), token, { reply_markup: keyboard('confirm') });
+      await say(viewingReviewText(copy, property, pending, language), 'confirm');
       return true;
     }
     const slotBooking = Boolean(pending.data.slotMode && pending.data.day && pending.data.time);
@@ -858,7 +910,7 @@ async function handleViewingFormMessage(message, user, token) {
       pending.editing = '';
       pending.data = newViewingData(language);
       scheduleSave();
-      await sendMessage(user.chatId, taken ? copy.slotTaken : copy.slotGone, token, { reply_markup: keyboard('date') });
+      await say(taken ? copy.slotTaken : copy.slotGone, 'date');
       return true;
     }
     const details = [
@@ -875,7 +927,8 @@ async function handleViewingFormMessage(message, user, token) {
     const inquiry = createInquiry(user, details, {
       type: 'viewing',
       propertyId: property.id,
-      sourceMessage: message,
+      // Нажатие кнопки — не сообщение клиента: в переписку его копировать нечего.
+      sourceMessage: inline ? undefined : message,
       viewing,
       status: slotBooking ? 'in_progress' : 'new',
     });
@@ -885,16 +938,54 @@ async function handleViewingFormMessage(message, user, token) {
       // Подтверждение одно: заголовок «Готово» и сразу подробности. Клавиатуру
       // главного меню возвращаем этим же сообщением, а тем, чьего номера мы не
       // знаем, добавляем кнопку «Оставить номер».
+      if (inline) {
+        // Итог заменяет вопрос, а не идёт следом. Номер для дня показа просим
+        // отдельной короткой строкой только тому, чьего номера мы не знаем.
+        await sendViewingConfirmation(inquiry, user, token, { heading: copy.slotBooked, editMessageId: inline.messageId });
+        if (!knownLeadPhone(user)) await sendMessage(user.chatId, copy.sharePhoneForViewing, token, { reply_markup: viewingMenuKeyboard(language, user) });
+        return true;
+      }
       await sendViewingConfirmation(inquiry, user, token, {
         heading: copy.slotBooked,
         keyboard: viewingMenuKeyboard(language, user),
       });
       return true;
     }
+    if (inline) {
+      await finish(withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || ''), '📅 ' + cleanText(pending.data.date, 160) + ' · ' + cleanText(pending.data.time, 160)].filter(Boolean).join('\n\n'), language));
+      return true;
+    }
     await sendMessage(user.chatId, withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
     return true;
   }
   return false;
+}
+
+// Нажатие кнопки под вопросом записи. Кнопка соответствует подписи варианта
+// ответа на этом шаге; если шаг уже ушёл вперёд или вопрос не тот, что сейчас
+// открыт, нажатие устарело.
+async function handleViewingFormCallback(query, token) {
+  const [, step, indexText] = String(query.data || '').split(':');
+  const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
+  const user = normalizeUser(query.from, chatId, false);
+  const language = user.preferredLanguage || 'ru';
+  const stale = (INTERACTION_TEXT[language] || INTERACTION_TEXT.ru).stale;
+  const answer = (text) => telegramRequest(token, 'answerCallbackQuery', { callback_query_id: query.id, ...(text ? { text } : {}) }).catch(() => {});
+  const pending = user.pendingAction;
+  const messageId = Number(query.message && query.message.message_id);
+  if (!pending || pending.type !== 'viewing_form' || pending.step !== step || (pending.inlineMessageId && pending.inlineMessageId !== messageId)) {
+    await answer(stale);
+    return;
+  }
+  const labels = viewingKeyboard(language, step, pending).keyboard.flat().map((button) => button.text);
+  const text = labels[Number(indexText)];
+  if (!text) {
+    await answer(stale);
+    return;
+  }
+  await answer();
+  pending.inlineMessageId = messageId;
+  await handleViewingFormMessage({ text, chat: { id: chatId }, from: query.from }, user, token, { inline: { messageId } });
 }
 
 // Меню после записи на просмотр: у кого нет телефона — с кнопкой «Оставить
@@ -1047,6 +1138,7 @@ export {
   saveViewingPhone,
   startLeadEdit,
   startLeadForm,
+  handleViewingFormCallback,
   startViewingForm,
   unfinishedActionKeyboard,
   validLeadPhone,

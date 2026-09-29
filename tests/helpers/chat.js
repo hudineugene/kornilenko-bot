@@ -111,7 +111,10 @@ function createChat({ language = 'ru', firstName = 'Анна' } = {}) {
       messageId += 1;
       // The same button pressed twice within 1.4 s counts as a double click.
       if (this.user) this.user.lastCallback = null;
-      const message = options.card
+      // options.messageId — нажатие под конкретным сообщением бота (например, под вопросом записи).
+      const message = options.messageId
+        ? { message_id: options.messageId, date: now(), chat, text: 'сообщение бота' }
+        : options.card
         ? { message_id: 5000 + messageId, date: now(), chat, caption: options.caption || 'карточка объекта', photo: [{ file_id: 'photo-card' }] }
         : { message_id: 5000 + messageId, date: now(), chat, text: '' };
       return deliver({ callback_query: { id: 'cb' + updateId, from, data, message } }, userId);

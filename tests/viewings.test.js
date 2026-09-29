@@ -631,3 +631,81 @@ test('два менеджера жмут «Подтвердить» одновр
   assert.match(results.find((item) => item.status === 'rejected').reason.message, /уже подтверждается/);
   assert.equal(inquiry.replies.filter((item) => /Просмотр подтверждён/.test(item.text)).length, 1, 'и запись в переписке одна');
 });
+
+test.describe('запись кнопками идёт в одном сообщении', () => {
+  // Нажатие под тем самым сообщением бота, где задан вопрос.
+  const tap = (chat, index) => chat.press('vf:' + chat.user.pendingAction.step + ':' + index, { messageId: chat.user.pendingAction.inlineMessageId });
+  const editedText = (step) => step.calls.filter((call) => call.method === 'editMessageText').map((call) => call.body.text).pop();
+  const editedButtons = (step) => step.calls.filter((call) => call.method === 'editMessageText').pop().body.reply_markup.inline_keyboard.flat().map((button) => button.text);
+
+  test('день, время и итог меняют одно сообщение, новых сообщений нет', async () => {
+    const chat = createChat();
+    chat.user.phone = '+34600111222';
+    const start = await chat.press('property:viewing:villa-marbella-01');
+    assert.equal(start.replies.length, 1, 'один вопрос');
+    assert.ok(chat.user.pendingAction.inlineMessageId, 'сообщение запомнено');
+    assert.deepEqual(start.last.buttons, [...ru.dateOptions, ru.online, ru.cancel], 'варианты — кнопками под сообщением');
+    const messagesBefore = telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id)).length;
+
+    let step = await tap(chat, 1);
+    assert.equal(editedText(step), ru.askTime, 'вопрос про время — в том же сообщении');
+    assert.deepEqual(editedButtons(step).slice(0, 3), ru.timeOptions.slice(0, 3));
+    step = await tap(chat, 1);
+    assert.match(editedText(step), new RegExp(ru.review.slice(0, 12)), 'проверка записи — там же');
+    step = await tap(chat, 0);
+    assert.match(editedText(step), new RegExp(ru.success.slice(0, 20)), 'итог — тоже на месте вопроса');
+    assert.deepEqual(editedButtons(step), [], 'кнопки убраны');
+
+    const [inquiry] = chat.inquiries;
+    assert.equal(inquiry.type, 'viewing');
+    assert.equal(chat.user.pendingAction, null);
+    const messagesAfter = telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id)).length;
+    assert.equal(messagesAfter, messagesBefore, 'после первого вопроса бот не прислал ни одного нового сообщения');
+  });
+
+  test('запись в свободное окно: итог одним сообщением, номер просят отдельной строкой только без телефона', async () => {
+    bot.getData().config.viewingSlots = { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], times: ['10:00', '16:00'], daysAhead: 3, perSlot: 1 };
+    const chat = createChat();
+    await chat.press('property:viewing:villa-marbella-01');
+    await tap(chat, 0);
+    await tap(chat, 0);
+    const done = await tap(chat, 0);
+    assert.match(editedText(done), /^✅ Готово, вы записаны на просмотр!/, 'подтверждение — вместо вопроса');
+    assert.match(editedText(done), /📍 Адрес: Марбелья, Calle del Mar, 5/);
+    assert.equal(chat.inquiries[0].viewing.confirmedAt.length > 0, true, 'запись подтверждена сразу');
+    // Телефона нет — одна короткая просьба оставить номер, а не пересказ записи.
+    const asks = done.replies.filter((reply) => reply.text === ru.sharePhoneForViewing);
+    assert.equal(asks.length, 1);
+  });
+
+  test('отмена кнопкой закрывает то же сообщение; устаревшее нажатие не действует', async () => {
+    const chat = createChat();
+    await chat.press('property:viewing:villa-marbella-01');
+    const messageId = chat.user.pendingAction.inlineMessageId;
+
+    // Нажатие под чужим (старым) сообщением — «устарело», запись не двигается.
+    const old = await chat.press('vf:date:1', { messageId: messageId + 999 });
+    assert.equal(old.popups.length, 1);
+    assert.equal(chat.user.pendingAction.step, 'date');
+
+    // Кнопка шага, который уже прошёл, — тоже.
+    await tap(chat, 1);
+    const late = await chat.press('vf:date:1', { messageId });
+    assert.equal(late.popups.length, 1);
+    assert.equal(chat.user.pendingAction.step, 'time');
+
+    const cancelled = await tap(chat, 4);
+    assert.equal(editedText(cancelled), ru.cancelled);
+    assert.deepEqual(editedButtons(cancelled), []);
+    assert.equal(chat.user.pendingAction, null);
+    assert.equal(chat.inquiries.length, 0);
+  });
+
+  test('набранный текст по-прежнему работает: тот, кто пишет, а не нажимает, не остаётся без ответа', async () => {
+    const chat = createChat();
+    await chat.press('property:viewing:villa-marbella-01');
+    const typed = await chat.say(ru.dateOptions[1]);
+    assert.equal(typed.last.text, ru.askTime);
+    assert.deepEqual(typed.last.buttons.slice(0, 3), ru.timeOptions.slice(0, 3));
+  });
+});
