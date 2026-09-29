@@ -34,33 +34,48 @@ function renderConnection(host) {
     '<div class="card-body stack"><div class="field"><label for="adminName">Как зовут главного администратора</label><input id="adminName" value="' + esc(config.adminName || "") + '" placeholder="Администратор"></div>' +
     '<div id="managerList" class="stack"></div>' +
     '<div class="hint">Менеджер открывает бота, отправляет /myid и присылает номер. Заявки приходят всем, отвечает любой.</div>' +
-    '<div class="hint">Настройки чата администратора сохраняются кнопкой в полосе снизу.</div>' +
-    '<button class="btn secondary small" id="saveManagers" type="button">Сохранить менеджеров</button></div></div>' +
+    '<div class="hint">Всё на этом экране — чат администратора, имя, менеджеры — сохраняется одной кнопкой «Сохранить» в полосе снизу.</div></div></div>' +
   '</div></div>';
 
-  var watcher = watchForm(host.querySelector(".stack"), async function () {
+  var managers = (config.managers || []).slice();
+  // Один экран — одна полоса и одно сохранение. Раньше чат администратора
+  // сохранялся полосой снизу, а менеджеры — своей кнопкой, и правка одного не
+  // касалась другого.
+  var watcher = watchForm(host, async function () {
     var adminChatId = host.querySelector("#setAdminChat").value.trim();
-    var payload = Object.assign(settingsPayload(), {
-      adminChatId: adminChatId,
-      notifyMode: host.querySelector("#setNotify").value,
-      statusNotices: host.querySelector("#setStatusNotices").checked,
-      active: state.config.active,
-    });
-    // Смена чата администратора отдаёт заявки клиентов в другой Telegram-чат:
-    // спрашиваем текущий пароль.
-    if (adminChatId !== String(state.config.adminChatId || "")) {
-      var password = await askPassword("Сменить чат администратора?", "Заявки клиентов будут приходить в другой чат Telegram. Нужен текущий пароль панели.");
-      if (!password) throw new Error("Смена чата администратора отменена");
-      payload.currentPassword = password;
+    var notifyMode = host.querySelector("#setNotify").value;
+    var statusNotices = host.querySelector("#setStatusNotices").checked;
+    var next = managers.filter(function (manager) { return manager.name || manager.chatId; });
+    var adminName = host.querySelector("#adminName").value;
+    var settingsChanged = adminChatId !== String(state.config.adminChatId || "") || notifyMode !== (state.config.notifyMode === "all" ? "all" : "inquiries") || statusNotices !== (state.config.statusNotices !== false);
+    var chatChanged = adminChatId !== String(state.config.adminChatId || "");
+    var before = JSON.stringify((state.config.managers || []).map(function (manager) { return [manager.name, manager.chatId]; }));
+    var after = JSON.stringify(next.map(function (manager) { return [manager.name, manager.chatId]; }));
+    var managersChanged = before !== after;
+    var teamChanged = managersChanged || adminName !== String(state.config.adminName || "");
+    // Смена чата администратора отдаёт заявки в другой Telegram-чат, а менеджер
+    // получает заявки и отвечает от имени компании: спрашиваем текущий пароль —
+    // один раз на обе правки.
+    var password = "";
+    if (chatChanged || managersChanged) {
+      var reasons = [];
+      if (chatChanged) reasons.push("заявки клиентов будут приходить в другой чат Telegram");
+      if (managersChanged) reasons.push("менеджер получает заявки клиентов и отвечает от имени компании");
+      password = await askPassword(chatChanged && managersChanged ? "Сохранить чат и менеджеров?" : chatChanged ? "Сменить чат администратора?" : "Изменить список менеджеров?", "Нужен текущий пароль панели: " + reasons.join("; ") + ".");
+      if (!password) throw new Error("Сохранение отменено");
     }
-    await send("/api/settings", "PUT", payload);
-  }, "Настройки подключения изменены");
+    if (settingsChanged) {
+      var payload = Object.assign(settingsPayload(), { adminChatId: adminChatId, notifyMode: notifyMode, statusNotices: statusNotices, active: state.config.active });
+      if (chatChanged) payload.currentPassword = password;
+      await send("/api/settings", "PUT", payload);
+    }
+    if (teamChanged) await send("/api/managers", "PUT", { adminName: adminName, managers: next, currentPassword: password });
+  }, "Настройки команды изменены");
 
   host.querySelector("#testAdmin").onclick = async function () {
     try { await send("/api/admin-notification/test", "POST", { chatId: host.querySelector("#setAdminChat").value.trim() }); toast("Сообщение отправлено в Telegram"); await reload(); } catch (error) { fail(error); }
   };
 
-  var managers = (config.managers || []).slice();
   function drawManagers() {
     var list = host.querySelector("#managerList");
     list.innerHTML = managers.length ? managers.map(function (manager, index) {
@@ -70,7 +85,7 @@ function renderConnection(host) {
         '<button class="btn ghost small" data-drop="' + index + '" type="button">✕</button></div>';
     }).join("") : '<span class="muted small">Менеджеров нет — заявки приходят только администратору.</span>';
     list.querySelectorAll("[data-drop]").forEach(function (button) {
-      button.onclick = function () { managers.splice(Number(button.dataset.drop), 1); drawManagers(); };
+      button.onclick = function () { managers.splice(Number(button.dataset.drop), 1); drawManagers(); watcher.check(); };
     });
     list.querySelectorAll("[data-test]").forEach(function (button) {
       button.onclick = async function () {
@@ -85,23 +100,7 @@ function renderConnection(host) {
     });
   }
   drawManagers();
-  host.querySelector("#addManager").onclick = function () { managers.push({ name: "", chatId: "" }); drawManagers(); };
-  host.querySelector("#saveManagers").onclick = async function () {
-    // Пароль спрашиваем только когда список действительно меняется.
-    var next = managers.filter(function (manager) { return manager.name || manager.chatId; });
-    var before = JSON.stringify((state.config.managers || []).map(function (manager) { return [manager.name, manager.chatId]; }));
-    var after = JSON.stringify(next.map(function (manager) { return [manager.name, manager.chatId]; }));
-    var password = "";
-    if (before !== after) {
-      password = await askPassword("Изменить список менеджеров?", "Менеджер получает заявки клиентов и отвечает от имени компании. Нужен текущий пароль панели.");
-      if (!password) return;
-    }
-    try {
-      await send("/api/managers", "PUT", { adminName: host.querySelector("#adminName").value, managers: next, currentPassword: password });
-      toast("Менеджеры сохранены");
-      await reload();
-    } catch (error) { fail(error); }
-  };
+  host.querySelector("#addManager").onclick = function () { managers.push({ name: "", chatId: "" }); drawManagers(); watcher.check(); };
 }
 
 // «Подключение к Telegram» живёт в «Обслуживании»: токен бота, включение и

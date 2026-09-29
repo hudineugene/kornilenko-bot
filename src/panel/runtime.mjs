@@ -401,18 +401,47 @@ function bindMarkupToolbar(root) {
 }
 
 // Панель сохранения: форма сообщает, что изменилась и как сохраниться.
+// «Изменилась» — значит значения полей отличаются от тех, что были при показе
+// экрана: если значение вернули как было, полоса пропадает. Раньше она оставалась
+// до сохранения или отмены, и плашка «Настройки компании изменены» висела над
+// экраном, где ничего не менялось. Правки не из полей (выбранный файл, фото)
+// код объявляет сам через mark(): их сравнить с полями нельзя, и такая отметка
+// от возврата текста к прежнему не снимается.
+function formSignature(root) {
+  var parts = [];
+  Array.prototype.forEach.call(root.querySelectorAll("input, select, textarea"), function (field, index) {
+    if (field.type === "file") return;
+    parts.push((field.id || field.name || index) + "=" + (field.type === "checkbox" || field.type === "radio" ? (field.checked ? "1" : "0") : String(field.value)));
+  });
+  return parts.join("\u0001");
+}
+
 function watchForm(root, save, label) {
-  var changed = false;
-  function mark() {
-    if (changed) return;
-    changed = true;
+  var initial = null;
+  var forced = false;
+  function show() {
     dirtyForm = { save: save, root: root };
     el("savebarText").textContent = label || "Есть несохранённые изменения";
     el("savebar").classList.remove("hidden");
   }
-  root.addEventListener("input", mark);
-  root.addEventListener("change", mark);
-  return { mark: mark };
+  function hide() {
+    if (dirtyForm && dirtyForm.root === root) clearDirty();
+  }
+  // Первый снимок — после того, как экран дорисуется до конца: поля заполняют
+  // сразу за вызовом watchForm.
+  setTimeout(function () { if (initial === null) initial = formSignature(root); }, 0);
+  function check() {
+    if (initial === null) initial = formSignature(root);
+    if (forced || formSignature(root) !== initial) show();
+    else hide();
+  }
+  function mark() {
+    forced = true;
+    show();
+  }
+  root.addEventListener("input", check);
+  root.addEventListener("change", check);
+  return { mark: mark, check: check };
 }
 function clearDirty() { dirtyForm = null; el("savebar").classList.add("hidden"); }
 function isDirty() { return Boolean(dirtyForm); }

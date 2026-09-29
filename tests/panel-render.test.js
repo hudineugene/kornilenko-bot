@@ -730,6 +730,95 @@ test('«Объекты» и «База клиентов» на телефоне:
   }
 });
 
+test('полоса «Есть несохранённые изменения»: пропадает, когда значение вернули к исходному; правки не из полей её удерживают', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const listeners = {};
+  const inputs = [{ id: 'a', type: 'text', value: 'один' }, { id: 'b', type: 'checkbox', checked: false, value: 'on' }, { id: 'f', type: 'file', value: '' }];
+  const root = {
+    addEventListener(type, handler) { (listeners[type] = listeners[type] || []).push(handler); },
+    querySelectorAll: () => inputs,
+  };
+  const fire = (type) => (listeners[type] || []).forEach((handler) => handler({}));
+  const bar = sandbox.el('savebar');
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+  const watcher = sandbox.watchForm(root, async () => {}, 'Правки');
+  await tick();
+  assert.equal(sandbox.isDirty(), false, 'сначала ничего не изменено');
+
+  inputs[0].value = 'два';
+  fire('input');
+  assert.equal(sandbox.isDirty(), true, 'изменили — полоса есть');
+  assert.ok(!bar.classList.contains('hidden'));
+
+  inputs[0].value = 'один';
+  fire('input');
+  assert.equal(sandbox.isDirty(), false, 'вернули прежнее значение — полосы больше нет');
+  assert.ok(bar.classList.contains('hidden'));
+
+  // Флажок и повторная правка.
+  inputs[1].checked = true;
+  fire('change');
+  assert.equal(sandbox.isDirty(), true);
+  inputs[1].checked = false;
+  fire('change');
+  assert.equal(sandbox.isDirty(), false);
+
+  // Файл выбрали — значения полей не изменились, но изменение есть: код сообщает о нём сам.
+  watcher.mark();
+  assert.equal(sandbox.isDirty(), true);
+  inputs[0].value = 'три';
+  fire('input');
+  inputs[0].value = 'один';
+  fire('input');
+  assert.equal(sandbox.isDirty(), true, 'выбранное фото не пропадает от того, что текст вернули к прежнему');
+
+  // Поля добавились или убавились (строка менеджера) — это тоже изменение.
+  sandbox.clearDirty();
+  const second = sandbox.watchForm(root, async () => {}, 'Правки');
+  await tick();
+  inputs.push({ id: 'm', type: 'text', value: '' });
+  second.check();
+  assert.equal(sandbox.isDirty(), true, 'добавили строку — есть что сохранять');
+  inputs.pop();
+  second.check();
+  assert.equal(sandbox.isDirty(), false, 'убрали её же — сохранять нечего');
+});
+
+test('«Команда»: одна полоса сохранения на чат администратора и менеджеров, пароль спрашивается один раз', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.config.adminChatId = '111';
+    data.config.managers = [{ id: 'm1', name: 'Мария', chatId: '222', verifiedAt: '' }];
+  });
+  const { sandbox, requests } = await panelSandbox();
+  let save = null;
+  sandbox.watchForm = (root, callback) => { save = callback; return { mark() {}, check() {} }; };
+  let prompts = 0;
+  sandbox.askPassword = async () => { prompts += 1; return 'пароль-панели'; };
+
+  const host = fakeElement('main');
+  sandbox.renderConnection(host);
+  const html = String(host.innerHTML);
+  assert.ok(!html.includes('id="saveManagers"'), 'отдельной кнопки «Сохранить менеджеров» нет');
+  assert.match(html, /кнопкой «Сохранить» в полосе снизу/, 'сказано, как сохранить');
+  assert.ok(typeof save === 'function', 'форма следит за изменениями всего экрана');
+
+  // Изменились и чат, и список менеджеров: пароль один, запросов два.
+  host.querySelector('#setAdminChat').value = '999';
+  host.querySelector('#adminName').value = 'Олег';
+  sandbox.state.config.adminChatId = '111';
+  requests.length = 0;
+  await save();
+  assert.equal(prompts, 1, 'пароль спрошен один раз');
+  const settings = requests.find((request) => request.url === '/api/settings' && request.method === 'PUT');
+  const managers = requests.find((request) => request.url === '/api/managers' && request.method === 'PUT');
+  assert.ok(settings && managers, 'сохранились и настройки чата, и менеджеры');
+  assert.equal(settings.body.currentPassword, 'пароль-панели');
+  assert.equal(managers.body.currentPassword, 'пароль-панели');
+});
+
 test('карточка клиента: удаление данных — отдельным блоком в конце, а не красной кнопкой рядом с «Сохранить»', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();
@@ -1492,7 +1581,7 @@ test('технику убрали с рабочих экранов: токен �
     assert.ok(!teamHtml.includes(word), '«Команда» не показывает: ' + word);
   }
   assert.ok(teamHtml.includes('setAdminChat') && teamHtml.includes('addManager'), 'зато чат администратора и менеджеры на месте');
-  assert.ok(teamHtml.includes('сохраняются кнопкой в полосе снизу'), 'и подсказка про сохранение');
+  assert.ok(teamHtml.includes('одной кнопкой «Сохранить» в полосе снизу'), 'и подсказка про сохранение');
 
   // В «Обслуживании» появился экран «Подключение к Telegram» со всем этим.
   sandbox.serviceScreen = 'telegram';
@@ -1999,7 +2088,7 @@ test('двойное нажатие не открывает второе окн�
 test('подсказка про сохранение настроек говорит правду', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.doesNotMatch(PANEL_HTML, /остальные настройки сохраняются сами/, 'неверная подсказка убрана');
-  assert.match(PANEL_HTML, /сохраняются кнопкой в полосе снизу/, 'сказано, как на самом деле');
+  assert.match(PANEL_HTML, /сохраняется одной кнопкой «Сохранить» в полосе снизу/, 'сказано, как на самом деле');
 });
 
 test('сбой записи на диск виден на всех экранах панели', async () => {
