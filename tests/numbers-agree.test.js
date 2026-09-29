@@ -124,3 +124,34 @@ test('прочитанный диалог перестаёт быть непро
   const again = await state();
   assert.equal(unreadMessages(again), 2, 'новое сообщение — снова непрочитанное');
 });
+
+test('«ожидание» в шапке, меню и колокольчике — одна сводка от бота: клиенты, из них просроченные, дела', async () => {
+  const data = bot.getData();
+  data.config.reminderHours = 4;
+  // Николай ждёт пять часов — дольше срока в четыре; Ольга — десять минут.
+  data.inquiries.find((item) => item.id === 'b1').clientMessageAt = minutesAgo(5 * 60);
+  const state = await (await realFetch(base + '/api/state', { headers })).json();
+  assert.deepEqual({ waitingClients: state.attention.waitingClients, lateClients: state.attention.lateClients }, { waitingClients: 2, lateClients: 1 });
+  const deeds = state.notifications.filter((item) => item.active && !item.handledAt).length;
+  assert.equal(state.attention.deeds, deeds, 'число дел — то же, что в списке «Сегодня»');
+  assert.ok(deeds >= 2, 'два клиента — как минимум два дела');
+  assert.equal(state.newInquiryCount, undefined, 'отдельного счётчика «новых» больше нет');
+  // Срок «не напоминать» (0) не значит «никогда»: берём два часа.
+  data.config.reminderHours = 0;
+  const fallback = await (await realFetch(base + '/api/state', { headers })).json();
+  assert.equal(fallback.attention.lateClients, 1);
+});
+
+test('«ждёт ответа» решает бот и присылает признаком: взятая в работу без ответа заявка ждёт, хотя её сообщений в состоянии нет', async () => {
+  const data = bot.getData();
+  const taken = data.inquiries.find((item) => item.id === 'b1');
+  taken.status = 'in_progress';
+  const state = await (await realFetch(base + '/api/state', { headers })).json();
+  const sent = state.inquiries.find((item) => item.id === 'b1');
+  assert.equal(sent.messages, undefined, 'самих сообщений в состоянии нет');
+  assert.equal(sent.awaitsReply, true, 'но признак есть: клиент ещё ждёт');
+  taken.replies = [{ createdAt: new Date().toISOString(), text: 'Ответ' }];
+  const answered = await (await realFetch(base + '/api/state', { headers })).json();
+  assert.equal(answered.inquiries.find((item) => item.id === 'b1').awaitsReply, false);
+  assert.equal(answered.attention.waitingClients, 1, 'остался один ждущий клиент — Ольга');
+});

@@ -187,6 +187,25 @@ function waitingConversationCount() {
   return waiting.size;
 }
 
+// Все «числа ожидания» шапки и меню — из одного места. waitingClients — сколько клиентов
+// ждут ответа; lateClients — из них дольше срока напоминания (по умолчанию два часа);
+// deeds — дел в списке «Сегодня» (то же число у колокольчика и у значка «Сегодня»).
+function attentionCounts(notifications = adminNotifications(), now = Date.now()) {
+  const hours = Number(data.config.reminderHours);
+  const limit = (hours > 0 ? hours : 2) * 3600000;
+  const waiting = new Set();
+  const late = new Set();
+  for (const inquiry of data.inquiries) {
+    if (!awaitingReply(inquiry)) continue;
+    const userId = String(inquiry.userId);
+    waiting.add(userId);
+    const since = Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0;
+    if (since && now - since >= limit) late.add(userId);
+  }
+  const deeds = notifications.filter((item) => item.active && !item.handledAt).length;
+  return { waitingClients: waiting.size, lateClients: late.size, deeds };
+}
+
 function notificationSnapshot(item) {
   return {
     id: cleanText(item.id, 240), kind: cleanText(item.kind, 30), severity: cleanText(item.severity, 20),
@@ -269,4 +288,4 @@ function readAllAdminNotifications() {
   saveDataNow();
 }
 
-export { adminNotifications, currentAdminNotifications, markMessageNotificationsRead, readAllAdminNotifications, updateAdminNotification, waitingConversationCount };
+export { adminNotifications, attentionCounts, currentAdminNotifications, markMessageNotificationsRead, readAllAdminNotifications, updateAdminNotification, waitingConversationCount };

@@ -15,7 +15,8 @@ import { publicRuntime } from './menus.mjs';
 import { propertyPublicationReadiness, recordImages } from './catalog.mjs';
 import { isContainerBackup, readBackupContainer } from './backup-file.mjs';
 import { userById } from './users.mjs';
-import { adminNotifications, waitingConversationCount } from './admin-notifications.mjs';
+import { adminNotifications, attentionCounts, waitingConversationCount } from './admin-notifications.mjs';
+import { awaitingReply } from './inquiries.mjs';
 
 const SESSIONS_FILE = path.join(path.dirname(DATA_FILE), 'bot-sessions.json');
 const SESSION_PERSIST_STEP_MS = 10 * 60 * 1000;
@@ -856,6 +857,9 @@ function safeState(session) {
     // (/api/conversations/:id/timeline). Здесь остаётся всё остальное.
     inquiries: data.inquiries.map(({ messages, ...item }) => ({
       ...item,
+      // «Ждёт ответа» решает бот; панель этого не пересчитывает (у неё нет самих
+      // сообщений, и её копия правила расходилась с ботом).
+      awaitsReply: awaitingReply({ ...item, messages }),
       messageCount: Array.isArray(messages) ? messages.length : 0,
       // Сколько из них написал клиент: по этому числу панель считает «Сообщений» у клиента.
       clientMessageCount: Array.isArray(messages) ? messages.filter((message) => message && message.direction === 'in').length : 0,
@@ -865,8 +869,8 @@ function safeState(session) {
       lastMessage: lastMessagePreview(messages),
     })),
     replyTemplates: data.replyTemplates || [],
-    newInquiryCount: data.inquiries.filter((item) => item.status === 'new').length,
-    // Одно определение «ждут ответа» для всех экранов панели.
+    // Одно место для всех «чисел ожидания»: значок меню, колокольчик, шапка, заголовок вкладки.
+    attention: attentionCounts(notifications),
     waitingConversationCount: waitingConversationCount(),
     // Время последнего сообщения клиента: по нему панель замечает новое сообщение
     // (мигает вкладкой, по желанию — звук), даже когда вкладка не на виду.

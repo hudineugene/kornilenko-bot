@@ -463,9 +463,9 @@ test.describe('автообновление панели раз в 45 секун
     assert.deepEqual(sandbox.__scrolls, [], 'без прокрутки наверх');
   });
 
-  // Сколько диалогов ждут ответа — это число в меню слева и в колокольчике.
+  // Сколько клиентов ждут ответа — значок «Клиенты» в меню слева.
   function waitingBadge(sandbox) {
-    return sandbox.navItems().find(function (item) { return item.id === 'today'; }).count;
+    return sandbox.navItems().find(function (item) { return item.id === 'clients'; }).count;
   }
 
   test('несохранённая форма не отменяет обновление счётчиков', async () => {
@@ -479,7 +479,7 @@ test.describe('автообновление панели раз в 45 секун
 
     const before = waitingBadge(sandbox);
     // Клиент написал: в новом состоянии одна беседа ждёт ответа.
-    state.waitingConversationCount = before + 3;
+    state.attention.waitingClients = before + 3;
 
     await tick(sandbox);
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -498,7 +498,7 @@ test.describe('автообновление панели раз в 45 секун
     assert.equal(dialog.open, true);
 
     const before = waitingBadge(sandbox);
-    state.waitingConversationCount = before + 1;
+    state.attention.waitingClients = before + 1;
 
     await tick(sandbox);
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -1477,8 +1477,16 @@ test('счётчик у «Переписки» — это клиенты, кот
   const { sandbox, state } = await panelSandbox();
   assert.equal(state.waitingConversationCount, 2, 'бот насчитал двух клиентов, а не три заявки');
 
-  const badge = sandbox.navItems().find((item) => item.id === 'today').count;
-  assert.equal(badge, 2, 'на значке в меню то же число');
+  const badge = sandbox.navItems().find((item) => item.id === 'clients').count;
+  assert.equal(badge, 2, 'на значке «Клиенты» в меню то же число');
+  assert.equal(state.attention.waitingClients, 2, 'и в общей сводке ожидания от бота');
+  sandbox.renderBotState();
+  assert.match(String(sandbox.document.getElementById('botStateText').innerHTML), /<b>2<\/b> ждут ответа/, 'и в шапке — с подписью, а не «2 новых»');
+  // Значок «Сегодня» и колокольчик — одно число: дела из списка, а не клиенты.
+  sandbox.renderNotificationBell();
+  const deeds = sandbox.navItems().find((item) => item.id === 'today').count;
+  assert.equal(deeds, state.attention.deeds, 'значок «Сегодня» — число дел от бота');
+  assert.equal(String(sandbox.document.getElementById('notificationCount').textContent), String(deeds), 'колокольчик показывает то же');
 
   const host = fakeElement('main');
   await sandbox.VIEWS.today.render(host, '');
@@ -1532,11 +1540,13 @@ test('числа на «Сегодня» и в «Отчётах» сходятс
 test('панель считает «взял в работу без ответа» так же, как бот', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();
-  const taken = { status: 'in_progress', replies: [], messages: [{ direction: 'in' }], createdAt: new Date().toISOString() };
+  // Правило у бота одно; панель берёт готовый признак, а не считает по своей копии.
+  const taken = { status: 'in_progress', replies: [], awaitsReply: true, createdAt: new Date().toISOString() };
   assert.equal(sandbox.awaitsReply(taken), true, 'без ответа клиент ждёт, хотя дело в работе');
   assert.match(sandbox.inquiryState(taken).text, /^Ждёт ответа/);
-  assert.equal(sandbox.awaitsReply({ ...taken, viewing: { confirmedAt: new Date().toISOString() } }), false, 'подтверждённый просмотр ответа не ждёт');
-  assert.equal(sandbox.awaitsReply({ ...taken, messages: [{ direction: 'out' }] }), false, 'начатое менеджером — тоже');
+  assert.equal(sandbox.awaitsReply({ ...taken, awaitsReply: false }), false, 'бот сказал «не ждёт» — панель не спорит');
+  assert.equal(sandbox.awaitsReply(null), false);
+  assert.equal(sandbox.awaitsReply({ status: 'new', replies: [] }), false, 'без признака от бота панель сама не додумывает');
 });
 
 test('нижняя панель: четыре главных раздела и «Ещё» с остальными; один щелчок — один раздел', async () => {
@@ -1663,7 +1673,7 @@ test('возраст ожидания: цвет и время у «Ждёт от
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();
   const now = Date.now();
-  const waiting = (minutes) => ({ id: 'w', userId: 'u', status: 'new', replies: [], clientMessageAt: new Date(now - minutes * 60000).toISOString(), createdAt: new Date(now - minutes * 60000).toISOString() });
+  const waiting = (minutes) => ({ id: 'w', userId: 'u', status: 'new', replies: [], awaitsReply: true, clientMessageAt: new Date(now - minutes * 60000).toISOString(), createdAt: new Date(now - minutes * 60000).toISOString() });
   sandbox.state.config.reminderHours = 4;
 
   // Порог — срок напоминания из настроек (4 ч); сутки — отдельная черта.
@@ -1671,8 +1681,8 @@ test('возраст ожидания: цвет и время у «Ждёт от
   assert.equal(sandbox.waitLevel(waiting(3 * 60), now), 'fresh', '3 часа при пороге 4 — ещё в норме');
   assert.equal(sandbox.waitLevel(waiting(5 * 60), now), 'late', '5 часов — дольше порога');
   assert.equal(sandbox.waitLevel(waiting(25 * 60), now), 'overdue', 'больше суток — просрочено');
-  assert.equal(sandbox.waitLevel({ ...waiting(600), status: 'closed' }, now), '', 'закрытая — не ждёт');
-  assert.equal(sandbox.waitLevel({ ...waiting(600), replies: [{ createdAt: new Date(now).toISOString() }] }, now), '', 'отвеченная — не ждёт');
+  assert.equal(sandbox.waitLevel({ ...waiting(600), status: 'closed', awaitsReply: false }, now), '', 'закрытая — не ждёт');
+  assert.equal(sandbox.waitLevel({ ...waiting(600), replies: [{ createdAt: new Date(now).toISOString() }], awaitsReply: false }, now), '', 'отвеченная — не ждёт');
   // Порог не задан («не напоминать») — берём два часа, а не «никогда».
   sandbox.state.config.reminderHours = 0;
   assert.equal(sandbox.waitLevel(waiting(150), now), 'late');
@@ -1700,6 +1710,7 @@ test('возраст ожидания: цвет и время у «Ждёт от
 
   // Счётчики: на «Сегодня» — сколько из ждущих дольше порога.
   sandbox.state.inquiries.find((item) => item.id === 'inq-nikolay').clientMessageAt = new Date(now - 30 * 3600000).toISOString();
+  sandbox.state.attention.lateClients = 1; // число «дольше срока» приходит от бота, панель его не пересчитывает
   const today = fakeElement('main');
   sandbox.VIEWS.today.render(today);
   assert.match(String(today.innerHTML), /из них просрочено: 1/, 'на «Сегодня» видно, сколько просрочено');
@@ -3277,7 +3288,7 @@ test('когда все отвечены, ноль везде', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, state } = await panelSandbox();
   assert.equal(state.waitingConversationCount, 0);
-  assert.equal(sandbox.navItems().find((item) => item.id === 'today').count, 0, 'значок пустой');
+  assert.equal(sandbox.navItems().find((item) => item.id === 'clients').count, 0, 'значок «Клиенты» пустой');
 });
 
 test('сбой загрузки переписки виден как сбой, а не как пустая беседа', async () => {
@@ -3441,4 +3452,11 @@ test('быстрые действия открывают редактор, а н
   assert.ok(dialog, 'открылась карточка объекта');
   assert.match(String(dialog.innerHTML), /Номер объекта|Название/, 'это форма объекта');
   dialog.closeClean();
+});
+
+test('этапы воронки в панели — те же, что у бота, и в том же порядке', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const { PIPELINE_STAGES } = await import('../src/data-format.mjs');
+  assert.deepEqual(Array.from(sandbox.PIPELINE_STAGES, (stage) => stage[0]), PIPELINE_STAGES, 'подписи — дело панели, набор и порядок — бота');
 });

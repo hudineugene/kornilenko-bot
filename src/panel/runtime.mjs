@@ -611,13 +611,14 @@ async function refresh() {
 // «Ждут ответа» в «Переписке». Раньше каждый экран считал по-своему — по
 // заявкам, по диалогам или по непрочитанным — и три числа не сходились.
 function waitingClients() {
-  var count = Number(state && state.waitingConversationCount);
-  if (Number.isFinite(count)) return count;
-  var clients = {};
-  (state && state.inquiries || []).forEach(function (item) {
-    if (awaitsReply(item)) clients[String(item.userId)] = true;
-  });
-  return Object.keys(clients).length;
+  var count = Number(state && state.attention ? state.attention.waitingClients : state && state.waitingConversationCount);
+  return Number.isFinite(count) ? count : 0;
+}
+
+// Дел в списке «Сегодня»: одно число у колокольчика и у значка «Сегодня».
+function deedCount() {
+  var count = Number(state && state.attention && state.attention.deeds);
+  return Number.isFinite(count) ? count : deedList().length;
 }
 
 // Люди команды: главный администратор и менеджеры, без пустых имён и повторов. Один
@@ -647,8 +648,8 @@ function navIcon(id) {
 
 function navItems() {
   return [
-    { id: "today", icon: navIcon("today"), title: "Сегодня", count: waitingClients(), late: overdueClients() },
-    { id: "clients", icon: navIcon("clients"), title: "Клиенты", tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
+    { id: "today", icon: navIcon("today"), title: "Сегодня", count: deedCount() },
+    { id: "clients", icon: navIcon("clients"), title: "Клиенты", count: waitingClients(), late: overdueClients(), tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
     { id: "viewings", icon: navIcon("viewings"), title: "Просмотры" },
     { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
     { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"]] },
@@ -732,6 +733,7 @@ function waitDuration(ms) {
 }
 // Сколько клиентов ждут дольше срока (одного клиента с несколькими заявками — один раз).
 function overdueClients() {
+  if (state && state.attention && Number.isFinite(Number(state.attention.lateClients))) return Number(state.attention.lateClients);
   var clients = {};
   (state && state.inquiries || []).forEach(function (item) {
     if (WAIT_RANK[waitLevel(item)] >= WAIT_RANK.late) clients[String(item.userId)] = true;
@@ -739,20 +741,10 @@ function overdueClients() {
   return Object.keys(clients).length;
 }
 
+// «Ждёт ответа» решает бот и присылает признаком в каждой заявке: у панели нет самих
+// сообщений, и её собственная копия правила расходилась с ботом.
 function awaitsReply(inquiry) {
-  if (!inquiry || inquiry.status === "closed") return false;
-  // Клиент искал сам и получил каталог — ответа никто не ждёт.
-  if (inquiry.searchLead) return false;
-  var replies = inquiry.replies || [];
-  if (!replies.length) {
-    if (inquiry.status === "new") return true;
-    // «В работу» — это «взял», а не «ответил»; так же считает и бот.
-    var confirmedViewing = Boolean(inquiry.viewing && inquiry.viewing.confirmedAt);
-    var clientWrote = (inquiry.messages || []).some(function (message) { return message.direction === "in"; });
-    return inquiry.status === "in_progress" && clientWrote && !confirmedViewing;
-  }
-  var lastReply = Math.max.apply(null, replies.map(function (reply) { return Date.parse(reply.createdAt) || 0; }));
-  return (Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0) > lastReply;
+  return Boolean(inquiry && inquiry.awaitsReply);
 }
 
 function renderNav() {
@@ -1148,7 +1140,7 @@ function bindAlerts() {
 function renderNotificationBell() {
   var button = el("notificationBell"), badge = el("notificationCount");
   // Колокольчик считает то же, что и «Список дел»: нерешённые дела, а не только непрочитанные.
-  var count = state ? deedList().length : 0;
+  var count = state ? deedCount() : 0;
   badge.textContent = count > 99 ? "99+" : String(count);
   badge.classList.toggle("hidden", count === 0);
   button.classList.toggle("active", currentView === "today");
@@ -1183,7 +1175,7 @@ function renderBotState() {
   el("botState").querySelector(".dot").className = "dot " + dot;
   el("botStateText").innerHTML = !active
     ? "Бот выключен"
-    : bad ? "Связь с Telegram потеряна" : "Бот работает" + (state.newInquiryCount ? ' · <b>' + num(state.newInquiryCount) + "</b> новых" : "");
+    : bad ? "Связь с Telegram потеряна" : "Бот работает" + (waitingClients() ? ' · <b>' + num(waitingClients()) + "</b> " + plural(waitingClients(), "ждёт", "ждут", "ждут") + " ответа" : "");
   // Когда шапка тесная, текст состояния прячется, остаётся точка — а слова в подсказке.
   // При беде рядом с точкой остаётся короткая подпись (на телефоне её рисуют стили).
   el("botState").title = el("botStateText").textContent || "";
