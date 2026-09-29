@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import { cleanText, clone } from './util.mjs';
 import { INTERFACE_TEXT_DEFAULTS } from './texts.mjs';
-import { PREVIOUS_INTERFACE_TEXTS } from './legacy-texts.mjs';
+import { PREVIOUS_INTERFACE_TEXTS, VERSION_38_DEFAULT_HASHES } from './legacy-texts.mjs';
 import { normalizedSimilarPropertyDetails } from './similar.mjs';
 
 // Версия формата данных. Поднимается при каждом изменении набора полей: по ней
@@ -296,6 +296,7 @@ const OBSOLETE_FALLBACKS = {
   en: ['Thank you! Your message has been received. A manager will reply in this chat.', 'Thank you for your message! I have passed it on to the administrator.'],
   es: ['¡Gracias! Hemos recibido tu mensaje. Un gestor responderá en este chat.', '¡Gracias por tu mensaje! Se lo he enviado al administrador.'],
 };
+const textFingerprint = (value) => crypto.createHash('sha1').update(JSON.stringify(value)).digest('hex').slice(0, 12);
 function migrateStaleTexts(interfaceText, messages) {
   const same = (first, second) => JSON.stringify(first) === JSON.stringify(second);
   for (const [group, languages] of Object.entries(INTERFACE_TEXT_DEFAULTS)) {
@@ -307,9 +308,11 @@ function migrateStaleTexts(interfaceText, messages) {
         if (!Object.hasOwn(stored, key)) continue;
         const value = stored[key];
         // Сохранённое равно нынешнему значению, прежнему значению по умолчанию
-        // или испорчено («[object Object]» вместо набора названий).
+        // (в том числе тому, что было в версии 38) или испорчено («[object
+        // Object]» вместо набора названий).
         const spoiled = fallback && typeof fallback === 'object' && !Array.isArray(fallback) && typeof value === 'string';
-        if (same(value, fallback) || (previous[key] || []).some((old) => same(old, value)) || spoiled) delete stored[key];
+        const wasDefault = VERSION_38_DEFAULT_HASHES[group + '.' + language + '.' + key] === textFingerprint(value);
+        if (same(value, fallback) || (previous[key] || []).some((old) => same(old, value)) || wasDefault || spoiled) delete stored[key];
       }
     }
   }

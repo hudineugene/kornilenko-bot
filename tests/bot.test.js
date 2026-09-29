@@ -387,8 +387,8 @@ test('the Spanish and English wording matches how agencies actually speak', () =
   });
   assert.deepEqual(stray, [], 'в текстах для клиента «gestor» остался только в расходах на оформление');
 
-  assert.equal(bot.text.propertyActions.en.contactManager, 'Contact an agent');
-  assert.equal(bot.text.propertyActions.es.contactManager, 'Contactar con un asesor');
+  assert.equal(bot.text.propertyActions.en.contactManager, 'Contact us', 'кнопка связи называется одинаково везде');
+  assert.equal(bot.text.propertyActions.es.contactManager, 'Contactar');
   assert.equal(bot.text.menuLabels.en.contacts, '💬 Contact us');
   assert.equal(bot.text.menuLabels.es.contacts, '💬 Contactar');
   assert.equal(bot.text.propertyActions.en.cardFavoriteRemove, 'Saved ✓', 'кнопка показывает состояние, а не действие «не сохранять»');
@@ -721,4 +721,20 @@ test('версия 39: приветствие EN/ES из четырёх абза
 
   const own = bot.normalizeLoadedData({ version: 38, config: { messages: { en: { greeting: 'Welcome, {first_name}! We build homes in Finestrat.' } } } });
   assert.equal(own.config.messages.en.greeting, 'Welcome, {first_name}! We build homes in Finestrat.', 'приветствие, написанное владельцем иначе, не трогаем');
+});
+
+test('кнопка связи с менеджером называется одинаково в меню, на карточке и в подписях', () => {
+  const withoutEmoji = (label) => label.replace(/^[^\p{L}]+/u, '');
+  for (const language of ['ru', 'en', 'es']) {
+    const inMenu = withoutEmoji(bot.text.menuLabels[language].contacts);
+    assert.equal(bot.text.propertyActions[language].contact, inMenu, language + ': на карточке то же слово, что в меню');
+    assert.equal(bot.text.propertyActions[language].contactManager, inMenu, language + ': и в остальных подписях');
+    // Прежние названия — «Manager», «Contact», «Gestor» — ни на одной кнопке не остались.
+    for (const old of ['Manager', 'Gestor', 'Менеджер']) {
+      assert.notEqual(inMenu, old, language + ': ' + old + ' — прежнее название');
+    }
+  }
+  assert.equal(bot.text.menuLabels.ru.contacts, '💬 Связаться');
+  assert.equal(bot.text.menuLabels.en.contacts, '💬 Contact us');
+  assert.equal(bot.text.menuLabels.es.contacts, '💬 Contactar');
 });
