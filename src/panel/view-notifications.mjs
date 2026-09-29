@@ -7,7 +7,7 @@ var notificationKind = "";
 var NOTIFICATION_KINDS = {
   message: { icon: "✉", label: "Сообщения" },
   task: { icon: "⏱", label: "Следующие шаги" },
-  viewing: { icon: "⌂", label: "Просмотры" },
+  viewing: { icon: "⌂", label: "Записи на просмотр" },
   broadcast: { icon: "➤", label: "Рассылки" },
   error: { icon: "!", label: "Ошибки" },
   system: { icon: "⚙", label: "Система" },

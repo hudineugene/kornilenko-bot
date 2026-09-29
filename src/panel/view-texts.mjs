@@ -20,11 +20,12 @@ async function renderWelcome(host) {
   var labels = interfaceTexts().menuLabels || {};
   var hints = interfaceTexts().menuHints || {};
   var MENU_FIELDS = [
-    ["objects", "Каталог"],
+    ["objects", "Объекты"],
     ["selection", "Подбор"],
     ["contacts", "Связаться"],
     ["promotions", "Акции"],
-    ["more", "Личный раздел"],
+    ["more", "Моё"],
+    ["guide", "Как купить"],
     ["placeholder", "Подсказка в поле ввода"],
   ];
   host.innerHTML = '<div class="split"><div class="card"><header><h3>Приветствие и меню</h3></header><div class="card-body stack" id="welcomeForm">' +
@@ -168,7 +169,7 @@ function renderSections(host) {
   // Контакты и «О компании» правятся на своей вкладке — здесь остаются только
   // тексты, которые клиент видит вместо пустого раздела.
   var fields = [["objects", "Объекты"], ["promotions", "Акции"]];
-  host.innerHTML = '<div class="card"><header><h3>Пустые разделы</h3><div class="actions"><span class="small faint">показываются, если карточек нет</span></div></header>' +
+  host.innerHTML = '<div class="card"><header><h3>Если раздел пуст</h3><div class="actions"><span class="small faint">показываются, если карточек нет</span></div></header>' +
     '<div class="card-body stack" id="menuForm">' + languageTabs() +
     fields.map(function (field) {
       return '<div class="field"><label>' + field[1] + "</label>" + LANGUAGES.map(function (language) {
@@ -191,6 +192,13 @@ function renderSections(host) {
 }
 
 // --- Контакты -------------------------------------------------------------------
+// Подпись кнопки на экране связи — та, что видит клиент (её можно править в «Тексты
+// бота → Все подписи»), а не запомненная когда-то копия.
+function contactScreenLabel(key, fallback) {
+  var copy = (interfaceTexts().managerContact || {}).ru || {};
+  return copy[key] || fallback;
+}
+
 function renderContacts(host) {
   var contacts = state.contacts || {};
   var hours = (state.config || {}).workingHours || {};
@@ -237,7 +245,7 @@ function renderContacts(host) {
     "</div></div>" +
     '<div class="card"><header><h3>Так увидит клиент</h3></header><div class="card-body stack">' +
       '<div class="msg">' + esc(previewLines.filter(Boolean).join("\n\n")) + "</div>" +
-      '<div class="row wrap">' + [whatsappAvailable ? "🟢 WhatsApp" : "", contacts.telegram ? "✈️ Telegram" : "", contacts.website ? "🌐 Сайт" : "", contacts.mapUrl ? "📍 Карта" : "", "📞 Позвоните мне", "❓ Задать вопрос", "ℹ️ О компании", "🏠 Главное меню"].filter(Boolean).map(function (label) {
+      '<div class="row wrap">' + [whatsappAvailable ? "🟢 WhatsApp" : "", contacts.telegram ? "✈️ Telegram" : "", contacts.website ? "🌐 Сайт" : "", contacts.mapUrl ? "📍 Карта" : "", contactScreenLabel("request", "📞 Заказать звонок"), contactScreenLabel("question", "❓ Задать вопрос"), "ℹ️ О компании", "🏠 Главное меню"].filter(Boolean).map(function (label) {
         return '<span class="chip brand">' + esc(label) + "</span>";
       }).join("") + "</div>" +
     "</div></div></div>";
@@ -402,7 +410,7 @@ var INTERFACE_GROUPS = [
   ["propertyBadges", "Метки объектов"],
   ["propertyConditions", "Состояние объекта"],
   ["privacy", "Данные клиента и политика"],
-  ["emptyStates", "Пустые разделы"],
+  ["emptyStates", "Если раздел пуст"],
   ["interaction", "Служебные сообщения"],
   ["commands", "Ответы на команды"],
   ["commandDescriptions", "Описания команд"],

@@ -119,7 +119,7 @@ test('«Контакты и о компании» собраны в одном �
 
   // «Разделы» больше не повторяют контакты и «О компании».
   assert.match(PANEL_HTML, /var fields = \[\["objects", "Объекты"\], \["promotions", "Акции"\]\]/);
-  assert.match(PANEL_HTML, /\["sections", "Пустые разделы"\]/);
+  assert.match(PANEL_HTML, /\["sections", "Если раздел пуст"\]/);
 
   // В настройках вместо поля — ссылка, где его искать.
   assert.match(PANEL_HTML, /во вкладке «Тексты бота» → «Контакты и о компании»/);
@@ -131,7 +131,7 @@ test('«Приветствие и меню» — на одной вкладке 
   // Приветствие, подсказка, помощь и подписи кнопок — в одной форме.
   assert.match(PANEL_HTML, /Подсказка под приветствием/);
   assert.match(PANEL_HTML, /field-label">Кнопки меню/);
-  assert.match(PANEL_HTML, /\["objects", "Каталог"\]/);
+  assert.match(PANEL_HTML, /\["objects", "Объекты"\]/);
   assert.match(PANEL_HTML, /\["placeholder", "Подсказка в поле ввода"\]/);
   assert.match(PANEL_HTML, /data-menu="/);
   assert.match(PANEL_HTML, /data-hint="text"/);
@@ -369,6 +369,18 @@ test('шрифт: основной текст не мельче 14 px, мелк�
   assert.ok(literals.every((value) => value >= 13), 'значения font-size: ' + literals.join(', '));
   // Без «font:inherit» браузер ставит кнопкам свои 13,33 px.
   assert.match(style, /(^|\n)button\{font:inherit\}/, 'кнопки наследуют шрифт страницы');
+});
+
+test('слова панели совпадают со словами клиента: «диалог», «этап», «Объекты», «Моё»', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  for (const old of ['Открыть переписку', 'Этап воронки', '["more", "Личный раздел"]', '<h3>Пустые разделы</h3>', 'label: "Просмотры" }', '"📞 Позвоните мне"']) {
+    assert.ok(!PANEL_HTML.includes(old), 'прежней подписи больше нет: ' + old);
+  }
+  assert.match(PANEL_HTML, />Открыть диалог</);
+  assert.match(PANEL_HTML, /\["more", "Моё"\]/, 'поле называется так же, как кнопка у клиента');
+  assert.match(PANEL_HTML, /\["guide", "Как купить"\]/, 'новая кнопка меню правится там же');
+  assert.match(PANEL_HTML, /Записи на просмотр/, 'тип событий не путается с разделом «Просмотры»');
+  assert.match(PANEL_HTML, /contactScreenLabel\("request", "📞 Заказать звонок"\)/, 'предпросмотр контактов показывает настоящие кнопки экрана связи');
 });
 
 test.describe('стили панели', () => {
