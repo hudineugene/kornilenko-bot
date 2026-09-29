@@ -12,10 +12,14 @@ var selectionWasAuto = false;
 // выбирает первую беседу в списке (и заново при каждой перерисовке) — раньше
 // из-за этого непрочитанные заявки «прочитывались» без участия владельца.
 var conversationOpenedByUser = false;
-function selectConversation(id) {
+// silent — выбор сделала сама панель (открытие по адресу, служебный сброс): адрес
+// при этом не трогаем. Выбор человека, пока он в «Диалогах», кладёт адрес диалога
+// в историю браузера: «Назад» возвращает к списку, а ссылка ведёт к клиенту.
+function selectConversation(id, silent) {
   selectedInquiry = id;
   conversationOpenedByUser = Boolean(id);
   selectionWasAuto = false;
+  if (!silent && currentView === "clients" && currentTab === "inbox") pushRoute("clients", "inbox", id);
 }
 var clientSearch = "";
 var clientStageFilter = "";
@@ -419,7 +423,7 @@ function renderInquiryList(host) {
   // Беседу сами не открываем: вход в раздел «Клиенты» открывал первую из
   // списка и тут же помечал её прочитанной — менеджер не читал, а клиент уже
   // считался «увиденным». Пока диалог не выбран, справа — «Выберите диалог».
-  if (!selectedGroup) selectConversation("");
+  if (!selectedGroup) selectConversation("", true);
   // Беседу открыла панель во время обновления, а теперь на экран смотрит
   // человек: раньше она оставалась непрочитанной, пока не щёлкнешь по ней ещё
   // раз — по уже открытой.
@@ -1094,7 +1098,7 @@ function renderViewings(host) {
       ["Ждут подтверждения", num(pending.length), pending.length ? "bad" : "", "Нужно ответить клиентам"],
       ["Подтверждено", num(upcoming.filter(function (item) { return item.viewing.confirmedAt; }).length), "", "Предстоящих"],
     ]) + '<div class="viewing-toolbar"><div class="tabs"><button class="' + (viewingMode === "calendar" ? "active" : "") + '" data-viewing-mode="calendar" type="button">Календарь</button><button class="' + (viewingMode === "pending" ? "active" : "") + '" data-viewing-mode="pending" type="button">Ждут подтверждения <span>' + pending.length + '</span></button><button class="' + (viewingMode === "history" ? "active" : "") + '" data-viewing-mode="history" type="button">История</button></div><span class="small muted">Время: ' + esc(timeZoneName()) + '</span></div>' + body;
-  host.querySelectorAll("[data-viewing-mode]").forEach(function (button) { button.onclick = function () { viewingModeChosen = true; viewingMode = button.dataset.viewingMode; renderViewings(host); }; });
+  host.querySelectorAll("[data-viewing-mode]").forEach(function (button) { button.onclick = function () { viewingModeChosen = true; viewingMode = button.dataset.viewingMode; pushRoute("viewings", viewingMode, ""); renderViewings(host); }; });
   host.querySelectorAll("[data-viewing-week]").forEach(function (button) { button.onclick = function () { viewingWeekOffset += Number(button.dataset.viewingWeek); renderViewings(host); }; });
   var todayButton = host.querySelector("[data-viewing-today]");
   if (todayButton) todayButton.onclick = function () { viewingWeekOffset = 0; renderViewings(host); };

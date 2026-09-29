@@ -1587,6 +1587,89 @@ test('«Все события»: на карточке два действия �
   assert.match(String(handled.innerHTML), /data-notification-action="reopen"[^>]*>Вернуть</);
 });
 
+test('значки навигации — один набор линейных SVG, а не глифы вперемешку с цветным эмодзи', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const items = sandbox.navItems();
+  assert.equal(items.map((item) => item.id).join(','), 'today,notifications,clients,viewings,objects,posts,texts,settings');
+  for (const item of items) {
+    assert.match(item.icon, /^<svg viewBox="0 0 24 24"[^>]*stroke="currentColor"/, item.id + ': значок — линейный SVG');
+    const visibleText = item.icon.replace(/<[^>]*>/g, '');
+    assert.equal(visibleText, '', item.id + ': в значке нет текстового глифа или эмодзи');
+  }
+  const icons = new Set(items.map((item) => item.icon));
+  assert.equal(icons.size, items.length, 'у каждого раздела свой значок');
+
+  // Верхняя навигация и нижняя панель рисуют их из одного источника.
+  sandbox.renderNav();
+  const shown = String(sandbox.el('nav').innerHTML) + String(sandbox.el('tabbar').innerHTML) + String(sandbox.el('moreSheet').innerHTML);
+  assert.ok(String(sandbox.el('nav').innerHTML).includes('<svg viewBox="0 0 24 24"'), 'значки видны в верхнем меню');
+  assert.ok(String(sandbox.el('tabbar').innerHTML).includes('<svg viewBox="0 0 24 24"'), 'и в нижней панели телефона');
+  for (const glyph of ['◉', '✉', '⌂', '➤', '✎', '⚙', '📅']) assert.ok(!shown.includes(glyph), 'старого глифа ' + glyph + ' на экране нет');
+});
+
+test('адреса: вкладки «Просмотров», разделы «Обслуживания» и открытый диалог открываются по ссылке и в истории браузера', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const pushed = [];
+  const replaced = [];
+  sandbox.history.pushState = (state, title, hash) => pushed.push(hash);
+  sandbox.history.replaceState = (state, title, hash) => replaced.push(hash);
+  const open = (hash) => { sandbox.location.hash = hash; sandbox.applyRoute(); };
+
+  // «Обслуживание»: раздел — в адресе. Без раздела адрес дополняется нынешним.
+  open('#/settings/service/access');
+  assert.equal(sandbox.serviceScreen, 'access');
+  assert.equal(sandbox.currentRouteHash, '#/settings/service/access');
+  open('#/settings/service/нет-такого');
+  assert.equal(sandbox.serviceScreen, 'access', 'неизвестный раздел не ломает экран');
+  assert.equal(sandbox.currentRouteHash, '#/settings/service/access');
+  // Старый адрес приводит на тот же экран и переписывается в новый.
+  replaced.length = 0;
+  open('#/settings/telegram');
+  assert.equal(sandbox.serviceScreen, 'telegram');
+  assert.equal(sandbox.currentRouteHash, '#/settings/service/telegram');
+  assert.ok(replaced.includes('#/settings/service/telegram'), 'адрес в строке браузера переписан');
+
+  // «Просмотры»: вкладка — в адресе; без вкладки — прежнее поведение (очередь, если есть что подтверждать).
+  sandbox.currentView = 'today';
+  open('#/viewings/history');
+  assert.equal(sandbox.viewingMode, 'history');
+  assert.equal(sandbox.viewingModeChosen, true, 'выбранная по ссылке вкладка остаётся');
+  assert.equal(sandbox.currentRouteHash, '#/viewings/history');
+  sandbox.currentView = 'today';
+  open('#/viewings');
+  assert.equal(sandbox.viewingModeChosen, false, 'заход без вкладки снова начинается с очереди');
+  open('#/viewings/чужая');
+  assert.equal(sandbox.currentRouteHash, '#/viewings', 'неизвестная вкладка отбрасывается');
+
+  // Диалог: номер обращения — в адресе; неизвестный номер отбрасывается.
+  open('#/clients/inbox/inq-olga');
+  assert.equal(sandbox.selectedInquiry, 'inq-olga');
+  assert.equal(sandbox.currentRouteHash, '#/clients/inbox/inq-olga');
+  open('#/clients/inbox/нет-такого');
+  assert.equal(sandbox.currentRouteHash, '#/clients/inbox');
+
+  // Выбор диалога кликом кладёт адрес в историю, чтобы «Назад» вернул к списку.
+  open('#/clients/inbox');
+  pushed.length = 0;
+  sandbox.selectConversation('inq-nikolay');
+  assert.deepEqual(pushed, ['#/clients/inbox/inq-nikolay']);
+  sandbox.selectConversation('inq-nikolay');
+  assert.equal(pushed.length, 1, 'тот же адрес второй раз в историю не попадает');
+  sandbox.selectConversation('');
+  assert.equal(pushed[pushed.length - 1], '#/clients/inbox', 'возврат к списку — тоже шаг истории');
+  pushed.length = 0;
+  sandbox.selectConversation('inq-olga', true);
+  assert.deepEqual(pushed, [], 'служебный выбор (самой панелью) адрес не трогает');
+  // Из другого раздела адрес не меняется: туда ведёт переход go().
+  sandbox.currentView = 'today';
+  sandbox.currentTab = '';
+  sandbox.currentRouteHash = '#/today';
+  sandbox.selectConversation('inq-nikolay');
+  assert.deepEqual(pushed, [], 'вне «Диалогов» выбор адрес не меняет');
+});
+
 test('«Скрыть» и «Вернуть» на событии уходят на бота теми же запросами, что и кнопки', async () => {
   twoWaitingConversations();
   const { sandbox, requests } = await panelSandbox();

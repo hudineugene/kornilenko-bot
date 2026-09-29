@@ -48,9 +48,11 @@ a:hover{text-decoration:underline}
 .app-brand img{width:34px;height:34px;border-radius:8px;object-fit:contain}
 .app-brand b{font-size:var(--fs-sm);line-height:1.12;white-space:nowrap}
 .app-brand span{display:block;font-size:var(--fs-xs);color:var(--faint);font-weight:400}
-.head-nav{display:flex;align-items:center;gap:2px;min-width:0}
+.head-nav{display:flex;align-items:center;gap:2px;min-width:0;flex:1 1 0;overflow-x:auto;scrollbar-width:none}
+.head-nav::-webkit-scrollbar{display:none}
+.nav-item{flex:none}
 /* Общий поиск: одно поле в шапке. */
-.global-search{position:relative;flex:1 1 200px;min-width:140px;max-width:320px}
+.global-search{position:relative;flex:0 1 220px;min-width:140px}
 .global-search input{width:100%;padding:7px 12px;border-radius:9px;background:var(--surface-soft);font-size:var(--fs-sm)}
 .global-results{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:70;max-height:70vh;overflow:auto;min-width:300px;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg)}
 .global-title{padding:6px 10px 2px;color:var(--faint);font-size:var(--fs-xs);font-weight:700;text-transform:uppercase}
@@ -64,7 +66,8 @@ a:hover{text-decoration:underline}
 .nav-item{display:flex;align-items:center;gap:6px;padding:6px 8px;border:0;background:none;border-radius:8px;color:var(--text);font:inherit;font-size:var(--fs-sm);text-align:left;cursor:pointer;white-space:nowrap}
 .nav-item:hover{background:var(--surface-soft)}
 .nav-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
-.nav-item .ico{width:16px;text-align:center;font-size:var(--fs);opacity:.9}
+.nav-item .ico{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;opacity:.9}
+.nav-item .ico svg,.tab-ico svg,.more-item .ico svg{width:100%;height:100%}
 .nav-item .count{margin-left:auto;min-width:20px;padding:0px 6px;border-radius:9px;background:var(--bad);color:var(--surface);font-size:var(--fs-sm);font-weight:700;text-align:center}
 .nav-item.active .count{background:var(--brand)}
 .head-tools{display:flex;align-items:center;gap:4px;margin-left:auto;flex:none}
@@ -735,7 +738,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .global-results{position:static;margin-top:6px;box-shadow:none;border:0;min-width:0;max-height:60vh}
   .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:55;display:flex;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -2px 10px rgba(16,24,40,.06);padding-bottom:env(safe-area-inset-bottom)}
   .tab{position:relative;flex:1 1 0;min-width:0;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 2px;border:0;background:none;color:var(--muted);font:inherit;font-size:var(--fs-xs);cursor:pointer}
-  .tab-ico{font-size:20px;line-height:1}
+  .tab-ico{display:inline-flex;width:24px;height:24px;line-height:1}
   .tab-title{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tab.active{color:var(--brand-dark);font-weight:600}
   .tab.active::before{content:"";position:absolute;top:0;left:22%;right:22%;height:3px;border-radius:0 0 3px 3px;background:var(--brand)}
@@ -744,7 +747,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .more-sheet.hidden{display:none}
   .more-item{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;padding:10px 12px;border:0;border-radius:10px;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
   .more-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
-  .more-item .ico{width:22px;text-align:center}
+  .more-item .ico{display:inline-flex;width:22px;height:22px;justify-content:center}
   /* Всё, что висит над экраном, поднимаем выше нижней панели. */
   .page{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
   .savebar,.refresh-hint{bottom:calc(66px + env(safe-area-inset-bottom))}
@@ -773,6 +776,23 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   /* Кнопки под палец: не ниже 44 px. Мелкие кнопки редактора текста не трогаем. */
   .btn,.btn.small{min-height:44px}
   .markup-bar .btn,.toast-action,.reply-delivery .btn.small{min-height:0}
+}
+/* Ноутбук (1181–1480 px): восемь пунктов, поле поиска и значки справа не помещаются
+   вместе с названием компании, и последний пункт («Настройки») уходил под поиск.
+   Остаётся логотип; название видно на широком экране. */
+@media(max-width:1480px) and (min-width:1181px){
+  .app-brand b{display:none}
+}
+@media(max-width:1340px) and (min-width:1181px){
+  .nav-item{padding-left:7px;padding-right:7px}
+  .global-search{flex-basis:170px;max-width:200px}
+}
+/* 1181–1240 px: поле поиска уходит за значок 🔍 и здесь (как на телефоне). */
+@media(max-width:1240px) and (min-width:1181px){
+  .search-toggle{display:inline-flex}
+  .global-search{display:none;position:fixed;left:10px;right:10px;top:calc(var(--header) + 6px);z-index:60;max-width:none;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg)}
+  .global-search.open{display:block}
+  .global-results{position:static;margin-top:6px;box-shadow:none;border:0;min-width:0;max-height:60vh}
 }
 @media(max-width:1180px) and (min-width:861px){
   .app-brand b{display:none}

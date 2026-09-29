@@ -68,7 +68,7 @@ const PANEL_SHELL = String.raw`
 `;
 
 const PANEL_RUNTIME_JS = String.raw`
-var state = null, csrf = "", currentView = "today", currentTab = "", dirtyForm = null, refreshTimer = 0, loginChallenge = "";
+var state = null, csrf = "", currentView = "today", currentTab = "", currentSub = "", dirtyForm = null, refreshTimer = 0, loginChallenge = "";
 var currentRouteHash = "", allowNextRoute = false, routePromptOpen = false;
 // stateVersion — отпечаток данных с сервера: если он не изменился, экран не
 // перерисовываем. pageTouched — пользователь что-то ввёл на текущем экране,
@@ -549,16 +549,33 @@ function waitingClients() {
   return Object.keys(clients).length;
 }
 
+// Значки разделов — один набор линейных SVG (толщина, скругления и размер общие;
+// цвет берут от текста). Раньше были глифы ◉ ✉ ⌂ ➤ ✎ ⚙ вперемешку с цветным
+// эмодзи 📅: разного размера, веса и цвета, и на разных системах разные.
+function navIcon(id) {
+  var bodies = {
+    today: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/>',
+    notifications: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
+    clients: '<path d="M4 5.5h16v11H9.5L5 20.5v-4H4z"/>',
+    viewings: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    objects: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-6h4v6"/>',
+    posts: '<path d="M21 3 10.5 13.5"/><path d="M21 3l-6.5 18-4-7.5L3 9.5z"/>',
+    texts: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+    settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  };
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (bodies[id] || "") + "</svg>";
+}
+
 function navItems() {
   return [
-    { id: "today", icon: "◉", title: "Сегодня", count: waitingClients() },
-    { id: "notifications", icon: "🔔", title: "Все события", hidden: true },
-    { id: "clients", icon: "✉", title: "Клиенты", tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
-    { id: "viewings", icon: "📅", title: "Просмотры" },
-    { id: "objects", icon: "⌂", title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
-    { id: "posts", icon: "➤", title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"]] },
-    { id: "texts", icon: "✎", title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["sections", "Если раздел пуст"], ["rules", "Автоответы и шаблоны"]] },
-    { id: "settings", icon: "⚙", title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["reports", "Отчёты"], ["service", "Обслуживание"]] },
+    { id: "today", icon: navIcon("today"), title: "Сегодня", count: waitingClients() },
+    { id: "notifications", icon: navIcon("notifications"), title: "Все события", hidden: true },
+    { id: "clients", icon: navIcon("clients"), title: "Клиенты", tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
+    { id: "viewings", icon: navIcon("viewings"), title: "Просмотры" },
+    { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
+    { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"]] },
+    { id: "texts", icon: navIcon("texts"), title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["sections", "Если раздел пуст"], ["rules", "Автоответы и шаблоны"]] },
+    { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["reports", "Отчёты"], ["service", "Обслуживание"]] },
   ];
 }
 
@@ -908,9 +925,12 @@ function renderBotState() {
   el("botState").dataset.short = dot === "off" ? "Выключен" : dot === "bad" ? "Нет связи" : "";
 }
 
-async function go(view, tab) {
+async function go(view, tab, sub) {
   var route = normalizeRoute(view, tab);
-  var target = "#/" + route[0] + (route[1] ? "/" + route[1] : "");
+  // Переход в «Диалоги» из другого места (задачи, уведомление) с уже выбранной
+  // беседой ведёт по адресу этой беседы.
+  if (!sub && route[0] === "clients" && route[1] === "inbox" && selectedInquiry && conversationOpenedByUser) sub = selectedInquiry;
+  var target = routeHash(route[0], route[1], sub);
   if (location.hash === target) return true;
   if (!(await confirmPageLeave())) return false;
   clearDirty();
@@ -919,15 +939,53 @@ async function go(view, tab) {
   return true;
 }
 
+// Адрес состоит из трёх частей: #/раздел/вкладка/подробность. Подробность — то,
+// что раньше жило только в памяти страницы и пропадало при «Назад» и в ссылке:
+// экран «Обслуживания», вкладка «Просмотров» (у неё она стоит на месте вкладки),
+// открытый диалог.
+var VIEWING_MODES = ["calendar", "pending", "history"];
+
+function routeHash(view, tab, sub) {
+  return "#/" + view + (tab ? "/" + tab : "") + (sub ? "/" + sub : "");
+}
+
+// Шаг в истории браузера без перерисовки: экран уже показан, меняется адрес.
+function pushRoute(view, tab, sub) {
+  var hash = routeHash(view, tab || "", sub || "");
+  if (hash === currentRouteHash) return;
+  currentRouteHash = hash;
+  currentView = view;
+  currentTab = tab || "";
+  currentSub = sub || "";
+  history.pushState(null, "", hash);
+}
+
 function applyRoute() {
   var parts = (location.hash || "").replace(/^#\//, "").split("/");
   var route = normalizeRoute(parts[0], parts[1]);
   var view = VIEWS[route[0]] ? route[0] : "today";
+  var tab = route[1] || "";
+  var sub = parts[2] || "";
   // Каждый заход в «Просмотры» снова начинается с очереди подтверждения.
   if (view === "viewings" && currentView !== "viewings") viewingModeChosen = false;
+  if (view === "settings" && tab === "service") {
+    // Раздел «Обслуживания»: из адреса, а без него (или по старой ссылке) — тот, что открыт.
+    if (SERVICE_SCREENS.some(function (item) { return item[0] === sub; })) serviceScreen = sub;
+    sub = serviceScreen;
+  } else if (view === "viewings") {
+    if (VIEWING_MODES.indexOf(tab) >= 0) {
+      viewingMode = tab;
+      viewingModeChosen = true;
+    } else tab = "";
+    sub = "";
+  } else if (view === "clients" && tab === "inbox" && sub) {
+    if ((state.inquiries || []).some(function (item) { return item.id === sub; })) selectConversation(sub, true);
+    else sub = "";
+  } else sub = "";
   currentView = view;
-  currentTab = route[1] || "";
-  currentRouteHash = "#/" + view + (currentTab ? "/" + currentTab : "");
+  currentTab = tab;
+  currentSub = sub;
+  currentRouteHash = routeHash(view, tab, sub);
   if (location.hash && location.hash !== currentRouteHash) {
     allowNextRoute = true;
     history.replaceState(null, "", currentRouteHash);

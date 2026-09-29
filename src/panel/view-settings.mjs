@@ -533,7 +533,7 @@ function renderService(host) {
       '<b>' + esc(item[1]) + '</b><span>' + esc(item[2]) + '</span></button>';
   }).join("") + '</div><div id="serviceBody"></div>';
   host.querySelectorAll("[data-service]").forEach(function (button) {
-    button.onclick = function () { serviceScreen = button.dataset.service; renderService(host); };
+    button.onclick = function () { serviceScreen = button.dataset.service; pushRoute("settings", "service", serviceScreen); renderService(host); };
   });
   var body = host.querySelector("#serviceBody");
   if (current === "telegram") return renderTelegramConnection(body);
