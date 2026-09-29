@@ -988,9 +988,10 @@ function openPostStyleDialog() {
     drawer: true,
     wide: true,
     body: '<div id="postStyleHost"></div>',
-    footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="saveStyle" type="button">Сохранить</button>',
     ready: function (dialog) {
-      renderPostStyle(dialog.querySelector("#postStyleHost"));
+      var save = renderPostStyle(dialog.querySelector("#postStyleHost"));
+      dialog.querySelector("#saveStyle").onclick = function () { return save(); };
     },
   });
 }
@@ -1005,6 +1006,26 @@ function renderPostStyle(host) {
   var draft = { signature: current.signature || "", signatureEnabled: current.signatureEnabled !== false, signatureWrap: current.signatureWrap || "keep", signatureQuote: Boolean(current.signatureQuote), signatureDivider: current.signatureDivider || "none" };
   var buttons = (current.buttons || []).map(function (button) { return { text: button.text, url: button.url }; });
   var perRow = current.buttonsPerRow || 3;
+
+  // Записывается кнопкой «Сохранить» в подвале окна (окно возвращает эту функцию).
+  async function saveStyle() {
+      try {
+        await send("/api/publishing", "PUT", {
+          signature: draft.signature,
+          signatureEnabled: draft.signatureEnabled,
+          signatureWrap: draft.signatureWrap,
+          signatureQuote: draft.signatureQuote,
+          signatureDivider: draft.signatureDivider,
+          buttons: buttons.filter(function (button) { return button.text && button.url; }),
+          buttonsPerRow: perRow,
+          rubrics: rubrics.map(function (rubric) {
+            return { id: rubric.id, name: rubric.name, placement: rubric.placement, imageDataUrl: rubric.pendingImage || "" };
+          }),
+        });
+        toast("Сохранено");
+        await reload();
+      } catch (error) { fail(error); }
+  }
 
   function draw() {
     host.innerHTML = '<div class="grid cols-2">' +
@@ -1025,7 +1046,6 @@ function renderPostStyle(host) {
           }).join("") +
         '</select><div class="hint">Длинная линия задаёт ширину сообщения: блок подписи перестаёт быть узким и виден сразу.</div></div>' +
         '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div><div id="signCodes" class="hint warn-text"></div></div>' +
-        '<button class="btn" id="saveStyle" type="button">Сохранить</button>' +
       "</div></div>" +
       '<div class="card"><header><h3>Кнопки под постом</h3><div class="actions"><button class="btn secondary small" id="addButton" type="button">＋ Кнопка</button></div></header><div class="card-body stack">' +
         '<p class="muted small">Кнопки идут под каждым постом и ведут по ссылке. По ним удобно попадать с телефона, и в них видно, куда ведёт ссылка. Значок ставится прямо в названии: «🎵 ТикТок».</p>' +
@@ -1143,26 +1163,9 @@ function renderPostStyle(host) {
         draw();
       });
     });
-    host.querySelector("#saveStyle").onclick = async function () {
-      try {
-        await send("/api/publishing", "PUT", {
-          signature: draft.signature,
-          signatureEnabled: draft.signatureEnabled,
-          signatureWrap: draft.signatureWrap,
-          signatureQuote: draft.signatureQuote,
-          signatureDivider: draft.signatureDivider,
-          buttons: buttons.filter(function (button) { return button.text && button.url; }),
-          buttonsPerRow: perRow,
-          rubrics: rubrics.map(function (rubric) {
-            return { id: rubric.id, name: rubric.name, placement: rubric.placement, imageDataUrl: rubric.pendingImage || "" };
-          }),
-        });
-        toast("Сохранено");
-        await reload();
-      } catch (error) { fail(error); }
-    };
   }
   draw();
+  return saveStyle;
 }
 
 VIEWS.posts = {

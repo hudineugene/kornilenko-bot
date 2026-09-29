@@ -791,11 +791,11 @@ function renderOffers(host) {
 function renderFeed(host) {
   var settings = state.config.feedImport || {};
   var last = settings.lastResult || null;
-  host.innerHTML = '<div class="grid cols-2"><div class="card"><header><h3>Выгрузка с сайта</h3></header><div class="card-body stack">' +
+  host.innerHTML = '<div class="grid cols-2"><div class="card"><header><h3>Выгрузка с сайта</h3></header><div class="card-body stack"><div class="stack" id="feedForm">' +
       '<div class="field"><label for="feedUrl">Ссылка на выгрузку объектов с вашего сайта</label><input id="feedUrl" value="' + esc(settings.url || "") + '" placeholder="https://сайт/feed.xml"></div>' +
       '<label class="check"><input type="checkbox" id="feedPublish"' + (settings.publishNew ? " checked" : "") + "> новые объекты сразу показывать клиентам</label>" +
       '<label class="check"><input type="checkbox" id="feedDaily"' + (settings.daily ? " checked" : "") + "> обновлять каждый день</label>" +
-      '<div class="row wrap"><button class="btn secondary" id="feedCheck" type="button">Проверить</button><button class="btn" id="feedImport" type="button">Загрузить</button><button class="btn ghost small" id="feedSave" type="button">Сохранить настройки</button></div>' +
+      '</div><div class="row wrap"><button class="btn secondary" id="feedCheck" type="button">Проверить</button><button class="btn" id="feedImport" type="button">Загрузить</button></div>' +
       '<div id="feedResult" class="small muted"></div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Последняя загрузка</h3></header><div class="card-body stack">' +
@@ -824,9 +824,10 @@ function renderFeed(host) {
       await reload();
     } catch (error) { host.querySelector("#feedResult").textContent = ""; fail(error); }
   };
-  host.querySelector("#feedSave").onclick = async function () {
-    try { await send("/api/feed/settings", "PUT", payload()); toast("Настройки сохранены"); await reload(); } catch (error) { fail(error); }
-  };
+  // Ссылка и два флажка — форма: полоса «Сохранить» внизу. «Проверить» и «Загрузить» — действия.
+  watchForm(host.querySelector("#feedForm"), async function () {
+    await send("/api/feed/settings", "PUT", payload());
+  }, "Настройки загрузки с сайта изменены");
 }
 
 VIEWS.objects = {
