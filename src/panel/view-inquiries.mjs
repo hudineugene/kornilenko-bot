@@ -769,6 +769,100 @@ async function exportInquiries() {
 
 // Шаблон ответа добавляется к набранному, а не заменяет его: менеджер мог уже
 // начать писать. Между набранным и шаблоном — пустая строка.
+// --- Быстрый ответ -------------------------------------------------------------
+// Ответить клиенту, не уходя с экрана «Сегодня»: окно с последним сообщением,
+// шаблонами и полем ответа. «Отправить и следующий» — сразу к тому, кто ждёт
+// дольше всех из оставшихся. Вложения и кнопки-ссылки — в полном диалоге.
+function waitingQueue(handled) {
+  return conversationGroups().filter(function (group) {
+    return group.waiting && (handled || []).indexOf(String(group.userId)) < 0;
+  }).sort(function (a, b) { return b.waitAge - a.waitAge; });
+}
+
+function waitingInquiryOf(group) {
+  var waiting = group.inquiries.filter(awaitsReply).sort(function (a, b) { return waitAge(b) - waitAge(a); });
+  return waiting[0] || group.active;
+}
+
+async function openNextQuickReply(handled) {
+  var next = waitingQueue(handled)[0];
+  if (!next) {
+    toast("Больше никто не ждёт ответа");
+    return false;
+  }
+  openQuickReply(waitingInquiryOf(next).id, handled);
+  return true;
+}
+
+function openQuickReply(inquiryId, handledBefore) {
+  var handled = (handledBefore || []).slice();
+  var item = (state.inquiries || []).find(function (entry) { return entry.id === inquiryId; });
+  if (!item) return;
+  var user = userOf(item);
+  var last = item.lastMessage;
+  var lastText = String((last && last.direction !== "out" && (last.text || last.fileName)) || item.text || "").replace(/\s+/g, " ");
+  var waiting = inquiryState(item);
+  var requestKey = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : "quick-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+  openDialog({
+    title: "Ответ: " + userName(user),
+    body: '<div class="stack"><div class="row wrap"><span class="chip ' + esc(waiting.chip) + '">' + esc(waiting.text) + '</span><span class="small muted">' + esc(inquiryTypeName(item)) + '</span></div>' +
+      '<div class="msg qr-last">' + esc(lastText) + "</div>" +
+      ((state.replyTemplates || []).length ? '<div class="reply-templates">' + state.replyTemplates.map(function (template) {
+        return '<button class="btn secondary small template-chip" type="button" data-template="' + esc(template.id) + '" title="' + esc(String(localized(template.text, "ru") || "").slice(0, 120)) + '">' + esc(template.title) + "</button>";
+      }).join("") + "</div>" : "") +
+      '<textarea id="qrText" maxlength="3800" placeholder="Напишите ответ клиенту…"></textarea>' +
+      '<div class="small bad-text" id="qrError"></div></div>',
+    footer: '<button class="btn ghost" id="qrOpen" type="button">Открыть диалог</button><button class="btn ghost" id="qrSkip" type="button">Пропустить</button><div class="grow"></div>' +
+      '<button class="btn secondary" id="qrSend" type="button">Отправить</button><button class="btn" id="qrSendNext" type="button">Отправить и следующий</button>',
+    ready: function (dialog) {
+      var text = dialog.querySelector("#qrText");
+      var error = dialog.querySelector("#qrError");
+      (state.replyTemplates || []).forEach(function (template) {
+        var button = dialog.querySelector('[data-template="' + template.id + '"]');
+        if (button) button.onclick = function () {
+          var body = localized(template.text, item.language || "ru") || template.text.ru || "";
+          if (!body) return;
+          text.value = withTemplate(text.value, body);
+          if (text.focus) text.focus();
+        };
+      });
+      async function submit(goNext, button) {
+        var message = text.value.trim();
+        if (!message) return toast("Введите сообщение", true);
+        button.disabled = true;
+        error.textContent = "";
+        try {
+          await send("/api/inquiries/" + encodeURIComponent(item.id) + "/reply", "POST", { text: message, clientRequestId: requestKey });
+          forgetConversation(item.userId);
+          toast("Ответ доставлен");
+          dialog.closeClean();
+          handled.push(String(item.userId));
+          await reload();
+          if (goNext) await openNextQuickReply(handled);
+        } catch (failure) {
+          // Черновик остаётся, очередь не двигается: сообщение не ушло.
+          error.textContent = "Не отправлено: " + (failure && failure.message || "неизвестная ошибка");
+          toast("Сообщение не отправлено. Черновик сохранён.", true);
+          button.disabled = false;
+        }
+      }
+      dialog.querySelector("#qrSendNext").onclick = function () { return submit(true, dialog.querySelector("#qrSendNext")); };
+      dialog.querySelector("#qrSend").onclick = function () { return submit(false, dialog.querySelector("#qrSend")); };
+      dialog.querySelector("#qrSkip").onclick = async function () {
+        handled.push(String(item.userId));
+        dialog.closeClean();
+        await openNextQuickReply(handled);
+      };
+      dialog.querySelector("#qrOpen").onclick = async function () {
+        dialog.closeClean();
+        selectConversation(item.id);
+        await go("inquiries", "inbox");
+      };
+      if (text.focus) text.focus();
+    },
+  });
+}
+
 function withTemplate(current, text) {
   var typed = String(current || "").replace(/\s+$/, "");
   return typed ? typed + "\n\n" + text : text;

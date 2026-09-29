@@ -2978,6 +2978,87 @@ test('Ctrl+K: палитра с действиями, клиенты — по в
   assert.deepEqual(opened, ['old-9'], 'карточка открылась');
 });
 
+test('быстрый ответ со «Сегодня»: окно с последним сообщением, шаблонами, «Отправить и следующий» — самые давние первыми', async () => {
+  twoWaitingConversations();
+  bot.getData().replyTemplates = [{ id: 't1', title: 'Здравствуйте', text: { ru: 'Здравствуйте! Уточню и отвечу.', en: '', es: '' } }];
+  const { sandbox, requests } = await panelSandbox();
+  const original = sandbox.openDialog;
+  const dialogs = [];
+  sandbox.openDialog = (options) => { const dialog = original(options); dialogs.push({ options, dialog }); return dialog; };
+  const toasts = [];
+  sandbox.toast = (message) => toasts.push(String(message));
+
+  const today = fakeElement('main');
+  sandbox.VIEWS.today.render(today);
+  assert.match(String(today.innerHTML), /id="answerQueue"[^>]*>Ответить по очереди · 2</, 'на «Сегодня» есть «Ответить по очереди · 2»');
+
+  // Дело «Новое сообщение» на «Сегодня»: «Ответить» открывает окно, а не уводит в диалог.
+  const deed = sandbox.deedList().find((item) => item.kind === 'message' && /Ольга/.test(item.title));
+  assert.ok(deed, 'есть дело про Ольгу');
+  await sandbox.runDeed(deed);
+  assert.equal(dialogs.length, 1, 'окно открылось');
+  const first = dialogs[0];
+  assert.match(first.options.title, /Ольга/);
+  assert.match(String(first.options.body), /Жду, спасибо/, 'видно последнее сообщение клиента');
+  assert.match(String(first.options.body), /data-template="t1"/, 'шаблоны под рукой');
+  for (const id of ['qrText', 'qrSend', 'qrSendNext', 'qrSkip', 'qrOpen']) assert.ok(String(first.options.body + first.options.footer).includes('id="' + id + '"'), id);
+
+  // Пустой ответ не уходит.
+  requests.length = 0;
+  first.dialog.querySelector('#qrText').value = '   ';
+  await first.dialog.querySelector('#qrSendNext').onclick();
+  assert.ok(!requests.some((request) => request.url.includes('/reply')), 'пустое сообщение не отправляется');
+  assert.ok(toasts.some((message) => /Введите сообщение/.test(message)));
+
+  // «Отправить и следующий»: ответ уходит, открывается следующий ждущий (Николай).
+  first.dialog.querySelector('#qrText').value = 'Добрый день, Ольга!';
+  await first.dialog.querySelector('#qrSendNext').onclick();
+  const call = requests.find((request) => request.url === '/api/inquiries/inq-olga/reply');
+  assert.ok(call && call.method === 'POST', 'ответ ушёл по заявке Ольги');
+  assert.equal(call.body.text, 'Добрый день, Ольга!');
+  assert.ok(call.body.clientRequestId, 'с номером запроса: повтор не задвоит сообщение');
+  assert.equal(dialogs.length, 2, 'открылось окно следующего');
+  assert.match(dialogs[1].options.title, /Николай/);
+
+  // «Пропустить»: никому ничего не уходит, очередь заканчивается.
+  requests.length = 0;
+  await dialogs[1].dialog.querySelector('#qrSkip').onclick();
+  assert.ok(!requests.some((request) => request.url.includes('/reply')), 'пропуск ничего не отправляет');
+  assert.equal(dialogs.length, 2, 'больше ждущих нет — новое окно не открывается');
+  assert.ok(toasts.some((message) => /Больше никто не ждёт/.test(message)));
+
+  // «Открыть диалог» ведёт на обычный экран диалога.
+  const routes = [];
+  sandbox.go = async (view, tab) => { routes.push([view, tab]); return true; };
+  await sandbox.runDeed(sandbox.deedList().find((item) => item.kind === 'message' && /Николай/.test(item.title)));
+  await dialogs[2].dialog.querySelector('#qrOpen').onclick();
+  assert.deepEqual(JSON.parse(JSON.stringify(routes)), [['inquiries', 'inbox']]);
+});
+
+test('быстрый ответ: очередь «по очереди» начинается с ждущего дольше всех; ошибка отправки не двигает очередь', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const original = sandbox.openDialog;
+  const dialogs = [];
+  sandbox.openDialog = (options) => { const dialog = original(options); dialogs.push({ options, dialog }); return dialog; };
+  sandbox.toast = () => {};
+
+  // Николай ждёт 9 минут, Ольга — 4: первым — Николай.
+  await sandbox.openNextQuickReply([]);
+  assert.match(dialogs[0].options.title, /Николай/);
+
+  // Ошибка доставки: окно остаётся, сообщение об ошибке видно, следующий не открывается.
+  const baseFetch = sandbox.fetch;
+  sandbox.fetch = async (url, options) => (String(url).includes('/reply')
+    ? { ok: false, status: 502, json: async () => ({ error: 'Telegram не ответил' }), text: async () => '', headers: { get: () => '' } }
+    : baseFetch(url, options));
+  dialogs[0].dialog.querySelector('#qrText').value = 'Ответ';
+  await dialogs[0].dialog.querySelector('#qrSendNext').onclick();
+  assert.equal(dialogs.length, 1, 'следующий не открылся');
+  assert.match(String(dialogs[0].dialog.querySelector('#qrError').textContent), /Не отправлено: Telegram не ответил/);
+  assert.equal(dialogs[0].dialog.querySelector('#qrText').value, 'Ответ', 'черновик остался');
+});
+
 test('старые адреса подключения к Telegram ведут на «Обслуживание → Подключение к Telegram»', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();

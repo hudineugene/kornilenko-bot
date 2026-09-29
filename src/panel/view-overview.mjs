@@ -173,6 +173,11 @@ async function runDeed(item, button) {
     var inquiry = (state.inquiries || []).find(function (entry) { return entry.id === target.inquiryId; });
     if (inquiry) return openViewingSchedule(inquiry);
   }
+  // Новое сообщение клиента: отвечаем в окне, не уходя со «Сегодня».
+  if (item.kind === "message" && target.inquiryId) {
+    var waiting = (state.inquiries || []).find(function (entry) { return entry.id === target.inquiryId; });
+    if (waiting) return openQuickReply(waiting.id, []);
+  }
   return openNotification(item, button);
 }
 
@@ -301,7 +306,7 @@ VIEWS.today = {
       '<div class="split">' +
         '<div class="stack">' +
           '<div id="readiness"></div>' +
-          '<div class="card"><header><h3>Список дел</h3><div class="actions"><div class="tabs" id="feedTabs">' +
+          '<div class="card"><header><h3>Список дел</h3><div class="actions">' + (waiting ? '<button class="btn small" type="button" id="answerQueue" title="Открыть ответ тому, кто ждёт дольше всех, и дальше по очереди">Ответить по очереди · ' + num(waiting) + '</button>' : "") + '<div class="tabs" id="feedTabs">' +
             '<button type="button" class="' + (feedFilter === "active" ? "active" : "") + '" data-feed-filter="active">Требуют внимания <span>' + num(deeds.length) + '</span></button>' +
             '<button type="button" class="' + (feedFilter === "done" ? "active" : "") + '" data-feed-filter="done">Выполненное</button></div></div></header>' +
             (feedFilter === "done" ? doneRowsHtml() : "") +
@@ -342,6 +347,8 @@ VIEWS.today = {
     host.querySelectorAll("[data-go]").forEach(function (node) {
       node.onclick = function () { go(node.dataset.go, node.dataset.tab || ""); };
     });
+    var answerQueue = host.querySelector("#answerQueue");
+    if (answerQueue) answerQueue.onclick = function () { openNextQuickReply([]); };
     loadReadiness(host);
     loadWeekLine(host);
     host.querySelectorAll("[data-feed-filter]").forEach(function (button) {
