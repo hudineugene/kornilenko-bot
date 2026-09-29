@@ -1519,3 +1519,15 @@ test.describe('возврат к карточке не теряет навига
     assert.ok(!buttons.some((data) => /^catalog:all:/.test(data)), 'в общий каталог клиента не выбрасывает');
   });
 });
+
+test('«💬 Менеджер» со старой клавиатуры открывает контакты, а не создаёт заявку', async () => {
+  resetData();
+  const chat = createChat();
+  await chat.say(bot.text.menuLabels.ru.objects);
+  const before = bot.getData().inquiries.length;
+  const step = await chat.say('💬 Менеджер');
+  assert.equal(bot.getData().inquiries.length, before, 'заявка не создана');
+  const replies = step.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id));
+  assert.ok(replies.length > 0, 'клиенту ответили');
+  assert.ok(!/получен/i.test(replies.map((call) => call.body.text).join(' ')), 'ответ не «ваше сообщение получено»');
+});

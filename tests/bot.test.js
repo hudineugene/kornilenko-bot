@@ -309,7 +309,8 @@ test('version 25 keeps the district in a saved search', () => {
 
 // Списки прежних подписей кнопок остаются дословными: по ним бот узнаёт
 // кнопки, которые всё ещё висят у старых клиентов.
-const PREVIOUS_LABELS = /Our properties|Nuestros inmuebles|Contact an agent|Contactar con un agente/;
+// «💬 Gestor» — прежняя подпись кнопки, которую бот обязан узнавать у старых клиентов.
+const PREVIOUS_LABELS = /Our properties|Nuestros inmuebles|Contact an agent|Contactar con un agente|💬 Gestor/;
 
 test('the Spanish and English wording matches how agencies actually speak', () => {
   // «Gestor» в Испании — тот, кто оформляет документы, а не тот, кто продаёт
@@ -332,6 +333,15 @@ test('the Spanish and English wording matches how agencies actually speak', () =
   // Прежние подписи бот всё ещё понимает: у старых клиентов они на экране.
   assert.equal(bot.menuItemForText('💬 Contactar con un gestor', 'es'), 'contacts');
   assert.equal(bot.menuItemForText('💬 Contact a manager', 'en'), 'contacts');
+});
+
+test('кнопка «Связаться» узнаётся под всеми прежними названиями', () => {
+  // Клиент, не обновивший чат, нажимает то, что осталось у него на клавиатуре.
+  for (const [label, language] of [['💬 Менеджер', 'ru'], ['💬 Manager', 'en'], ['💬 Agent', 'en'], ['💬 Gestor', 'es'], ['💬 Asesor', 'es']]) {
+    assert.equal(bot.menuItemForText(label, language), 'contacts', label);
+  }
+  assert.equal(bot.menuItemForText('💬 Связаться', 'ru'), 'contacts', 'нынешняя подпись по-прежнему работает');
+  assert.equal(bot.menuItemForText('💬 Manager', 'ru'), '', 'чужой язык не подхватывается случайно');
 });
 
 test('an old menu keyboard still opens its sections', async () => {

@@ -2,7 +2,7 @@
 
 import { fillTemplate } from './util.mjs';
 import { imageExists } from './media.mjs';
-import { BOT_COMMAND_DESCRIPTIONS, CATALOG_SUMMARY_TEXT, COMPARISON_TEXT, PRIVACY_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
+import { BOT_COMMAND_DESCRIPTIONS, CATALOG_SUMMARY_TEXT, COMPARISON_TEXT, PRIVACY_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, EARLIER_CONTACT_LABELS, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, localizedExact, normalizedSavedSearch, promotionIsActive, sendUiMessage } from './catalog.mjs';
@@ -50,8 +50,10 @@ function menuItemForText(text, language) {
   const previous = PREVIOUS_MENU_LABELS[language] || PREVIOUS_MENU_LABELS.ru;
   // У «Акций» на кнопке стоит число — отрезаем его перед сравнением.
   const value = String(text || '').replace(/\s+·\s+\d+$/, '');
+  const earlierContacts = EARLIER_CONTACT_LABELS[language] || EARLIER_CONTACT_LABELS.ru;
   return ['objects', 'selection', 'contacts', 'promotions', 'favorites', 'request', 'about', 'help', 'more'].find((key) => {
-    return labels[key] === value || legacy[key] === value || previous[key] === value;
+    return labels[key] === value || legacy[key] === value || previous[key] === value
+      || (key === 'contacts' && earlierContacts.includes(value));
   }) || '';
 }
 

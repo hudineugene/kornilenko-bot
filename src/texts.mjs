@@ -20,6 +20,15 @@ const PREVIOUS_MENU_LABELS = {
   en: { objects: '🏘 Our properties', selection: '✨ Help me find a property', contacts: '💬 Contact a manager', request: '📞 Request a call', more: '☰ More' },
   es: { objects: '🏘 Nuestros inmuebles', selection: '✨ Ayúdame a elegir', contacts: '💬 Contactar con un gestor', request: '📞 Solicitar una llamada', more: '☰ Más' },
 };
+// Названия кнопки «Связаться», которые были в главном меню до переименования.
+// У клиента, который не обновлял чат, на клавиатуре может остаться любое из
+// них; без этого нажатие уходило как обычный текст — заявкой и ответом
+// «получено», а не открывало контакты.
+const EARLIER_CONTACT_LABELS = {
+  ru: ['💬 Менеджер'],
+  en: ['💬 Manager', '💬 Agent'],
+  es: ['💬 Gestor', '💬 Asesor'],
+};
 const LEGACY_MENU_LABELS = {
   ru: { objects: 'Наши объекты', contacts: 'Контакты', promotions: 'Акции', favorites: 'Избранное', request: 'Оставить заявку', about: 'О нас', language: 'Сменить язык' },
   en: { objects: 'Our properties', contacts: 'Contacts', promotions: 'Special offers', favorites: 'Favorites', request: 'Contact an agent', about: 'About us', language: 'Change language' },
@@ -1244,6 +1253,7 @@ export {
   LANGUAGE_PICKER_TEXT,
   LANGUAGE_SELECTED,
   LEAD_FORM_TEXT,
+  EARLIER_CONTACT_LABELS,
   LEGACY_MENU_LABELS,
   MAIN_MENU_TEXT,
   MANAGER_CONTACT_TEXT,
