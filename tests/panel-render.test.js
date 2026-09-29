@@ -3544,7 +3544,7 @@ test('сохранение — два способа: форма с полосо
 
   // Разметка: названия и описания группы — форма; кнопки-«Сохранить» на карточках нет.
   assert.ok(PANEL_HTML.includes('id="groupInfoForm"') && !PANEL_HTML.includes('groupSaveInfo'), 'название и описание группы — форма с полосой');
-  assert.match(PANEL_HTML, /Как в панели сохраняется то, что человек правит/, 'правило записано в коде');
+  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'panel', 'runtime.mjs'), 'utf8'), /Как в панели сохраняется то, что человек правит/, 'правило записано в коде');
   // «Загрузка с сайта»: настройки — форма с полосой; «Оформление постов»: «Сохранить» в подвале окна, не в теле.
   assert.ok(PANEL_HTML.includes('id="feedForm"') && !PANEL_HTML.includes('id="feedSave"'), 'настройки загрузки с сайта — форма с полосой');
   assert.match(PANEL_HTML, /footer: '[^']*id="saveStyle"[^']*'/, '«Сохранить» оформления постов — в подвале окна');

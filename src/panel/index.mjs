@@ -12,7 +12,13 @@ import { TEXTS_JS } from './view-texts.mjs';
 import { REACH_JS } from './view-reach.mjs';
 import { SETTINGS_JS } from './view-settings.mjs';
 
-const PANEL_SCRIPT = [
+// Комментарии нужны тем, кто правит код; браузеру они лишний вес (около 73 КБ из 612). Убираем
+// только строки-комментарии целиком: остальное (в том числе «//» внутри ссылок и строк)
+// остаётся как есть. Исходники модулей не меняются.
+function stripCommentLines(source) {
+  return source.split('\n').filter((line) => !/^\s*\/\//.test(line)).join('\n').replace(/\n{3,}/g, '\n\n');
+}
+const PANEL_SCRIPT = stripCommentLines([
   PANEL_RUNTIME_JS,
   OVERVIEW_JS,
   INQUIRIES_JS,
@@ -22,7 +28,7 @@ const PANEL_SCRIPT = [
   REACH_JS,
   SETTINGS_JS,
   'bindShell();\nboot().catch(function (error) { console.error(error); });',
-].join('\n');
+].join('\n'));
 
 const PANEL_HTML = String.raw`<!doctype html>
 <html lang="ru">

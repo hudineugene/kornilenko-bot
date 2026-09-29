@@ -745,3 +745,16 @@ test('в одном теге разметки один атрибут class: в�
   }
   assert.deepEqual(doubled, [], 'теги с двумя class=: ' + doubled.join(' | '));
 });
+
+test('в страницу не уходят комментарии кода; скрипт по-прежнему разбирается; размер страницы в бюджете', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const script = PANEL_HTML.match(/<script[^>]*>([\s\S]*?)<\/script>/)[1];
+  assert.doesNotThrow(() => new vm.Script(script), 'без комментариев скрипт разбирается');
+  const commentLines = script.split('\n').filter((line) => /^\s*\/\//.test(line));
+  assert.deepEqual(commentLines.slice(0, 3), [], 'строк-комментариев в странице нет');
+  // Ссылки с «//» внутри строк остались нетронутыми.
+  assert.ok(script.includes('https://'), 'адреса внутри строк на месте');
+  // Бюджет: страница в браузер уходит не больше 560 КБ сырой (было 612 КБ с комментариями).
+  const kilobytes = Buffer.byteLength(PANEL_HTML) / 1024;
+  assert.ok(kilobytes <= 560, 'размер страницы ' + kilobytes.toFixed(0) + ' КБ');
+});
