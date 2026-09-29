@@ -187,6 +187,7 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
         caption: caption || undefined,
         parse_mode: parseMode,
         show_caption_above_media: captionAbove,
+        message_thread_id: options.threadId || undefined,
         reply_parameters: options.replyParameters || undefined,
         reply_markup: replyMarkup,
       });
@@ -203,6 +204,7 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
       caption: caption || undefined,
       parse_mode: parseMode,
       show_caption_above_media: captionAbove,
+      message_thread_id: options.threadId ? String(options.threadId) : undefined,
       reply_parameters: options.replyParameters || undefined,
       reply_markup: replyMarkup,
     });
@@ -226,6 +228,7 @@ async function sendDocumentMessage(chatId, image, caption, token, replyMarkup, o
     document: { upload: new Blob([bytes], { type: image.mimeType || 'application/octet-stream' }), fileName: name },
     caption: caption || undefined,
     parse_mode: options.parseMode || undefined,
+    message_thread_id: options.threadId ? String(options.threadId) : undefined,
     reply_parameters: options.replyParameters || undefined,
     reply_markup: replyMarkup,
   });

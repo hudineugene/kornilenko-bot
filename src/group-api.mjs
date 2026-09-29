@@ -11,15 +11,19 @@ import { persistImage } from './media.mjs';
 import { json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
 import { objectCaption, propertyDeepLink, recordImages } from './catalog.mjs';
 import {
+  GENERAL_TOPIC_ID,
   fetchAdministrators,
   upsertGroup,
+  findTopic,
   forgetGroupMessage,
+  forgetTopic,
   groupById,
   groupList,
   newGroupPost,
   postToGroup,
   refreshGroup,
   refreshGroups,
+  rememberTopic,
 } from './groups.mjs';
 
 const MAX_SCHEDULED_POSTS = 50;
@@ -47,6 +51,24 @@ function postImage(body) {
   const image = parseUploadedImage(body.image, 'group');
   persistImage(image);
   return image;
+}
+
+// Тема из поля «ссылка или номер»: ссылка на тему или на сообщение в ней
+// (t.me/c/1234567890/12 или t.me/имя/12) либо просто номер. Ссылка на чужую
+// группу отвергается: иначе пост ушёл бы в тему с тем же номером не там.
+function topicFromInput(group, value) {
+  const text = cleanText(value, 300);
+  if (/^\d{1,10}$/.test(text)) return Number(text);
+  const link = text.match(/^(?:https?:\/\/)?t\.me\/(c\/(\d+)|([A-Za-z0-9_]{4,32}))\/(\d+)(?:\/\d+)?(?:\?.*)?$/i);
+  if (!link) throw new Error('Укажите номер темы или ссылку на неё вида https://t.me/c/1234567890/12');
+  if (link[2] && group.id !== '-100' + link[2]) throw new Error('Эта ссылка ведёт в другую группу');
+  if (link[3] && group.username && link[3].toLowerCase() !== group.username.toLowerCase()) throw new Error('Эта ссылка ведёт в другую группу');
+  return Number(link[4]);
+}
+
+function requestedThread(group, value) {
+  const threadId = Math.floor(Number(value)) || 0;
+  return threadId > GENERAL_TOPIC_ID && group.isForum ? threadId : 0;
 }
 
 function futureDate(value) {
@@ -213,7 +235,7 @@ async function handleGroupApi(req, res, url) {
     // --- Публикации ---------------------------------------------------------
     if (action === 'post' && req.method === 'POST') {
       const body = await readJson(req);
-      const fields = { ...body, groupId: group.id, image: postImage(body) };
+      const fields = { ...body, groupId: group.id, threadId: requestedThread(group, body.threadId), image: postImage(body) };
       if (body.sendAt) {
         const scheduled = (data.groupPosts || []).filter((item) => item.status === 'scheduled');
         if (scheduled.length >= MAX_SCHEDULED_POSTS) throw new Error('Слишком много отложенных публикаций');
@@ -227,12 +249,53 @@ async function handleGroupApi(req, res, url) {
         // Проверка вида: тот же пост, но в админ-чат, а не в группу.
         const adminChatId = cleanText(data.config.adminChatId, 40);
         if (!adminChatId) throw new Error("Админ-чат не настроен");
-        await postToGroup({ ...group, id: adminChatId, messages: [] }, { ...fields, pin: false });
+        await postToGroup({ ...group, id: adminChatId, messages: [] }, { ...fields, threadId: 0, pin: false });
         return json(res, 200, { ok: true, preview: true }), true;
       }
       const messageId = await postToGroup(group, fields);
       saveDataNow();
       return json(res, 200, { ok: true, messageId }), true;
+    }
+
+    // --- Темы (подгруппы) ---------------------------------------------------
+    // Список тем Telegram боту не отдаёт: бот запоминает те, о которых узнал по
+    // сообщениям, а остальные можно добавить по ссылке или создать заново.
+    if (action === 'topics' && !target && !sub && req.method === 'POST') {
+      const body = await readJson(req);
+      const name = cleanText(body.name, 128);
+      if (!name) throw new Error('Назовите тему');
+      if (!group.isForum) throw new Error('В этой группе не включены темы. Включите их в Telegram: «Управление группой» → «Темы».');
+      let created;
+      try {
+        created = await telegramRequest(token(), 'createForumTopic', { chat_id: group.id, name });
+      } catch (error) {
+        if (/not enough rights|CHAT_ADMIN_REQUIRED|manage topics/i.test(error.message)) {
+          throw new Error('У бота нет права управлять темами. В Telegram откройте «Администраторы» → бот и включите «Управление темами».');
+        }
+        throw error;
+      }
+      const threadId = Number(created && created.message_thread_id);
+      if (!threadId) throw new Error('Telegram не вернул номер новой темы');
+      const topic = rememberTopic(group, threadId, { name, closed: false, at: new Date().toISOString() });
+      saveDataNow();
+      return json(res, 200, { ok: true, topic, topics: group.topics }), true;
+    }
+
+    if (action === 'topics' && !target && sub === 'add' && req.method === 'POST') {
+      const body = await readJson(req);
+      const threadId = topicFromInput(group, body.link);
+      if (threadId <= GENERAL_TOPIC_ID) throw new Error('«Общая» тема уже в списке');
+      const known = findTopic(group, threadId);
+      const topic = rememberTopic(group, threadId, { name: body.name, manual: !known, at: known ? known.lastMessageAt : '' });
+      if (!topic) throw new Error('Слишком много тем');
+      saveDataNow();
+      return json(res, 200, { ok: true, topic, topics: group.topics }), true;
+    }
+
+    if (action === 'topics' && target && !sub && req.method === 'DELETE') {
+      if (!forgetTopic(group, target)) throw new Error('Такой темы в списке нет');
+      saveDataNow();
+      return json(res, 200, { ok: true, topics: group.topics }), true;
     }
 
     if (action === 'messages' && target && req.method === 'DELETE') {

@@ -2,6 +2,17 @@
 
 const REACH_JS = String.raw`
 var selectedGroup = "";
+// Выбранная тема по группам: «Общая» — номер 1, для неё в Telegram номер не нужен.
+var selectedTopics = {};
+
+// Название темы для человека. Списка тем Telegram боту не отдаёт, поэтому у темы,
+// о которой известен только номер, названия нет.
+function topicLabel(group, id) {
+  var threadId = Number(id) || 1;
+  var topic = (group.topics || []).find(function (item) { return item.id === threadId; });
+  if (topic && topic.name) return topic.name;
+  return threadId === 1 ? "Общая" : "Тема №" + threadId;
+}
 
 function campaignPropertySignalLabel(signal) {
   return { any: "любой интерес", favorite: "в избранном", comparison: "сравнивает", viewed: "просматривал", match: "подходит по запросу", inquiry: "обращался" }[signal || "any"] || "любой интерес";
@@ -55,7 +66,7 @@ function publicationRows() {
     rows.push({
       kind: "post",
       id: post.id,
-      where: (group && group.type !== "channel" ? "Группа · " : "Канал · ") + (group ? group.title || group.id : post.groupId),
+      where: (group && group.type !== "channel" ? "Группа · " : "Канал · ") + (group ? group.title || group.id : post.groupId) + (group && post.threadId > 1 ? " · тема «" + topicLabel(group, post.threadId) + "»" : ""),
       text: String(post.text || "").slice(0, 70),
       at: post.sendAt || post.sentAt || post.createdAt,
       queued: post.status === "scheduled",
@@ -531,10 +542,47 @@ function groupPostQueue(group) {
     posts.map(function (post) {
       var failed = post.status === "failed";
       return '<div class="list-item"><span class="grow"><b>' + esc(String(post.text || "Публикация с фото").slice(0, 80)) + "</b>" +
-        '<br><span class="muted small">' + esc(dateTime(post.sendAt)) + (failed && post.error ? " · " + esc(String(post.error).slice(0, 120)) : "") + "</span></span>" +
+        '<br><span class="muted small">' + esc(dateTime(post.sendAt)) + (post.threadId > 1 ? " · тема «" + esc(topicLabel(group, post.threadId)) + "»" : "") + (failed && post.error ? " · " + esc(String(post.error).slice(0, 120)) : "") + "</span></span>" +
         '<span class="chip ' + (failed ? "bad" : "brand") + '">' + (failed ? "не ушла" : "ждёт отправки") + "</span>" +
         '<button class="btn ghost small" data-cancel-post="' + esc(post.id) + '" type="button">' + (failed ? "Убрать" : "Отменить") + "</button></div>";
     }).join("") + "</div></div>";
+}
+
+// Выбор темы над текстом поста. Только в группах с темами: в канале и в обычной
+// группе выбирать нечего.
+function topicPicker(group) {
+  if (!group.isForum) return "";
+  var topics = (group.topics || []).slice().sort(function (a, b) { return a.id - b.id; });
+  if (!topics.some(function (topic) { return topic.id === 1; })) topics.unshift({ id: 1, name: "", closed: false });
+  var chosen = topics.some(function (topic) { return topic.id === selectedTopics[group.id]; }) ? selectedTopics[group.id] : 1;
+  return '<div class="field"><label for="groupTopic">Тема группы</label><select id="groupTopic">' + topics.map(function (topic) {
+    return '<option value="' + topic.id + '"' + (topic.id === chosen ? " selected" : "") + ">" + esc(topicLabel(group, topic.id) + (topic.id === 1 ? " (основная лента)" : "") + (topic.closed ? " — закрыта" : "")) + "</option>";
+  }).join("") + "</select></div>";
+}
+
+// Темы (подгруппы) в разделе управления. Список тем Telegram боту не отдаёт,
+// поэтому бот добавляет те, в которых что-то происходит, а остальные — по ссылке.
+function topicsCard(group) {
+  if (group.type === "channel") return "";
+  var topics = (group.topics || []).slice().sort(function (a, b) { return a.id - b.id; });
+  var intro = group.isForum
+    ? "Бот запоминает тему, как только в ней появляется сообщение. Telegram не даёт боту прочитать список тем целиком: недостающую тему добавьте по ссылке или напишите в ней любое сообщение."
+    : "В группе не включены темы. Если вы их включили, нажмите «Обновить» — они появятся здесь. Включить: в Telegram «Управление группой» → «Темы».";
+  return '<div class="card"><header><h3>Темы группы</h3></header><div class="card-body stack">' +
+    '<div class="small muted">' + esc(intro) + "</div>" +
+    (topics.length ? '<div class="list">' + topics.map(function (topic) {
+      var seen = (group.messages || []).filter(function (message) { return (message.threadId || 0) === topic.id; }).length;
+      return '<div class="list-item"><span class="grow"><b>' + esc(topicLabel(group, topic.id)) + "</b>" +
+        (topic.closed ? ' <span class="chip warn">закрыта</span>' : "") +
+        '<br><span class="small faint">№ ' + topic.id + (seen ? " · сообщений видно: " + seen : "") + (topic.lastMessageAt ? " · " + esc(dateShort(topic.lastMessageAt)) : "") + "</span></span>" +
+        (topic.id === 1 ? "" : '<button class="btn ghost small" data-forget-topic="' + topic.id + '" type="button">Убрать</button>') + "</div>";
+    }).join("") + "</div>" : "") +
+    (group.isForum ? '<div class="field"><label for="newTopicName">Создать новую тему</label><div class="row"><input id="newTopicName" maxlength="128" placeholder="Например, «Новостройки»"><button class="btn secondary small" id="createTopic" type="button">Создать</button></div>' +
+      (groupCan(group, "can_manage_topics") ? "" : '<div class="small faint">У бота нет права «Управление темами» — создать тему он не сможет. Включите его в списке администраторов группы.</div>') + "</div>" +
+      '<div class="field"><label for="knownTopicLink">Добавить существующую тему</label><div class="grid cols-2"><input id="knownTopicLink" placeholder="Ссылка на тему или её номер"><input id="knownTopicName" maxlength="128" placeholder="Название (по желанию)"></div>' +
+      '<div class="row"><button class="btn secondary small" id="addTopic" type="button">Добавить</button></div>' +
+      '<div class="small faint">Ссылку даёт Telegram: в теме нажмите на её название → «Копировать ссылку».</div></div>' : "") +
+    "</div></div>";
 }
 
 function renderGroupCard(host, group, mode) {
@@ -548,10 +596,11 @@ function renderGroupCard(host, group, mode) {
       ["Права бота", admin ? "администратор" : "участник", admin ? "" : "bad", admin ? "" : "Назначьте бота администратором"],
       ["Сообщений видно", num((group.messages || []).length), "", "Из последних 200"],
       ["Заявок на вступление", num((group.joinRequests || []).length), (group.joinRequests || []).length ? "bad" : "", "Ждут решения"],
-    ]) : "") +
+    ].concat(group.isForum ? [["Темы", num((group.topics || []).length), "", "В группе включены темы"]] : [])) : "") +
     (group.lastError ? '<div class="card gap-bottom"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
     '<div class="split">' + (showPost ? '<div class="stack">' +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Опубликовать в канале" : "Написать в группу") + '</h3></header><div class="card-body stack">' +
+        topicPicker(group) +
         markupToolbar("groupText") +
         '<textarea id="groupText" placeholder="' + (group.type === "channel" ? "Текст поста от имени канала" : "Текст сообщения от имени бота") + '" class="area-sm"></textarea>' +
         '<div class="hint">Ссылка надписью: <code>[смотреть объекты](https://t.me/…)</code></div>' +
@@ -577,6 +626,7 @@ function renderGroupCard(host, group, mode) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
             '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">бот</span>' : "") +
             (message.kind !== "text" ? ' <span class="chip">' + esc(GROUP_MESSAGE_KINDS[message.kind] || message.kind) + "</span>" : "") +
+            (group.isForum && message.threadId ? ' <span class="chip">' + esc(topicLabel(group, message.threadId)) + "</span>" : "") +
             '<br><span class="muted small">' + esc(String(message.text || "").slice(0, 120)) + "</span></span>" +
             '<span class="small faint nowrap">' + dateShort(message.date) + "</span>" +
             (groupCan(group, "can_pin_messages") ? '<button class="btn ghost small" data-pin="' + message.messageId + '" title="Закрепить">📌</button>' : "") +
@@ -596,6 +646,7 @@ function renderGroupCard(host, group, mode) {
           '<button class="btn small" data-approve="' + esc(request.userId) + '" type="button">Принять</button>' +
           '<button class="btn ghost small" data-decline="' + esc(request.userId) + '" type="button">Отклонить</button></div>';
       }).join("") + "</div></div>" : "") +
+      topicsCard(group) +
       (group.username ? '<div class="card"><header><h3>Публичная ссылка</h3></header><div class="card-body"><a href="https://t.me/' + esc(group.username) + '" target="_blank" rel="noreferrer">t.me/' + esc(group.username) + "</a></div></div>" : "") +
       '<div class="card"><header><h3>Ссылка-приглашение</h3></header><div class="card-body stack">' +
         (group.inviteLink ? '<div class="row"><input value="' + esc(group.inviteLink) + '" readonly id="inviteLink"><button class="btn ghost small" id="copyInvite" type="button">Копировать</button></div>' : '<span class="muted small">Ссылки нет</span>') +
@@ -731,6 +782,7 @@ function renderGroupCard(host, group, mode) {
       pin: Boolean(host.querySelector("#groupPin") && host.querySelector("#groupPin").checked),
       notify: host.querySelector("#groupNotify").checked,
       image: image,
+      threadId: Number((host.querySelector("#groupTopic") || {}).value) || 0,
       sendAt: when ? zonedDateTimeToIso(when) : "",
     };
   }
@@ -746,7 +798,7 @@ function renderGroupCard(host, group, mode) {
     var payload = postPayload();
     // Пост уходит всем подписчикам сразу и правке не подлежит: спрашиваем, куда
     // и когда. Кнопка стоит рядом с «Себе для проверки», промахнуться легко.
-    var where = (group.title || groupKindName(group)) + (group.memberCount ? ", " + counted(group.memberCount, "подписчик", "подписчика", "подписчиков") : "");
+    var where = (group.title || groupKindName(group)) + (payload.threadId > 1 ? ", тема «" + topicLabel(group, payload.threadId) + "»" : group.isForum ? ", тема «Общая»" : "") + (group.memberCount ? ", " + counted(group.memberCount, "подписчик", "подписчика", "подписчиков") : "");
     var when = payload.sendAt ? "Отправим " + dateTime(payload.sendAt) + "." : "Сообщение уйдёт сразу.";
     if (!(await confirmDialog(
       payload.sendAt ? "Запланировать публикацию?" : "Опубликовать?",
@@ -759,6 +811,37 @@ function renderGroupCard(host, group, mode) {
       await reload();
     } catch (error) { fail(error); }
   };
+  var topicSelect = host.querySelector("#groupTopic");
+  if (topicSelect) topicSelect.onchange = function () { selectedTopics[group.id] = Number(topicSelect.value) || 1; };
+  var createTopic = host.querySelector("#createTopic");
+  if (createTopic) createTopic.onclick = async function () {
+    var name = host.querySelector("#newTopicName").value.trim();
+    if (!name) { toast("Назовите тему"); return; }
+    try {
+      var created = await send(base + "/topics", "POST", { name: name });
+      selectedTopics[group.id] = created.topic.id;
+      toast("Тема создана: " + name);
+      await reload();
+    } catch (error) { fail(error); }
+  };
+  var addTopic = host.querySelector("#addTopic");
+  if (addTopic) addTopic.onclick = async function () {
+    try {
+      await send(base + "/topics/add", "POST", { link: host.querySelector("#knownTopicLink").value, name: host.querySelector("#knownTopicName").value });
+      toast("Тема добавлена");
+      await reload();
+    } catch (error) { fail(error); }
+  };
+  host.querySelectorAll("[data-forget-topic]").forEach(function (button) {
+    button.onclick = async function () {
+      if (!(await confirmDialog("Убрать тему из списка?", "Сама тема в Telegram останется. Бот снова добавит её в список, как только в ней появится сообщение.", "Убрать", true))) return;
+      try {
+        await api(base + "/topics/" + button.dataset.forgetTopic, { method: "DELETE" });
+        if (selectedTopics[group.id] === Number(button.dataset.forgetTopic)) delete selectedTopics[group.id];
+        await reload();
+      } catch (error) { fail(error); }
+    };
+  });
   host.querySelectorAll("[data-cancel-post]").forEach(function (button) {
     button.onclick = async function () {
       // Спрашиваем: отменённую публикацию не вернуть, а текст поста пропадёт.

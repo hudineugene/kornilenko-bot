@@ -20,6 +20,9 @@ import { applyPrivateChatStatus } from './users.mjs';
 const GROUP_MESSAGE_LIMIT = 200;
 const GROUP_LIMIT = 50;
 const MEMBER_COUNT_TTL_MS = 5 * 60 * 1000;
+// Темы форума (подгруппы). «Общая» тема — всегда номер 1.
+const TOPIC_LIMIT = 100;
+const GENERAL_TOPIC_ID = 1;
 
 const ADMIN_RIGHT_FIELDS = [
   'can_manage_chat',
@@ -66,8 +69,89 @@ function normalizeGroupMessage(message) {
     text: cleanText(message.text || message.caption || '', 1000),
     kind: message.photo ? 'photo' : message.video ? 'video' : message.document ? 'document' : message.voice ? 'voice' : message.poll ? 'poll' : 'text',
     fromBot: Boolean(from.is_bot) || (!message.from && Boolean(message.sender_chat)),
+    threadId: 0,
     date: new Date(Number(message.date || 0) * 1000 || Date.now()).toISOString(),
   };
+}
+
+function topicList(group) {
+  if (!Array.isArray(group.topics)) group.topics = [];
+  return group.topics;
+}
+
+function findTopic(group, id) {
+  const threadId = Math.floor(Number(id));
+  return topicList(group).find((topic) => topic.id === threadId) || null;
+}
+
+// Название темы для человека: у «Общей» его нет в Telegram, у темы, о которой
+// бот знает только номер, — тоже.
+function topicTitle(group, id) {
+  const threadId = Math.floor(Number(id)) || GENERAL_TOPIC_ID;
+  const topic = findTopic(group, threadId);
+  if (topic && topic.name) return topic.name;
+  return threadId === GENERAL_TOPIC_ID ? 'Общая' : 'Тема №' + threadId;
+}
+
+// Запомнить тему (или обновить то, что о ней известно). Наличие темы означает,
+// что в группе включены темы.
+function rememberTopic(group, id, patch = {}) {
+  const threadId = Math.floor(Number(id));
+  if (!group || !Number.isFinite(threadId) || threadId < 1) return null;
+  let topic = findTopic(group, threadId);
+  if (!topic) {
+    if (topicList(group).length >= TOPIC_LIMIT) return null;
+    topic = { id: threadId, name: '', closed: false, manual: false, lastMessageAt: '' };
+    topicList(group).push(topic);
+  }
+  const name = cleanText(patch.name, 128);
+  if (name && (patch.overwrite !== false || !topic.name)) topic.name = name;
+  if (patch.closed !== undefined) topic.closed = Boolean(patch.closed);
+  if (patch.manual) topic.manual = true;
+  if (patch.at) topic.lastMessageAt = patch.at;
+  group.isForum = true;
+  scheduleSave();
+  return topic;
+}
+
+function forgetTopic(group, id) {
+  const threadId = Math.floor(Number(id));
+  if (threadId === GENERAL_TOPIC_ID) return false;
+  const before = topicList(group).length;
+  group.topics = topicList(group).filter((topic) => topic.id !== threadId);
+  scheduleSave();
+  return group.topics.length < before;
+}
+
+// В какой теме сообщение. Служебные события темы называют её сами; у обычного
+// сообщения номер темы указан, если оно написано внутри темы. Сообщение без
+// номера в форуме — из «Общей». Номер, который Telegram ставит у ответов в
+// группе без тем, темой не считается.
+function messageThread(message, group) {
+  if (message.forum_topic_created) return Number(message.message_thread_id || message.message_id) || 0;
+  const thread = Number(message.message_thread_id) || 0;
+  if (message.forum_topic_edited || message.forum_topic_closed || message.forum_topic_reopened) return thread;
+  if (message.is_topic_message && thread) return thread;
+  return group && group.isForum ? GENERAL_TOPIC_ID : 0;
+}
+
+const TOPIC_SERVICE_FIELDS = ['forum_topic_created', 'forum_topic_edited', 'forum_topic_closed', 'forum_topic_reopened'];
+
+function learnTopic(group, message, threadId, at) {
+  const created = message.forum_topic_created;
+  if (created) {
+    rememberTopic(group, threadId, { name: created.name, closed: false, at });
+    return;
+  }
+  const edited = message.forum_topic_edited;
+  if (edited) rememberTopic(group, threadId, { name: edited.name, at });
+  if (message.forum_topic_closed) rememberTopic(group, threadId, { closed: true, at });
+  if (message.forum_topic_reopened) rememberTopic(group, threadId, { closed: false, at });
+  if (!edited && !message.forum_topic_closed && !message.forum_topic_reopened && threadId) {
+    // Первое сообщение темы отвечает на её «создание»: там лежит название.
+    const origin = message.reply_to_message && message.reply_to_message.forum_topic_created;
+    rememberTopic(group, threadId, { name: origin && origin.name, overwrite: false, at });
+  }
 }
 
 function upsertGroup(chat, patch = {}) {
@@ -85,6 +169,8 @@ function upsertGroup(chat, patch = {}) {
       rights: rightsOf(null),
       memberCount: 0,
       memberCountAt: '',
+      isForum: false,
+      topics: [],
       description: '',
       inviteLink: '',
       pinnedMessageId: 0,
@@ -126,7 +212,20 @@ function rememberGroupMessage(message) {
   const group = groupById(chat.id);
   if (!group) return null;
   upsertGroup(chat);
-  group.messages.push(normalizeGroupMessage(message));
+  const at = new Date().toISOString();
+  if (message.is_topic_message || TOPIC_SERVICE_FIELDS.some((field) => message[field])) group.isForum = true;
+  const threadId = messageThread(message, group);
+  if (threadId) learnTopic(group, message, threadId, at);
+  // Служебные события темы — не сообщения группы: в списке они были бы пустыми
+  // строками. О самой теме бот уже узнал.
+  if (TOPIC_SERVICE_FIELDS.some((field) => message[field])) {
+    group.lastMessageAt = at;
+    scheduleSave();
+    return group;
+  }
+  const remembered = normalizeGroupMessage(message);
+  remembered.threadId = threadId;
+  group.messages.push(remembered);
   if (group.messages.length > GROUP_MESSAGE_LIMIT) group.messages = group.messages.slice(-GROUP_MESSAGE_LIMIT);
   group.lastMessageAt = new Date().toISOString();
   if (message.pinned_message && message.pinned_message.message_id) group.pinnedMessageId = Number(message.pinned_message.message_id);
@@ -161,7 +260,9 @@ async function refreshGroup(group, token = data.config.botToken) {
       inviteLink: cleanText(chat.invite_link, 200),
       pinnedMessageId: chat.pinned_message ? Number(chat.pinned_message.message_id) : group.pinnedMessageId,
       photoFileId: chat.photo ? cleanText(chat.photo.small_file_id, 200) : '',
+      isForum: Boolean(chat.is_forum),
     });
+    if (group.isForum && !findTopic(group, GENERAL_TOPIC_ID)) rememberTopic(group, GENERAL_TOPIC_ID);
     const count = await telegramRequest(token, 'getChatMemberCount', { chat_id: group.id });
     group.memberCount = Number(count) || 0;
     group.memberCountAt = new Date().toISOString();
@@ -344,9 +445,10 @@ function rubricOf(post) {
   return rubric && imageExists(rubric.image) ? rubric : null;
 }
 
-function rememberOwnMessage(group, messageId, text, kind) {
+function rememberOwnMessage(group, messageId, text, kind, threadId = 0) {
   if (!messageId) return;
   group.messages.push({
+    threadId,
     messageId,
     userId: String(data.bot && data.bot.id || ''),
     name: group.type === 'channel' ? (group.title || 'Канал') : 'Бот',
@@ -366,11 +468,29 @@ function rememberOwnMessage(group, messageId, text, kind) {
 // поста вместе с постоянной подписью, когда плашка стоит внизу сообщения.
 const CAPTION_LIMIT = 1024;
 
+// Номер темы для Telegram: «Общая» и группа без тем принимают сообщение без
+// номера, а номер, которого там нет, Telegram отвергает.
+function postThreadId(group, post) {
+  const threadId = Math.floor(Number(post && post.threadId)) || 0;
+  return threadId > GENERAL_TOPIC_ID && group.isForum ? threadId : 0;
+}
+
+// Ошибки Telegram про тему — человеческим языком.
+function topicErrorMessage(group, post, error) {
+  const message = String(error && error.message || '');
+  const name = topicTitle(group, post.threadId);
+  if (/thread not found|TOPIC_DELETED/i.test(message)) return 'Темы «' + name + '» нет: её могли удалить. Уберите её из списка тем или выберите другую.';
+  if (/TOPIC_CLOSED|topic closed/i.test(message)) return 'Тема «' + name + '» закрыта — писать в неё нельзя. Откройте тему в Telegram или выберите другую.';
+  return '';
+}
+
 // Повтор без ссылки mailto, если Telegram её не принял.
 async function postToGroup(group, post, token = data.config.botToken) {
   try {
     return await sendPost(group, post, token);
   } catch (error) {
+    const friendly = postThreadId(group, post) ? topicErrorMessage(group, post, error) : '';
+    if (friendly) throw new Error(friendly);
     const rejected = /url|entit|parse/i.test(String(error && error.message));
     if (!rejected || post.plainMail || !hasMailto(postText(post))) throw error;
     recordError('Ссылка mailto не принята, отправляем адрес текстом', error);
@@ -387,6 +507,8 @@ async function sendPost(group, post, token = data.config.botToken) {
   const plain = useHtml ? formatted.plain : written;
   const parseMode = useHtml ? 'HTML' : undefined;
   const markup = postMarkup(post);
+  const threadId = postThreadId(group, post);
+  const threadOptions = threadId ? { threadId } : {};
   const rubric = rubricOf(post);
   const ownImage = imageExists(post.image) ? post.image : null;
   // Прозрачный PNG Telegram сохраняет только файлом, а файл нельзя поставить
@@ -400,35 +522,35 @@ async function sendPost(group, post, token = data.config.botToken) {
   let sent;
   let plateSentInside = false;
   if (plateInside) {
-    sent = await sendPhotoMessage(group.id, rubric.image, text, token, markup, { captionAbove: true, parseMode });
+    sent = await sendPhotoMessage(group.id, rubric.image, text, token, markup, { captionAbove: true, parseMode, ...threadOptions });
     plateSentInside = true;
   } else if (topImage) {
     const sendImage = ownTransparent ? sendDocumentMessage : sendPhotoMessage;
     if (text && plain.length <= CAPTION_LIMIT) {
-      sent = await sendImage(group.id, topImage, text, token, markup, { parseMode });
+      sent = await sendImage(group.id, topImage, text, token, markup, { parseMode, ...threadOptions });
     } else {
-      sent = await sendImage(group.id, topImage, '', token, null);
+      sent = await sendImage(group.id, topImage, '', token, null, threadOptions);
       // Фотография уже в группе: если текст под ней не уйдёт, повторять весь
       // пост нельзя — в группе оказались бы две фотографии.
       if (text) {
-        await sendMessage(group.id, text, token, { track: false, ...(parseMode ? { parse_mode: parseMode } : {}), ...(markup ? { reply_markup: markup } : {}) })
+        await sendMessage(group.id, text, token, { track: false, ...(threadId ? { message_thread_id: threadId } : {}), ...(parseMode ? { parse_mode: parseMode } : {}), ...(markup ? { reply_markup: markup } : {}) })
           .catch((error) => recordError('Текст поста под фотографией', error));
       }
     }
   } else {
     if (!text) throw new Error('Сообщение пустое');
-    sent = await sendMessage(group.id, text, token, { track: false, ...(parseMode ? { parse_mode: parseMode } : {}), ...(markup ? { reply_markup: markup } : {}) });
+    sent = await sendMessage(group.id, text, token, { track: false, ...(threadId ? { message_thread_id: threadId } : {}), ...(parseMode ? { parse_mode: parseMode } : {}), ...(markup ? { reply_markup: markup } : {}) });
   }
   const messageId = sent && Number(sent.message_id);
-  rememberOwnMessage(group, messageId, plain, topImage || plateSentInside ? 'photo' : 'text');
+  rememberOwnMessage(group, messageId, plain, topImage || plateSentInside ? 'photo' : 'text', threadId || (group.isForum ? GENERAL_TOPIC_ID : 0));
   // Длинный пост или своё фото: плашка уходит отдельным сообщением следом.
   if (rubric && (rubric.placement !== 'top' || plateTransparent) && !plateSentInside) {
     const sendPlate = plateTransparent ? sendDocumentMessage : sendPhotoMessage;
-    const plate = await sendPlate(group.id, rubric.image, '', token, null).catch((error) => {
+    const plate = await sendPlate(group.id, rubric.image, '', token, null, threadOptions).catch((error) => {
       recordError('Плашка рубрики «' + rubric.name + '»', error);
       return null;
     });
-    rememberOwnMessage(group, plate && Number(plate.message_id), '🏷 ' + rubric.name, 'photo');
+    rememberOwnMessage(group, plate && Number(plate.message_id), '🏷 ' + rubric.name, 'photo', threadId || (group.isForum ? GENERAL_TOPIC_ID : 0));
   }
   if (messageId && post.pin) {
     // Сообщение уже опубликовано: неудачное закрепление — повод для записи в
@@ -442,6 +564,7 @@ async function sendPost(group, post, token = data.config.botToken) {
     if (pinned) group.pinnedMessageId = messageId;
   }
   group.lastPostAt = new Date().toISOString();
+  if (threadId) rememberTopic(group, threadId, { at: group.lastPostAt });
   scheduleSave();
   return messageId || 0;
 }
@@ -499,6 +622,7 @@ function newGroupPost(fields) {
   return {
     id: crypto.randomUUID(),
     groupId: cleanText(fields.groupId, 40),
+    threadId: Math.max(0, Math.floor(Number(fields.threadId)) || 0),
     text: cleanText(fields.text, 4000),
     buttonText: cleanText(fields.buttonText, 64),
     buttonUrl: cleanText(fields.buttonUrl, 500),
@@ -516,12 +640,15 @@ function newGroupPost(fields) {
 }
 
 export {
+  GENERAL_TOPIC_ID,
   GROUP_POST_ATTEMPTS,
   GROUP_MESSAGE_LIMIT,
   activeGroups,
   duePosts,
   fetchAdministrators,
+  findTopic,
   forgetGroupMessage,
+  forgetTopic,
   groupById,
   groupList,
   handleChatJoinRequest,
@@ -534,9 +661,11 @@ export {
   postToGroup,
   signatureBlock,
   signatureText,
+  topicTitle,
   refreshGroup,
   refreshGroups,
   rememberGroupMessage,
+  rememberTopic,
   runDueGroupPosts,
   upsertGroup,
 };

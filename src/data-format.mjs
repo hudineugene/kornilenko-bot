@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 39;
+const DATA_VERSION = 40;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -573,6 +573,29 @@ function normalizePublishing(value) {
 // negative; messages are capped when loading too.
 const GROUP_STATUSES = ['creator', 'administrator', 'member', 'restricted', 'left', 'kicked'];
 
+// Темы форума (подгруппы). Список тем Telegram боту не отдаёт: он запоминает те,
+// о которых узнал по сообщениям, или те, что добавили вручную. Тема «Общая» —
+// номер 1, в неё сообщения уходят без номера темы.
+function normalizeTopics(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const topics = [];
+  for (const item of value) {
+    const id = Math.floor(Number(item && item.id));
+    if (!Number.isFinite(id) || id < 1 || seen.has(id)) continue;
+    seen.add(id);
+    topics.push({
+      id,
+      name: cleanText(item.name, 128),
+      closed: Boolean(item.closed),
+      manual: Boolean(item.manual),
+      lastMessageAt: cleanText(item.lastMessageAt, 40),
+    });
+    if (topics.length >= 100) break;
+  }
+  return topics;
+}
+
 function normalizeGroups(value) {
   if (!Array.isArray(value)) return [];
   return value.filter((item) => item && /^-?\d{4,20}$/.test(String(item.id))).slice(0, 50).map((item) => ({
@@ -586,6 +609,8 @@ function normalizeGroups(value) {
       : {},
     memberCount: Math.max(0, Number(item.memberCount) || 0),
     memberCountAt: cleanText(item.memberCountAt, 40),
+    isForum: Boolean(item.isForum),
+    topics: normalizeTopics(item.topics),
     description: cleanText(item.description, 1000),
     inviteLink: cleanText(item.inviteLink, 200),
     pinnedMessageId: Math.max(0, Number(item.pinnedMessageId) || 0),
@@ -597,6 +622,7 @@ function normalizeGroups(value) {
       text: cleanText(message.text, 1000),
       kind: cleanText(message.kind, 20) || 'text',
       fromBot: Boolean(message.fromBot),
+      threadId: Math.max(0, Math.floor(Number(message.threadId)) || 0),
       date: cleanText(message.date, 40),
     })),
     joinRequests: (Array.isArray(item.joinRequests) ? item.joinRequests : []).slice(-100).map((request) => ({
@@ -618,6 +644,7 @@ function normalizeGroupPosts(value) {
   return value.slice(-100).map((item) => ({
     id: cleanText(item.id, 60) || crypto.randomUUID(),
     groupId: cleanText(item.groupId, 40),
+    threadId: Math.max(0, Math.floor(Number(item.threadId)) || 0),
     text: cleanText(item.text, 4000),
     buttonText: cleanText(item.buttonText, 64),
     buttonUrl: cleanText(item.buttonUrl, 500),

@@ -1396,6 +1396,66 @@ test('«Пост в канал» — форма поста с выбором к�
   assert.ok(!manageHtml.includes('id="groupSend"'), 'формы поста там нет');
 });
 
+test('группа с темами: в форме поста выбирается тема, в «Обслуживании» темы создают, добавляют и убирают', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.groups.push({
+      id: '-1003934963994', title: 'Стройка без фильтров', type: 'supergroup', status: 'administrator', memberCount: 40,
+      rights: { can_pin_messages: true, can_manage_topics: true }, isForum: true,
+      topics: [{ id: 1, name: '', closed: false }, { id: 12, name: 'Новостройки', closed: false }, { id: 33, name: 'Старая', closed: true }],
+      messages: [{ messageId: 5, name: 'Ирина', text: 'Что у моря?', kind: 'text', threadId: 12, date: new Date().toISOString() }],
+    });
+    data.groups.push({ id: '-1002222222222', title: 'Обычная группа', type: 'supergroup', status: 'member', memberCount: 8, isForum: false, topics: [] });
+    data.groupPosts.push({ id: 'post-topic-1', groupId: '-1003934963994', threadId: 12, text: 'Завтра', status: 'scheduled', sendAt: new Date(Date.now() + 864e5).toISOString() });
+  });
+  const { sandbox, requests } = await panelSandbox();
+
+  const post = fakeElement('main');
+  sandbox.renderGroups(post, 'post');
+  const html = String(post.innerHTML) + String(post.querySelector('#groupBody').innerHTML);
+  assert.match(html, /id="groupTopic"/, 'выбор темы есть');
+  assert.match(html, /<option value="1" selected>Общая \(основная лента\)<\/option>/, 'по умолчанию — «Общая»');
+  assert.match(html, /<option value="12">Новостройки<\/option>/);
+  assert.match(html, /<option value="33">Старая — закрыта<\/option>/, 'закрытая тема помечена');
+  assert.ok(html.indexOf('id="groupTopic"') < html.indexOf('id="groupText"'), 'тему выбирают до текста');
+  assert.match(html, /<span class="chip">Новостройки<\/span>/, 'у сообщения видно, из какой оно темы');
+  assert.match(html, /тема «Новостройки»/, 'в очереди отложенных указана тема');
+
+  // Группа без тем: выбирать нечего.
+  sandbox.state.groups[0].isForum = false;
+  const plain = fakeElement('main');
+  sandbox.renderGroupCard(plain, sandbox.state.groups[1], 'post');
+  assert.ok(!String(plain.innerHTML).includes('groupTopic'), 'в группе без тем выбора темы нет');
+  sandbox.state.groups[0].isForum = true;
+
+  const manage = fakeElement('main');
+  sandbox.renderGroupCard(manage, sandbox.state.groups[0], 'manage');
+  const manageHtml = String(manage.innerHTML);
+  for (const word of ['Темы группы', 'Создать новую тему', 'Добавить существующую тему', 'Копировать ссылку', 'data-forget-topic="12"', 'закрыта']) assert.ok(manageHtml.includes(word), 'на экране есть: ' + word);
+  assert.ok(!manageHtml.includes('data-forget-topic="1"'), '«Общую» убрать нельзя');
+  assert.ok(!manageHtml.includes('нет права «Управление темами»'), 'право у бота есть — предупреждения нет');
+
+  requests.length = 0;
+  manage.querySelector('#newTopicName').value = 'Аренда';
+  await manage.querySelector('#createTopic').onclick();
+  const created = requests.find((request) => request.url.endsWith('/topics') && request.method === 'POST');
+  assert.ok(created, 'создание темы ушло на бота');
+  assert.equal(created.body.name, 'Аренда');
+
+  requests.length = 0;
+  manage.querySelector('#knownTopicLink').value = 'https://t.me/c/3934963994/44';
+  manage.querySelector('#knownTopicName').value = 'Курорты';
+  await manage.querySelector('#addTopic').onclick();
+  const added = requests.find((request) => request.url.endsWith('/topics/add'));
+  assert.deepEqual([added.body.link, added.body.name], ['https://t.me/c/3934963994/44', 'Курорты']);
+
+  // Группа без тем объясняет, как их включить.
+  const off = fakeElement('main');
+  sandbox.renderGroupCard(off, sandbox.state.groups[1], 'manage');
+  assert.match(String(off.innerHTML), /не включены темы/);
+  assert.ok(!String(off.innerHTML).includes('createTopic'), 'создавать тему негде');
+});
+
 test('редактор объекта: внизу «Опубликовать» и «Сохранить как черновик»; опубликованный — «Сохранить», «Снять», «В канал»', async () => {
   resetData((data) => {
     data.config.active = true;
