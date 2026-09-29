@@ -319,6 +319,18 @@ function mediaCheckHtml(report) {
   return rows;
 }
 
+// Журнал ошибок: подряд идущие одинаковые (тот же раздел и то же сообщение) — одна строка
+// «×5, последняя 16:37». Список идёт от новых к старым, поэтому первая в группе — последняя по времени.
+function groupErrors(errors) {
+  var groups = [];
+  (errors || []).forEach(function (error) {
+    var last = groups[groups.length - 1];
+    if (last && (last.area || last.context) === (error.area || error.context) && last.message === error.message) last.count += 1;
+    else groups.push(Object.assign({}, error, { count: 1 }));
+  });
+  return groups;
+}
+
 function renderData(host) {
   var backup = state.config.telegramBackup || {};
   host.innerHTML = '<div class="grid cols-2">' +
@@ -343,9 +355,9 @@ function renderData(host) {
       '<div class="card-body stack" id="mediaCheckBody"><p class="muted small">Сверяет картинки в данных с файлами в папке bot-media. Потерянные можно вернуть из ежедневной копии.</p></div>' +
     "</div>" +
     '<div class="card"><header><h3>Журнал ошибок</h3><div class="actions"><button class="btn ghost small" id="clearErrors" type="button">Очистить</button></div></header>' +
-      ((state.errors || []).length ? '<div class="list">' + state.errors.slice(0, 20).map(function (error) {
-        return '<div class="list-item"><span class="grow"><b>' + esc(error.area || error.context || "Ошибка") + '</b><br><span class="muted small">' + esc(error.message) + "</span></span>" +
-          '<span class="small faint nowrap">' + dateTime(error.createdAt || error.at) + "</span></div>";
+      ((state.errors || []).length ? '<div class="list">' + groupErrors(state.errors).slice(0, 20).map(function (error) {
+        return '<div class="list-item"><span class="grow"><b>' + esc(error.area || error.context || "Ошибка") + '</b>' + (error.count > 1 ? ' <span class="chip warn">×' + error.count + "</span>" : "") + '<br><span class="muted small">' + esc(error.message) + "</span></span>" +
+          '<span class="small faint nowrap">' + (error.count > 1 ? "последняя " : "") + dateTime(error.createdAt || error.at) + "</span></div>";
       }).join("") + "</div>" : '<div class="empty"><b>Ошибок нет</b></div>') +
     "</div>" +
     '<div class="card"><header><h3>Статистика и история</h3></header><div class="card-body stack">' +

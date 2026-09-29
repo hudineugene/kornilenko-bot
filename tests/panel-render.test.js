@@ -3716,3 +3716,26 @@ test('очередь публикаций: клик по отложенному 
   await dialogs[0].dialog.querySelector('#cancelScheduledPost').onclick();
   assert.ok(requests.some((request) => request.method === 'DELETE' || /cancel/.test(request.url)), 'отмена ушла на бота: ' + JSON.stringify(requests.map((request) => request.method + ' ' + request.url)));
 });
+
+test('журнал ошибок: подряд идущие одинаковые строки схлопываются в «×N, последняя …»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const at = (minutes) => new Date(Date.now() - minutes * 60000).toISOString();
+  const error = (area, message, minutes) => ({ area, message, createdAt: at(minutes) });
+  const list = [error('Копия', 'Не удалось создать копию', 1), error('Копия', 'Не удалось создать копию', 5), error('Копия', 'Не удалось создать копию', 9), error('Telegram', 'Таймаут', 12), error('Копия', 'Не удалось создать копию', 20)];
+  const grouped = sandbox.groupErrors(list);
+  assert.equal(grouped.length, 3, 'три подряд слились, четвёртая — другая, пятая — снова копия отдельной строкой');
+  assert.equal(grouped[0].count, 3);
+  assert.equal(grouped[0].createdAt, list[0].createdAt, 'время у группы — самой свежей (первой)');
+  assert.equal(grouped[1].count, 1);
+  assert.equal(sandbox.groupErrors([]).length, 0);
+  assert.equal(sandbox.groupErrors(null).length, 0);
+
+  sandbox.state.errors = [error('Копия', 'Не удалось создать копию', 1), error('Копия', 'Не удалось создать копию', 5), error('Telegram', 'Таймаут', 12)];
+  const host = fakeElement('main');
+  sandbox.renderData(host);
+  const html = String(host.innerHTML);
+  assert.match(html, /Копия<\/b> <span class="chip warn">×2<\/span>/, 'у сдвоенной строки — «×2»');
+  assert.match(html, /последняя /);
+  assert.equal((html.match(/Не удалось создать копию/g) || []).length, 1, 'сообщение показано один раз');
+});
