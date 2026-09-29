@@ -2400,6 +2400,75 @@ test('«Отчёт»: воронка бота — шаги от «зашли» �
   assert.ok(!String(sandbox.weeklyCard({ report: base, text: '' })).includes('Воронка бота'));
 });
 
+test('«Почему мы»: вкладка в «Текстах бота»; поля, отзывы с разрешением, статус «виден / скрыт», сохранение', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const texts = sandbox.navItems().find((item) => item.id === 'texts');
+  assert.ok(texts.tabs.some((tab) => tab[0] === 'trust' && tab[1] === 'Почему мы'), 'вкладка есть');
+
+  let save = null;
+  sandbox.watchForm = (root, callback) => { save = callback; return { mark() {} }; };
+
+  // Пусто: экран клиентам не виден, об этом сказано.
+  sandbox.state.trust = { yearsOnMarket: 0, dealsCount: 0, registration: '', officeAddress: '', reviewsUrl: '', reviews: [] };
+  const empty = fakeElement('main');
+  sandbox.renderTrust(empty);
+  const emptyHtml = String(empty.innerHTML);
+  assert.match(emptyHtml, /Скрыт: пока ничего не заполнено/);
+  assert.match(emptyHtml, /id="tYears"/);
+  assert.match(emptyHtml, /id="tReviewsUrl"/);
+  assert.match(String(empty.querySelector('#trustPreview').innerHTML), /Пока пусто — клиенты этого экрана не увидят/);
+  assert.match(emptyHtml, /бот ничего не сочиняет/, 'предупреждение: содержимое только своё');
+
+  // Заполнено: статус меняется; отзыв без разрешения помечен и в превью не попадает.
+  sandbox.state.trust = {
+    yearsOnMarket: 12, dealsCount: 340, registration: 'Рег. №1', officeAddress: 'Calle del Mar, 5', reviewsUrl: 'https://r.example.com',
+    reviews: [{ id: 'r1', name: 'Ханс', country: 'Германия', text: 'Отлично', allowed: true }, { id: 'r2', name: 'Скрытый', country: '', text: 'Нет разрешения', allowed: false }],
+  };
+  const filled = fakeElement('main');
+  sandbox.renderTrust(filled);
+  const html = String(filled.innerHTML);
+  assert.match(html, /Экран виден клиентам/);
+  assert.match(html, /value="12"/);
+  const rows = String(filled.querySelector('#trustReviews').innerHTML);
+  assert.match(rows, /data-rv-allow="0" checked/, 'у первого отзыва разрешение отмечено');
+  assert.ok(!/data-rv-allow="1" checked/.test(rows), 'у второго — нет');
+  assert.match(rows, /Без отметки о разрешении отзыв клиентам не показывается/);
+  const preview = String(filled.querySelector('#trustPreview').innerHTML);
+  assert.match(preview, /Ханс/);
+  assert.ok(!/Скрытый|Нет разрешения/.test(preview), 'отзыв без разрешения в превью не попадает');
+
+  // Сохранение: пустые строки отзывов отбрасываются, разрешение уходит как есть.
+  filled.querySelector('#tYears').value = '13';
+  filled.querySelector('#tDeals').value = '350';
+  filled.querySelector('#tReg').value = 'Рег. №2';
+  filled.querySelector('#tOffice').value = 'Другой адрес';
+  filled.querySelector('#tReviewsUrl').value = 'https://r2.example.com';
+  filled.querySelector('[data-rv-name="0"]').value = 'Ханс';
+  filled.querySelector('[data-rv-country="0"]').value = 'Германия';
+  filled.querySelector('[data-rv-text="0"]').value = 'Отлично';
+  filled.querySelector('[data-rv-allow="0"]').checked = true;
+  filled.querySelector('[data-rv-name="1"]').value = '';
+  filled.querySelector('[data-rv-country="1"]').value = '';
+  filled.querySelector('[data-rv-text="1"]').value = '';
+  filled.querySelector('[data-rv-allow="1"]').checked = false;
+  requests.length = 0;
+  await save();
+  const call = requests.find((request) => request.url === '/api/trust');
+  assert.equal(call.method, 'PUT');
+  assert.equal(call.body.yearsOnMarket, '13');
+  assert.equal(call.body.registration, 'Рег. №2');
+  assert.deepEqual(call.body.reviews, [{ name: 'Ханс', country: 'Германия', text: 'Отлично', allowed: true }], 'пустой отзыв не уходит');
+
+  // «Добавить отзыв»: не больше пяти.
+  sandbox.state.trust.reviews = Array.from({ length: 4 }, (_, index) => ({ id: 'x' + index, name: 'Н' + index, country: '', text: 'Т' + index, allowed: true }));
+  const many = fakeElement('main');
+  sandbox.renderTrust(many);
+  many.querySelector('#addReview').onclick();
+  assert.match(String(many.querySelector('#trustReviews').innerHTML), /data-review="4"/, 'пятый отзыв добавлен');
+  assert.equal(many.querySelector('#addReview').disabled, true, 'больше пяти нельзя');
+});
+
 test('«Отчёт»: реклама → сделки — одна таблица «источник → клиенты → заявки → просмотры → сделки» и конструктор ссылки рядом', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();

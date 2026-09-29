@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, delay, hashPassword, localDayKey } from './util.mjs';
-import { normalizeLoadedData } from './data-format.mjs';
+import { MAX_TRUST_REVIEWS, normalizeLoadedData, normalizeTrust } from './data-format.mjs';
 import { backupChunks } from './backup-file.mjs';
 import { dropMissingImages, storedMediaFiles } from './media.mjs';
 import { applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
@@ -491,6 +491,32 @@ async function handleApi(req, res, url) {
     };
     saveDataNow();
     return json(res, 200, { ok: true });
+  }
+
+  // «Почему мы»: цифры, регистрационные данные, адрес офиса, отзывы. Отзыв без
+  // подтверждённого разрешения автора клиентам не показывается.
+  if (url.pathname === '/api/trust' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const reviewsUrl = cleanText(body.reviewsUrl, 500);
+    if (reviewsUrl && !validHttpUrl(reviewsUrl)) return json(res, 400, { error: 'Ссылка на отзывы должна начинаться с http:// или https://' });
+    const reviews = Array.isArray(body.reviews) ? body.reviews : [];
+    if (reviews.length > MAX_TRUST_REVIEWS) return json(res, 400, { error: 'Можно добавить не больше ' + MAX_TRUST_REVIEWS + ' отзывов' });
+    for (const review of reviews) {
+      const name = cleanText(review && review.name, 80);
+      const text = cleanText(review && review.text, 600);
+      if (!name && !text) continue;
+      if (!name || !text) return json(res, 400, { error: 'У каждого отзыва должны быть имя автора и текст' });
+    }
+    const years = Number(body.yearsOnMarket);
+    const deals = Number(body.dealsCount);
+    if ((body.yearsOnMarket !== '' && body.yearsOnMarket != null && !(years >= 0 && years <= 200)) || (body.dealsCount !== '' && body.dealsCount != null && !(deals >= 0 && deals <= 1000000))) {
+      return json(res, 400, { error: 'Годы на рынке и число сделок — целые числа, не отрицательные' });
+    }
+    data.trust = normalizeTrust({ ...body, reviewsUrl });
+    saveDataNow();
+    return json(res, 200, { ok: true, trust: data.trust });
   }
 
   // Тексты интерфейса — больше половины веса общего пакета, поэтому панель

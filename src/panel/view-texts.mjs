@@ -597,12 +597,110 @@ async function renderInterface(host) {
   }, "Тексты интерфейса изменены");
 }
 
+// --- «Почему мы» -----------------------------------------------------------------
+// Экран доверия для клиентов: цифры, регистрационные данные, адрес офиса, отзывы.
+// Заполняет владелец; ничего не подставляется само. Пока пусто — клиенты экрана не
+// видят. Отзыв показывается, только если отмечено разрешение автора.
+var TRUST_MAX_REVIEWS = 5;
+
+function trustHasContent(trust) {
+  var visible = (trust.reviews || []).some(function (review) { return review.allowed && review.name && review.text; });
+  return Boolean(Number(trust.yearsOnMarket) > 0 || Number(trust.dealsCount) > 0 || trust.registration || trust.officeAddress || trust.reviewsUrl || visible);
+}
+
+function trustReviewRow(review, index) {
+  return '<div class="card trust-review" data-review="' + index + '"><div class="card-body stack">' +
+    '<div class="row wrap"><div class="field grow"><label for="rvName' + index + '">Имя автора</label><input id="rvName' + index + '" data-rv-name="' + index + '" value="' + esc(review.name || "") + '" placeholder="Ханс"></div>' +
+    '<div class="field grow"><label for="rvCountry' + index + '">Страна</label><input id="rvCountry' + index + '" data-rv-country="' + index + '" value="' + esc(review.country || "") + '" placeholder="Германия"></div></div>' +
+    '<div class="field"><label for="rvText' + index + '">Отзыв</label><textarea id="rvText' + index + '" data-rv-text="' + index + '" rows="3">' + esc(review.text || "") + '</textarea></div>' +
+    '<div class="row wrap"><label class="check"><input type="checkbox" id="rvAllow' + index + '" data-rv-allow="' + index + '"' + (review.allowed ? " checked" : "") + '><span>Автор разрешил опубликовать отзыв</span></label>' +
+    '<span class="grow"></span><button class="btn ghost small" type="button" data-rv-remove="' + index + '">Убрать отзыв</button></div>' +
+    (!review.allowed && (review.name || review.text) ? '<div class="small warn-text">Без отметки о разрешении отзыв клиентам не показывается.</div>' : "") +
+    "</div></div>";
+}
+
+function renderTrust(host) {
+  var trust = state.trust || { reviews: [] };
+  var reviews = (trust.reviews || []).map(function (review) { return { name: review.name, country: review.country, text: review.text, allowed: Boolean(review.allowed) }; });
+  var shown = trustHasContent(trust);
+  var contacts = state.contacts || {};
+  host.innerHTML = '<div class="split"><div class="card"><header><h3>Почему мы</h3><div class="actions"><span class="chip ' + (shown ? "ok" : "warn") + '" id="trustStatus">' + (shown ? "Экран виден клиентам" : "Скрыт: пока ничего не заполнено") + "</span></div></header>" +
+    '<div class="card-body stack" id="trustForm">' +
+      '<p class="muted small">Экран доверия для покупателя из-за границы: он решает, доверить ли деньги незнакомой фирме. Кнопка «Почему мы» появится у клиентов в «Моё», в гиде «Как купить», в «Подробнее» у объекта и на экране «Связаться», как только вы заполните хотя бы один пункт. Пишите только то, что правда и что можно публиковать: бот ничего не сочиняет и не подставляет.</p>' +
+      '<div class="row wrap"><div class="field"><label for="tYears">Лет на рынке</label><input id="tYears" type="number" min="0" max="200" value="' + esc(trust.yearsOnMarket || "") + '"></div>' +
+      '<div class="field"><label for="tDeals">Завершённых сделок</label><input id="tDeals" type="number" min="0" value="' + esc(trust.dealsCount || "") + '"></div></div>' +
+      '<div class="field"><label for="tReg">Регистрационные данные</label><textarea id="tReg" rows="2" placeholder="Например: номер записи в реестре агентов, название юридического лица">' + esc(trust.registration || "") + "</textarea></div>" +
+      '<div class="field"><label for="tOffice">Адрес офиса</label><input id="tOffice" value="' + esc(trust.officeAddress || "") + '" placeholder="Улица, дом, город"><div class="hint">' + (contacts.mapUrl ? "Кнопка «Офис на карте» использует ссылку на карту из «Контактов»." : "Чтобы у клиента появилась кнопка «Офис на карте», укажите ссылку на карту в «Контактах».") + "</div></div>" +
+      '<div class="field"><label for="tReviewsUrl">Ссылка на отзывы</label><input id="tReviewsUrl" value="' + esc(trust.reviewsUrl || "") + '" placeholder="https://…"></div>' +
+      '<div class="week-subtitle">Отзывы (до ' + TRUST_MAX_REVIEWS + ')</div><div class="stack" id="trustReviews"></div>' +
+      '<div class="row"><button class="btn secondary small" id="addReview" type="button">Добавить отзыв</button></div>' +
+    "</div></div>" +
+    '<div class="card"><header><h3>Что увидит клиент</h3></header><div class="card-body"><div class="msg" id="trustPreview"></div></div></div></div>';
+
+  var watcher = null;
+  function collect() {
+    var list = [];
+    for (var index = 0; index < reviews.length; index += 1) {
+      var name = host.querySelector('[data-rv-name="' + index + '"]');
+      if (!name) continue;
+      list.push({
+        name: name.value,
+        country: host.querySelector('[data-rv-country="' + index + '"]').value,
+        text: host.querySelector('[data-rv-text="' + index + '"]').value,
+        allowed: host.querySelector('[data-rv-allow="' + index + '"]').checked === true,
+      });
+    }
+    return list;
+  }
+  function draw() {
+    host.querySelector("#trustReviews").innerHTML = reviews.map(trustReviewRow).join("");
+    var add = host.querySelector("#addReview");
+    add.disabled = reviews.length >= TRUST_MAX_REVIEWS;
+    add.onclick = function () {
+      reviews = collect();
+      if (reviews.length >= TRUST_MAX_REVIEWS) return;
+      reviews.push({ name: "", country: "", text: "", allowed: false });
+      draw();
+      if (watcher) watcher.mark();
+    };
+    host.querySelectorAll("[data-rv-remove]").forEach(function (button) {
+      button.onclick = function () {
+        reviews = collect();
+        reviews.splice(Number(button.dataset.rvRemove), 1);
+        draw();
+        if (watcher) watcher.mark();
+      };
+    });
+  }
+  draw();
+  watcher = watchForm(host, async function () {
+    await send("/api/trust", "PUT", {
+      yearsOnMarket: host.querySelector("#tYears").value,
+      dealsCount: host.querySelector("#tDeals").value,
+      registration: host.querySelector("#tReg").value,
+      officeAddress: host.querySelector("#tOffice").value,
+      reviewsUrl: host.querySelector("#tReviewsUrl").value,
+      reviews: collect().filter(function (review) { return review.name.trim() || review.text.trim(); }),
+    });
+  }, "Сохранить «Почему мы»");
+  var preview = [];
+  if (trust.yearsOnMarket) preview.push("📆 На рынке: " + trust.yearsOnMarket);
+  if (trust.dealsCount) preview.push("🤝 Сделок: " + trust.dealsCount);
+  if (trust.registration) preview.push("🏛 " + trust.registration);
+  if (trust.officeAddress) preview.push("📍 Офис: " + trust.officeAddress);
+  var visibleReviews = (trust.reviews || []).filter(function (review) { return review.allowed && review.name && review.text; });
+  if (visibleReviews.length) preview.push("⭐ Отзывы клиентов");
+  visibleReviews.forEach(function (review) { preview.push("«" + review.text + "» — " + [review.name, review.country].filter(Boolean).join(", ")); });
+  host.querySelector("#trustPreview").innerHTML = preview.length ? preview.map(esc).join("<br>") : '<span class="muted">Пока пусто — клиенты этого экрана не увидят.</span>';
+}
+
 VIEWS.texts = {
   subtitle: function () { return "Всё, что бот говорит клиенту"; },
   render: function (host, tab) {
     if (tab === "sections") return renderSections(host);
     if (tab === "contacts") return renderContacts(host);
     if (tab === "rules") return renderRules(host);
+    if (tab === "trust") return renderTrust(host);
 
     renderWelcome(host);
   },

@@ -801,6 +801,7 @@ function safeState(session) {
     objects: data.objects.map((record) => publicRecord(record, 'objects')),
     promotions: data.promotions.map((record) => publicRecord(record, 'promotions')),
     contacts: { ...data.contacts, photo: imageMeta(data.contacts && data.contacts.photo) },
+    trust: data.trust,
     guidePages: data.guidePages || [],
     errors: data.errors,
     notifications,

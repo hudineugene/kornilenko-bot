@@ -1,5 +1,6 @@
 // Главное меню, приветствие, выбор языка и команды бота.
 
+import { trustButtonRow } from './trust.mjs';
 import { fillTemplate } from './util.mjs';
 import { imageExists } from './media.mjs';
 import { BOT_COMMAND_DESCRIPTIONS, CATALOG_SUMMARY_TEXT, COMPARISON_TEXT, PRIVACY_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, EARLIER_CONTACT_LABELS, EARLIER_FAVORITES_LABELS, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
@@ -170,6 +171,7 @@ async function sendMoreMenu(chatId, user, token) {
         [{ text: (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).menuButton + count(comparison), callback_data: 'compare:view' }],
         [{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton + count(requests), callback_data: 'myreq:list' }],
         [{ text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).menuButton, callback_data: 'subs:menu' }],
+        ...(trustButtonRow(language) ? [trustButtonRow(language)] : []),
         [{ text: (PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).menuButton, callback_data: 'privacy:open' }],
         [{ text: labels.help, callback_data: 'nav:help' }, { text: labels.language, callback_data: 'nav:language' }],
         [{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }],

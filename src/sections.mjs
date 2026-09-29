@@ -17,6 +17,7 @@ import { CATALOG_MODES, catalogHeading, catalogViewContext, escapeTelegramHtml, 
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
 import { similarPropertyRanking } from './similar.mjs';
 import { DEAD_END_TEXT, nearestByBudget } from './dead-end.mjs';
+import { trustButtonRow } from './trust.mjs';
 
 async function sendPromotionPage(chatId, user, token, page = 0) {
   const language = user.preferredLanguage || 'ru';
@@ -107,6 +108,8 @@ async function sendContacts(chatId, user, token) {
   const aboutRow = [{ text: (MENU_LABELS[language] || MENU_LABELS.ru).about, callback_data: 'nav:about' }];
   if (site) aboutRow.push({ text: '🌐 ' + copy.website, url: site });
   buttons.push(aboutRow);
+  const trust = trustButtonRow(language);
+  if (trust) buttons.push(trust);
   const closing = [];
   if (map) closing.push({ text: '📍 ' + copy.map, url: map });
   closing.push({ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' });
@@ -210,6 +213,8 @@ async function sendGuidePage(chatId, user, token, index = 0, query = null) {
   if (safeIndex < pages.length - 1) pager.push({ text: '➡️', callback_data: 'guide:page:' + (safeIndex + 1) });
   rows.push(pager);
   rows.push([{ text: navigation.guideConsult, callback_data: 'contact:lead' }]);
+  const trust = trustButtonRow(language);
+  if (trust) rows.push(trust);
   rows.push([{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]);
   // Гид листается в том же сообщении: пять экранов подряд в чате — это стена.
   if (query && query.message && query.message.message_id) {
@@ -599,6 +604,7 @@ async function handlePropertyCallback(query, token) {
           : [[{ text: mobileButtonText('💬', text.contact), callback_data: 'property:manager:' + record.id }]]),
         extra,
         ...(links.length ? [links] : []),
+        ...(trustButtonRow(language) ? [trustButtonRow(language)] : []),
         [{ text: '🔼 ' + interaction.collapseDetails, callback_data: 'property:card:' + record.id }],
       ];
       try {
@@ -619,6 +625,7 @@ async function handlePropertyCallback(query, token) {
     const rows = [];
     if (extra.length) rows.push(extra);
     if (links.length) rows.push(links);
+    if (trustButtonRow(language)) rows.push(trustButtonRow(language));
     rows.push([{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:return:' + record.id }]);
     await sendUiMessage(chatId, user, full, token, {
       parse_mode: 'HTML',
@@ -817,6 +824,7 @@ export {
   aboutPreview,
   acknowledgeCallback,
   configuredWhatsappUrl,
+  sendManagerPhoto,
   whatsappPropertyMessage,
   whatsappRow,
   handleAboutCallback,

@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 43;
+const DATA_VERSION = 44;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -171,6 +171,9 @@ const defaultData = {
     text: { ru: '', en: '', es: '' },
   },
   interfaceText: {},
+  // «Почему мы»: то, что владелец сам решил показать клиентам как основание для
+  // доверия. Пока пусто, экран клиентам не показывается; ничего не подставляется.
+  trust: { yearsOnMarket: 0, dealsCount: 0, registration: '', officeAddress: '', reviewsUrl: '', reviews: [] },
   guidePages: clone(DEFAULT_GUIDE_PAGES),
   groups: [],
   groupPosts: [],
@@ -842,6 +845,48 @@ function normalizeWorkingHours(value) {
   };
 }
 
+// «Почему мы»: годы на рынке, число сделок, регистрационные данные, адрес офиса,
+// ссылка на отзывы и до пяти отзывов. Отзыв показывается клиентам, только если
+// владелец подтвердил, что у него есть разрешение автора на публикацию (allowed).
+const MAX_TRUST_REVIEWS = 5;
+
+function normalizeTrust(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const count = (input, limit) => {
+    const number = Math.round(Number(input));
+    return Number.isFinite(number) && number > 0 ? Math.min(number, limit) : 0;
+  };
+  let reviewsUrl = cleanText(source.reviewsUrl, 500);
+  try {
+    if (!['http:', 'https:'].includes(new URL(reviewsUrl).protocol)) reviewsUrl = '';
+  } catch {
+    reviewsUrl = '';
+  }
+  const seen = new Set();
+  const reviews = (Array.isArray(source.reviews) ? source.reviews : []).map((item) => {
+    const review = item && typeof item === 'object' ? item : {};
+    let id = cleanText(review.id, 60);
+    if (!id || seen.has(id)) id = crypto.randomUUID();
+    seen.add(id);
+    return {
+      id,
+      name: cleanText(review.name, 80),
+      country: cleanText(review.country, 80),
+      text: cleanText(review.text, 600),
+      // Только настоящее «да»: разрешение на публикацию не выводится из отсутствия ответа.
+      allowed: review.allowed === true,
+    };
+  }).filter((review) => review.name || review.text).slice(0, MAX_TRUST_REVIEWS);
+  return {
+    yearsOnMarket: count(source.yearsOnMarket, 200),
+    dealsCount: count(source.dealsCount, 1000000),
+    registration: cleanText(source.registration, 500),
+    officeAddress: cleanText(source.officeAddress, 300),
+    reviewsUrl,
+    reviews,
+  };
+}
+
 // A viewing request: what the client asked for (date may be unknown, for
 // "at the weekend" or a free-text answer), what the manager confirmed and
 // what the bot already sent about it.
@@ -1239,6 +1284,7 @@ function normalizeLoadedData(parsed) {
     normalized.lastWeeklyReportFor = cleanText(parsed.lastWeeklyReportFor, 10);
     normalized.replyTemplates = normalizeReplyTemplates(parsed.replyTemplates);
     normalized.guidePages = normalizeGuidePages(parsed.guidePages);
+    normalized.trust = normalizeTrust(parsed.trust);
     normalized.config.publishing = normalizePublishing(normalized.config.publishing);
     normalized.groups = normalizeGroups(parsed.groups);
     normalized.groupPosts = normalizeGroupPosts(parsed.groupPosts);
@@ -1265,6 +1311,8 @@ function normalizeLoadedData(parsed) {
 
 export {
   CLOCK_TIME_PATTERN,
+  MAX_TRUST_REVIEWS,
+  normalizeTrust,
   DATA_VERSION,
   DAY_KEY_PATTERN,
   DEFAULT_CALCULATOR,
