@@ -10,6 +10,7 @@ import { recordActivity, recordDaily, recordError } from './analytics.mjs';
 import { markUnavailable, normalizeUser, userByChatId } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
 import { localized } from './catalog.mjs';
+import { PLACES } from './places.mjs';
 import { acknowledgeCallback, propertyRequestText } from './sections.mjs';
 import { recordBroadcastResponse, userUnavailableError } from './broadcasts.mjs';
 import { sendStatusNotice } from './status.mjs';
@@ -166,7 +167,7 @@ function reportInquiryOverflow(openRemoved, now = new Date()) {
     '⚠️ Обращений стало больше ' + MAX_INQUIRIES,
     '',
     'Место закончилось, и самые старые обращения в работе пришлось удалить: ' + openRemoved + '.',
-    'Закройте отработанные обращения или очистите старые в панели: «Переписка» → «Очистить».',
+    'Закройте отработанные обращения или очистите старые в панели: ' + PLACES.cleanup + '.',
     'Перед очисткой их можно выгрузить в Excel — там же, кнопкой «Выгрузить в Excel».',
   ].join('\n')).catch(() => {});
 }
@@ -306,7 +307,7 @@ function createInquiry(user, text, context = {}) {
 const INQUIRY_TYPE_LABELS = {
   question: 'вопрос по объекту',
   interest: 'интерес к объекту',
-  selection: 'подбор недвижимости',
+  selection: 'подбор объекта',
   viewing: 'запись на просмотр',
   lead: 'заявка на звонок',
   general: 'сообщение',

@@ -4,6 +4,7 @@
 // у inquiryStillOpen.
 
 import { cleanText, localDayKey } from './util.mjs';
+import { PLACES } from './places.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { eraseUserData } from './users.mjs';
 import { awaitingReply } from './inquiries.mjs';
@@ -105,7 +106,7 @@ async function runRetentionCleanup(now = new Date(), token = data.config.botToke
     const lines = ['🗂 Срок хранения данных (' + months + ' мес.): удалены данные, от которых давно ничего не было.'];
     if (plan.users.length) lines.push('Клиентов: ' + plan.users.length);
     if (removeIds.size) lines.push('Отдельных обращений: ' + removeIds.size);
-    lines.push('Не удаляются те, кто ждёт ответа, с предстоящим просмотром или напоминанием. Срок меняется в панели: Настройки → Работа с клиентами.');
+    lines.push('Не удаляются те, кто ждёт ответа, с предстоящим просмотром или напоминанием. Срок меняется в панели: ' + PLACES.retention + '.');
     await sendMessage(adminChatId, lines.join('\n'), token, { track: false }).catch((error) => recordError('Срок хранения данных', error));
   }
   return removed;

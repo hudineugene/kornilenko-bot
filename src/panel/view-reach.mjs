@@ -593,7 +593,7 @@ function renderGroupCard(host, group, mode) {
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small faint">историю Telegram не отдаёт</span></div></header>' +
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
-            '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">бот</span>' : "") +
+            '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">от бота</span>' : "") +
             (message.kind !== "text" ? ' <span class="chip">' + esc(GROUP_MESSAGE_KINDS[message.kind] || message.kind) + "</span>" : "") +
             (group.isForum && message.threadId ? ' <span class="chip">' + esc(topicLabel(group, message.threadId)) + "</span>" : "") +
             '<br><span class="muted small">' + esc(String(message.text || "").slice(0, 120)) + "</span></span>" +

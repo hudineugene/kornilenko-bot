@@ -780,7 +780,7 @@ function renderFeed(host) {
       (settings.lastRunAt ? '<div class="small muted">' + dateTime(settings.lastRunAt) + "</div>" : '<div class="muted">Загрузок ещё не было</div>') +
       (last ? '<div class="grid cols-3">' + kpiCard("Добавлено", num(last.added)) + kpiCard("Обновлено", num(last.updated)) + kpiCard("Фото", num(last.photos)) + "</div>" : "") +
       (settings.lastError ? '<div class="chip bad">' + esc(settings.lastError) + "</div>" : "") +
-      '<div class="hint">Объекты сопоставляются по номеру (ref). Тексты, которые вы правили в панели, не перезаписываются.</div>' +
+      '<div class="hint">Объекты сопоставляются по номеру объекта из выгрузки. Тексты, которые вы правили в панели, не перезаписываются.</div>' +
     "</div></div></div>";
 
   function payload() {

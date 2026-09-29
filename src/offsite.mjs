@@ -10,6 +10,7 @@ import zlib from 'node:zlib';
 import { cleanText, clone, localDayKey } from './util.mjs';
 import { normalizeTelegramBackup } from './data-format.mjs';
 import { data, saveDataNow } from './store.mjs';
+import { PLACES } from './places.mjs';
 import { recordError } from './analytics.mjs';
 import { telegramMultipartRequest } from './telegram.mjs';
 import { adminMessagesAllowed } from './hours.mjs';
@@ -77,7 +78,7 @@ async function sendTelegramBackup(now = new Date(), token = data.config.botToken
   try {
     await telegramMultipartRequest(token, 'sendDocument', {
       chat_id: adminChatId,
-      caption: '🔐 Резервная копия данных за ' + day.split('-').reverse().join('.') + ' (без фотографий). Хранится зашифрованной. Чтобы восстановить: панель → «Настройки» → «Резервная копия» → «Восстановить», затем пароль копии.',
+      caption: '🔐 Резервная копия данных за ' + day.split('-').reverse().join('.') + ' (без фотографий). Хранится зашифрованной. Чтобы восстановить: панель → ' + PLACES.restore + ', затем пароль копии.',
       document: new File([file], 'kornilenko-backup-' + day + '.kbk', { type: 'application/octet-stream' }),
     });
     data.config.telegramBackup = { ...settings, lastSentAt: now.toISOString(), lastError: '' };

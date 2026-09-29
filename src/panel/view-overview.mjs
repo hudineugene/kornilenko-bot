@@ -278,7 +278,7 @@ function connectionText() {
 
 function inquiryTypeName(item) {
   if (item.searchLead) return "искал объекты сам";
-  return { lead: "заявка на звонок", viewing: "запись на просмотр", selection: "подбор", question: "вопрос по объекту", interest: "интерес к объекту", general: "сообщение" }[item.type] || "сообщение";
+  return { lead: "заявка на звонок", viewing: "запись на просмотр", selection: "подбор объекта", question: "вопрос по объекту", interest: "интерес к объекту", general: "сообщение" }[item.type] || "сообщение";
 }
 
 function barList(rows, total) {

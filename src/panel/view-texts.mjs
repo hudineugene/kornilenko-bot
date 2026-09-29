@@ -5,6 +5,8 @@ const TEXTS_JS = String.raw`
 var interfaceGroupOpen = "";
 
 // --- Приветствие --------------------------------------------------------------
+var EXAMPLE_QUERY = { ru: "Альтеа, 3 спальни, до 350 000 €", en: "Altea, 3 bedrooms, up to €350,000", es: "Altea, 3 dormitorios, hasta 350.000 €" };
+
 async function renderWelcome(host) {
   // Подписи кнопок приезжают отдельным запросом: рисуем экран, когда они уже
   // есть, иначе поля окажутся пустыми и сохранение сотрёт подписи.
@@ -35,7 +37,7 @@ async function renderWelcome(host) {
       }).join("") + '<div class="hint">{first_name} подставит имя клиента, {last_name} — фамилию, {username} — ник в Telegram.</div></div>' +
       '<div class="field"><label>Подсказка под приветствием</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-hint="text" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((hints[language[0]] || {}).text || "") + "</textarea>";
-      }).join("") + '<div class="hint">Строку о том, сколько объектов в каталоге, бот добавляет сам.</div></div>' +
+      }).join("") + '<div class="hint">Строку о том, сколько объектов в каталоге, бот добавляет сам. {example} подставит пример запроса из вашего каталога — «: Альтеа, 3 спальни, до 350 000 €»; если {example} не писать, бот ничего не подставит.</div></div>' +
       '<div class="field"><label>Помощь (/help)</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-tr="help" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" class="area-lg">' + esc((messages[language[0]] || {}).help || "") + "</textarea>";
       }).join("") + "</div>" +
@@ -82,7 +84,9 @@ async function renderWelcome(host) {
       .replace(/\{first_name\}/g, exampleNames[language] || "Anna")
       .replace(/\{last_name\}/g, "")
       .replace(/\{username\}/g, "anna");
-    var hint = languageValue('[data-hint="text"]', language);
+    // {example} бот заменяет примером из настоящего каталога; в предпросмотре —
+    // образец, чтобы фигурная скобка не попала на экран как есть.
+    var hint = languageValue('[data-hint="text"]', language).replace(/\{example\}/g, ": «" + (EXAMPLE_QUERY[language] || EXAMPLE_QUERY.ru) + "»");
     var pending = pendingImages[language];
     var stored = (images[language] || {});
     var imageUrl = pending && pending.dataUrl

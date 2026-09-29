@@ -10,6 +10,7 @@ import { data, loadedDataVersion, runtime, scheduleSave } from './store.mjs';
 import { propertyReadyForLanguage } from './catalog.mjs';
 import { forEachStoredImage, imageExists, referencedImageFiles } from './media.mjs';
 import { policyIsDraft } from './privacy.mjs';
+import { PLACES } from './places.mjs';
 
 const LANGUAGES = ['ru', 'en', 'es'];
 // Тот же вид токена, что принимает панель (admin-http не импортируем, чтобы
@@ -83,7 +84,9 @@ function connectionDetail() {
   if (runtime.status === ONLINE) return 'связь с Telegram есть';
   if (runtime.status === 'stopped') return data.config.active ? 'подключение ещё не начиналось' : 'бот выключен в настройках';
   const failures = Number(runtime.consecutiveFailures) || 0;
-  return 'связь: ' + runtime.status + (failures ? ', неудачных попыток подряд: ' + failures : '')
+  // Слова, а не имена состояний из кода: владелец не знает, что такое reconnecting.
+  const words = { reconnecting: 'переподключается', error: 'ошибка', connecting: 'подключается' };
+  return 'связь: ' + (words[runtime.status] || runtime.status) + (failures ? ', неудачных попыток подряд: ' + failures : '')
     + (runtime.lastError ? ' (' + cleanText(runtime.lastError, 160) + ')' : '');
 }
 
@@ -165,45 +168,45 @@ function runSelfCheck(now = new Date()) {
   const add = (id, title, status, detail, hint = '') => checks.push({ id, title, status, detail, hint });
 
   const token = cleanText(data.config.botToken, 100);
-  if (!token) add('token', 'Токен бота', 'bad', 'не задан', 'Настройки → Подключение');
-  else if (!TOKEN_SHAPE.test(token)) add('token', 'Токен бота', 'bad', 'формат не похож на токен BotFather', 'Настройки → Подключение');
-  else if (!data.config.active) add('token', 'Токен бота', 'warn', 'задан, но бот выключен в настройках', 'Настройки → Подключение');
+  if (!token) add('token', 'Токен бота', 'bad', 'не задан', PLACES.telegram);
+  else if (!TOKEN_SHAPE.test(token)) add('token', 'Токен бота', 'bad', 'формат не похож на токен BotFather', PLACES.telegram);
+  else if (!data.config.active) add('token', 'Токен бота', 'warn', 'задан, но бот выключен в настройках', PLACES.telegram);
   else if (runtime.status === ONLINE) add('token', 'Токен бота', 'ok', 'принят Telegram, связь есть');
   // Несколько неудачных попыток подряд — бот не работает, а не «подключается».
-  else if (runtime.status === 'error' || Number(runtime.consecutiveFailures) >= 3) add('token', 'Токен бота', 'bad', connectionDetail(), 'Настройки → Подключение');
-  else add('token', 'Токен бота', 'warn', connectionDetail(), 'Настройки → Подключение');
+  else if (runtime.status === 'error' || Number(runtime.consecutiveFailures) >= 3) add('token', 'Токен бота', 'bad', connectionDetail(), PLACES.telegram);
+  else add('token', 'Токен бота', 'warn', connectionDetail(), PLACES.telegram);
 
   const adminChatId = cleanText(data.config.adminChatId, 40);
-  if (!adminChatId) add('admin', 'Чат администратора', 'bad', 'не задан — уведомления о заявках никуда не уходят', 'Настройки → Подключение');
-  else if (!data.config.adminNotificationVerifiedAt) add('admin', 'Чат администратора', 'warn', 'задан, но проверочное сообщение ещё не приходило', 'Настройки → Подключение → «Проверить»');
+  if (!adminChatId) add('admin', 'Чат администратора', 'bad', 'не задан — уведомления о заявках никуда не уходят', PLACES.adminChat);
+  else if (!data.config.adminNotificationVerifiedAt) add('admin', 'Чат администратора', 'warn', 'задан, но проверочное сообщение ещё не приходило', PLACES.adminChat);
   else add('admin', 'Чат администратора', 'ok', 'проверен ' + new Date(data.config.adminNotificationVerifiedAt).toLocaleDateString('ru-RU'));
 
   const catalog = catalogReport();
-  if (!catalog.active) add('catalog', 'Каталог', 'warn', 'активных объектов нет', 'Каталог → Объекты');
-  else if (!catalog.visible) add('catalog', 'Каталог', 'bad', (catalog.active === 1 ? 'единственный объект не проходит правила публикации' : 'ни один из ' + catalog.active + ' объектов не проходит правила публикации') + ' — у клиентов каталог пустой', 'Каталог → Объекты');
-  else if (catalog.visible < catalog.active) add('catalog', 'Каталог', 'warn', 'клиенты видят ' + catalog.visible + ' из ' + catalog.active + ' объектов', 'Каталог → Объекты');
+  if (!catalog.active) add('catalog', 'Каталог', 'warn', 'активных объектов нет', PLACES.catalog);
+  else if (!catalog.visible) add('catalog', 'Каталог', 'bad', (catalog.active === 1 ? 'единственный объект не проходит правила публикации' : 'ни один из ' + catalog.active + ' объектов не проходит правила публикации') + ' — у клиентов каталог пустой', PLACES.catalog);
+  else if (catalog.visible < catalog.active) add('catalog', 'Каталог', 'warn', 'клиенты видят ' + catalog.visible + ' из ' + catalog.active + ' объектов', PLACES.catalog);
   else add('catalog', 'Каталог', 'ok', 'клиенты видят все ' + objects(catalog.active) + (catalog.visibleRu < catalog.active ? ', но не на всех языках' : ''));
 
   // Политика конфиденциальности с подстановками в квадратных скобках — это
   // черновик: клиенту его показывать нельзя.
   const months = Number(data.config.retentionMonths) || 0;
-  if (policyIsDraft()) add('privacy', 'Политика конфиденциальности', 'warn', 'в тексте остались подстановки в [квадратных скобках] — подставьте данные компании и срок хранения', 'Тексты бота → Интерфейс → privacy');
-  else if (!months) add('privacy', 'Политика конфиденциальности', 'warn', 'политика заполнена, но срок хранения данных не задан', 'Настройки → Работа с клиентами');
+  if (policyIsDraft()) add('privacy', 'Политика конфиденциальности', 'warn', 'в тексте остались подстановки в [квадратных скобках] — подставьте данные компании и срок хранения', PLACES.policyText);
+  else if (!months) add('privacy', 'Политика конфиденциальности', 'warn', 'политика заполнена, но срок хранения данных не задан', PLACES.retention);
   else add('privacy', 'Политика конфиденциальности', 'ok', 'заполнена, срок хранения ' + months + ' мес.');
 
   // Данные не сохраняются: самая тяжёлая из возможных неприятностей — вся
   // работа держится в памяти до перезапуска.
   if (runtime.lastSaveError) {
     add('save', 'Сохранение данных', 'bad', 'последняя запись не удалась: ' + runtime.lastSaveError
-      + (runtime.nextSaveRetryAt ? '; повтор запланирован' : ''), 'Настройки → Данные');
+      + (runtime.nextSaveRetryAt ? '; повтор запланирован' : ''), PLACES.dataCopies);
   }
 
   const media = mediaReport();
   if (media.missing.length) {
     add('media', 'Файлы картинок', 'bad', 'нет файлов: ' + media.missing.length + ' из ' + media.total
-      + ' (' + media.missing.slice(0, 3).join(', ') + (media.missing.length > 3 ? ', …' : '') + ')', 'Настройки → Данные → «Проверить файлы»');
+      + ' (' + media.missing.slice(0, 3).join(', ') + (media.missing.length > 3 ? ', …' : '') + ')', PLACES.checkFiles);
   } else if (media.orphans) {
-    add('media', 'Файлы картинок', 'warn', 'все ' + media.total + ' на месте, лишних файлов в папке: ' + media.orphans, 'Настройки → Данные');
+    add('media', 'Файлы картинок', 'warn', 'все ' + media.total + ' на месте, лишних файлов в папке: ' + media.orphans, PLACES.dataCopies);
   } else {
     add('media', 'Файлы картинок', 'ok', 'все на месте: ' + media.total);
   }
@@ -228,8 +231,8 @@ function runSelfCheck(now = new Date()) {
   } else {
     const backup = latestDailyBackup();
     const ageDays = backup ? Math.floor((now - backup.at) / 86400000) : Infinity;
-    if (!backup) add('version', 'Версия данных и копия', 'warn', 'версия ' + DATA_VERSION + ', ежедневной копии ещё нет', 'Настройки → Данные');
-    else if (ageDays > BACKUP_FRESH_DAYS) add('version', 'Версия данных и копия', 'warn', 'версия ' + DATA_VERSION + ', последняя копия ' + backup.name + ' (' + ageDays + ' дн. назад)', 'Настройки → Данные');
+    if (!backup) add('version', 'Версия данных и копия', 'warn', 'версия ' + DATA_VERSION + ', ежедневной копии ещё нет', PLACES.dataCopies);
+    else if (ageDays > BACKUP_FRESH_DAYS) add('version', 'Версия данных и копия', 'warn', 'версия ' + DATA_VERSION + ', последняя копия ' + backup.name + ' (' + ageDays + ' дн. назад)', PLACES.dataCopies);
     else add('version', 'Версия данных и копия', 'ok', 'версия ' + DATA_VERSION + ', копия ' + backup.name);
   }
 
@@ -255,6 +258,7 @@ function selfCheckNotice(report) {
 
 export {
   DISK_CRITICAL_BYTES,
+  connectionDetail,
   DISK_LOW_BYTES,
   diskReport,
   diskSpaceNotice,

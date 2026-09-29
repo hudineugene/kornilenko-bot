@@ -454,6 +454,9 @@ function renderData(host) {
   };
 }
 
+// Состояние туннеля словами: в данных лежат имена из кода (off, starting…).
+var TUNNEL_STATUS_WORDS = { off: "выключен", starting: "запускается", online: "работает", error: "ошибка", missing: "не найден cloudflared.exe" };
+
 function renderAccess(host) {
   var config = state.config, runtime = state.runtime || {}, tunnel = runtime.tunnel || {};
   host.innerHTML = '<div class="grid cols-2">' +
@@ -465,11 +468,11 @@ function renderAccess(host) {
       '<div class="hint">После смены пароля остальные сеансы завершатся.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Доступ из интернета</h3></header><div class="card-body stack">' +
-      '<label class="check"><input type="checkbox" id="remoteOn"' + (config.remoteAccess ? " checked" : "") + "> открыть панель по адресу через Cloudflare</label>" +
-      '<div class="field"><label for="tunnelHost">Адрес панели</label><input id="tunnelHost" value="' + esc(config.tunnelHostname || "") + '" placeholder="panel.example.com"></div>' +
-      '<div class="field"><label for="tunnelToken">Токен туннеля</label><input id="tunnelToken" type="password" placeholder="' + (config.tunnelTokenSet ? "токен сохранён" : "из панели Cloudflare") + '"></div>' +
+      '<label class="check"><input type="checkbox" id="remoteOn"' + (config.remoteAccess ? " checked" : "") + "> разрешить вход в панель из интернета</label>" +
+      '<div class="field"><label for="tunnelHost">Адрес панели в интернете</label><input id="tunnelHost" value="' + esc(config.tunnelHostname || "") + '" placeholder="panel.example.com"></div>' +
+      '<div class="field"><label for="tunnelToken">Ключ доступа от Cloudflare</label><input id="tunnelToken" type="password" placeholder="' + (config.tunnelTokenSet ? "токен сохранён" : "из панели Cloudflare") + '"></div>' +
       '<button class="btn secondary small" id="saveRemote" type="button">Сохранить</button>' +
-      '<div class="small muted">Состояние: ' + esc(tunnel.status || "выключен") + (tunnel.url ? " · " + esc(tunnel.url) : "") + (tunnel.error ? " · " + esc(tunnel.error) : "") + "</div>" +
+      '<div class="small muted">Состояние: ' + esc(TUNNEL_STATUS_WORDS[tunnel.status] || tunnel.status || "выключен") + (tunnel.url ? " · " + esc(tunnel.url) : "") + (tunnel.error ? " · " + esc(tunnel.error) : "") + "</div>" +
       '<div class="hint">Вход из интернета требует кода, который приходит в админ-чат Telegram.</div>' +
     "</div></div></div>";
 

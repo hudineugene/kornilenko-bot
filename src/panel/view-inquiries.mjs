@@ -741,7 +741,7 @@ function renderInquiryCard(host) {
         '<div class="field"><label for="inqNote">Заметка по этой заявке</label><textarea id="inqNote" placeholder="Что важно сделать по заявке">' + esc(item.note || "") + "</textarea></div>" +
         '<div class="field"><label for="clientTagsInq">Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div>' +
         '<div class="field"><label for="clientNoteInq">Общая заметка о клиенте</label><textarea id="clientNoteInq" placeholder="Предпочтения, договорённости и важные детали">' + esc(user.note || "") + "</textarea></div>" +
-        '<div class="conversation-save"><button class="btn" id="saveInq" type="button">Сохранить</button><button class="btn ghost small" id="openClientCard" type="button">Карточка клиента 360°</button><button class="btn ghost small" id="inquiryExtras" type="button">⋯ Ещё</button></div>' +
+        '<div class="conversation-save"><button class="btn" id="saveInq" type="button">Сохранить</button><button class="btn ghost small" id="openClientCard" type="button">Карточка клиента</button><button class="btn ghost small" id="inquiryExtras" type="button">⋯ Ещё</button></div>' +
       '</div></details></aside>' +
     "</div></div>";
 
