@@ -10,14 +10,14 @@ import { recordError } from './analytics.mjs';
 import { eraseUserData, markUnavailable, userByChatId, userById, userDataExport } from './users.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
-import { appendInquiryMessage, awaitingReply, inquiryTimelineMessage, trimInquiries } from './inquiries.mjs';
+import { appendInquiryMessage, awaitingReply, inquiryChats, inquiryTimelineMessage, trimInquiries } from './inquiries.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
 import { json, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
 import { replyTemplateInput } from './admin-input.mjs';
 import { CLIENT_EXPORT_COLUMNS, INQUIRY_EXPORT_COLUMNS, clientExportRows, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { confirmViewing } from './viewings.mjs';
-import { weeklyReportData, weeklyReportText } from './notices.mjs';
+import { sendInquiryToAdministrator, weeklyReportData, weeklyReportText } from './notices.mjs';
 
 // Сколько бесед вернуть в ответ на поиск: больше в списке всё равно не читают,
 // а перебор пяти тысяч переписок не должен занимать заметное время.
@@ -379,6 +379,75 @@ async function handleClientsApi(req, res, url) {
       recordError('Открытие вложения в панели', error);
       return json(res, 502, { error: 'Не удалось получить вложение из Telegram' });
     }
+  }
+
+  // Передача клиента: сменить ответственного и сказать об этом новому менеджеру.
+  // Один клиент — целым уведомлением (на него можно ответить), все клиенты человека
+  // (например, перед отпуском) — одной сводкой.
+  const staffNames = () => [cleanText(data.config.adminName, 60) || 'Администратор', ...(Array.isArray(data.config.managers) ? data.config.managers.map((manager) => cleanText(manager.name, 60)) : [])];
+  const transferTarget = (name) => inquiryChats().find((chat) => chat.name === name) || null;
+  const transferClientName = (inquiry) => {
+    const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
+    return user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Пользователь удалён';
+  };
+  const transferActor = () => cleanText(data.config.adminName, 60) || 'Администратор';
+
+  const transferOneMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/transfer$/);
+  if (transferOneMatch && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const inquiry = data.inquiries.find((item) => item.id === decodeURIComponent(transferOneMatch[1]));
+    if (!inquiry) return json(res, 404, { error: 'Обращение не найдено' });
+    const body = await readJson(req);
+    const to = cleanText(body.to, 60);
+    if (!to || !staffNames().includes(to)) return json(res, 400, { error: 'Выберите, кому передать клиента, из списка менеджеров' });
+    if (inquiry.assignee === to) return json(res, 200, { ok: true, moved: 0, notified: false });
+    inquiry.assignee = to;
+    inquiry.updatedAt = new Date().toISOString();
+    saveDataNow();
+    let notified = false;
+    const chat = transferTarget(to);
+    if (chat && data.config.botToken) {
+      try {
+        notified = (await sendInquiryToAdministrator(inquiry, '🔁 Вам передан клиент. Передал(а): ' + transferActor(), [], { chats: [chat] })) > 0;
+      } catch (error) {
+        recordError('Передача клиента: уведомление менеджеру', error);
+      }
+    }
+    return json(res, 200, { ok: true, moved: 1, notified });
+  }
+
+  if (url.pathname === '/api/inquiries/transfer' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const from = cleanText(body.from, 60);
+    const to = cleanText(body.to, 60);
+    const names = staffNames();
+    if (!to || !names.includes(to)) return json(res, 400, { error: 'Выберите, кому передать клиентов, из списка менеджеров' });
+    if (from && !names.includes(from)) return json(res, 400, { error: 'Выберите, у кого забрать клиентов, из списка менеджеров' });
+    if (from === to) return json(res, 400, { error: 'Клиенты уже у этого менеджера' });
+    // Открытые заявки: закрытые остаются у прежнего — это история.
+    const moving = data.inquiries.filter((item) => item.status !== 'closed' && !item.searchLead && cleanText(item.assignee, 60) === from);
+    const now = new Date().toISOString();
+    for (const inquiry of moving) {
+      inquiry.assignee = to;
+      inquiry.updatedAt = now;
+    }
+    if (moving.length) saveDataNow();
+    let notified = false;
+    const chat = transferTarget(to);
+    if (moving.length && chat && data.config.botToken) {
+      const shown = moving.slice(0, 15).map((item) => '• ' + transferClientName(item));
+      const text = ['🔁 Вам передано клиентов: ' + moving.length + '. Передал(а): ' + transferActor() + '.', '', ...shown, ...(moving.length > shown.length ? ['и ещё ' + (moving.length - shown.length)] : []), '', 'Все они теперь в «Мои» в панели.'].join('\n');
+      try {
+        await sendMessage(chat.chatId, text, data.config.botToken, { track: false });
+        notified = true;
+      } catch (error) {
+        recordError('Передача клиентов: уведомление менеджеру', error);
+      }
+    }
+    return json(res, 200, { ok: true, moved: moving.length, notified });
   }
 
   const inquiryMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)$/);

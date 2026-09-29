@@ -2387,6 +2387,80 @@ test('«Отчёт»: реклама → сделки — одна таблиц�
   assert.equal((page.match(/id="sourceLabel"/g) || []).length, 1, 'конструктор ссылки один');
 });
 
+test('передача клиента: «Передать…» появляется, когда есть кому; диалог шлёт запрос и честно говорит, ушло ли уведомление', async () => {
+  twoWaitingConversations();
+  bot.getData().config.adminName = 'Олег';
+  bot.getData().config.managers = [{ id: 'm1', name: 'Мария', chatId: '8880001', verifiedAt: '' }];
+  const { sandbox, requests } = await panelSandbox();
+  sandbox.selectConversation('inq-olga');
+  const host = fakeElement('main');
+  const card = host.querySelector('#inquiryCard');
+  await sandbox.VIEWS.clients.render(host, '');
+  assert.match(String(card.innerHTML), /id="transferInq"/, 'рядом с «Ответственный менеджер» есть «Передать…»');
+
+  const toasts = [];
+  sandbox.toast = (message) => toasts.push(String(message));
+  const baseFetch = sandbox.fetch;
+  let answer = { ok: true, moved: 1, notified: true };
+  sandbox.fetch = async (url, options) => {
+    const response = await baseFetch(url, options);
+    return String(url).includes('/transfer') ? { ...response, json: async () => answer } : response;
+  };
+  const original = sandbox.openDialog;
+  let dialog = null;
+  let shown = null;
+  sandbox.openDialog = (options) => { shown = options; dialog = original(options); return dialog; };
+
+  // Один клиент.
+  await card.querySelector('#transferInq').onclick();
+  assert.ok(dialog, 'диалог открылся');
+  assert.match(String(shown.body), /<option value="Мария">/);
+  assert.ok(/уведомление/i.test(String(shown.body)), 'диалог предупреждает, что новому менеджеру придёт сообщение');
+  dialog.querySelector('#transferTo').value = 'Мария';
+  requests.length = 0;
+  await dialog.querySelector('#doTransfer').onclick();
+  const call = requests.find((request) => request.url === '/api/inquiries/inq-olga/transfer');
+  assert.ok(call && call.method === 'POST', 'запрос ушёл');
+  assert.deepEqual(call.body, { to: 'Мария' });
+  assert.ok(toasts.some((message) => /Мария/.test(message) && /Telegram/.test(message) && !/не отправлено/.test(message)), 'уведомление ушло — так и сказано: ' + toasts.join(' | '));
+
+  // Уведомление не дошло — об этом не молчим.
+  toasts.length = 0;
+  answer = { ok: true, moved: 1, notified: false };
+  await card.querySelector('#transferInq').onclick();
+  dialog.querySelector('#transferTo').value = 'Мария';
+  await dialog.querySelector('#doTransfer').onclick();
+  assert.ok(toasts.some((message) => /не отправлено|не дошло/.test(message)), 'если сообщение не ушло, сказано: ' + toasts.join(' | '));
+
+  // Все клиенты человека.
+  await sandbox.openTransferDialog('all');
+  assert.ok(dialog.querySelector('#transferFrom'), 'выбор, у кого забрать');
+  assert.match(String(shown.body), /Без менеджера/);
+  // Один и тот же человек в обоих списках: кнопка гаснет сама (нажатие внутри окна блокировало бы её насовсем).
+  dialog.querySelector('#transferFrom').value = 'Олег';
+  dialog.querySelector('#transferTo').value = 'Олег';
+  dialog.querySelector('#transferTo').onchange();
+  assert.equal(dialog.querySelector('#doTransfer').disabled, true, 'одинаковый выбор — «Передать» недоступна');
+  assert.match(String(dialog.querySelector('#transferHint').textContent), /разных людей/);
+  dialog.querySelector('#transferTo').value = 'Мария';
+  dialog.querySelector('#transferTo').onchange();
+  assert.equal(dialog.querySelector('#doTransfer').disabled, false, 'выбрали разных — снова доступна');
+  requests.length = 0;
+  answer = { ok: true, moved: 2, notified: true };
+  await dialog.querySelector('#doTransfer').onclick();
+  const bulk = requests.find((request) => request.url === '/api/inquiries/transfer');
+  assert.deepEqual(bulk.body, { from: 'Олег', to: 'Мария' });
+
+  // Без менеджеров передавать некому: кнопки нет.
+  bot.getData().config.managers = [];
+  const { sandbox: lonely } = await panelSandbox();
+  lonely.selectConversation('inq-olga');
+  const lonelyHost = fakeElement('main');
+  const lonelyCard = lonelyHost.querySelector('#inquiryCard');
+  await lonely.VIEWS.clients.render(lonelyHost, '');
+  assert.ok(!/id="transferInq"/.test(String(lonelyCard.innerHTML)), 'один человек в команде — «Передать…» не нужна');
+});
+
 test('«База клиентов»: кнопка «В Excel» выгружает тех, кто на экране', async () => {
   resetData((data) => {
     data.config.active = true;

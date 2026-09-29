@@ -528,6 +528,8 @@ function openInquiryExtras() {
     body: '<div class="stack">' +
       '<button class="btn secondary" id="extraExport" type="button">⬇ Выгрузить заявки в Excel</button>' +
       '<span class="small muted">Файл со всеми заявками и контактами — для отчёта или переноса.</span>' +
+      (transferStaff().length > 1 ? '<button class="btn secondary" id="extraTransfer" type="button">🔁 Передать всех клиентов менеджера…</button>' +
+        '<span class="small muted">Например, на время отпуска: открытые заявки перейдут к другому, ему придёт сводка в Telegram.</span>' : "") +
       '<button class="btn ghost" id="extraCleanup" type="button">🧹 Очистить заявки</button>' +
       '<span class="small muted">Удаляет старые заявки из панели без возможности восстановления.</span>' +
       "</div>",
@@ -535,6 +537,88 @@ function openInquiryExtras() {
     ready: function (dialog) {
       dialog.querySelector("#extraExport").onclick = function () { dialog.closeClean(); exportInquiries(); };
       dialog.querySelector("#extraCleanup").onclick = function () { dialog.closeClean(); openCleanup(); };
+      var extraTransfer = dialog.querySelector("#extraTransfer");
+      if (extraTransfer) extraTransfer.onclick = function () { dialog.closeClean(); openTransferDialog("all"); };
+    },
+  });
+}
+
+// --- Передача клиента ---------------------------------------------------------
+// Ответственный хранится именем; передача меняет его и сообщает новому менеджеру
+// в Telegram. Одного клиента — из карточки диалога; всех клиентов человека
+// (отпуск, увольнение) — из «⋯». Бот честно говорит, дошло ли уведомление.
+function transferStaff() {
+  return [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).filter(function (name, index, all) { return name && all.indexOf(name) === index; });
+}
+
+function transferOptions(names, withNobody) {
+  return (withNobody ? '<option value="">Без менеджера</option>' : "") + names.map(function (name) { return '<option value="' + esc(name) + '">' + esc(name) + "</option>"; }).join("");
+}
+
+function transferDoneText(result, who) {
+  return (result.moved > 1 ? "Передано заявок: " + result.moved + " — " : "Передано: ") + who + ". " +
+    (result.notified ? "Уведомление ушло в Telegram." : "Уведомление в Telegram не отправлено — сообщите ему сами.");
+}
+
+async function openTransferDialog(mode, item) {
+  var names = transferStaff();
+  if (mode === "one") {
+    if (isDirty() && !(await confirmDialog("Передать без сохранения правок?", "В карточке есть несохранённые изменения — при передаче они пропадут. Сначала нажмите «Сохранить».", "Всё равно передать", true))) return;
+    var user = userOf(item);
+    openDialog({
+      title: "Передать клиента",
+      body: '<div class="stack"><p class="muted small"><b>' + esc(userName(user)) + "</b> перейдёт к выбранному менеджеру и появится у него в «Мои». Ему придёт уведомление в Telegram — на него можно ответить, и ответ уйдёт клиенту.</p>" +
+        '<div class="field"><label for="transferTo">Кому передать</label><select id="transferTo">' + transferOptions(names.filter(function (name) { return name !== item.assignee; }), false) + "</select></div></div>",
+      footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="doTransfer" type="button">Передать</button>',
+      ready: function (dialog) {
+        dialog.querySelector("#doTransfer").onclick = async function () {
+          var to = dialog.querySelector("#transferTo").value;
+          if (!to) return;
+          try {
+            var result = await send("/api/inquiries/" + encodeURIComponent(item.id) + "/transfer", "POST", { to: to });
+            dialog.closeClean();
+            toast(result.moved ? transferDoneText(result, to) : "Клиент уже у этого менеджера");
+            await reload(true, { keepScroll: true });
+          } catch (error) { fail(error); }
+        };
+      },
+    });
+    return;
+  }
+  var openFor = function (name) {
+    return (state.inquiries || []).filter(function (entry) { return entry.status !== "closed" && !entry.searchLead && String(entry.assignee || "") === name; }).length;
+  };
+  openDialog({
+    title: "Передать всех клиентов менеджера",
+    body: '<div class="stack"><p class="muted small">Открытые заявки перейдут к выбранному менеджеру. Закрытые останутся как история. Ему придёт одна сводка в Telegram.</p>' +
+      '<div class="field"><label for="transferFrom">У кого забрать</label><select id="transferFrom">' + transferOptions(names, true) + "</select></div>" +
+      '<div class="field"><label for="transferTo">Кому передать</label><select id="transferTo">' + transferOptions(names, false) + "</select></div>" +
+      '<div class="chip warn" id="transferCount"></div><div class="small bad-text" id="transferHint"></div></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="doTransfer" type="button">Передать</button>',
+    ready: function (dialog) {
+      // Кнопка гаснет сама, пока выбраны один и тот же человек: нажатие внутри
+      // открытого окна блокирует кнопку до его закрытия, поэтому «отказ по
+      // нажатию» оставил бы окно без рабочей кнопки.
+      var count = function () {
+        var from = dialog.querySelector("#transferFrom").value, to = dialog.querySelector("#transferTo").value;
+        dialog.querySelector("#transferCount").textContent = "Будет передано заявок: " + openFor(from);
+        dialog.querySelector("#transferHint").textContent = from === to ? "Выберите разных людей: клиенты уже у этого менеджера." : "";
+        dialog.querySelector("#doTransfer").disabled = from === to;
+      };
+      dialog.querySelector("#transferFrom").onchange = count;
+      dialog.querySelector("#transferTo").onchange = count;
+      count();
+      dialog.querySelector("#doTransfer").onclick = async function () {
+        var from = dialog.querySelector("#transferFrom").value, to = dialog.querySelector("#transferTo").value;
+        if (!to) return;
+        if (from === to) { dialog.querySelector("#transferHint").textContent = "Выберите разных людей: клиенты уже у этого менеджера."; return; }
+        try {
+          var result = await send("/api/inquiries/transfer", "POST", { from: from, to: to });
+          dialog.closeClean();
+          toast(result.moved ? transferDoneText(result, to) : "Нечего передавать: у " + (from || "«без менеджера»") + " нет открытых заявок");
+          await reload(true, { keepScroll: true });
+        } catch (error) { fail(error); }
+      };
     },
   });
 }
@@ -754,7 +838,8 @@ function renderInquiryCard(host) {
             return '<option value="' + option[0] + '"' + ((item.status === "closed" ? "closed" : "open") === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
           }).join("") + '</select></div>' +
         '<div class="field"><label for="inqPipeline">Этап сделки <span class="small faint">(по желанию)</span></label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div>' +
-        '<div class="field"><label for="inqAssignee">Ответственный менеджер</label><select id="inqAssignee"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select></div>' +
+        '<div class="field"><label for="inqAssignee">Ответственный менеджер</label><div class="row"><select id="inqAssignee" class="grow"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select>' +
+          (managers.length > 1 ? '<button class="btn secondary small" id="transferInq" type="button" title="Передать клиента другому менеджеру и сообщить ему в Telegram">Передать…</button>' : "") + '</div></div>' +
         '<div class="row followup-fields"><div class="field grow"><label for="followDate">Следующий шаг</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label for="followTime">Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div>' +
         '<div class="field"><label for="inqNote">Заметка по этой заявке</label><textarea id="inqNote" placeholder="Что важно сделать по заявке">' + esc(item.note || "") + "</textarea></div>" +
         '<div class="field"><label for="clientTagsInq">Теги клиента</label><input id="clientTagsInq" value="' + esc((user.tags || []).join(", ")) + '" placeholder="покупка, горячий лид"></div>' +
@@ -951,6 +1036,8 @@ function renderInquiryCard(host) {
       },
     });
   };
+  var transferButton = host.querySelector("#transferInq");
+  if (transferButton) transferButton.onclick = function () { return openTransferDialog("one", item); };
   var scheduleButton = host.querySelector("#scheduleViewing");
   if (scheduleButton) scheduleButton.onclick = function () { openViewingSchedule(item); };
   var inlineViewing = host.querySelector("#confirmViewingInline");

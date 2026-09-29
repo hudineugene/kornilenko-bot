@@ -278,6 +278,7 @@ function refreshStaffCommands(previousChatIds = []) {
     if (list.length > MAX_MANAGERS) return json(res, 400, { error: 'Можно добавить не больше ' + MAX_MANAGERS + ' менеджеров' });
     const previous = new Map((data.config.managers || []).map((manager) => [manager.chatId, manager]));
     const staffChatsBefore = inquiryChats().map((chat) => chat.chatId);
+    const adminNameBefore = cleanText(data.config.adminName, 60) || 'Администратор';
     data.config.adminName = cleanText(body.adminName, 60);
     // A chat that stays the same keeps its checked state.
     data.config.managers = normalizeManagers(list.map((item) => {
@@ -285,6 +286,20 @@ function refreshStaffCommands(previousChatIds = []) {
       const old = previous.get(chatId);
       return { id: old ? old.id : '', name: item.name, chatId, verifiedAt: old ? old.verifiedAt : '' };
     }), adminChatId);
+    // Ответственный в заявке записан именем: переименовали человека — имя в его
+    // заявках идёт следом, иначе клиенты остаются «без хозяина» и пропадают из «Мои».
+    const renamed = new Map();
+    const adminNameAfter = cleanText(data.config.adminName, 60) || 'Администратор';
+    if (adminNameBefore !== adminNameAfter) renamed.set(adminNameBefore, adminNameAfter);
+    for (const manager of data.config.managers) {
+      const old = previous.get(manager.chatId);
+      if (old && old.name !== manager.name) renamed.set(old.name, manager.name);
+    }
+    if (renamed.size) {
+      for (const inquiry of data.inquiries) {
+        if (inquiry.assignee && renamed.has(inquiry.assignee)) inquiry.assignee = renamed.get(inquiry.assignee);
+      }
+    }
     saveDataNow();
     refreshStaffCommands(staffChatsBefore);
     return json(res, 200, { ok: true });
