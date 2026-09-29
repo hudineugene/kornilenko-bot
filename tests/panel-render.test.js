@@ -1951,13 +1951,36 @@ test('«Сегодня»: «Мои / Все» появляется при дву
   sandbox.VIEWS.today.render(host);
   html = String(host.innerHTML);
   assert.ok(html.includes('Ольга'), 'у Марии — её клиентка');
-  assert.ok(!html.includes('Николай'), 'чужого и ничьего клиента в «Мои» нет');
-  assert.match(html, /Ещё \d+ — чужие, без менеджера или не про клиентов/, 'сказано, сколько дел спрятано');
-
-  sandbox.todayScope.me = 'Олег';
+  // Новое обращение, за которым ещё никто не закреплён, видят все: иначе в «Мои»
+  // оно не показывалось бы никому и могло ждать, пока его заметят в «Все».
+  assert.ok(html.includes('Николай'), 'ничей клиент в «Мои» виден');
+  assert.match(html, /<span class="chip warn">без менеджера<\/span>/, 'с пометкой «без менеджера»');
+  assert.equal((html.match(/без менеджера<\/span>/g) || []).length, 1, 'пометка только у ничьего, не у клиентки Марии');
+  data.inquiries.find((item) => item.id === 'inq-nikolay').assignee = 'Олег';
+  ({ sandbox } = await panelSandbox());
+  sandbox.todayScope.mine = true;
+  sandbox.todayScope.me = 'Мария';
+  host = fakeElement('main');
   sandbox.VIEWS.today.render(host);
   html = String(host.innerHTML);
-  assert.match(html, /Своих дел нет/, 'у Олега закреплённых нет — так и сказано, а не «все отвечены»');
+  assert.ok(!html.includes('Николай'), 'клиент Олега у Марии не виден');
+  assert.match(html, /Ещё \d+ — чужие или не про клиентов/, 'сказано, сколько дел спрятано');
+
+  data.inquiries.find((item) => item.id === 'inq-olga').assignee = 'Мария';
+  ({ sandbox } = await panelSandbox());
+  sandbox.todayScope.mine = true;
+  sandbox.todayScope.me = 'Олег';
+  host = fakeElement('main');
+  sandbox.VIEWS.today.render(host);
+  html = String(host.innerHTML);
+  assert.ok(html.includes('Николай'), 'у Олега — его клиент');
+  data.inquiries.find((item) => item.id === 'inq-nikolay').assignee = 'Мария';
+  ({ sandbox } = await panelSandbox());
+  sandbox.todayScope.mine = true;
+  sandbox.todayScope.me = 'Олег';
+  host = fakeElement('main');
+  sandbox.VIEWS.today.render(host);
+  assert.match(String(host.innerHTML), /Своих дел нет/, 'ничьих и своих нет — так и сказано, а не «все отвечены»');
 });
 
 test('«Отчёты»: неделя одной страницей — плитки со сравнением, источники, объекты, копирование текстом', async () => {

@@ -118,14 +118,16 @@ function deedAssignee(item) {
   var inquiry = id ? (state.inquiries || []).find(function (entry) { return entry.id === id; }) : null;
   return inquiry ? inquiry.assignee || "" : null;
 }
-// Дела для «Мои»: клиент закреплён за выбранным человеком. Что клиентов не
-// касается (ошибки, каталог, рассылки) или ещё ничьё — только в «Все».
+// Дела для «Мои»: клиент закреплён за выбранным человеком — и клиент, за которым
+// ещё никто не закреплён: новую заявку иначе не видел бы никто, пока его не
+// заметят в «Все» (такие дела помечены «без менеджера»). Чужие клиенты и всё, что
+// клиентов не касается (ошибки, каталог, рассылки), — только в «Все».
 function scopedDeeds(deeds) {
   var people = todayPeople();
   if (people.length < 2) return { shown: deeds, hidden: 0, active: false };
   if (people.indexOf(todayScope.me) < 0) todayScope.me = people[0];
   if (!todayScope.mine) return { shown: deeds, hidden: 0, active: false };
-  var shown = deeds.filter(function (item) { return deedAssignee(item) === todayScope.me; });
+  var shown = deeds.filter(function (item) { var assignee = deedAssignee(item); return assignee === todayScope.me || assignee === ""; });
   return { shown: shown, hidden: deeds.length - shown.length, active: true };
 }
 
@@ -179,11 +181,11 @@ VIEWS.today = {
             '<button class="btn ghost small" type="button" data-go="notifications">Все события</button></div></header>' +
             (people.length > 1 ? '<div class="deeds-scope row wrap"><div class="tabs" id="deedScope"><button type="button" data-scope="all" class="' + (todayScope.mine ? "" : "active") + '">Все</button><button type="button" data-scope="mine" class="' + (todayScope.mine ? "active" : "") + '">Мои</button></div>' +
               '<label class="small muted" for="deedMe">Я —</label><select id="deedMe" style="width:auto;min-width:0">' + people.map(function (name) { return '<option value="' + esc(name) + '"' + (name === todayScope.me ? " selected" : "") + ">" + esc(name) + "</option>"; }).join("") + "</select>" +
-              (scoped.active && scoped.hidden ? '<span class="small faint">Ещё ' + num(scoped.hidden) + ' — чужие, без менеджера или не про клиентов: они в «Все»</span>' : "") + "</div>" : "") +
+              (scoped.active && scoped.hidden ? '<span class="small faint">Ещё ' + num(scoped.hidden) + ' — чужие или не про клиентов: они в «Все»</span>' : "") + "</div>" : "") +
             (deeds.length ? '<div class="deeds">' + deeds.map(function (item) {
               return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '">' +
                 '<span class="deed-icon">' + deedIcon(item) + '</span>' +
-                '<span class="deed-body"><b>' + esc(item.title) + '</b><span>' + esc(item.text) + '</span></span>' +
+                '<span class="deed-body"><b>' + esc(item.title) + '</b>' + (people.length > 1 && deedAssignee(item) === "" ? ' <span class="chip warn">без менеджера</span>' : "") + '<span>' + esc(item.text) + '</span></span>' +
                 '<span class="deed-actions"><button class="btn small" type="button" data-deed="' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
                 '<button class="btn ghost small" type="button" data-deed-hide="' + esc(item.id) + '" title="Убрать из списка дел">Скрыть</button></span>' +
               '</div>';
