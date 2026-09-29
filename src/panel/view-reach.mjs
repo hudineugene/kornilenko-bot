@@ -250,7 +250,10 @@ function openCampaignEditor(id) {
           dialog.querySelector("#campEstimate").textContent = "Получателей: " + result.total;
           var languages = [result.byLanguage.ru ? "RU " + result.byLanguage.ru : "", result.byLanguage.en ? "EN " + result.byLanguage.en : "", result.byLanguage.es ? "ES " + result.byLanguage.es : ""].filter(Boolean).join(" · ");
           var sample = (result.sample || []).length ? "Пример: " + result.sample.join(", ") : "Нет подходящих клиентов";
-          dialog.querySelector("#campEstimateDetails").textContent = [languages, sample].filter(Boolean).join(" · ");
+          // Получателей меньше, чем «им можно писать» на «Сегодня»: рассылку получают только
+          // те, кто согласился на «Новости и акции», — и подходящие под условия выше.
+          var consent = "Согласились на рассылки: " + num(state.newsConsentCount) + " из " + num(state.activeUserCount) + " клиентов, которым можно писать";
+          dialog.querySelector("#campEstimateDetails").textContent = [languages, sample, consent].filter(Boolean).join(" · ");
           return result;
         } catch (error) {
           dialog.querySelector("#campEstimate").textContent = "Аудитория пока не определена";

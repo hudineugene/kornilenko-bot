@@ -740,6 +740,7 @@ function safeState(session) {
       preferredLanguage: user.preferredLanguage || '',
       source: user.source || '',
       blocked: Boolean(user.blocked),
+      messages: Number(user.messages) || 0,
       lastSeenAt: user.lastSeenAt || '',
       // Карточка неполная: подробности панель запросит, когда её откроют.
       partial: true,
@@ -810,6 +811,8 @@ function safeState(session) {
     inquiries: data.inquiries.map(({ messages, ...item }) => ({
       ...item,
       messageCount: Array.isArray(messages) ? messages.length : 0,
+      // Сколько из них написал клиент: по этому числу панель считает «Сообщений» у клиента.
+      clientMessageCount: Array.isArray(messages) ? messages.filter((message) => message && message.direction === 'in').length : 0,
       lastMessageAt: Array.isArray(messages) && messages.length ? messages[messages.length - 1].createdAt || '' : '',
       // Последнее сообщение — то, что видно в списке диалогов. Без него панель
       // показывала первое сообщение клиента, то есть месяцами одно и то же.

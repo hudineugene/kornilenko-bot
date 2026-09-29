@@ -1609,6 +1609,46 @@ test('значки навигации — один набор линейных S
   for (const glyph of ['◉', '✉', '⌂', '➤', '✎', '⚙', '📅']) assert.ok(!shown.includes(glyph), 'старого глифа ' + glyph + ' на экране нет');
 });
 
+test('числа на экранах не спорят: «Сообщений» у клиента, «им можно писать» и «рассылки получат», клиенты без переписки', async () => {
+  twoWaitingConversations();
+  resetData((data) => {
+    data.config.active = true;
+    data.users['720001'] = { id: '720001', chatId: 720001, firstName: 'Ольга', activity: [], messages: 0, lastSeenAt: new Date().toISOString(), newsConsentAt: new Date().toISOString() };
+    data.users['720002'] = { id: '720002', chatId: 720002, firstName: 'Николай', activity: [], messages: 1, lastSeenAt: new Date().toISOString() };
+    data.users['720003'] = { id: '720003', chatId: 720003, firstName: 'Тихий', activity: [], lastSeenAt: new Date().toISOString() };
+    const now = new Date().toISOString();
+    data.inquiries.push({
+      id: 'inq-olga', userId: '720001', chatId: '720001', language: 'ru', type: 'general', text: 'Здравствуйте', status: 'new', pipelineStage: 'new', replies: [],
+      messages: [{ id: 'm1', direction: 'in', kind: 'text', text: 'Здравствуйте', createdAt: now }, { id: 'm2', direction: 'in', kind: 'text', text: 'Есть новости?', createdAt: now }],
+      createdAt: now, updatedAt: now, clientMessageAt: now,
+    });
+  });
+  const { sandbox } = await panelSandbox();
+
+  // «Сегодня»: сколько можно писать и сколько из них согласились на рассылки.
+  const today = fakeElement('main');
+  sandbox.VIEWS.today.render(today);
+  const todayHtml = String(today.innerHTML);
+  assert.match(todayHtml, /им можно писать: 3/);
+  assert.match(todayHtml, /согласились на рассылки: 1/, 'рассылку получат не все, кому можно писать, — сказано сколько');
+
+  // Карточка клиента: «Сообщений» не меньше, чем клиент написал в переписке (в профиле счётчик мог отстать).
+  const original = sandbox.openDialog;
+  let options = null;
+  sandbox.openDialog = (dialogOptions) => { options = dialogOptions; return original(dialogOptions); };
+  sandbox.openClient('720001');
+  assert.match(String(options.body), /Сообщений<\/span><span class="value">2</, 'в профиле 0, а в переписке два сообщения клиента — показано два');
+
+  // Рассылка: рядом с числом получателей — почему их меньше, чем «можно писать».
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.ok(PANEL_HTML.includes('Согласились на рассылки: " + num(state.newsConsentCount) + " из " + num(state.activeUserCount)'), 'оценка аудитории объясняет разницу');
+
+  // «Диалоги»: сказано, сколько клиентов в базе ещё ничего не писали.
+  const inbox = fakeElement('main');
+  sandbox.renderInquiryList(inbox);
+  assert.match(String(inbox.innerHTML), /в базе ещё 2 клиента без переписки/, 'в базе три клиента, в диалогах один');
+});
+
 test('переключатели «Бот включён» на «Сегодня» и в «Подключении» шлют одно поле active, а не все настройки', async () => {
   twoWaitingConversations();
   const { sandbox, requests } = await panelSandbox();

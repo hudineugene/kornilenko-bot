@@ -71,7 +71,8 @@ function mediaReport() {
 }
 
 function catalogReport() {
-  const active = data.objects.filter((record) => record.status === 'active');
+  // В каталог у клиента входят объекты в продаже и забронированные (проданные и скрытые — нет).
+  const active = data.objects.filter((record) => ['active', 'reserved'].includes(record.status));
   const visible = active.filter((record) => LANGUAGES.some((language) => propertyReadyForLanguage(record, language)));
   const visibleRu = active.filter((record) => propertyReadyForLanguage(record, 'ru'));
   return { active: active.length, visible: visible.length, visibleRu: visibleRu.length };

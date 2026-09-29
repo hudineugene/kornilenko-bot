@@ -200,7 +200,7 @@ VIEWS.today = {
           '<div class="card"><header><h3>Состояние бота</h3></header><div class="card-body stack">' +
             '<label class="switch"><input type="checkbox" id="botActive"' + (state.config.active ? " checked" : "") + '><span class="track"></span><span>' + (state.config.active ? "Бот включён" : "Бот выключен") + "</span></label>" +
             '<div class="small muted">Связь: ' + esc(connectionText()) + "</div>" +
-            '<div class="small muted">Клиентов в базе: ' + num(state.userCount) + " · им можно писать: " + num(state.activeUserCount) + "</div>" +
+            '<div class="small muted">Клиентов в базе: ' + num(state.userCount) + " · им можно писать: " + num(state.activeUserCount) + " · согласились на рассылки: " + num(state.newsConsentCount) + "</div>" +
             '<div class="row wrap"><button class="btn secondary small" type="button" data-go="settings" data-tab="team">Настройки</button>' +
             '<button class="btn secondary small" type="button" data-go="settings" data-tab="reports">Отчёты</button></div>' +
           "</div></div>" +

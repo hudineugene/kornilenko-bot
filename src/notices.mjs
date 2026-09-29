@@ -9,6 +9,7 @@ import { sendMessage } from './telegram.mjs';
 import { awaitingReply, inquiryChats, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
 import { localized, shortenedText } from './catalog.mjs';
 import { runViewingNotices } from './viewings.mjs';
+import { waitingConversationCount } from './admin-notifications.mjs';
 import { temporaryDeliveryError } from './broadcasts.mjs';
 import { adminMessagesAllowed, adminMorningHour } from './hours.mjs';
 import { runFormReminders } from './forms.mjs';
@@ -280,7 +281,8 @@ function weeklyReportData(now = new Date(), which = 'last') {
     },
     viewings: { booked: bookedViewings, held: heldViewings },
     deals: { count: deals, previous: previousDeals },
-    waiting: data.inquiries.filter(awaitingReply).length,
+    // Клиентов, а не обращений: как на «Сегодня» и в «Клиентах» (у одного клиента их может быть несколько).
+    waiting: waitingConversationCount(),
     topProperties,
     sources: Array.from(bySource).sort((a, b) => b[1] - a[1]),
     broadcasts: {
