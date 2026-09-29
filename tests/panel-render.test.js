@@ -1856,7 +1856,7 @@ test('новое сообщение клиента: вкладка мигает 
   let beeps = 0;
   sandbox.playAlertSound = () => { beeps += 1; };
   sandbox.alertKit.sound = true;
-  sandbox.alertKit.last = 0;
+  sandbox.alertKit.last = null;
   sandbox.document.hidden = false;
   try {
     // Первое чтение только запоминает время: старое сообщение новым не считается.
@@ -1895,6 +1895,70 @@ test('новое сообщение клиента: вкладка мигает 
     sandbox.stopTitleFlash();
     sandbox.document.hidden = false;
   }
+});
+
+test('первое сообщение при пустой базе мигает и звучит; звук не зависит от первого нажатия после перезагрузки', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.state.latestClientMessageAt = 0;
+  sandbox.alertKit.last = null;
+  sandbox.alertKit.sound = true;
+  let beeps = 0;
+  const realPlay = sandbox.playAlertSound;
+  sandbox.playAlertSound = () => { beeps += 1; };
+  sandbox.document.hidden = true;
+  try {
+    // Первое чтение — пустая база: запоминаем «сообщений нет» и ничего не сигналим.
+    assert.equal(sandbox.checkNewClientMessage(), false);
+    assert.equal(sandbox.alertKit.last, 0, 'помним, что сообщений не было');
+    // Пришло самое первое сообщение клиента в истории: раньше «до этого было 0»
+    // читалось как «ещё не смотрели», и оно проходило молча.
+    sandbox.state.latestClientMessageAt = Date.now();
+    assert.equal(sandbox.checkNewClientMessage(), true, 'первое сообщение в пустой базе сигналит');
+    assert.equal(beeps, 1);
+  } finally {
+    sandbox.stopTitleFlash();
+    sandbox.playAlertSound = realPlay;
+    sandbox.document.hidden = false;
+  }
+
+  // Звук: один общий AudioContext на страницу. Браузер держит созданный без
+  // нажатия контекст «приостановленным» — его надо возобновлять, иначе после
+  // перезагрузки страницы звука нет, пока не нажмёшь что-нибудь.
+  const created = [];
+  sandbox.window.AudioContext = class {
+    constructor() {
+      this.state = 'suspended';
+      this.currentTime = 0;
+      this.destination = {};
+      this.resumed = 0;
+      created.push(this);
+    }
+    resume() { this.resumed += 1; this.state = 'running'; return Promise.resolve(); }
+    createOscillator() { return { frequency: {}, connect() {}, start() {}, stop() {} }; }
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+    close() {}
+  };
+  sandbox.alertKit.audio = null;
+  sandbox.alertKit.sound = true;
+  sandbox.playAlertSound();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(created.length, 1);
+  assert.ok(created[0].resumed >= 1, 'приостановленный контекст возобновлён перед сигналом');
+  sandbox.playAlertSound();
+  assert.equal(created.length, 1, 'контекст один на страницу, а не новый на каждый сигнал');
+
+  // Первое нажатие на странице «будит» звук заранее.
+  created.length = 0;
+  sandbox.alertKit.audio = null;
+  sandbox.unlockAudio();
+  assert.equal(created.length, 1, 'нажатие создаёт контекст');
+  assert.equal(created[0].state, 'running');
+  sandbox.alertKit.sound = false;
+  sandbox.alertKit.audio = null;
+  created.length = 0;
+  sandbox.unlockAudio();
+  assert.equal(created.length, 0, 'при выключенном звуке контекст не создаётся');
 });
 
 test('скрытая вкладка обновляет данные, но не перерисовывает экран, пока в неё не вернутся', async () => {

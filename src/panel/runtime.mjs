@@ -798,7 +798,8 @@ function initGlobalSearch() {
 // показывает, сколько клиентов ждут ответа, а на новое сообщение вкладка мигает
 // «✉ Новое сообщение» (и по желанию подаёт короткий звук), пока в неё не вернутся.
 // Звук выключен, пока его не включат: неожиданный сигнал на рабочем месте хуже тишины.
-var alertKit = { last: 0, flashTimer: 0, flashOn: false, sound: false, baseTitle: "" };
+// last: null — данных ещё не читали; 0 — прочитали, сообщений от клиентов не было.
+var alertKit = { last: null, flashTimer: 0, flashOn: false, sound: false, baseTitle: "", audio: null };
 (function () {
   try { alertKit.sound = localStorage.getItem("alert.sound") === "1"; } catch (error) {}
 })();
@@ -824,24 +825,46 @@ function startTitleFlash() {
     document.title = alertKit.flashOn ? "✉ Новое сообщение" : titleWithCount();
   }, 1200);
 }
+// Один звуковой контекст на страницу. Созданный без нажатия браузер держит
+// приостановленным и до первого нажатия молчит; поэтому контекст создаётся и
+// возобновляется на первом же нажатии (unlockAudio), а перед каждым сигналом
+// проверяется ещё раз. Раньше на каждый сигнал создавался новый контекст, и после
+// перезагрузки страницы звук не работал, пока что-нибудь не нажмёшь.
+function alertAudio() {
+  if (alertKit.audio) return alertKit.audio;
+  var Context = window.AudioContext || window.webkitAudioContext;
+  if (!Context) return null;
+  try { alertKit.audio = new Context(); } catch (error) { return null; }
+  return alertKit.audio;
+}
+function unlockAudio() {
+  if (!alertKit.sound) return;
+  var audio = alertAudio();
+  if (audio && audio.state === "suspended" && audio.resume) {
+    var done = function () { if (typeof renderSoundToggle === "function") renderSoundToggle(); };
+    audio.resume().then(done, done);
+  }
+}
 // Короткий двойной сигнал без файла со звуком: браузер сам его синтезирует.
 function playAlertSound() {
   try {
-    var Context = window.AudioContext || window.webkitAudioContext;
-    if (!Context) return;
-    var context = new Context();
-    [0, 0.22].forEach(function (offset) {
-      var tone = context.createOscillator(), volume = context.createGain();
-      tone.frequency.value = 880;
-      volume.gain.setValueAtTime(0.0001, context.currentTime + offset);
-      volume.gain.exponentialRampToValueAtTime(0.12, context.currentTime + offset + 0.02);
-      volume.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + offset + 0.16);
-      tone.connect(volume);
-      volume.connect(context.destination);
-      tone.start(context.currentTime + offset);
-      tone.stop(context.currentTime + offset + 0.18);
-    });
-    setTimeout(function () { try { context.close(); } catch (error) {} }, 800);
+    var context = alertAudio();
+    if (!context) return;
+    var ring = function () {
+      [0, 0.22].forEach(function (offset) {
+        var tone = context.createOscillator(), volume = context.createGain();
+        tone.frequency.value = 880;
+        volume.gain.setValueAtTime(0.0001, context.currentTime + offset);
+        volume.gain.exponentialRampToValueAtTime(0.12, context.currentTime + offset + 0.02);
+        volume.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + offset + 0.16);
+        tone.connect(volume);
+        volume.connect(context.destination);
+        tone.start(context.currentTime + offset);
+        tone.stop(context.currentTime + offset + 0.18);
+      });
+    };
+    if (context.state === "suspended" && context.resume) context.resume().then(ring, function () {});
+    else ring();
   } catch (error) {}
 }
 function tabIsAway() {
@@ -851,10 +874,13 @@ function tabIsAway() {
 // время: старые сообщения новыми не считаются.
 function checkNewClientMessage() {
   var latest = Number(state && state.latestClientMessageAt) || 0;
-  var previous = alertKit.last;
+  // Первое чтение только запоминает, что было. Пустая база (0) — тоже «что было»:
+  // раньше 0 читался как «ещё не смотрели», и самое первое сообщение проходило молча.
+  var first = alertKit.last === null;
+  var previous = first ? latest : alertKit.last;
   alertKit.last = Math.max(previous, latest);
   document.title = alertKit.flashTimer && alertKit.flashOn ? "✉ Новое сообщение" : titleWithCount();
-  if (!previous || latest <= previous) return false;
+  if (first || latest <= previous) return false;
   if (!tabIsAway()) return false;
   startTitleFlash();
   if (alertKit.sound) playAlertSound();
@@ -864,7 +890,8 @@ function renderSoundToggle() {
   var button = el("soundToggle");
   button.textContent = alertKit.sound ? "🔊" : "🔇";
   button.setAttribute("aria-pressed", String(alertKit.sound));
-  button.title = "Звук о новом сообщении: " + (alertKit.sound ? "включён" : "выключен");
+  var waiting = alertKit.sound && alertKit.audio && alertKit.audio.state === "suspended";
+  button.title = "Звук о новом сообщении: " + (alertKit.sound ? (waiting ? "включён, но браузер ждёт первого нажатия на странице" : "включён") : "выключен");
 }
 function bindAlerts() {
   renderSoundToggle();
@@ -875,6 +902,8 @@ function bindAlerts() {
     // Сигнал при включении — чтобы сразу было слышно, что звук работает.
     if (alertKit.sound) playAlertSound();
   };
+  // Первое нажатие или клавиша на странице «будит» звук заранее.
+  ["pointerdown", "keydown"].forEach(function (type) { document.addEventListener(type, unlockAudio, { passive: true }); });
   window.addEventListener("focus", stopTitleFlash);
 }
 
