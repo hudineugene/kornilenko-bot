@@ -140,6 +140,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .switch .track::after{content:"";display:block;width:18px;height:18px;margin:2px;border-radius:50%;background:var(--surface);box-shadow:var(--shadow);transition:transform .15s}
 .switch input:checked+.track{background:var(--live)}
 .switch input:checked+.track::after{transform:translateX(16px)}
+.deeds-scope{padding:10px 16px 0;align-items:center;gap:8px}
 .tabs{display:flex;gap:2px;padding:2px;background:var(--surface-soft);border:1px solid var(--line);border-radius:9px;overflow:auto}
 .tabs button{padding:6px 10px;border:0;border-radius:7px;background:none;color:var(--muted);font:inherit;font-size:var(--fs-sm);font-weight:600;cursor:pointer;white-space:nowrap}
 .tabs button.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}

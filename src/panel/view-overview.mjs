@@ -92,6 +92,43 @@ function deedIcon(item) {
   return { message: "✉", task: "⏱", viewing: "📅", catalog: "⌂", group: "👥", broadcast: "➤", error: "!", system: "⚙" }[item.kind] || "•";
 }
 
+// «Мои / Все»: пока менеджер один, переключателя нет. С двумя и больше на
+// «Сегодня» можно оставить только свои дела — те, где клиент закреплён за тобой.
+// Кто «я», панель не знает (вход один на всех), поэтому имя выбирают и запоминают
+// в этом браузере.
+var todayScope = { mine: false, me: "" };
+(function () {
+  try {
+    todayScope.mine = localStorage.getItem("today.mine") === "1";
+    todayScope.me = localStorage.getItem("today.me") || "";
+  } catch (error) {}
+})();
+function rememberTodayScope() {
+  try {
+    localStorage.setItem("today.mine", todayScope.mine ? "1" : "0");
+    localStorage.setItem("today.me", todayScope.me || "");
+  } catch (error) {}
+}
+function todayPeople() {
+  var names = [state.config.adminName || "Администратор"].concat((state.config.managers || []).map(function (manager) { return manager.name; })).filter(Boolean);
+  return names.filter(function (name, index) { return names.indexOf(name) === index; });
+}
+function deedAssignee(item) {
+  var id = item.route && item.route.inquiryId;
+  var inquiry = id ? (state.inquiries || []).find(function (entry) { return entry.id === id; }) : null;
+  return inquiry ? inquiry.assignee || "" : null;
+}
+// Дела для «Мои»: клиент закреплён за выбранным человеком. Что клиентов не
+// касается (ошибки, каталог, рассылки) или ещё ничьё — только в «Все».
+function scopedDeeds(deeds) {
+  var people = todayPeople();
+  if (people.length < 2) return { shown: deeds, hidden: 0, active: false };
+  if (people.indexOf(todayScope.me) < 0) todayScope.me = people[0];
+  if (!todayScope.mine) return { shown: deeds, hidden: 0, active: false };
+  var shown = deeds.filter(function (item) { return deedAssignee(item) === todayScope.me; });
+  return { shown: shown, hidden: deeds.length - shown.length, active: true };
+}
+
 // Сначала то, что горит, потом по времени: свежее сверху.
 function deedList() {
   var rank = { bad: 0, warn: 1 };
@@ -121,7 +158,10 @@ VIEWS.today = {
     var today = startOfToday(), week = startOfWeek();
     var waiting = waitingClients();
     var weekDays = lastDays(7);
-    var deeds = deedList();
+    var allDeeds = deedList();
+    var scoped = scopedDeeds(allDeeds);
+    var deeds = scoped.shown;
+    var people = todayPeople();
     var unconfirmed = unconfirmedViewings().length;
     host.innerHTML =
       // Цифры — одной строкой: ряд из четырёх карточек занимал треть экрана и
@@ -137,6 +177,9 @@ VIEWS.today = {
           '<div class="card"><header><h3>Список дел</h3><div class="actions">' +
             (deeds.length ? '<span class="chip ' + (deeds.some(function (item) { return item.severity === "bad"; }) ? "bad" : "warn") + '">' + num(deeds.length) + '</span>' : '') +
             '<button class="btn ghost small" type="button" data-go="notifications">Все события</button></div></header>' +
+            (people.length > 1 ? '<div class="deeds-scope row wrap"><div class="tabs" id="deedScope"><button type="button" data-scope="all" class="' + (todayScope.mine ? "" : "active") + '">Все</button><button type="button" data-scope="mine" class="' + (todayScope.mine ? "active" : "") + '">Мои</button></div>' +
+              '<label class="small muted" for="deedMe">Я —</label><select id="deedMe" style="width:auto;min-width:0">' + people.map(function (name) { return '<option value="' + esc(name) + '"' + (name === todayScope.me ? " selected" : "") + ">" + esc(name) + "</option>"; }).join("") + "</select>" +
+              (scoped.active && scoped.hidden ? '<span class="small faint">Ещё ' + num(scoped.hidden) + ' — чужие, без менеджера или не про клиентов: они в «Все»</span>' : "") + "</div>" : "") +
             (deeds.length ? '<div class="deeds">' + deeds.map(function (item) {
               return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '">' +
                 '<span class="deed-icon">' + deedIcon(item) + '</span>' +
@@ -144,7 +187,7 @@ VIEWS.today = {
                 '<span class="deed-actions"><button class="btn small" type="button" data-deed="' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
                 '<button class="btn ghost small" type="button" data-deed-hide="' + esc(item.id) + '" title="Убрать из списка дел">Скрыть</button></span>' +
               '</div>';
-            }).join("") + '</div>' : '<div class="empty"><b>Дел нет</b>Все клиенты отвечены, просмотры подтверждены</div>') +
+            }).join("") + '</div>' : '<div class="empty"><b>' + (scoped.active ? "Своих дел нет" : "Дел нет") + '</b>' + (scoped.active ? "За вами закреплённых дел сейчас нет" : "Все клиенты отвечены, просмотры подтверждены") + '</div>') +
           "</div>" +
           '<div class="card"><header><h3>Сообщения и заявки, 7 дней</h3></header><div class="card-body">' +
             sparkline(weekDays, "received", "var(--brand)") +
@@ -170,6 +213,11 @@ VIEWS.today = {
     host.querySelectorAll("[data-go]").forEach(function (node) {
       node.onclick = function () { go(node.dataset.go, node.dataset.tab || ""); };
     });
+    host.querySelectorAll("#deedScope [data-scope]").forEach(function (button) {
+      button.onclick = function () { todayScope.mine = button.dataset.scope === "mine"; rememberTodayScope(); VIEWS.today.render(host); };
+    });
+    var deedMe = host.querySelector("#deedMe");
+    if (deedMe) deedMe.onchange = function () { todayScope.me = deedMe.value; rememberTodayScope(); VIEWS.today.render(host); };
     host.querySelectorAll("[data-deed]").forEach(function (button) {
       button.onclick = function () {
         var item = (state.notifications || []).find(function (entry) { return entry.id === button.dataset.deed; });

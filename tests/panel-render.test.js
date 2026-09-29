@@ -1475,6 +1475,43 @@ test('группа с темами: в форме поста выбираетс�
   assert.ok(!String(off.innerHTML).includes('createTopic'), 'создавать тему негде');
 });
 
+test('«Сегодня»: «Мои / Все» появляется при двух и больше менеджерах и оставляет дела за выбранным человеком', async () => {
+  // Один менеджер — переключателя нет: выбирать не из чего.
+  twoWaitingConversations();
+  let { sandbox } = await panelSandbox();
+  let host = fakeElement('main');
+  sandbox.VIEWS.today.render(host);
+  assert.ok(!String(host.innerHTML).includes('id="deedScope"'), 'без второго менеджера переключателя нет');
+
+  // Двое: Ольга закреплена за Марией, Николай — ничей.
+  twoWaitingConversations();
+  const data = bot.getData();
+  data.config.adminName = 'Олег';
+  data.config.managers = [{ id: 'm1', name: 'Мария', chatId: '9000501', verifiedAt: '' }];
+  data.inquiries.find((item) => item.id === 'inq-olga').assignee = 'Мария';
+  ({ sandbox } = await panelSandbox());
+  host = fakeElement('main');
+  sandbox.VIEWS.today.render(host);
+  let html = String(host.innerHTML);
+  assert.match(html, /id="deedScope"/, 'переключатель есть');
+  assert.match(html, /<option value="Олег" selected>/, 'по умолчанию «я» — первый в списке');
+  assert.ok(html.includes('Когда можно посмотреть?') || html.includes('Ольга'), 'в «Все» видны дела Ольги');
+  assert.ok(html.includes('Николай'), 'и Николая');
+
+  sandbox.todayScope.mine = true;
+  sandbox.todayScope.me = 'Мария';
+  sandbox.VIEWS.today.render(host);
+  html = String(host.innerHTML);
+  assert.ok(html.includes('Ольга'), 'у Марии — её клиентка');
+  assert.ok(!html.includes('Николай'), 'чужого и ничьего клиента в «Мои» нет');
+  assert.match(html, /Ещё \d+ — чужие, без менеджера или не про клиентов/, 'сказано, сколько дел спрятано');
+
+  sandbox.todayScope.me = 'Олег';
+  sandbox.VIEWS.today.render(host);
+  html = String(host.innerHTML);
+  assert.match(html, /Своих дел нет/, 'у Олега закреплённых нет — так и сказано, а не «все отвечены»');
+});
+
 test('«База клиентов»: кнопка «В Excel» выгружает тех, кто на экране', async () => {
   resetData((data) => {
     data.config.active = true;
