@@ -356,7 +356,7 @@ function renderPipeline(host) {
   var unassigned = active.filter(function (row) { return !row.item.assignee; }).length;
   var canAssign = transferStaff().length > 1;
   host.innerHTML = numberStrip([
-      ["Активные клиенты", num(active.length), "", "Без «Выиграно» и «Проиграно»"],
+      ["В работе", num(active.length), "", "Клиенты без этапов «Сделка» и «Неактуально»"],
       ["Ждут ответа", num(waiting), waiting ? "bad" : ""],
       ["Связаться", num(due), due ? "bad" : "", "Шаг на сегодня или уже просрочен"],
     ].concat(canAssign ? [["Без менеджера", num(unassigned), unassigned ? "bad" : ""]] : [])) + clientFilterBar({ search: true, steps: true, note: "На доске: " + rows.length + " из " + allRows.length + " (вместе с завершёнными)" }) +
@@ -1510,7 +1510,7 @@ function renderClients(host) {
     return true;
   });
   host.innerHTML = clientFilterBar({ search: false, steps: true }) + '<div class="toolbar">' +
-      '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) + " из " + num(state.userCount) + " · активных " + num(state.activeUserCount) + '</span><div class="grow"></div><button class="btn secondary small" id="exportClients" type="button" title="Таблица с теми, кого вы видите на экране: для обзвона, отчёта или переноса">⬇ В Excel</button></div>' +
+      '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) +  " из " + num(state.userCount) + (Number(state.activeUserCount) !== Number(state.userCount) ? " · им можно писать: " + num(state.activeUserCount) : "") + '</span><div class="grow"></div><button class="btn secondary small" id="exportClients" type="button" title="Таблица с теми, кого вы видите на экране: для обзвона, отчёта или переноса">⬇ В Excel</button></div>' +
     '<div class="card"><div class="table-wrap"><table class="table-cards clients-table"><thead><tr><th>Клиент</th><th>Источник и язык</th><th>Этап</th><th>Следующий шаг</th><th class="right">Последняя активность</th></tr></thead><tbody>' +
     (rows.length ? rows.slice(0, clientsShown).map(function (row) {
       var user = row.user, latest = row.latest, active = row.active;

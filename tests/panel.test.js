@@ -551,7 +551,7 @@ test('воронка отделяет этап продажи от статус�
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /\["pipeline", "Воронка"\]/);
   assert.match(PANEL_HTML, /function renderPipeline\(host\)/);
-  assert.match(PANEL_HTML, /Активные клиенты/);
+  assert.match(PANEL_HTML, /В работе/);
   assert.match(PANEL_HTML, /Переговоры/);
   assert.match(PANEL_HTML, /Успешно завершено/);
   assert.match(PANEL_HTML, /data-pipeline-stage/);

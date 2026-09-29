@@ -1592,7 +1592,7 @@ test('на пяти экранах цифры — одной строкой, а 
   const { sandbox } = await panelSandbox();
   const screens = [
     ['clients', 'tasks', /К выполнению: <b/],
-    ['clients', 'pipeline', /Активные клиенты: <b/],
+    ['clients', 'pipeline', /В работе: <b/],
     ['viewings', '', /Ждут подтверждения: <b/],
     ['reports', '', /Всего клиентов: <b/],
   ];
@@ -3774,4 +3774,21 @@ test('сбой не пропадает сам: тост ошибки держи�
   assert.match(String(host.innerHTML), /id="retryLoad"/);
   await host.querySelector('#retryLoad').onclick();
   assert.equal(attempts, 2, '«Повторить» пробует загрузить снова');
+});
+
+test('числа не спорят словами: «В работе» в воронке, в базе «им можно писать» только когда отличается от общего', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.state.users = [{ id: 'a', firstName: 'Анна' }, { id: 'b', firstName: 'Борис' }];
+  sandbox.state.inquiries = [];
+  sandbox.state.userCount = 2;
+  sandbox.state.activeUserCount = 2;
+  const same = fakeElement('main');
+  sandbox.renderClients(same);
+  assert.match(String(same.innerHTML), /Показано 2 из 2<\/span>/, 'когда все доступны — слова «активных» нет');
+  assert.ok(!/активных/.test(String(same.innerHTML)));
+  sandbox.state.activeUserCount = 1;
+  const differs = fakeElement('main');
+  sandbox.renderClients(differs);
+  assert.match(String(differs.innerHTML), /Показано 2 из 2 · им можно писать: 1/, 'у бота то же слово, что на «Сегодня»');
 });
