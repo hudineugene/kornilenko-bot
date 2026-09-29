@@ -526,8 +526,8 @@ function renderGroups(host, mode) {
     return;
   }
   if (mode === "manage") {
-    pageAction("Обновить", async function () {
-      try { await send("/api/groups/refresh", "POST", {}); await reload(); toast("Обновлено"); } catch (error) { fail(error); }
+    pageAction("Проверить права бота", async function () {
+      try { await send("/api/groups/refresh", "POST", {}); await reload(); toast("Данные каналов и прав обновлены"); } catch (error) { fail(error); }
     }, "secondary");
   }
   var picker = mode === "post"
@@ -582,14 +582,14 @@ function topicsCard(group) {
   var topics = (group.topics || []).slice().sort(function (a, b) { return a.id - b.id; });
   var intro = group.isForum
     ? "Бот запоминает тему, как только в ней появляется сообщение. Telegram не даёт боту прочитать список тем целиком: недостающую тему добавьте по ссылке или напишите в ней любое сообщение."
-    : "В группе не включены темы. Если вы их включили, нажмите «Обновить» — они появятся здесь. Включить: в Telegram «Управление группой» → «Темы».";
+    : "В группе не включены темы. Если вы их включили, нажмите «Проверить права бота» — темы появятся здесь. Включить: в Telegram «Управление группой» → «Темы».";
   return '<div class="card"><header><h3>Темы группы</h3></header><div class="card-body stack">' +
     '<div class="small muted">' + esc(intro) + "</div>" +
     (topics.length ? '<div class="list">' + topics.map(function (topic) {
       var seen = (group.messages || []).filter(function (message) { return (message.threadId || 0) === topic.id; }).length;
       return '<div class="list-item"><span class="grow"><b>' + esc(topicLabel(group, topic.id)) + "</b>" +
         (topic.closed ? ' <span class="chip warn">закрыта</span>' : "") +
-        '<br><span class="small faint">№ ' + topic.id + (seen ? " · сообщений видно: " + seen : "") + (topic.lastMessageAt ? " · " + esc(dateShort(topic.lastMessageAt)) : "") + "</span></span>" +
+        '<br><span class="small faint">№ ' + topic.id + (seen ? " · сообщений в ленте: " + seen : "") + (topic.lastMessageAt ? " · " + esc(dateShort(topic.lastMessageAt)) : "") + "</span></span>" +
         (topic.id === 1 ? "" : '<button class="btn ghost small" data-forget-topic="' + topic.id + '" type="button">Убрать</button>') + "</div>";
     }).join("") + "</div>" : "") +
     (group.isForum ? '<div class="field"><label for="newTopicName">Создать новую тему</label><div class="row"><input id="newTopicName" maxlength="128" placeholder="Например, «Новостройки»"><button class="btn secondary small" id="createTopic" type="button">Создать</button></div>' +
@@ -609,7 +609,7 @@ function renderGroupCard(host, group, mode) {
     (showManage ? numberStrip([
       [membersWord(group), num(group.memberCount), "", groupKindName(group)],
       ["Права бота", admin ? "администратор" : "участник", admin ? "" : "bad", admin ? "" : "Назначьте бота администратором"],
-      ["Сообщений видно", num((group.messages || []).length), "", "Из последних 200"],
+      ["Сообщений в ленте", num((group.messages || []).length), "", "Бот хранит последние 200 сообщений группы"],
       ["Заявок на вступление", num((group.joinRequests || []).length), (group.joinRequests || []).length ? "bad" : "", "Ждут решения"],
     ].concat(group.isForum ? [["Темы", num((group.topics || []).length), "", "В группе включены темы"]] : [])) : "") +
     (group.lastError ? '<div class="card gap-bottom"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
