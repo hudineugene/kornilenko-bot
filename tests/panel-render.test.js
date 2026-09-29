@@ -697,6 +697,39 @@ test('отвеченная беседа остаётся открытой, а н
   assert.match(String(after.innerHTML), /Ольга/, 'и она по-прежнему видна в списке');
 });
 
+test('«Объекты» и «База клиентов» на телефоне: таблица превращается в карточки, порядок ячеек не сбит', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push({ id: 'card-1', status: 'active', reference: 'C-1', dealType: 'sale', propertyType: 'apartment', title: { ru: 'Квартира у моря', en: '', es: '' }, city: { ru: 'Бенидорм', en: '', es: '' }, priceValue: 150000, currency: 'EUR', imagesByLanguage: { ru: [], en: [], es: [] } });
+    data.users['610'] = { id: '610', chatId: 610, firstName: 'Анна', activity: [] };
+  });
+  const { sandbox } = await panelSandbox();
+  const cells = (html) => (String(html).match(/<tr[^>]*data-id[^>]*>([\s\S]*?)<\/tr>/) || [])[1].match(/<td[\s>]/g).length;
+
+  // Карточки на телефоне рисуются правилами по номеру ячейки (td:nth-child):
+  // изменили столбцы — правила надо менять вместе с ними.
+  const objects = fakeElement('main');
+  sandbox.renderObjects(objects);
+  const objectsHtml = String(objects.innerHTML);
+  assert.match(objectsHtml, /<table class="table-cards objects-table">/);
+  assert.equal(cells(objectsHtml), 8, 'в строке объекта восемь ячеек: фото, название, тип, город, цена, статус, эффективность, «⋯»');
+
+  const clients = fakeElement('main');
+  sandbox.renderClients(clients);
+  const clientsHtml = String(clients.innerHTML);
+  assert.match(clientsHtml, /<table class="table-cards clients-table">/);
+  assert.equal(cells(clientsHtml), 5, 'в строке клиента пять ячеек: клиент, источник и язык, этап, следующий шаг, активность');
+
+  // Сами правила: до 600 px строка — сетка, а не ширина таблицы.
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const sheet = PANEL_HTML.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
+  const phone = sheet.slice(sheet.indexOf('/* Таблицы-карточки на телефоне'));
+  assert.match(phone, /@media \(max-width:600px\)/);
+  for (const rule of ['.table-cards thead{display:none}', '.table-cards tr{display:grid', '.objects-table tr{grid-template-columns', '.clients-table tr{grid-template-columns', '.table-cards td[colspan]']) {
+    assert.ok(phone.includes(rule), 'правило: ' + rule);
+  }
+});
+
 test('кнопки в шапке экрана не плодятся, когда список перерисовывается сам', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();

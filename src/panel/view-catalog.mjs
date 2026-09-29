@@ -109,7 +109,7 @@ function renderObjects(host) {
         return '<option value="' + item[0] + '"' + (catalogStatus === item[0] ? " selected" : "") + ">" + item[1] + "</option>";
       }).join("") + "</select>" +
       '<span class="small faint">' + counted(rows.length, "объект", "объекта", "объектов") + "</span></div>" +
-    '<div class="card"><div class="table-wrap"><table><thead><tr><th class="thumb-xs"></th><th>Объект</th><th>Тип</th><th>Город</th><th class="right">Цена</th><th>Статус</th><th class="right">Эффективность</th><th></th></tr></thead><tbody>' +
+    '<div class="card"><div class="table-wrap"><table class="table-cards objects-table"><thead><tr><th class="thumb-xs"></th><th>Объект</th><th>Тип</th><th>Город</th><th class="right">Цена</th><th>Статус</th><th class="right">Эффективность</th><th></th></tr></thead><tbody>' +
     (rows.length ? rows.map(function (record, index) {
       var images = propertyImages(record, "ru");
       var stats = catalogPropertyStats(record);

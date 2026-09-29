@@ -140,6 +140,36 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .switch .track::after{content:"";display:block;width:18px;height:18px;margin:2px;border-radius:50%;background:var(--surface);box-shadow:var(--shadow);transition:transform .15s}
 .switch input:checked+.track{background:var(--live)}
 .switch input:checked+.track::after{transform:translateX(16px)}
+/* Таблицы-карточки на телефоне: «Объекты» и «База клиентов». Таблица шире экрана
+   уходила в горизонтальную прокрутку без подсказки, и цена, статус и «⋯» оказывались
+   за краем. До 600 px строка — карточка; ячейки ставятся по номеру (td:nth-child),
+   поэтому порядок столбцов в разметке менять нельзя без правки этих правил
+   (его сторожит тест). */
+@media (max-width:600px){
+  .table-cards,.table-cards tbody{display:block;width:100%}
+  .table-cards thead{display:none}
+  .table-cards tr{display:grid;gap:2px 10px;padding:10px 12px;border-bottom:1px solid var(--line);align-items:center}
+  .table-cards td{display:block;padding:0;border:0;min-width:0}
+  .table-cards td[colspan]{grid-column:1/-1;grid-row:auto}
+  .objects-table tr{grid-template-columns:52px minmax(0,1fr) auto}
+  .objects-table td:nth-child(1){grid-column:1;grid-row:1/span 3}
+  .objects-table td:nth-child(1) .thumb{width:52px;height:52px}
+  .objects-table td:nth-child(2){grid-column:2;grid-row:1}
+  .objects-table td:nth-child(8){grid-column:3;grid-row:1}
+  .objects-table td:nth-child(2) .small{white-space:nowrap}
+  .objects-table td:nth-child(3){display:none}
+  .objects-table td:nth-child(4){grid-column:2;grid-row:2;color:var(--muted)}
+  .objects-table td:nth-child(5){grid-column:3;grid-row:2;font-weight:700;text-align:right}
+  .objects-table td:nth-child(6){grid-column:2;grid-row:3}
+  .objects-table td:nth-child(7){grid-column:3;grid-row:3;text-align:right}
+  .objects-table .object-performance{display:flex;flex-direction:column;align-items:flex-end;gap:0;font-size:var(--fs-xs)}
+  .clients-table tr{grid-template-columns:minmax(0,1fr) auto}
+  .clients-table td:nth-child(1){grid-column:1/-1;grid-row:1}
+  .clients-table td:nth-child(3){grid-column:1;grid-row:2}
+  .clients-table td:nth-child(4){grid-column:2;grid-row:2;text-align:right}
+  .clients-table td:nth-child(2){grid-column:1;grid-row:3;font-size:var(--fs-sm);color:var(--muted)}
+  .clients-table td:nth-child(5){grid-column:2;grid-row:3;text-align:right}
+}
 /* «Обслуживание»: шесть разделов сеткой карточек — название, под ним пояснение. */
 .service-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
 .service-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);font:inherit;text-align:left;cursor:pointer}
