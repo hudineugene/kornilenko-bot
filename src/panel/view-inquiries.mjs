@@ -1623,6 +1623,37 @@ function renderClients(host) {
   });
 }
 
+// Один и тот же человек мог оказаться в базе дважды: позвонил (завели руками), а потом написал боту. Совпадение —
+// по телефону (последние 9 цифр, без кода страны).
+function phoneKey(user) {
+  var digits = String((user && user.phone) || "").replace(/\D/g, "");
+  return digits.length >= 7 ? digits.slice(-9) : "";
+}
+function duplicatesOf(user) {
+  var key = phoneKey(user);
+  if (!key) return [];
+  return (state.users || []).filter(function (other) { return String(other.id) !== String(user.id) && phoneKey(other) === key; }).slice(0, 3);
+}
+// Кого во кого вливать: в карточку с чатом в Telegram; если чатов нет ни у кого — в открытую. Две карточки с чатами не склеить.
+function mergePlan(user, other) {
+  if (user.chatId && other.chatId) return null;
+  return other.chatId ? { keepId: other.id, mergeId: user.id } : { keepId: user.id, mergeId: other.id };
+}
+async function mergeClients(dialog, user, other) {
+  var plan = mergePlan(user, other);
+  var keep = userById(plan.keepId);
+  var gone = userById(plan.mergeId);
+  if (!(await confirmDialog("Объединить карточки?", "«" + userName(gone) + "» вольётся в «" + userName(keep) + "»: заявки, заметки, теги и избранное окажутся в одной карточке, лишняя исчезнет. Это можно вернуть сразу после объединения.", "Объединить"))) return;
+  try {
+    var result = await send("/api/users/merge", "POST", plan);
+    dialog.closeClean();
+    toast("Карточки объединены", false, { label: "Вернуть", run: async function () {
+      try { await send("/api/users/unmerge", "POST", { token: result.undoToken }); toast("Возвращено"); await reload(); } catch (error) { fail(error); }
+    } });
+    await reload();
+  } catch (error) { fail(error); }
+}
+
 function openClient(id) {
   var user = userById(id);
   // Клиента нет в общем состоянии (старше 500-го) или карточка неполная: запрашиваем
@@ -1646,7 +1677,10 @@ function openClient(id) {
     body: '<div class="client-profile"><aside class="client-profile-side"><div class="client-profile-identity"><span class="conversation-avatar client-avatar">' + esc(initials(user.firstName)) + '</span><div><h2>' + esc(userName(user)) + '</h2><span class="small muted">ID ' + esc(user.id) + (user.username ? " · @" + esc(user.username) : "") + '</span></div></div>' +
       '<div class="client-facts"><div><span>Источник</span><b>' + esc(user.source || "без метки") + '</b></div>' + (user.plan && user.plan.startedAt ? '<div><span>План покупки</span><b>' + Object.keys(user.plan.done || {}).length + ' из 10 шагов' + (Object.keys(user.plan.help || {}).length ? ', просит помощи' : '') + '</b></div>' : "") + (user.goal ? '<div><span>Цель</span><b>' + esc({ live: "купить для жизни", invest: "инвестиция и аренда", browse: "пока смотрит" }[user.goal] || "") + '</b></div>' : "") + '<div><span>Первый контакт</span><b>' + dateTime(user.firstSeenAt) + '</b></div><div><span>Последняя активность</span><b>' + dateTime(user.lastSeenAt) + '</b></div>' + (latest ? '<div><span>Этап</span><b>' + esc(clientStageLabel(latest)) + '</b></div>' : "") + '</div>' +
       '<div class="client-edit stack"><div class="grid cols-2"><div class="field"><label for="clientContactName">Имя для связи</label><input id="clientContactName" data-client-edit value="' + esc(user.contactName || userName(user)) + '"></div><div class="field"><label for="clientLanguage">Язык</label><select id="clientLanguage" data-client-edit><option value="">Не выбран</option>' + [["ru", "Русский"], ["en", "English"], ["es", "Español"]].map(function (language) { return '<option value="' + language[0] + '"' + (user.preferredLanguage === language[0] ? " selected" : "") + '>' + language[1] + "</option>"; }).join("") + '</select></div></div><div class="field"><label for="clientPhone">Телефон</label><input id="clientPhone" data-client-edit value="' + esc(user.phone || "") + '" placeholder="+34 …"></div><div class="field"><label for="clientContactTime">Когда удобно связаться</label><input id="clientContactTime" data-client-edit value="' + esc(user.preferredContactTime || "") + '"></div><div class="field"><label for="clientTags">Теги клиента</label><input id="clientTags" data-client-edit value="' + esc((user.tags || []).join(", ")) + '"></div><div class="field"><label for="clientNote">Заметка о клиенте</label><textarea id="clientNote" data-client-edit>' + esc(user.note || "") + '</textarea></div><label class="check"><input type="checkbox" id="clientBlocked" data-client-edit' + (user.blocked ? " checked" : "") + '> не писать этому клиенту</label></div></aside>' +
-      '<main class="client-profile-main">' + numberStrip([["Сообщений", num(clientMessageTotal(user, inquiries))], ["Заявок", num(inquiries.length)], ["Избранное", num((user.favorites || []).length)], ["Просмотрено", num((user.recentlyViewed || []).length)]]) +
+      '<main class="client-profile-main">' + duplicatesOf(user).map(function (other) {
+        return '<section class="card"><div class="card-body row wrap"><span class="chip warn">Возможный дубль</span><span>Тот же телефон у клиента «' + esc(userName(other)) + '»' + (other.chatId ? "" : " (заведён вручную)") + '</span>' +
+          (mergePlan(user, other) ? '<button class="btn secondary small" type="button" data-client-merge="' + esc(other.id) + '">Объединить</button>' : '<span class="small muted">Оба пишут через Telegram — объединить нельзя</span>') + '</div></section>';
+      }).join("") + numberStrip([["Сообщений", num(clientMessageTotal(user, inquiries))], ["Заявок", num(inquiries.length)], ["Избранное", num((user.favorites || []).length)], ["Просмотрено", num((user.recentlyViewed || []).length)]]) +
       '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит клиенту в Telegram</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть диалог →</button><button class="btn secondary" id="clientViewing" type="button">Назначить просмотр</button>' + (!user.chatId ? '<div class="small muted">Клиент заведён вручную: в боте его нет, писать ему из панели нельзя.</div>' : '') + '</div></section>' +
       '<div class="grid cols-2 client-interest-grid">' + (!hasWish ? '<section class="card"><div class="card-body"><span class="small muted">Условия поиска: клиент пока не оставлял ни сохранённого поиска, ни заявки на подбор.</span></div></section>' : '<section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section>') + '<section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="stack"><div class="muted small">Активных заявок нет. Можно поставить шаг — например, «позвонить в четверг»: он появится в «Следующих шагах» и в напоминаниях.</div><div class="grid cols-2"><div class="field"><label for="stepDate">День</label><input type="date" id="stepDate"></div><div class="field"><label for="stepTime">Время</label><input type="time" id="stepTime"></div></div><div class="field"><label for="stepNote">Что сделать</label><input id="stepNote" maxlength="300" placeholder="Позвонить, уточнить бюджет"></div><button class="btn secondary small" id="clientStep" type="button">Поставить шаг</button></div>') + '</div></section></div>' +
       '<section class="card"><header><h3>Объекты и интересы</h3><div class="actions"><span class="small faint">избранное · сравнение · история · подбор</span></div></header>' + clientPropertiesHtml(user) + '</section>' +
@@ -1692,6 +1726,9 @@ function openClient(id) {
       dialog.querySelectorAll("[data-client-inquiry]").forEach(function (button) { button.onclick = function () { openConversation(button.dataset.clientInquiry); }; });
       var openTask = dialog.querySelector("#clientOpenTask");
       if (openTask && active) openTask.onclick = function () { openConversation(active.id); };
+      dialog.querySelectorAll("[data-client-merge]").forEach(function (button) {
+        button.onclick = function () { return mergeClients(dialog, user, userById(button.dataset.clientMerge)); };
+      });
       var stepButton = dialog.querySelector("#clientStep");
       if (stepButton) stepButton.onclick = async function () {
         var day = dialog.querySelector("#stepDate").value;

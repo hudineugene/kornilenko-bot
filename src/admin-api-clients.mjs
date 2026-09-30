@@ -23,6 +23,9 @@ import { sendInquiryToAdministrator, weeklyReportData, weeklyReportText } from '
 // а перебор пяти тысяч переписок не должен занимать заметное время.
 const CONVERSATION_SEARCH_LIMIT = 200;
 
+// Последние слияния карточек — для «Вернуть» (только в памяти).
+const recentMerges = new Map();
+
 // Каждая ветка сама отвечает клиенту и возвращает управление. Если не подошла
 // ни одна, функция возвращает false — тогда запрос ищут в других модулях.
 
@@ -280,6 +283,63 @@ async function handleClientsApi(req, res, url) {
     trimInquiries();
     saveDataNow();
     return json(res, 201, { ok: true, id: inquiry.id });
+  }
+
+  // Объединение двух карточек одного человека: заведённый руками клиент (без чата в Telegram) вливается в
+  // основную карточку — заявки переходят к ней, пустые поля дополняются, а телефон и заметки не теряются.
+  // Вливать можно только карточку без Telegram-чата: два живых чата в одну не склеить. «Вернуть» держится в
+  // памяти бота (несколько последних слияний): после перезапуска вернуть уже нельзя, но данные остаются целыми.
+  if (url.pathname === '/api/users/merge' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const keep = userById(String(body.keepId || ''));
+    const gone = userById(String(body.mergeId || ''));
+    if (!keep || !gone) return json(res, 404, { error: 'Клиент не найден' });
+    if (keep === gone) return json(res, 400, { error: 'Выберите двух разных клиентов' });
+    if (gone.chatId != null && gone.chatId !== '' && gone.chatId !== 0) return json(res, 400, { error: 'В основную карточку можно влить только клиента без чата в Telegram' });
+    const before = { phone: keep.phone, contactName: keep.contactName, preferredLanguage: keep.preferredLanguage, source: keep.source, note: keep.note, tags: keep.tags, favorites: keep.favorites, firstSeenAt: keep.firstSeenAt, messages: keep.messages };
+    const moved = [];
+    for (const inquiry of data.inquiries) {
+      if (String(inquiry.userId) !== String(gone.id)) continue;
+      moved.push({ id: inquiry.id, chatId: inquiry.chatId });
+      inquiry.userId = String(keep.id);
+      if (!inquiry.chatId && keep.chatId) inquiry.chatId = String(keep.chatId);
+    }
+    for (const field of ['phone', 'contactName', 'preferredLanguage', 'source']) if (!keep[field] && gone[field]) keep[field] = gone[field];
+    if (gone.note && !String(keep.note || '').includes(gone.note)) keep.note = cleanText([keep.note, gone.note].filter(Boolean).join('\n'), CLIENT_NOTE_LIMIT);
+    keep.tags = [...new Set([...(keep.tags || []), ...(gone.tags || [])])].slice(0, 20);
+    keep.favorites = [...new Set([...(keep.favorites || []), ...(gone.favorites || [])].map(String))];
+    if (gone.firstSeenAt && (!keep.firstSeenAt || gone.firstSeenAt < keep.firstSeenAt)) keep.firstSeenAt = gone.firstSeenAt;
+    keep.messages = Number(keep.messages || 0) + Number(gone.messages || 0);
+    const token = crypto.randomBytes(8).toString('hex');
+    recentMerges.set(token, { keepId: String(keep.id), gone: JSON.parse(JSON.stringify(gone)), moved, before: JSON.parse(JSON.stringify(before)) });
+    while (recentMerges.size > 5) recentMerges.delete(recentMerges.keys().next().value);
+    delete data.users[String(gone.id)];
+    saveDataNow();
+    return json(res, 200, { ok: true, keepId: String(keep.id), moved: moved.length, undoToken: token });
+  }
+
+  if (url.pathname === '/api/users/unmerge' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const token = String(body.token || '');
+    const entry = recentMerges.get(token);
+    if (!entry) return json(res, 404, { error: 'Вернуть уже нельзя: слияние давно сделано или бот перезапускался' });
+    const keep = userById(entry.keepId);
+    if (!keep || userById(entry.gone.id)) return json(res, 409, { error: 'Карточки изменились — вернуть нельзя' });
+    Object.assign(keep, entry.before);
+    data.users[entry.gone.id] = entry.gone;
+    for (const item of entry.moved) {
+      const inquiry = data.inquiries.find((candidate) => candidate.id === item.id);
+      if (!inquiry) continue;
+      inquiry.userId = String(entry.gone.id);
+      inquiry.chatId = item.chatId;
+    }
+    recentMerges.delete(token);
+    saveDataNow();
+    return json(res, 200, { ok: true, id: String(entry.gone.id) });
   }
 
   // Следующий шаг у клиента: «позвонить в четверг». Если у клиента есть открытая заявка — дата ставится на неё;

@@ -4100,3 +4100,38 @@ test('карточка клиента без заявок: можно поста
   const made = requests.find((request) => request.url === '/api/users/n2/step' && request.method === 'POST');
   assert.deepEqual(JSON.parse(JSON.stringify(made.body)), { date: '2030-05-23', time: '10:00', note: 'Позвонить в четверг' });
 });
+
+test('карточка клиента: тот же телефон у другой карточки — «Возможный дубль» и «Объединить» (в карточку с чатом); «Вернуть» после слияния', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  sandbox.state.users = [
+    { id: 'manual-1', firstName: 'Анна Соколова', chatId: '', phone: '+34 600 111 222', favorites: [], recentlyViewed: [], tags: [], note: '' },
+    { id: '777', firstName: 'Анна', chatId: 777, phone: '0034600111222', favorites: [], recentlyViewed: [], tags: [], note: '' },
+    { id: '888', firstName: 'Пётр', chatId: 888, phone: '+34 600 111 222', favorites: [], recentlyViewed: [], tags: [], note: '' },
+    { id: '999', firstName: 'Ольга', chatId: 999, phone: '+34 611 000 000', favorites: [], recentlyViewed: [], tags: [], note: '' },
+  ];
+  sandbox.state.inquiries = [];
+  const toasts = [];
+  sandbox.toast = (message, bad, action) => toasts.push({ message: String(message), bad: Boolean(bad), action });
+  sandbox.confirmDialog = async () => true;
+  let options = null;
+  let dialog = null;
+  sandbox.openDialog = (opts) => { options = opts; dialog = fakeElement('dialog'); dialog.closeClean = () => {}; if (opts.ready) opts.ready(dialog); return dialog; };
+  sandbox.openClient('999');
+  assert.ok(!/Возможный дубль/.test(String(options.body)), 'у Ольги дублей нет');
+  sandbox.openClient('manual-1');
+  const html = String(options.body);
+  assert.equal((html.match(/Возможный дубль/g) || []).length, 2, 'два совпадения по телефону, несмотря на разную запись номера');
+  assert.match(html, /data-client-merge="777"/);
+  requests.length = 0;
+  const mergeButton = dialog.querySelector('[data-client-merge]');
+  mergeButton.dataset = { clientMerge: '777' };
+  await mergeButton.onclick();
+  const merge = requests.find((request) => request.url === '/api/users/merge');
+  assert.deepEqual(JSON.parse(JSON.stringify(merge.body)), { keepId: '777', mergeId: 'manual-1' }, 'вливаем карточку без чата в карточку с чатом');
+  const undoToast = toasts.find((item) => item.message === 'Карточки объединены');
+  assert.equal(undoToast.action.label, 'Вернуть');
+  // Две карточки с чатами объединить нельзя.
+  sandbox.openClient('777');
+  assert.match(String(options.body), /Оба пишут через Telegram — объединить нельзя/);
+});

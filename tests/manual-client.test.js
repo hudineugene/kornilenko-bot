@@ -123,3 +123,39 @@ test('следующий шаг у клиента без заявок: заво�
   const { currentAdminNotifications } = await import('../src/admin-notifications.mjs');
   assert.ok(currentAdminNotifications().some((item) => item.kind === 'task' && item.id.includes(step.id)), 'просроченный шаг попал в дела');
 });
+
+test('объединение дублей: карточка без чата вливается в основную, заявки и заметки переходят, «Вернуть» всё возвращает', async () => {
+  const data = bot.getData();
+  const { id: manualId } = await (await post('/api/users', { name: 'Анна Соколова', phone: '+34 600 111 222', source: 'звонок', note: 'Просила перезвонить' })).json();
+  data.users['777'] = { id: '777', chatId: 777, firstName: 'Анна', lastName: '', phone: '', contactName: '', preferredLanguage: '', source: '', note: 'Ищет виллу', tags: ['горячий'], favorites: ['villa-1'], firstSeenAt: '2026-09-01T10:00:00.000Z', messages: 3 };
+  await post('/api/users/' + manualId + '/step', { date: tomorrow(), note: 'Позвонить' });
+  const stepId = data.inquiries.find((item) => item.userId === manualId).id;
+
+  // Нельзя: влить карточку с чатом, склеить с самим собой, неизвестного.
+  assert.equal((await post('/api/users/merge', { keepId: manualId, mergeId: '777' })).status, 400);
+  assert.equal((await post('/api/users/merge', { keepId: '777', mergeId: '777' })).status, 400);
+  assert.equal((await post('/api/users/merge', { keepId: '777', mergeId: 'нет' })).status, 404);
+
+  const merged = await post('/api/users/merge', { keepId: '777', mergeId: manualId });
+  assert.equal(merged.status, 200);
+  const result = await merged.json();
+  assert.equal(result.moved, 1);
+  assert.equal(data.users[manualId], undefined, 'лишней карточки больше нет');
+  const keep = data.users['777'];
+  assert.equal(keep.phone, '+34 600 111 222', 'телефон дополнен');
+  assert.equal(keep.source, 'звонок');
+  assert.match(keep.note, /Ищет виллу\nПросила перезвонить/);
+  assert.equal(data.inquiries.find((item) => item.id === stepId).userId, '777');
+  assert.equal(data.inquiries.find((item) => item.id === stepId).chatId, '777', 'ответить теперь можно в чат');
+
+  const undone = await post('/api/users/unmerge', { token: result.undoToken });
+  assert.equal(undone.status, 200);
+  assert.equal(data.users[manualId].phone, '+34 600 111 222');
+  assert.equal(data.users[manualId].chatId == null || data.users[manualId].chatId === '' || data.users[manualId].chatId === 0, true);
+  assert.equal(data.inquiries.find((item) => item.id === stepId).userId, manualId);
+  assert.equal(data.inquiries.find((item) => item.id === stepId).chatId, '');
+  assert.equal(data.users['777'].phone, '');
+  assert.equal(data.users['777'].note, 'Ищет виллу');
+  assert.equal(data.users['777'].messages, 3);
+  assert.equal((await post('/api/users/unmerge', { token: result.undoToken })).status, 404, 'второй раз — уже нечего возвращать');
+});
