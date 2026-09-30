@@ -4536,3 +4536,26 @@ test('«Все подписи бота»: поля групп рисуются �
   assert.match(body, /class="lang-input"/, 'активный язык виден');
   assert.match(body, /class="lang-input hidden"/, 'остальные языки скрыты');
 });
+
+test('«Сегодня»: у каждой кнопки дела в разметке стоит номер дела, а «Открыть» у технической ошибки ведёт в «Данные»', async () => {
+  twoWaitingConversations();
+  bot.getData().errors = [{ id: 'e-open', area: 'Копия данных в Telegram', message: 'Файл слишком большой', createdAt: new Date().toISOString() }];
+  const { sandbox } = await panelSandbox();
+  const today = fakeElement('main');
+  sandbox.VIEWS.today.render(today);
+  const html = String(today.innerHTML);
+
+  const deeds = sandbox.deedList();
+  const fault = deeds.find((item) => item.kind === 'error');
+  assert.ok(fault, 'техническая ошибка есть в списке дел');
+  const ids = [...html.matchAll(/data-deed="([^"]*)"/g)].map((match) => match[1]);
+  assert.equal(ids.length, deeds.length, 'кнопка у каждого дела');
+  assert.ok(ids.every(Boolean), 'номер дела не пустой: раньше из-за лишней кавычки он был пустым и кнопки молчали: ' + JSON.stringify(ids));
+  assert.ok(ids.includes(fault.id));
+  assert.ok(!/data-deed=""[^\s>]/.test(html), 'нет склеенного атрибута');
+
+  const routes = [];
+  sandbox.go = async (view, tab) => { routes.push([view, tab]); return true; };
+  await sandbox.runDeed(fault);
+  assert.deepEqual(JSON.parse(JSON.stringify(routes)), [['settings', 'data']], '«Открыть» ведёт в «Настройки → Данные»');
+});

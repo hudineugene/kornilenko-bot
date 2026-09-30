@@ -346,7 +346,7 @@ VIEWS.today = {
               return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '">' +
                 '<span class="deed-icon">' + deedIcon(item) + '</span>' +
                 '<span class="deed-body"><b>' + esc(item.title) + '</b>' + (people.length > 1 && deedAssignee(item) === "" ? ' ' + chip("warn", 'Без менеджера') : "") + '<span>' + esc(item.text) + '</span></span>' +
-                '<span class="deed-actions"><button class="btn secondary small" type="button" data-deed=""' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
+                '<span class="deed-actions"><button class="btn secondary small" type="button" data-deed="' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
                 '<button class="btn ghost small" type="button" data-deed-hide="' + esc(item.id) + '" title="Убрать из списка дел">Скрыть</button></span>' +
               '</div>';
             }).join("") + '</div>' : '<div class="empty"><b>' + (scoped.active ? "Своих дел нет" : "Дел нет") + '</b>' + (scoped.active ? "За вами закреплённых дел сейчас нет" : "Все клиенты отвечены, просмотры подтверждены") + '</div>') +
