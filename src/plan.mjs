@@ -75,7 +75,7 @@ const PLAN_TEXT = {
     reminder: 'Your buying plan is waiting. Next step: {n}. {title}',
     open: '📋 Open the plan',
     off: '🔕 Stop reminders',
-    offDone: 'OK, no more plan reminders. The plan stays in “My space → My buying plan”.',
+    offDone: 'OK, no more plan reminders. The plan stays in “My account → My buying plan”.',
     menu: '🏠 Main menu',
   },
   es: {

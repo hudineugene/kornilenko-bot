@@ -41,7 +41,7 @@ const GOAL_TEXT = {
     invest: '📈 Investment and rental',
     browse: '👀 Just browsing',
     menuButton: '🎯 My goal',
-    change: 'You can change it any time: “My space → My goal”.',
+    change: 'You can change it any time: “My account → My goal”.',
     selection: '🔎 Find a property',
     guide: '📖 How to buy',
     catalog: '🏘 Browse properties',

@@ -57,7 +57,7 @@ function menuItemForText(text, language) {
   const value = String(text || '').replace(/\s+·\s+\d+$/, '');
   const earlierContacts = EARLIER_CONTACT_LABELS[language] || EARLIER_CONTACT_LABELS.ru;
   return ['objects', 'selection', 'contacts', 'promotions', 'favorites', 'request', 'about', 'help', 'more', 'guide'].find((key) => {
-    return labels[key] === value || legacy[key] === value || previous[key] === value
+    return labels[key] === value || legacy[key] === value || [].concat(previous[key] || []).includes(value)
       || (key === 'contacts' && earlierContacts.includes(value))
       || (key === 'favorites' && (EARLIER_FAVORITES_LABELS[language] || []).includes(value));
   }) || '';

@@ -10,15 +10,15 @@ const LANGUAGE_SELECTED = {
 };
 const MENU_LABELS = {
   ru: { objects: '🏘 Объекты', selection: '✨ Подбор', promotions: '🔥 Акции', favorites: '❤️ Избранное', contacts: '💬 Связаться', request: '📞 Позвоните мне', about: 'ℹ️ О компании', help: '❓ Помощь', more: '👤 Моё', guide: '🇪🇸 Как купить', language: '🌐 Сменить язык', placeholder: 'Напишите, что ищете' },
-  en: { objects: '🏘 Properties', selection: '✨ Find for me', promotions: '🔥 Offers', favorites: '❤️ Favourites', contacts: '💬 Contact us', request: '📞 Call me back', about: 'ℹ️ About', help: '❓ Help', more: '👤 My space', guide: '🇪🇸 Buying in Spain', language: '🌐 Change language', placeholder: 'Write what you are looking for' },
-  es: { objects: '🏘 Inmuebles', selection: '✨ Búsqueda', promotions: '🔥 Promociones', favorites: '❤️ Favoritos', contacts: '💬 Contactar', request: '📞 Llámame', about: 'ℹ️ La empresa', help: '❓ Ayuda', more: '👤 Mi espacio', guide: '🇪🇸 Cómo comprar', language: '🌐 Cambiar idioma', placeholder: 'Escribe qué buscas' },
+  en: { objects: '🏘 Properties', selection: '✨ Help me choose', promotions: '🔥 Offers', favorites: '❤️ Favourites', contacts: '💬 Contact us', request: '📞 Call me back', about: 'ℹ️ About', help: '❓ Help', more: '👤 My account', guide: '🇪🇸 Buying in Spain', language: '🌐 Change language', placeholder: 'Write what you are looking for' },
+  es: { objects: '🏘 Inmuebles', selection: '✨ Buscar por mí', promotions: '🔥 Promociones', favorites: '❤️ Favoritos', contacts: '💬 Contactar', request: '📞 Llámame', about: 'ℹ️ La empresa', help: '❓ Ayuda', more: '👤 Mi espacio', guide: '🇪🇸 Cómo comprar', language: '🌐 Cambiar idioma', placeholder: 'Escribe qué buscas' },
 };
 // Labels from earlier keyboards: clients may still tap those messages, so
 // both the long labels from before version 17 and "More" from version 17 work.
 const PREVIOUS_MENU_LABELS = {
   ru: { objects: '🏘 Наши объекты', selection: '✨ Помогите подобрать объект', contacts: '💬 Связаться с менеджером', request: '📞 Заказать звонок', more: '☰ Ещё' },
-  en: { objects: '🏘 Our properties', selection: '✨ Help me find a property', contacts: '💬 Contact a manager', request: '📞 Request a call', more: '☰ More' },
-  es: { objects: '🏘 Nuestros inmuebles', selection: '✨ Ayúdame a elegir', contacts: '💬 Contactar con un gestor', request: '📞 Solicitar una llamada', more: '☰ Más' },
+  en: { objects: '🏘 Our properties', selection: ['✨ Help me find a property', '✨ Find for me'], contacts: '💬 Contact a manager', request: '📞 Request a call', more: ['☰ More', '👤 My space'] },
+  es: { objects: '🏘 Nuestros inmuebles', selection: ['✨ Ayúdame a elegir', '✨ Búsqueda'], contacts: '💬 Contactar con un gestor', request: '📞 Solicitar una llamada', more: '☰ Más' },
 };
 // Названия кнопки «Связаться», которые были в главном меню до переименования.
 // У клиента, который не обновлял чат, на клавиатуре может остаться любое из
@@ -62,7 +62,7 @@ const MY_AREA_TEXT = {
     recentEmpty: 'Вы пока не открывали карточки объектов. Посмотрите каталог — последние просмотренные варианты появятся здесь.',
   },
   en: {
-    title: '👤 My space',
+    title: '👤 My account',
     intro: 'Your favourites, compared properties, saved search, viewing history, requests and personal settings are all here.',
     recent: '🕘 Recently viewed',
     recentHeading: '🕘 Recently viewed',
@@ -225,7 +225,7 @@ const COMPARISON_TEXT = {
     bathrooms: '🚿 Bathrooms',
     condition: '🔑 Condition',
     floor: '🏢 Floor',
-    distanceSea: '🌊 Distance to sea',
+    distanceSea: '🌊 Sea',
     pricePerM2: '💶 Price per m²',
     purchaseCosts: '🧾 Purchase costs',
     bestValue: '✅ — best value',
@@ -328,7 +328,7 @@ const PROPERTY_CONDITION_LABELS = {
 };
 const PROPERTY_ACTION_TEXT = {
   ru: { details: 'Подробнее', contact: 'Связаться', photos: 'Фото', contactManager: 'Связаться', share: 'Поделиться', sharePrefix: 'Посмотрите этот объект: ', viewWebsite: 'Посмотреть на сайте', videoTour: 'Видео-тур', openMap: 'Открыть карту', interest: 'Заказать звонок', viewing: 'Записаться на просмотр', availability: 'Уточнить доступность', similar: 'Похожие объекты', question: 'Задать вопрос', gallery: 'Все фотографии', favoriteButton: 'Добавить в избранное', favoriteRemoveButton: 'Убрать из избранного', cardFavorite: 'В избранное', cardFavoriteRemove: 'Из избранного', favoriteAdd: 'Добавлено в избранное', favoriteRemove: 'Удалено из избранного', askQuestion: 'Напишите ваш вопрос по этому объекту. Можно отправить текст, фотографию или голосовое сообщение.', cancel: 'Отменить действие', cancelled: 'Действие отменено', received: 'Спасибо! Менеджер получил ваше обращение и ответит в этом чате.', emptyFavorites: 'В избранном пока нет объектов. Добавляйте их кнопкой ❤️ под карточкой.', forRent: 'Аренда', forSale: 'Продажа', reserved: 'Забронирован', available: 'Доступен', priceMonth: '/ месяц', priceWeek: '/ неделю', priceOnRequest: 'Цена по запросу', floor: 'Этаж', bedroomsLabel: 'Спальни', bathroomsLabel: 'Санузлы', areaLabel: 'Площадь', plotAreaLabel: 'Участок', distanceSeaLabel: 'До моря', conditionLabel: 'Состояние', specificationsTitle: 'Характеристики', descriptionTitle: 'Описание', reference: '№ объекта:', updated: 'Обновлено', propertyUnavailable: 'Этот объект уже недоступен.', propertyHeading: 'Объект', requestViewingPrefix: 'Запрос на просмотр:', questionPrefix: 'Вопрос по объекту:', interestPrefix: 'Интересует объект:', noSimilar: 'Сейчас похожих объектов нет. Менеджер может предложить другие варианты.', similarHeading: 'Похожие объекты', similarWhy: 'Почему подходит: {reasons}', similarNote: 'Обратите внимание: {warnings}', similarReasonType: 'тот же тип', similarReasonRelatedType: 'близкий тип', similarReasonCity: 'тот же город', similarReasonDistrict: 'тот же район', similarReasonPrice: 'близкая цена', similarReasonBedrooms: 'похожее число спален', similarReasonArea: 'похожая площадь', similarWarningPriceDifferent: 'цена заметно отличается', similarWarningPriceMissing: 'цена указана не у всех объектов', similarWarningCurrency: 'цена в другой валюте', managerPrompt: 'Как менеджер может помочь по этому объекту?', photosUnavailable: 'Фотографии пока недоступны', nextProperty: 'Следующий объект →', nextPrompt: 'Что вы хотите сделать дальше?', askPrice: 'Узнать цену', promotionAsk: 'Узнать подробнее' },
-  en: { details: 'View details', contact: 'Contact us', photos: 'Photos', contactManager: 'Contact us', share: 'Share property', sharePrefix: 'Take a look at this property: ', viewWebsite: 'View on website', videoTour: 'Video tour', openMap: 'Open map', interest: 'Request a call', viewing: 'Book a viewing', availability: 'Check availability', similar: 'Similar properties', question: 'Ask a question', gallery: 'All photos', favoriteButton: 'Add to favourites', favoriteRemoveButton: 'Remove from favourites', cardFavorite: 'Save', cardFavoriteRemove: 'Saved ✓', favoriteAdd: 'Added to favourites', favoriteRemove: 'Removed from favourites', askQuestion: 'Send your question about this property. You can send text, a photo, or a voice message.', cancel: 'Cancel action', cancelled: 'Action cancelled', received: 'Thank you! An agent received your message and will reply in this chat.', emptyFavorites: 'Your favourites are empty. Add properties with the ❤️ button under a card.', forRent: 'For rent', forSale: 'For sale', reserved: 'Reserved', available: 'Available', priceMonth: '/ month', priceWeek: '/ week', priceOnRequest: 'Price on request', floor: 'Floor', bedroomsLabel: 'Bedrooms', bathroomsLabel: 'Bathrooms', areaLabel: 'Area', plotAreaLabel: 'Plot', distanceSeaLabel: 'Beach', conditionLabel: 'Condition', specificationsTitle: 'Key details', descriptionTitle: 'About the property', reference: 'Ref:', updated: 'Updated', propertyUnavailable: 'This property is no longer available.', propertyHeading: 'Property', requestViewingPrefix: 'Viewing request:', questionPrefix: 'Question about:', interestPrefix: 'Interested in:', noSimilar: 'No similar properties are available right now. An agent can suggest alternatives.', similarHeading: 'Similar properties', similarWhy: 'Why it fits: {reasons}', similarNote: 'Please note: {warnings}', similarReasonType: 'same type', similarReasonRelatedType: 'related type', similarReasonCity: 'same city', similarReasonDistrict: 'same area', similarReasonPrice: 'similar price', similarReasonBedrooms: 'similar number of bedrooms', similarReasonArea: 'similar floor area', similarWarningPriceDifferent: 'the price differs noticeably', similarWarningPriceMissing: 'some properties have no listed price', similarWarningCurrency: 'the price uses another currency', managerPrompt: 'How would you like the agent to help with this property?', photosUnavailable: 'Photos are not available yet', nextProperty: 'Next property →', nextPrompt: 'What would you like to do next?', askPrice: 'Ask for the price', promotionAsk: 'Learn more' },
+  en: { details: 'View details', contact: 'Contact us', photos: 'Photos', contactManager: 'Contact us', share: 'Share property', sharePrefix: 'Take a look at this property: ', viewWebsite: 'View on website', videoTour: 'Video tour', openMap: 'Open map', interest: 'Request a call', viewing: 'Book a viewing', availability: 'Check availability', similar: 'Similar properties', question: 'Ask a question', gallery: 'All photos', favoriteButton: 'Add to favourites', favoriteRemoveButton: 'Remove from favourites', cardFavorite: 'Save', cardFavoriteRemove: 'Saved ✓', favoriteAdd: 'Added to favourites', favoriteRemove: 'Removed from favourites', askQuestion: 'Send your question about this property. You can send text, a photo, or a voice message.', cancel: 'Cancel', cancelled: 'Action cancelled', received: 'Thank you! An agent received your message and will reply in this chat.', emptyFavorites: 'Your favourites are empty. Add properties with the ❤️ button under a card.', forRent: 'For rent', forSale: 'For sale', reserved: 'Reserved', available: 'Available', priceMonth: '/ month', priceWeek: '/ week', priceOnRequest: 'Price on request', floor: 'Floor', bedroomsLabel: 'Bedrooms', bathroomsLabel: 'Bathrooms', areaLabel: 'Area', plotAreaLabel: 'Plot', distanceSeaLabel: 'Sea', conditionLabel: 'Condition', specificationsTitle: 'Key details', descriptionTitle: 'About the property', reference: 'Ref:', updated: 'Updated', propertyUnavailable: 'This property is no longer available.', propertyHeading: 'Property', requestViewingPrefix: 'Viewing request:', questionPrefix: 'Question about:', interestPrefix: 'Interested in:', noSimilar: 'No similar properties are available right now. An agent can suggest alternatives.', similarHeading: 'Similar properties', similarWhy: 'Why it fits: {reasons}', similarNote: 'Please note: {warnings}', similarReasonType: 'same type', similarReasonRelatedType: 'related type', similarReasonCity: 'same city', similarReasonDistrict: 'same area', similarReasonPrice: 'similar price', similarReasonBedrooms: 'similar number of bedrooms', similarReasonArea: 'similar floor area', similarWarningPriceDifferent: 'the price differs noticeably', similarWarningPriceMissing: 'some properties have no listed price', similarWarningCurrency: 'the price uses another currency', managerPrompt: 'How would you like the agent to help with this property?', photosUnavailable: 'Photos are not available yet', nextProperty: 'Next property →', nextPrompt: 'What would you like to do next?', askPrice: 'Ask for the price', promotionAsk: 'Learn more' },
   es: { details: 'Ver detalles', contact: 'Contactar', photos: 'Fotos', contactManager: 'Contactar', share: 'Compartir inmueble', sharePrefix: 'Mira este inmueble: ', viewWebsite: 'Ver en el sitio web', videoTour: 'Visita en vídeo', openMap: 'Abrir mapa', interest: 'Solicitar una llamada', viewing: 'Pedir visita', availability: 'Consultar disponibilidad', similar: 'Inmuebles similares', question: 'Hacer una pregunta', gallery: 'Todas las fotos', favoriteButton: 'Añadir a favoritos', favoriteRemoveButton: 'Quitar de favoritos', cardFavorite: 'Guardar', cardFavoriteRemove: 'Quitar', favoriteAdd: 'Añadido a favoritos', favoriteRemove: 'Eliminado de favoritos', askQuestion: 'Escribe tu pregunta sobre este inmueble. Puedes enviar texto, una foto o un mensaje de voz.', cancel: 'Cancelar acción', cancelled: 'Acción cancelada', received: '¡Gracias! Un asesor ha recibido tu mensaje y responderá en este chat.', emptyFavorites: 'Todavía no tienes favoritos. Añade inmuebles con el botón ❤️ de la ficha.', forRent: 'Alquiler', forSale: 'Venta', reserved: 'Reservado', available: 'Disponible', priceMonth: '/ mes', priceWeek: '/ semana', priceOnRequest: 'Precio a consultar', floor: 'Planta', bedroomsLabel: 'Dormitorios', bathroomsLabel: 'Baños', areaLabel: 'Superficie', plotAreaLabel: 'Parcela', distanceSeaLabel: 'Al mar', conditionLabel: 'Estado', specificationsTitle: 'Características', descriptionTitle: 'Descripción', reference: 'Ref.:', updated: 'Actualizado', propertyUnavailable: 'Este inmueble ya no está disponible.', propertyHeading: 'Inmueble', requestViewingPrefix: 'Solicitud de visita:', questionPrefix: 'Pregunta sobre:', interestPrefix: 'Interés en:', noSimilar: 'No hay inmuebles similares disponibles ahora mismo. Un asesor puede sugerirte alternativas.', similarHeading: 'Inmuebles similares', similarWhy: 'Por qué encaja: {reasons}', similarNote: 'Ten en cuenta: {warnings}', similarReasonType: 'mismo tipo', similarReasonRelatedType: 'tipo relacionado', similarReasonCity: 'misma ciudad', similarReasonDistrict: 'misma zona', similarReasonPrice: 'precio similar', similarReasonBedrooms: 'número de dormitorios similar', similarReasonArea: 'superficie similar', similarWarningPriceDifferent: 'el precio es bastante diferente', similarWarningPriceMissing: 'algunos inmuebles no muestran el precio', similarWarningCurrency: 'el precio está en otra moneda', managerPrompt: '¿Cómo quieres que te ayude el asesor con este inmueble?', photosUnavailable: 'Las fotos aún no están disponibles', nextProperty: 'Siguiente inmueble →', nextPrompt: '¿Qué quieres hacer ahora?', askPrice: 'Consultar el precio', promotionAsk: 'Más información' },
 };
 const LEAD_FORM_TEXT = {
@@ -475,7 +475,7 @@ const VIEWING_FORM_TEXT = {
     reviewLabels: ['Property', 'Date', 'Time'],
     unavailable: 'This property is no longer available for viewing.',
     asSpecified: 'As specified',
-    confirm: '✅ Send to manager',
+    confirm: '✅ Send to agent',
     restart: '✏️ Change date and time',
     editDate: '📅 Change date',
     editTime: '🕒 Change time',
@@ -586,16 +586,18 @@ const SELECTION_FORM_TEXT = {
   en: {
     intro: '✨ I will ask a few short questions and send your preferences to an agent.',
     wizardTitle: '✨ Find a property',
-    wizardDeal: 'What are you considering?',
+    wizardDeal: 'Buying or renting?',
     wizardType: 'What kind of property?',
     wizardCity: 'Where to look?',
     wizardBudget: 'What is your budget?',
     wizardBedrooms: 'How many bedrooms?',
-    wizardFound: 'Properties found: {count}',
+    wizardFound: '{count} properties match',
+    wizardFoundOne: '1 property matches',
     wizardNothing: 'Nothing matches right now — an agent will find options for you.',
     wizardBack: '⬅️ Back',
     wizardSkip: 'Any',
-    wizardShow: '👀 Show {count}',
+    wizardShow: '👀 Show {count} properties',
+    wizardShowOne: '👀 Show 1 property',
     wizardNotify: '🔔 Tell me about new ones',
     wizardManager: '💬 Send to an agent',
     wizardRestart: '↺ Start over',
@@ -612,7 +614,7 @@ const SELECTION_FORM_TEXT = {
     review: 'Please check your preferences:',
     summaryTitle: 'Property selection',
     labels: ['Purpose', 'Type', 'Location', 'Budget', 'Bedrooms'],
-    confirm: '✅ Send to manager',
+    confirm: '✅ Send to agent',
     restart: '✏️ Start again',
     editDeal: '✏️ Edit purpose',
     editType: '🏠 Edit type',
@@ -650,16 +652,18 @@ const SELECTION_FORM_TEXT = {
   es: {
     intro: '✨ Te haré unas preguntas breves y enviaré tus preferencias a un asesor.',
     wizardTitle: '✨ Búsqueda de inmueble',
-    wizardDeal: '¿Qué te interesa?',
+    wizardDeal: '¿Comprar o alquilar?',
     wizardType: '¿Qué tipo de inmueble?',
     wizardCity: '¿Dónde buscamos?',
     wizardBudget: '¿Cuál es tu presupuesto?',
     wizardBedrooms: '¿Cuántos dormitorios?',
-    wizardFound: 'Resultados: {count}',
+    wizardFound: '{count} inmuebles coinciden',
+    wizardFoundOne: '1 inmueble coincide',
     wizardNothing: 'Ahora mismo no hay nada así: un asesor te buscará opciones.',
     wizardBack: '⬅️ Atrás',
     wizardSkip: 'Indiferente',
-    wizardShow: '👀 Ver {count}',
+    wizardShow: '👀 Ver {count} inmuebles',
+    wizardShowOne: '👀 Ver 1 inmueble',
     wizardNotify: '🔔 Avísame de los nuevos',
     wizardManager: '💬 Pasar a un asesor',
     wizardRestart: '↺ Empezar de nuevo',
@@ -754,7 +758,7 @@ const PRIVACY_TEXT = {
     storedTitle: 'Stored right now:',
     policyButton: '📄 How we handle your data',
     policyTitle: '📄 How we handle your data',
-    policy: 'Who processes the data: [company name], NIF [number], [address], questions — [e-mail].\n\nWhat the bot stores: your Telegram first name and username, chat number, chosen language; name, phone and preferred time if you left them in a request; your messages to the bot and our replies; favourites, comparison, saved search, viewing history; booked viewings.\n\nWhy: to answer your request, find suitable properties and arrange a viewing.\n\nLegal basis: your request to us. Newsletters only with your separate consent, which you can withdraw at any time.\n\nHow long: [period, for example 24 months] after your last contact, then the data is deleted.\n\nWho else sees it: nobody. Messages travel through Telegram as the channel; the data is kept on the company computer.\n\nYour rights: to know what is stored, correct it, delete it, withdraw consent, complain to the AEPD (www.aepd.es). You can delete everything yourself: “👤 My space” → “🔒 My data” → “🗑 Delete my data”.',
+    policy: 'Who processes the data: [company name], NIF [number], [address], questions — [e-mail].\n\nWhat the bot stores: your Telegram first name and username, chat number, chosen language; name, phone and preferred time if you left them in a request; your messages to the bot and our replies; favourites, comparison, saved search, viewing history; booked viewings.\n\nWhy: to answer your request, find suitable properties and arrange a viewing.\n\nLegal basis: your request to us. Newsletters only with your separate consent, which you can withdraw at any time.\n\nHow long: [period, for example 24 months] after your last contact, then the data is deleted.\n\nWho else sees it: nobody. Messages travel through Telegram as the channel; the data is kept on the company computer.\n\nYour rights: to know what is stored, correct it, delete it, withdraw consent, complain to the AEPD (www.aepd.es). You can delete everything yourself: “👤 My account” → “🔒 My data” → “🗑 Delete my data”.',
     eraseButton: '🗑 Delete my data',
     eraseTitle: 'Delete all your data?',
     eraseWarning: 'This removes your requests and the conversation with the agent, favourites, comparison, saved search, viewing history, phone and name. It cannot be undone. You can start again any time.',
@@ -762,7 +766,7 @@ const PRIVACY_TEXT = {
     eraseCancel: '← Keep my data',
     erased: 'Done: everything the bot kept about you is deleted. Send /start if you ever want to come back.',
     phoneNotice: 'We only need the phone to answer your request. What we store and how to delete it — the /privacy command.',
-    back: '⬅️ 👤 My space',
+    back: '⬅️ 👤 My account',
     nothing: 'Apart from your language, the bot keeps nothing about you yet.',
   },
   es: {
@@ -880,7 +884,7 @@ const SUBSCRIPTION_TEXT = {
     news: 'News and offers',
     alerts: 'Properties: price drops and new matches for your request',
     unsubscribe: '🔕 Unsubscribe from news',
-    newsOff: 'You have unsubscribed from our news. You can turn it back on in “👤 My space → 🔔 Notifications”.',
+    newsOff: 'You have unsubscribed from our news. You can turn it back on in “👤 My account → 🔔 Notifications”.',
     newsOn: 'News messages are on again.',
     undo: '↩️ Resubscribe',
     newsConsent: 'News and offers are sent only with your consent: tap “News and offers” to receive them. You can turn them off at any time.',
@@ -997,7 +1001,7 @@ const VIEWING_NOTICE_TEXT = {
     time: 'Time',
     address: 'Address',
     online: '📹 Online viewing by video call — no need to travel',
-    confirmedFooter: 'If your plans change, open “👤 My space → 📋 My requests” or just send us a message.',
+    confirmedFooter: 'If your plans change, open “👤 My account → 📋 My requests” or just send us a message.',
     reminder: '⏰ Reminder: your viewing is tomorrow',
     reminderFooter: 'If your plans have changed, cancel the viewing with the button below or message the agent.',
     feedbackQuestion: 'How was the viewing? Your opinion matters to us.',

@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 47;
+const DATA_VERSION = 48;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -208,13 +208,13 @@ const defaultData = {
         fallback: 'Спасибо! Сообщение получено. Менеджер ответит в этом чате.',
       },
       en: {
-        greeting: 'Hello, {first_name}! Glad to see you. How can I help?',
-        help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n💬 Contact us — ask a question, request a call or write on WhatsApp\n👤 My space — saved properties, comparison, requests, notifications and your data\n\nYou can also send a regular message. An agent will reply in this chat.',
+        greeting: 'Hello, {first_name}! Nice to meet you. How can I help?',
+        help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Help me choose — tell us what you are looking for and get matching options\n💬 Contact us — ask a question, request a call or write on WhatsApp\n👤 My account — saved properties, comparison, requests, notifications and your data\n\nYou can also send a regular message. An agent will reply in this chat.',
         fallback: 'Thank you! Your message has been received. An agent will reply in this chat.',
       },
       es: {
         greeting: '¡Hola, {first_name}! Me alegra verte. ¿Cómo puedo ayudarte?',
-        help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n💬 Contactar — hacer una pregunta, pedir una llamada o escribir por WhatsApp\n👤 Mi espacio — inmuebles guardados, comparación, solicitudes, avisos y tus datos\n\nTambién puedes enviar un mensaje normal. Un asesor responderá en este chat.',
+        help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Buscar por mí — cuéntanos qué buscas y recibe opciones adecuadas\n💬 Contactar — hacer una pregunta, pedir una llamada o escribir por WhatsApp\n👤 Mi espacio — inmuebles guardados, comparación, solicitudes, avisos y tus datos\n\nTambién puedes enviar un mensaje normal. Un asesor responderá en este chat.',
         fallback: '¡Gracias! Hemos recibido tu mensaje. Un asesor responderá en este chat.',
       },
     },
@@ -493,6 +493,33 @@ const PREVIOUS_HELP_DEFAULTS = {
   en: '👋 How can I help?\n\n🏘 Our properties — browse available real estate\n✨ Help me find a property — send your preferences to a manager\n❤️ Favorites — return to saved properties\n🔥 Offers — view current promotions\n💬 Contact a manager — ask a question or request a call\n☰ More — open company information and help\n🌐 Change language — select another language\n\nYou can also send a regular message. A manager will reply in this chat.',
   es: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Nuestros inmuebles — ver las propiedades disponibles\n✨ Ayúdame a elegir — enviar tus preferencias a un gestor\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — consultar las ofertas actuales\n💬 Contactar con un gestor — hacer una pregunta o solicitar una llamada\n☰ Más — abrir la información de la empresa y la ayuda\n🌐 Cambiar idioma — seleccionar otro idioma\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
 };
+
+// Версия 48: английские и испанские ярлыки и фразы «как родные» («Help me choose», «My account»,
+// «Buscar por mí»). Прежние значения по умолчанию, оставшиеся у владельца нетронутыми, заменяются на
+// новые; то, что он правил сам, не трогаем.
+const V47_WORDING = {
+  en: { greeting: 'Hello, {first_name}! Glad to see you. How can I help?', help: '👋 How can I help?\n\n🏘 Properties — browse available real estate\n✨ Find for me — tell us what you are looking for and get matching options\n💬 Contact us — ask a question, request a call or write on WhatsApp\n👤 My space — saved properties, comparison, requests, notifications and your data\n\nYou can also send a regular message. An agent will reply in this chat.' },
+  es: { help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n💬 Contactar — hacer una pregunta, pedir una llamada o escribir por WhatsApp\n👤 Mi espacio — inmuebles guardados, comparación, solicitudes, avisos y tus datos\n\nTambién puedes enviar un mensaje normal. Un asesor responderá en este chat.' },
+};
+const V47_MENU_LABELS = {
+  en: { selection: '✨ Find for me', more: '👤 My space' },
+  es: { selection: '✨ Búsqueda' },
+};
+
+function migrateWording(interfaceText, messages) {
+  for (const language of ['en', 'es']) {
+    const saved = messages && messages[language];
+    for (const [key, previous] of Object.entries(V47_WORDING[language])) {
+      if (saved && saved[key] === previous) saved[key] = defaultData.config.messages[language][key];
+    }
+    const labels = interfaceText && interfaceText.menuLabels && interfaceText.menuLabels[language];
+    if (labels && typeof labels === 'object') {
+      for (const [key, previous] of Object.entries(V47_MENU_LABELS[language])) {
+        if (labels[key] === previous) labels[key] = INTERFACE_TEXT_DEFAULTS.menuLabels[language][key];
+      }
+    }
+  }
+}
 
 function migrateShortMenu(interfaceText, messages) {
   const labels = interfaceText && interfaceText.menuLabels;
@@ -1426,6 +1453,7 @@ function normalizeLoadedData(parsed) {
     if (storedVersion < 35) migrateShortGreeting(normalized.interfaceText);
     if (storedVersion < 39) migrateStaleTexts(normalized.interfaceText, normalized.config.messages);
     if (storedVersion < 47) mergeInquiryNotes(normalized);
+    if (storedVersion < 48) migrateWording(normalized.interfaceText, normalized.config.messages);
     normalized.config.notifyMode = ['all', 'inquiries'].includes(normalized.config.notifyMode) ? normalized.config.notifyMode : 'inquiries';
     normalized.lastDigestFor = cleanText(parsed.lastDigestFor, 10);
     normalized.lastDiskWarningFor = cleanText(parsed.lastDiskWarningFor, 10);

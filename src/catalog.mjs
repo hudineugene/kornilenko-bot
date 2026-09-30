@@ -1459,7 +1459,7 @@ function selectionWizardPanel(user, step) {
   const heading = [
     copy.wizardTitle,
     summary,
-    found ? copy.wizardFound.replace('{count}', () => (String(found))) : copy.wizardNothing,
+    found ? (found === 1 && copy.wizardFoundOne ? copy.wizardFoundOne : copy.wizardFound).replace('{count}', () => (String(found))) : copy.wizardNothing,
   ].filter(Boolean).join('\n\n');
 
   if (current === 'deal') {
@@ -1497,7 +1497,7 @@ function selectionWizardPanel(user, step) {
     rows.push([skip('done')]);
   } else {
     // Итог: посмотреть подходящие, подписаться на новые или отдать менеджеру.
-    if (found) rows.push([{ text: copy.wizardShow.replace('{count}', () => (String(found))), callback_data: 'sel:show' }]);
+    if (found) rows.push([{ text: (found === 1 && copy.wizardShowOne ? copy.wizardShowOne : copy.wizardShow).replace('{count}', () => (String(found))), callback_data: 'sel:show' }]);
     rows.push([{ text: copy.wizardNotify, callback_data: 'saved:save' }]);
     rows.push([{ text: copy.wizardManager, callback_data: 'cfilter:manager' }]);
     if (dead) rows.push([{ text: copy.wizardRestart, callback_data: 'sel:restart:deal' }]);
