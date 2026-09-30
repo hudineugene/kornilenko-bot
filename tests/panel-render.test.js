@@ -1551,9 +1551,8 @@ test('числа на «Сегодня» и в «Отчётах» сходятс
   const today = fakeElement('main');
   await sandbox.VIEWS.today.render(today, '');
   const text = String(today.innerHTML).replace(/ /g, ' ');
-  assert.match(text, /Сообщения и заявки, 7 дней/, 'график — за 7 дней, как и строка цифр');
+  assert.ok(!/Сообщения и заявки, 7 дней/.test(text), 'график «7 дней» с «Сегодня» убран: он дублировал «Отчёт»');
   assert.match(text, /<b>2<\/b> заявки за 7 дней/, 'строка цифр: заявок за 7 дней две');
-  assert.match(text, /<b>2<\/b> заявки<\/span>/, 'под графиком то же число, а не 99');
 });
 
 test('панель считает «взял в работу без ответа» так же, как бот', async () => {
@@ -3467,8 +3466,12 @@ test('быстрые действия открывают редактор, а н
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();
   const host = fakeElement('main');
+  sandbox.el('pageActions').children.length = 0;
   await sandbox.VIEWS.today.render(host, '');
-  await host.querySelector('#quickObject').onclick();
+  // Быстрые действия — кнопки в шапке страницы.
+  const quick = sandbox.el('pageActions').children.find((button) => button.dataset && button.dataset.label === '＋ Объект');
+  assert.ok(quick, 'кнопка «＋ Объект» в шапке «Сегодня»');
+  await quick.onclick();
   await new Promise((resolve) => setTimeout(resolve, 20));
   const dialog = sandbox.document.querySelector('dialog[open]');
   assert.ok(dialog, 'открылась карточка объекта');
@@ -3930,4 +3933,18 @@ test('«Объекты»: клик по строке открывает реда
   assert.equal(opened[1], 'insights:o1');
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /data-edit-object="1" type="button">✎ Редактировать</, 'в «⋯» есть «Редактировать»');
+});
+
+test('«Сегодня»: дела выше чек-листа готовности; нет карточки «Быстрые действия», дублирующих кнопок «Настройки»/«Отчёт» и графика «7 дней»', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.VIEWS.today.render(host, '');
+  const html = String(host.innerHTML);
+  assert.ok(html.indexOf('Список дел') > 0 && html.indexOf('Список дел') < html.indexOf('id="readiness"'), 'первым идёт список дел, потом готовность');
+  assert.ok(html.indexOf('id="readiness"') < html.indexOf('Состояние бота'), 'а здоровье — после');
+  assert.ok(!/Быстрые действия/.test(html));
+  assert.ok(!/data-go="reports"|data-go="settings" data-tab="team"/.test(html), 'кнопки, повторяющие меню, убраны');
+  const labels = sandbox.el('pageActions').children.map((button) => button.dataset && button.dataset.label);
+  assert.ok(['＋ Объект', '✉ Рассылка', '➤ Пост в канал'].every((label) => labels.includes(label)), 'быстрые действия — в шапке: ' + labels);
 });

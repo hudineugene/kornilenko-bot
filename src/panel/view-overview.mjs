@@ -330,7 +330,6 @@ VIEWS.today = {
       '<div class="week-line" id="weekLine"></div>' +
       '<div class="split">' +
         '<div class="stack">' +
-          '<div id="readiness"></div>' +
           '<div class="card"><header><h3>Список дел</h3><div class="actions">' + (waiting ? '<button class="btn small" type="button" id="answerQueue" title="Открыть ответ тому, кто ждёт дольше всех, и дальше по очереди">Ответить по очереди · ' + num(waiting) + '</button>' : "") + '<div class="tabs" id="feedTabs">' +
             '<button type="button" class="' + (feedFilter === "active" ? "active" : "") + '" data-feed-filter="active">Требуют внимания <span>' + num(deeds.length) + '</span></button>' +
             '<button type="button" class="' + (feedFilter === "done" ? "active" : "") + '" data-feed-filter="done">Выполненное</button></div></div></header>' +
@@ -347,10 +346,7 @@ VIEWS.today = {
               '</div>';
             }).join("") + '</div>' : '<div class="empty"><b>' + (scoped.active ? "Своих дел нет" : "Дел нет") + '</b>' + (scoped.active ? "За вами закреплённых дел сейчас нет" : "Все клиенты отвечены, просмотры подтверждены") + '</div>') +
           "</div>" +
-          '<div class="card"><header><h3>Сообщения и заявки, 7 дней</h3></header><div class="card-body">' +
-            sparkline(weekDays, "received", "var(--brand)") +
-            '<div class="legend"><span><i class="brand-dot"></i>Столбики — сообщения от клиентов за день</span><span>Всего за 7 дней: <b>' + num(sumDays(weekDays, "received")) + '</b> сообщений, <b>' + num(inquiriesInRange(week).length) + '</b> ' + plural(inquiriesInRange(week).length, "заявка", "заявки", "заявок") + "</span></div>" +
-          "</div></div>" +
+          '<div id="readiness"></div>' +
         "</div>" +
         '<div class="stack">' +
           '<div class="card"><header><h3>Состояние бота</h3></header><div class="card-body stack">' +
@@ -358,13 +354,6 @@ VIEWS.today = {
             '<div class="small muted">Связь: ' + esc(connectionText()) + "</div>" +
             '<div id="healthRows"></div>' +
             '<div class="small muted">Клиентов в базе: ' + num(state.userCount) + " · им можно писать: " + num(state.activeUserCount) + " · согласились на рассылки: " + num(state.newsConsentCount) + "</div>" +
-            '<div class="row wrap"><button class="btn secondary small" type="button" data-go="settings" data-tab="team">Настройки</button>' +
-            '<button class="btn secondary small" type="button" data-go="reports">Отчёт</button></div>' +
-          "</div></div>" +
-          '<div class="card"><header><h3>Быстрые действия</h3></header><div class="card-body row wrap">' +
-            '<button class="btn secondary small" type="button" id="quickObject">Добавить объект</button>' +
-            '<button class="btn secondary small" type="button" id="quickBroadcast">Создать рассылку</button>' +
-            '<button class="btn secondary small" type="button" data-go="posts" data-tab="channel">Написать в канал</button>' +
           "</div></div>" +
         "</div>" +
       "</div>";
@@ -407,14 +396,14 @@ VIEWS.today = {
     });
     // Быстрые действия открывают редактор, а не список: «Добавить объект»
     // должно добавлять объект.
-    var quickObject = host.querySelector("#quickObject");
-    if (quickObject) quickObject.onclick = async function () {
+    // Быстрые действия — в шапке страницы, а не карточкой в самом низу.
+    pageAction("＋ Объект", async function () {
       if (await go("objects", "list")) openRecordEditor("objects", null);
-    };
-    var quickBroadcast = host.querySelector("#quickBroadcast");
-    if (quickBroadcast) quickBroadcast.onclick = async function () {
+    });
+    pageAction("✉ Рассылка", async function () {
       if (await go("posts", "broadcast")) openCampaignEditor(null);
-    };
+    }, "secondary");
+    pageAction("➤ Пост в канал", function () { go("posts", "channel"); }, "secondary");
     var toggle = host.querySelector("#botActive");
     if (toggle) toggle.onchange = function () { return setBotActive(toggle); };
   },
