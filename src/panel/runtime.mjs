@@ -61,6 +61,7 @@ const PANEL_SHELL = String.raw`
   <div class="main">
     <div class="topbar">
       <div><h1 id="pageTitle">Обзор</h1><div class="sub" id="pageSubtitle"></div></div>
+      <div class="tabs page-tabs hidden" id="pageTabs"></div>
       <div class="grow"></div>
       <div id="pageActions" class="row"></div>
     </div>
@@ -1077,10 +1078,11 @@ function initAccessibility() {
     var timer = 0;
     new MutationObserver(function () {
       clearTimeout(timer);
-      timer = setTimeout(function () { enhanceAccessibility(page); iconifyButtons(document.body); }, 30);
+      timer = setTimeout(function () { enhanceAccessibility(page); enhanceAccessibility(document.querySelector(".topbar")); iconifyButtons(document.body); }, 30);
     }).observe(document.body, { childList: true, subtree: true });
   }
   enhanceAccessibility(page);
+  enhanceAccessibility(document.querySelector(".topbar"));
   iconifyButtons(document.body);
 }
 
@@ -1535,10 +1537,14 @@ function renderView(options) {
   el("pageSubtitle").textContent = view.subtitle ? view.subtitle() : "";
   el("pageActions").innerHTML = "";
   var page = el("page");
-  page.innerHTML = (item && item.tabs ? '<div class="toolbar"><div class="tabs">' + item.tabs.map(function (tab) {
+  // Вкладки раздела — в одной строке с названием экрана, а не отдельным рядом под ним.
+  var tabsBox = el("pageTabs");
+  tabsBox.innerHTML = item && item.tabs ? item.tabs.map(function (tab) {
     return '<button type="button" data-tab="' + tab[0] + '" class="' + (tab[0] === currentTab ? "active" : "") + '">' + esc(tab[1]) + "</button>";
-  }).join("") + "</div></div>" : "") + '<div id="viewBody"></div>';
-  page.querySelectorAll("[data-tab]").forEach(function (button) {
+  }).join("") : "";
+  tabsBox.classList.toggle("hidden", !(item && item.tabs));
+  page.innerHTML = '<div id="viewBody"></div>';
+  tabsBox.querySelectorAll("[data-tab]").forEach(function (button) {
     button.onclick = function () { go(currentView, button.dataset.tab); };
   });
   view.render(el("viewBody"), currentTab);

@@ -107,7 +107,7 @@ function renderPublications(host) {
   pageAction("✉ Рассылка клиентам", function () { openCampaignEditor(null); });
   pageAction("➤ Пост в канал", openChannelComposer, "secondary");
   host.innerHTML =
-    '<div class="card gap-bottom"><header><h3>Очередь</h3><div class="actions"><span class="small faint">черновики и запланированное</span></div></header><div class="table-wrap"><table><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th></th></tr></thead><tbody>' +
+    '<div class="card gap-bottom"><header><h3>Очередь</h3><div class="actions"><span class="small muted">черновики и запланированное</span></div></header><div class="table-wrap"><table><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th></th></tr></thead><tbody>' +
     (queue.length ? queue.map(function (row) {
       return '<tr data-kind="' + row.kind + '" data-id="' + esc(row.id) + '">' +
         '<td class="nowrap">' + (row.status === "draft" ? "черновик" : dateTime(row.at)) + "</td>" +
@@ -116,7 +116,7 @@ function renderPublications(host) {
         '<td class="right"><button class="btn ghost small" data-drop="1" title="Убрать из очереди">✕</button></td></tr>';
     }).join("") : '<tr><td colspan="4"><div class="empty"><b>Очередь пуста</b>Запланированные рассылки и посты появятся здесь</div></td></tr>') +
     "</tbody></table></div></div>" +
-    '<div class="card"><header><h3>История</h3><div class="actions"><span class="small faint">отправлено · отклики · отписки</span></div></header><div class="table-wrap"><table><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
+    '<div class="card"><header><h3>История</h3><div class="actions"><span class="small muted">отправлено · отклики · отписки</span></div></header><div class="table-wrap"><table><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
     (history.length ? history.map(function (row) {
       return "<tr><td class=\"nowrap\">" + dateShort(row.at) + "</td><td class=\"small\">" + esc(row.where) + "</td><td>" + esc(row.text || "без текста") + "</td>" +
         '<td class="right">' + (row.kind === "broadcast" ? num(row.sent) : "—") + "</td>" +
@@ -573,7 +573,7 @@ function showGroupCard(body, current, mode) {
 function groupPostQueue(group) {
   var posts = (state.groupPosts || []).filter(function (post) { return String(post.groupId) === String(group.id); });
   if (!posts.length) return "";
-  return '<div class="card"><header><h3>Отложенные публикации</h3><div class="actions"><span class="small faint">время по часовому поясу бота</span></div></header><div class="list">' +
+  return '<div class="card"><header><h3>Отложенные публикации</h3><div class="actions"><span class="small muted">время по часовому поясу бота</span></div></header><div class="list">' +
     posts.map(function (post) {
       var failed = post.status === "failed";
       return '<div class="list-item"><span class="grow"><b>' + esc(String(post.text || "Публикация с фото").slice(0, 80)) + "</b>" +
@@ -609,14 +609,14 @@ function topicsCard(group) {
       var seen = (group.messages || []).filter(function (message) { return (message.threadId || 0) === topic.id; }).length;
       return '<div class="list-item"><span class="grow"><b>' + esc(topicLabel(group, topic.id)) + "</b>" +
         (topic.closed ? ' <span class="chip warn">закрыта</span>' : "") +
-        '<br><span class="small faint">№ ' + topic.id + (seen ? " · сообщений в ленте: " + seen : "") + (topic.lastMessageAt ? " · " + esc(dateShort(topic.lastMessageAt)) : "") + "</span></span>" +
+        '<br><span class="small muted">№ ' + topic.id + (seen ? " · сообщений в ленте: " + seen : "") + (topic.lastMessageAt ? " · " + esc(dateShort(topic.lastMessageAt)) : "") + "</span></span>" +
         (topic.id === 1 ? "" : '<button class="btn ghost small" data-forget-topic="' + topic.id + '" type="button">Убрать</button>') + "</div>";
     }).join("") + "</div>" : "") +
     (group.isForum ? '<div class="field"><label for="newTopicName">Создать новую тему</label><div class="row"><input id="newTopicName" maxlength="128" placeholder="Например, «Новостройки»"><button class="btn secondary small" id="createTopic" type="button">Создать</button></div>' +
-      (groupCan(group, "can_manage_topics") ? "" : '<div class="small faint">У бота нет права «Управление темами» — создать тему он не сможет. Включите его в списке администраторов группы.</div>') + "</div>" +
+      (groupCan(group, "can_manage_topics") ? "" : '<div class="small muted">У бота нет права «Управление темами» — создать тему он не сможет. Включите его в списке администраторов группы.</div>') + "</div>" +
       '<div class="field"><label for="knownTopicLink">Добавить существующую тему</label><div class="grid cols-2"><input id="knownTopicLink" placeholder="Ссылка на тему или её номер"><input id="knownTopicName" maxlength="128" placeholder="Название (по желанию)"></div>' +
       '<div class="row"><button class="btn secondary small" id="addTopic" type="button">Добавить</button></div>' +
-      '<div class="small faint">Ссылку даёт Telegram: в теме нажмите на её название → «Копировать ссылку».</div></div>' : "") +
+      '<div class="small muted">Ссылку даёт Telegram: в теме нажмите на её название → «Копировать ссылку».</div></div>' : "") +
     "</div></div>";
 }
 
@@ -653,17 +653,17 @@ function renderGroupCard(host, group, mode) {
         '<div class="grow"></div><button class="btn secondary" id="groupPreview" type="button">Себе для проверки</button>' +
         '<button class="btn" id="groupSend" type="button">Отправить</button></div>' +
       "</div></div>" +
-      '<div class="card"><header><h3>Предпросмотр</h3><div class="actions"><span class="small faint">так увидят подписчики</span></div></header>' +
+      '<div class="card"><header><h3>Предпросмотр</h3><div class="actions"><span class="small muted">так увидят подписчики</span></div></header>' +
         '<div class="card-body"><div class="tg-preview" id="postPreview"></div></div></div>' +
       groupPostQueue(group) +
-      '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small faint">историю Telegram не отдаёт</span></div></header>' +
+      '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small muted">историю Telegram не отдаёт</span></div></header>' +
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
             '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">от бота</span>' : "") +
             (message.kind !== "text" ? ' <span class="chip">' + esc(GROUP_MESSAGE_KINDS[message.kind] || message.kind) + "</span>" : "") +
             (group.isForum && message.threadId ? ' <span class="chip">' + esc(topicLabel(group, message.threadId)) + "</span>" : "") +
             '<br><span class="muted small">' + esc(String(message.text || "").slice(0, 120)) + "</span></span>" +
-            '<span class="small faint nowrap">' + dateShort(message.date) + "</span>" +
+            '<span class="small muted nowrap">' + dateShort(message.date) + "</span>" +
             (groupCan(group, "can_pin_messages") ? '<button class="btn ghost small" data-pin="' + message.messageId + '" title="Закрепить">📌</button>' : "") +
             (groupCan(group, "can_delete_messages") ? '<button class="btn ghost small" data-del="' + message.messageId + '" title="Удалить">✕</button>' : "") + "</div>";
         }).join("") + "</div>" : '<div class="empty"><b>Пока пусто</b>' + (group.type === "channel" ? "Посты появятся здесь после первой публикации." : "Бот видит сообщения группы, если в BotFather выключен privacy mode.") + "</div>") +
@@ -671,13 +671,13 @@ function renderGroupCard(host, group, mode) {
     "</div>" : "") + (showManage ? '<div class="stack">' +
       '<div class="card"><header><h3>' + esc(group.title || "Группа") + "</h3></header><div class=\"card-body stack\">" +
         '<div class="small muted">ID ' + esc(group.id) + (group.username ? " · @" + esc(group.username) : "") + "</div>" +
-        (pinned ? '<div class="msg">📌 ' + esc(String(pinned.text || "").slice(0, 160)) + '<div class="msg-meta"><button class="btn ghost small" id="unpin" type="button">Открепить</button></div></div>' : '<div class="small faint">Закреплённого сообщения нет</div>') +
+        (pinned ? '<div class="msg">📌 ' + esc(String(pinned.text || "").slice(0, 160)) + '<div class="msg-meta"><button class="btn ghost small" id="unpin" type="button">Открепить</button></div></div>' : '<div class="small muted">Закреплённого сообщения нет</div>') +
         (groupCan(group, "can_change_info") ? '<div class="stack" id="groupInfoForm"><div class="field"><label for="groupTitle">Название</label><input id="groupTitle" value="' + esc(group.title || "") + '"></div>' +
           '<div class="field"><label for="groupDescription">Описание</label><textarea id="groupDescription">' + esc(group.description || "") + "</textarea></div>" +
           '</div>' : '<div class="chip warn">' + (admin ? "Боту не выдано право менять описание" : "Бот не администратор: доступна только отправка сообщений") + "</div>") +
       "</div></div>" +
       ((group.joinRequests || []).length ? '<div class="card"><header><h3>Заявки на вступление</h3></header><div class="list">' + group.joinRequests.map(function (request) {
-        return '<div class="list-item"><span class="grow"><b>' + esc(request.name) + "</b>" + (request.username ? ' <span class="small faint">@' + esc(request.username) + "</span>" : "") + "</span>" +
+        return '<div class="list-item"><span class="grow"><b>' + esc(request.name) + "</b>" + (request.username ? ' <span class="small muted">@' + esc(request.username) + "</span>" : "") + "</span>" +
           '<button class="btn small" data-approve="' + esc(request.userId) + '" type="button">Принять</button>' +
           '<button class="btn ghost small" data-decline="' + esc(request.userId) + '" type="button">Отклонить</button></div>';
       }).join("") + "</div></div>" : "") +
@@ -942,8 +942,8 @@ function renderGroupCard(host, group, mode) {
       var result = await api(base + "/admins");
       host.querySelector("#adminsBox").innerHTML = '<div class="list">' + result.admins.map(function (admin) {
         return '<div class="list-item"><span class="avatar">' + esc(initials(admin.name)) + '</span><span class="grow"><b>' + esc(admin.name) + "</b>" +
-          (admin.username ? ' <span class="small faint">@' + esc(admin.username) + "</span>" : "") + (admin.isBot ? ' <span class="chip">бот</span>' : "") +
-          '<br><span class="small faint">' + esc(admin.status === "creator" ? "владелец" : "администратор") + (admin.customTitle ? " · " + esc(admin.customTitle) : "") + "</span></span>" +
+          (admin.username ? ' <span class="small muted">@' + esc(admin.username) + "</span>" : "") + (admin.isBot ? ' <span class="chip">бот</span>' : "") +
+          '<br><span class="small muted">' + esc(admin.status === "creator" ? "владелец" : "администратор") + (admin.customTitle ? " · " + esc(admin.customTitle) : "") + "</span></span>" +
           (admin.status !== "creator" && !admin.isBot ? '<button class="btn ghost small" data-ban="' + esc(admin.userId) + '" type="button">Забанить</button>' : "") + "</div>";
       }).join("") + "</div>";
       host.querySelectorAll("[data-ban]").forEach(function (button) {
@@ -1213,7 +1213,6 @@ function renderPostStyle(host) {
 }
 
 VIEWS.posts = {
-  subtitle: function () { return "Рассылки клиентам и посты в каналах"; },
   render: function (host, tab) {
     if (tab === "channel") return renderGroups(host, "post");
     if (tab === "channels") return renderGroups(host, "manage");

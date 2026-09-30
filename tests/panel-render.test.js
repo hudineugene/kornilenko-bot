@@ -1252,7 +1252,7 @@ test('статус один: «Ждёт ответа / Отвечено / Зак
   await sandbox.VIEWS.clients.render(view, '');
   const card = String(view.querySelector('#inquiryCard').innerHTML);
   assert.match(card, /<label for="inqStatusValue">Статус<\/label>/);
-  assert.match(card, /Этап <span class="small faint">\(по желанию\)/);
+  assert.match(card, /Этап <span class="small muted">\(по желанию\)/);
   assert.ok(!card.includes('Этап воронки'), 'старая подпись убрана');
 });
 
@@ -4480,4 +4480,28 @@ test('«Пост в канал»: один канал — сразу редак�
   sandbox.renderGroups(two, 'post');
   assert.match(String(two.innerHTML), /id="groupSelect"/, 'каналов несколько — выбор есть');
   assert.ok(!/Публикуем:/.test(String(two.innerHTML)));
+});
+
+test('на каждом экране не больше одной залитой (главной) кнопки: остальные — контурные, тихие или опасные', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('villa-1', 'Вилла у моря', 'active'));
+    data.users['700001'] = { id: '700001', chatId: 700001, firstName: 'Анна', preferredLanguage: 'ru', activity: [], lastSeenAt: new Date().toISOString() };
+    data.inquiries.push({ id: 'inq-1', userId: '700001', chatId: '700001', language: 'ru', type: 'general', text: 'Есть ли парковка?', status: 'new', pipelineStage: 'new', replies: [], messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), clientMessageAt: new Date().toISOString() });
+  });
+  const { sandbox } = await panelSandbox();
+  const out = [];
+  for (const item of sandbox.navItems()) for (const tab of (item.tabs && item.tabs.length ? item.tabs.map((entry) => entry[0]) : [''])) {
+    sandbox.el('pageActions').children.length = 0;
+    const host = fakeElement('main');
+    await sandbox.VIEWS[item.id].render(host, tab);
+    const html = String(host.innerHTML) + sandbox.el('pageActions').children.map((child) => '<x class="' + child.className + '">').join('');
+    const filled = [];
+    for (const match of html.matchAll(/<(button|a|x)\b[^>]*class="([^"]*)"[^>]*>([^<]{0,30})/g)) {
+      const classes = match[2].split(/\s+/);
+      if (classes.includes('btn') && !classes.some((name) => ['secondary', 'ghost', 'danger', 'icon'].includes(name))) filled.push(match[3].trim());
+    }
+    out.push(item.id + '/' + tab + ': ' + filled.length + ' ' + JSON.stringify(filled));
+  }
+  console.log('\n' + out.join('\n'));
 });

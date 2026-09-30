@@ -31,6 +31,8 @@ html,body{max-width:100%;overflow-x:clip}
   --tabbar-h:62px; --savebar-h:96px;
   /* Шкала размеров текста: 13, 14, 16, 20. Основной — 14 px. */
   --fs-xs:13px; --fs-sm:14px; --fs-lg:16px; --fs-xl:20px; --fs-display:28px;
+  /* Роли заголовков: h1 — название экрана, h2 — заголовок окна, имя клиента или объекта, h3 — заголовок карточки. */
+  --fs-h1:24px; --fs-h2:18px; --fs-h3:15px;
   /* Одна шкала отступов: 4, 8, 12, 16, 24 (и 2 px — только для волосяных зазоров). */
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
 }
@@ -38,15 +40,14 @@ html,body{margin:0;padding:0}
 /* Кнопки берут шрифт страницы: без этого браузер ставил им свои 13,33 px. */
 button{font:inherit}
 body{background:var(--bg);color:var(--text);font:400 var(--fs-sm)/1.45 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-h1,h2,h3,h4{margin:0;font-weight:650;letter-spacing:-.01em}
-h1{font-size:var(--fs-xl)}h2{font-size:var(--fs-lg)}h3{font-size:var(--fs-lg)}
+h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:-.01em}
+h1{font-size:var(--fs-h1)}h2{font-size:var(--fs-h2)}h3{font-size:var(--fs-h3)}
 p{margin:0}
 a{color:var(--brand);text-decoration:none}
 a:hover{text-decoration:underline}
 .hidden{display:none!important}
 .muted{color:var(--muted)}
-.faint{color:var(--muted)}
-.small{font-size:var(--fs-sm)}
+.small{font-size:var(--fs-xs)}
 .nowrap{white-space:nowrap}
 .right{text-align:right}
 .grow{flex:1}
@@ -98,8 +99,13 @@ a:hover{text-decoration:underline}
 .dot.off{background:var(--line)}
 .dot.bad{background:var(--bad);box-shadow:0 0 0 3px color-mix(in srgb, var(--bad) 13%, transparent)}
 .main{min-width:0;display:flex;flex-direction:column}
-.topbar{position:sticky;top:var(--header);z-index:var(--z-sticky);display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);background:rgba(245,246,248,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.topbar{position:sticky;top:var(--header);z-index:var(--z-sticky);display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-4);padding:var(--sp-2) var(--sp-5);background:rgba(245,246,248,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .topbar .sub{font-size:var(--fs-sm);color:var(--muted)}
+.topbar .page-tabs{flex:0 1 auto;min-width:0;max-width:100%;gap:var(--sp-1);padding:0;background:none;border:0;border-radius:0}
+.topbar .page-tabs button{padding:var(--sp-2) var(--sp-3);border-radius:0;border-bottom:2px solid transparent;color:var(--muted)}
+.topbar .page-tabs button:hover{color:var(--text)}
+.topbar .page-tabs button.active{background:none;box-shadow:none;color:var(--brand);border-bottom-color:var(--brand)}
+.topbar h1{white-space:nowrap}
 .page{padding:var(--sp-4) var(--sp-5) var(--savebar-h);max-width:1560px;width:100%;margin:0 auto}
 
 /* --- Карточки и таблицы ----------------------------------------------------- */
@@ -165,6 +171,8 @@ tbody tr.selected{background:var(--brand-soft)}
 /* Пояснение к числу: на компьютере — подсказка при наведении (title), на телефоне наведения нет — подпись под числом. */
 .strip-hint{display:none;color:var(--muted);font-size:var(--fs-xs)}
 @media(max-width:860px){.today-numbers .strip-hint{display:block}}
+/* Телефон: цифры дня — две колонки помельче, недельная строка — только ссылка на отчёт: дела начинаются выше. */
+@media(max-width:600px){.today-numbers{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-1) var(--sp-3);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-xs);line-height:1.35}.today-numbers b{font-size:var(--fs-sm)}.week-line .week-line-text{display:none}}
 .btn-ico svg{width:100%;height:100%}
 .chip{display:inline-flex;align-items:center;gap:var(--sp-1);padding:2px var(--sp-2);border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface-soft);font-size:var(--fs-sm);font-weight:600;color:var(--muted);white-space:nowrap}
 .chip.ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok)}
@@ -173,7 +181,8 @@ tbody tr.selected{background:var(--brand-soft)}
 .chip.brand{background:var(--brand-soft);border-color:var(--brand-soft-line);color:var(--brand-dark)}
 .field{display:flex;flex-direction:column;gap:var(--sp-1);min-width:0}
 .field>label,.field-label{font-size:var(--fs-sm);font-weight:600;color:var(--muted)}
-.hint{font-size:var(--fs-sm);color:var(--muted)}
+.hint{font-size:var(--fs-sm);color:var(--muted);max-width:80ch}
+@media(min-width:861px){.field select{max-width:420px}.funnel-table,.source-table{max-width:1000px}}
 input,textarea,select{width:100%;padding:var(--sp-2) var(--sp-3);border:1px solid var(--field-line);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit;font-size:var(--fs-sm)}
 input:focus,textarea:focus,select:focus{outline:0;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
 button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
@@ -271,14 +280,15 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .msg-meta{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);font-size:var(--fs-sm);color:var(--muted);margin-top:var(--sp-1)}
 .msg-meta>span{min-width:0}
 .messenger-toolbar{display:flex;flex-direction:column;gap:var(--sp-2);margin-bottom:var(--sp-3)}
+@media(min-width:861px){.messenger-toolbar{flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-4)}}
 .messenger-controls{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
 .messenger-controls .search{max-width:none;min-width:260px;flex:1}
 .messenger-controls select{width:auto;min-width:210px}
 .messenger-filters{align-self:flex-start;max-width:100%}
 .messenger-filter-compact{display:none}
 .conversation-back{display:none}
-.messenger-shell{display:grid;grid-template-columns:340px minmax(0,1fr);gap:var(--sp-3);align-items:start}
-.conversation-list-panel{position:sticky;top:calc(var(--header) + 70px);display:flex;flex-direction:column;max-height:calc(100vh - var(--header) - var(--savebar-h));overflow:hidden}
+.messenger-shell{display:grid;grid-template-columns:clamp(340px,30vw,440px) minmax(0,1fr);gap:var(--sp-3);align-items:start}
+.conversation-list-panel{position:sticky;top:calc(var(--header) + 64px);display:flex;flex-direction:column;max-height:calc(100vh - var(--header) - var(--savebar-h));overflow:hidden}
 .conversation-list-panel>header{flex:none}
 .conversation-list-panel>header .chip{margin-left:auto}
 .conversation-list{overflow:auto;overscroll-behavior:contain}
@@ -337,7 +347,9 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .viewing-card{--flag:var(--warn);display:flex;flex-direction:column;gap:var(--sp-2);align-items:flex-start;padding:var(--sp-3);border-top:1px solid var(--flag);border-right:1px solid var(--flag);border-bottom:1px solid var(--flag);border-radius:var(--radius);background:var(--surface-soft)}
 .viewing-card.confirmed{--flag:var(--ok)}
 .viewing-card-head{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;width:100%}
-.viewing-card-when{font-size:var(--fs-lg);font-weight:600}
+.viewing-card-when{font-size:var(--fs-sm);font-weight:600}
+.conversation-main .viewing-card{flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-3);padding:var(--sp-2) var(--sp-3);border:1px solid var(--line-soft);border-left:4px solid var(--flag);background:var(--surface-soft)}
+.conversation-main .viewing-card-head{width:auto}
 /* Экран клиента: переписка слева, сопровождение справа. На узком экране одно
    под другим — иначе на телефоне обе колонки становятся нечитаемыми. */
 .conversation-split{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--sp-4);align-items:start}
@@ -346,6 +358,27 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-side-inner{background:var(--surface-soft);border:1px solid var(--line);border-radius:var(--radius);padding:var(--sp-3)}
 .conversation-side .conversation-save{display:flex;flex-direction:column;gap:var(--sp-2);align-items:stretch}
 @media (max-width:1180px){.conversation-split{grid-template-columns:minmax(0,1fr)}.conversation-side{position:static}}
+@media(min-width:1181px){
+  .conversation-card{display:flex;flex-direction:column;height:calc(100vh - var(--header) - 156px);min-height:520px}
+  .conversation-card>.conversation-split{flex:1 1 auto;min-height:0;align-items:stretch}
+  .conversation-card .conversation-main{min-height:0;overflow:auto}
+  .conversation-card .conversation-thread{flex:1 1 auto;min-height:96px;max-height:none}
+  /* Сжимаем то, что над перепиской: заявка и запись на просмотр — по одной строке, поле ответа не уезжает вниз. */
+  .conversation-card .conversation-context{align-items:center;padding:var(--sp-2) var(--sp-3)}
+  .conversation-card .conversation-context .field-label{display:none}
+  .conversation-card .conversation-context-title{margin-top:0}
+  .conversation-card .conversation-context .property-link{min-width:0;padding:var(--sp-1) var(--sp-2)}
+  .conversation-card .viewing-card>.small{display:none}
+  .conversation-card .reply-box-head{display:none}
+  .conversation-card .reply-box{position:sticky;bottom:0}
+  .conversation-card .reply-actions>.small{display:none}
+  .conversation-card .conversation-details>summary{padding:var(--sp-2) var(--sp-3)}
+  .conversation-card .conversation-context,.conversation-card .viewing-card,.conversation-card .reply-box{flex:none}
+  .conversation-card .reply-box textarea{min-height:72px}
+  .conversation-card .conversation-side{position:static;min-height:0;overflow:auto}
+  /* Состояние заявки справа уже есть (в списке слева и в «Статусе»): рядом с именем оно лишнее. */
+  .conversation-head .status-in-head{display:none}
+}
 .conversation-side-toggle,.side-close,.side-backdrop{display:none}
 .conversation-thread{display:flex;flex-direction:column;gap:var(--sp-2);min-height:300px;max-height:min(54vh,620px);overflow:auto;padding:var(--sp-3);border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--surface-soft);overscroll-behavior:contain}
 .conversation-line{display:flex;justify-content:flex-start}
@@ -726,8 +759,8 @@ dialog::backdrop{background:var(--overlay)}
      «Пост в канал») рядом не помещаются в 375 px и растягивали всю страницу —
      а вместе с ней и выдвижные окна, которые «уезжали» вправо. */
   .topbar{padding:var(--sp-3) var(--sp-4);flex-wrap:wrap}
-  .topbar #pageActions{flex-wrap:wrap;width:100%}
-  .topbar #pageActions .btn{flex:1 1 auto;min-width:0}
+  .topbar #pageActions{flex-wrap:nowrap;width:100%;overflow-x:auto;scrollbar-width:none}
+  .topbar #pageActions .btn{flex:0 0 auto}
   .savebar{left:14px;right:14px}
   .cols-3,.cols-2{grid-template-columns:minmax(0,1fr)}
   .drawer,.drawer.wide{left:0;right:0;width:100%;max-width:100%}

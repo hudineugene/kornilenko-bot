@@ -192,7 +192,7 @@ function renderSections(host) {
   // Контакты и «О компании» правятся на своей вкладке — здесь остаются только
   // тексты, которые клиент видит вместо пустого раздела.
   var fields = [["objects", "Объекты"], ["promotions", "Акции"]];
-  host.innerHTML = '<div class="card"><header><h3>Если раздел пуст</h3><div class="actions"><span class="small faint">показываются, если карточек нет</span></div></header>' +
+  host.innerHTML = '<div class="card"><header><h3>Если раздел пуст</h3><div class="actions"><span class="small muted">показываются, если карточек нет</span></div></header>' +
     '<div class="card-body stack" id="menuForm">' + languageTabs() +
     fields.map(function (field) {
       return '<div class="field"><label>' + field[1] + "</label>" + LANGUAGES.map(function (language) {
@@ -366,7 +366,7 @@ function renderRules(host) {
   pageAction("＋ Автоответ", function () { openRuleEditor(null); });
   host.innerHTML = '<div class="split"><div class="stack"><div class="card"><div class="table-wrap"><table><thead><tr><th>Если сообщение</th><th>Ответ</th><th>Язык</th><th></th></tr></thead><tbody>' +
     (rules.length ? rules.map(function (rule) {
-      return '<tr data-id="' + esc(rule.id) + '"><td class="clickable" data-edit="1"><b>' + esc(rule.trigger) + '</b><br><span class="small faint">' + esc((RULE_TYPES.find(function (type) { return type[0] === rule.type; }) || ["", ""])[1]) + "</span></td>" +
+      return '<tr data-id="' + esc(rule.id) + '"><td class="clickable" data-edit="1"><b>' + esc(rule.trigger) + '</b><br><span class="small muted">' + esc((RULE_TYPES.find(function (type) { return type[0] === rule.type; }) || ["", ""])[1]) + "</span></td>" +
         "<td>" + esc(String(rule.answer).slice(0, 80)) + "</td><td>" + esc(rule.language === "all" ? "все" : rule.language.toUpperCase()) + "</td>" +
         '<td class="right nowrap">' + (rule.enabled === false ? '<span class="chip">выключен</span>' : "") +
         '<button class="btn ghost small" data-move="up" title="Проверять раньше">↑</button>' +
@@ -545,16 +545,16 @@ async function renderInterface(host) {
     return;
   }
   host.innerHTML = '<div class="toolbar"><div class="search"><input id="textSearch" placeholder="Найти текст"></div>' +
-      '<span class="small faint">Здесь меняются все подписи, которые видит клиент</span></div>' +
+      '<span class="small muted">Здесь меняются все подписи, которые видит клиент</span></div>' +
     '<div class="card" id="interfaceForm"><div class="card-body stack">' + languageTabs() + "</div>" +
     INTERFACE_GROUPS.filter(function (group) { return texts[group[0]]; }).map(function (group) {
       var keys = Object.keys(texts[group[0]].ru || {});
       return '<details class="card flat-divided"' + (interfaceGroupOpen === group[0] ? " open" : "") + ' data-group="' + group[0] + '">' +
-        '<summary class="pad-md"><b>' + esc(group[1]) + '</b> <span class="small faint">' + counted(keys.length, "текст", "текста", "текстов") + "</span></summary>" +
+        '<summary class="pad-md"><b>' + esc(group[1]) + '</b> <span class="small muted">' + counted(keys.length, "текст", "текста", "текстов") + "</span></summary>" +
         '<div class="card-body grid cols-2">' + keys.map(function (key) {
           var value = (texts[group[0]].ru || {})[key];
           if (Array.isArray(value)) {
-            return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(group[0], key, value)) + ' <span class="faint small">список</span></label>' + LANGUAGES.map(function (language) {
+            return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(group[0], key, value)) + ' <span class="muted small">список</span></label>' + LANGUAGES.map(function (language) {
               return '<textarea data-group="' + group[0] + '" data-key="' + esc(key) + '" data-list="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc(((texts[group[0]][language[0]] || {})[key] || []).join("\n")) + "</textarea>";
             }).join("") + "</div>";
           }

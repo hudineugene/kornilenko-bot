@@ -192,8 +192,8 @@ function selectionMatchingPanel(item) {
     var reasons = (result.reasons || []).map(function (key) { return MATCH_REASON_NAMES[key]; }).filter(Boolean);
     var warnings = (result.warnings || []).map(function (key) { return MATCH_WARNING_NAMES[key]; }).filter(Boolean);
     var needsData = (result.warnings || []).some(function (key) { return key === "priceMissing" || key === "bedroomsMissing"; });
-    return '<div class="list-item start"><div class="grow"><div class="row wrap"><b>' + esc(title) + '</b><span class="chip ' + tier[1] + '">' + tier[0] + '</span><span class="small faint">оценка ' + Math.max(0, Math.min(100, Number(result.score) || 0)) + '%</span></div>' +
-      (reasons.length ? '<div class="small faint gap-top-sm">Совпало: ' + esc(reasons.join(", ")) + '</div>' : "") +
+    return '<div class="list-item start"><div class="grow"><div class="row wrap"><b>' + esc(title) + '</b><span class="chip ' + tier[1] + '">' + tier[0] + '</span><span class="small muted">оценка ' + Math.max(0, Math.min(100, Number(result.score) || 0)) + '%</span></div>' +
+      (reasons.length ? '<div class="small muted gap-top-sm">Совпало: ' + esc(reasons.join(", ")) + '</div>' : "") +
       (warnings.length ? '<div class="small gap-top-sm ' + (needsData ? "bad-text" : "warn-text") + '">Учесть: ' + esc(warnings.join(", ")) + '</div>' : "") +
       '</div>' + (property ? '<button class="btn ghost small" type="button" data-match-property="' + esc(property.id) + '">Карточка</button>' : '<span class="chip bad">объект удалён</span>') + '</div>';
   }).join("");
@@ -219,9 +219,9 @@ function viewingCardHtml(item, property) {
     "</div>";
 }
 
-function statusChip(item) {
+function statusChip(item, extraClass) {
   var state = inquiryState(item);
-  return '<span class="chip ' + state.chip + '">' + state.text + "</span>";
+  return '<span class="chip ' + state.chip + (extraClass ? " " + extraClass : "") + '">' + state.text + "</span>";
 }
 function inquiryUnread(item) {
   var incoming = (item.messages || []).filter(function (message) { return message.direction === "in"; }).map(function (message) { return Date.parse(message.createdAt) || 0; });
@@ -1232,7 +1232,7 @@ function renderInquiryCard(host) {
     conversationOpenedByUser = false;
     markConversationRead(item.userId);
   }
-  host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><button class="btn ghost small conversation-back" id="backToList" type="button">← Диалоги</button><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions"><button class="btn secondary small conversation-side-toggle" id="sideToggle" type="button" aria-expanded="false" title="Статус, этап, заметка и следующий шаг">⋯ Сведения</button>' + statusChip(item) + "</div></header>" +
+  host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><button class="btn ghost small conversation-back" id="backToList" type="button">← Диалоги</button><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions"><button class="btn secondary small conversation-side-toggle" id="sideToggle" type="button" aria-expanded="false" title="Статус, этап, заметка и следующий шаг">⋯ Сведения</button>' + statusChip(item, "status-in-head") + "</div></header>" +
     '<div class="card-body conversation-body conversation-split">' +
       '<div class="conversation-main">' +
       '<div class="conversation-context">' +
@@ -1277,7 +1277,7 @@ function renderInquiryCard(host) {
           [["open", item.status === "closed" ? "Открыть снова" : inquiryState(item).text], ["closed", "Закрыт"]].map(function (option) {
             return '<option value="' + option[0] + '"' + ((item.status === "closed" ? "closed" : "open") === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
           }).join("") + '</select></div>' +
-        '<div class="field"><label for="inqPipeline">Этап <span class="small faint">(по желанию)</span></label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div>' +
+        '<div class="field"><label for="inqPipeline">Этап <span class="small muted">(по желанию)</span></label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div>' +
         '<div class="field"><label for="inqAssignee">Ответственный менеджер</label><div class="row"><select id="inqAssignee" class="grow"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select>' +
           (managers.length > 1 ? '<button class="btn secondary small" id="transferInq" type="button" title="Передать клиента другому менеджеру и сообщить ему в Telegram">Передать…</button>' : "") + '</div></div>' +
         '<div class="row followup-fields"><div class="field grow"><label for="followDate">Следующий шаг</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label for="followTime">Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div>' +
@@ -1730,21 +1730,21 @@ function renderClients(host) {
     return true;
   });
   host.innerHTML = clientFilterBar({ search: false, steps: true }) + '<div class="toolbar">' +
-      '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small faint">Показано ' + num(rows.length) +  " из " + num(state.userCount) + (Number(state.activeUserCount) !== Number(state.userCount) ? " · им можно писать: " + num(state.activeUserCount) : "") + '</span><div class="grow"></div><button class="btn secondary small" id="exportClients" type="button" title="Таблица с теми, кого вы видите на экране: для обзвона, отчёта или переноса">⬇ В Excel</button></div>' +
+      '<select id="clientStage"><option value="">Все этапы</option>' + PIPELINE_STAGES.map(function (stage) { return '<option value="' + stage[0] + '"' + (clientStageFilter === stage[0] ? " selected" : "") + '>' + stage[1] + "</option>"; }).join("") + '</select><span class="small muted">Показано ' + num(rows.length) +  " из " + num(state.userCount) + (Number(state.activeUserCount) !== Number(state.userCount) ? " · им можно писать: " + num(state.activeUserCount) : "") + '</span><div class="grow"></div><button class="btn secondary small" id="exportClients" type="button" title="Таблица с теми, кого вы видите на экране: для обзвона, отчёта или переноса">⬇ В Excel</button></div>' +
     '<div class="card"><div class="table-wrap"><table class="table-cards clients-table"><thead><tr><th>Клиент</th><th>Источник и язык</th><th>Этап</th><th>Следующий шаг</th><th class="right">Последняя активность</th></tr></thead><tbody>' +
     (rows.length ? rows.slice(0, clientsShown).map(function (row) {
       var user = row.user, latest = row.latest, active = row.active;
       return '<tr class="clickable" data-id="' + esc(user.id) + '"><td><div class="row"><span class="avatar">' + esc(initials(user.firstName)) + "</span><span><b>" + esc(userName(user)) + "</b>" +
-        (user.username ? ' <span class="small faint">@' + esc(user.username) + "</span>" : "") +
-        (user.phone ? '<br><span class="small faint">' + esc(user.phone) + "</span>" : "") + "</span></div></td>" +
+        (user.username ? ' <span class="small muted">@' + esc(user.username) + "</span>" : "") +
+        (user.phone ? '<br><span class="small muted">' + esc(user.phone) + "</span>" : "") + "</span></div></td>" +
         "<td>" + esc(user.source || "без метки") + ' <span class="chip">' + esc((user.preferredLanguage || "—").toUpperCase()) + "</span>" + (user.blocked ? ' <span class="chip bad">недоступен</span>' : "") + "</td>" +
         "<td>" + (latest ? '<span class="chip brand">' + esc(clientStageLabel(latest)) + "</span>" : "—") + "</td>" +
         "<td>" + (active && active.followUpDate ? '<span class="chip ' + (active.followUpDate <= pipelineToday() ? "bad" : "") + '">' + pipelineDate(active.followUpDate) + (active.followUpTime ? " · " + esc(active.followUpTime) : "") + "</span>" : "—") + "</td>" +
-        '<td class="right small faint nowrap">' + ago(user.lastSeenAt) + "</td></tr>";
+        '<td class="right small muted nowrap">' + ago(user.lastSeenAt) + "</td></tr>";
     }).join("") : '<tr><td colspan="5"><div class="empty"><b>Никого не найдено</b></div></td></tr>') +
     "</tbody></table></div>" +
     (rows.length > clientsShown
-      ? '<div class="card-body row"><span class="small faint">Показаны первые ' + num(clientsShown) + " из " + num(rows.length) + '</span><div class="grow"></div><button class="btn secondary small" id="moreClients" type="button">Показать ещё ' + num(Math.min(CLIENTS_PAGE, rows.length - clientsShown)) + "</button></div>"
+      ? '<div class="card-body row"><span class="small muted">Показаны первые ' + num(clientsShown) + " из " + num(rows.length) + '</span><div class="grow"></div><button class="btn secondary small" id="moreClients" type="button">Показать ещё ' + num(Math.min(CLIENTS_PAGE, rows.length - clientsShown)) + "</button></div>"
       : "") +
     "</div>";
   host.querySelector("#exportClients").onclick = function () { exportClients(rows.map(function (row) { return row.user.id; })); };
@@ -1817,7 +1817,7 @@ function openClient(id) {
       }).join("") + numberStrip([["Сообщений", num(clientMessageTotal(user, inquiries))], ["Заявок", num(inquiries.length)], ["Избранное", num((user.favorites || []).length)], ["Просмотрено", num((user.recentlyViewed || []).length)]]) +
       '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит клиенту в Telegram</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть диалог →</button><button class="btn secondary" id="clientViewing" type="button">Назначить просмотр</button>' + (!user.chatId ? '<div class="small muted">Клиент заведён вручную: в боте его нет, писать ему из панели нельзя.</div>' : '') + '</div></section>' +
       '<div class="grid cols-2 client-interest-grid">' + (!hasWish ? '<section class="card"><div class="card-body"><span class="small muted">Условия поиска: клиент пока не оставлял ни сохранённого поиска, ни заявки на подбор.</span></div></section>' : '<section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section>') + '<section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="stack"><div class="muted small">Активных заявок нет. Можно поставить шаг — например, «позвонить в четверг»: он появится в «Следующих шагах» и в напоминаниях.</div><div class="grid cols-2"><div class="field"><label for="stepDate">День</label><input type="date" id="stepDate"></div><div class="field"><label for="stepTime">Время</label><input type="time" id="stepTime"></div></div><div class="field"><label for="stepNote">Что сделать</label><input id="stepNote" maxlength="300" placeholder="Позвонить, уточнить бюджет"></div><button class="btn secondary small" id="clientStep" type="button">Поставить шаг</button></div>') + '</div></section></div>' +
-      '<section class="card"><header><h3>Объекты и интересы</h3><div class="actions"><span class="small faint">избранное · сравнение · история · подбор</span></div></header>' + clientPropertiesHtml(user) + '</section>' +
+      '<section class="card"><header><h3>Объекты и интересы</h3><div class="actions"><span class="small muted">избранное · сравнение · история · подбор</span></div></header>' + clientPropertiesHtml(user) + '</section>' +
       '<section class="card"><header><h3>История заявок</h3></header>' + (inquiries.length ? '<div class="client-inquiries">' + inquiries.slice(0, 20).map(function (item) { return '<button class="client-inquiry" data-client-inquiry="' + esc(item.id) + '" type="button"><span><b>' + esc(inquiryTypeName(item)) + '</b><small>' + esc(String(item.text || "").replace(/\s+/g, " ").slice(0, 100)) + '</small></span><span class="chip ' + (awaitsReply(item) ? "bad" : item.status === "closed" ? "" : "ok") + '">' + (awaitsReply(item) ? "ждёт ответа" : item.status === "closed" ? "закрыто" : "в работе") + '</span><time>' + dateTime(item.updatedAt || item.createdAt) + '</time><i>→</i></button>'; }).join("") + '</div>' : '<div class="empty"><b>Заявок ещё нет</b></div>') + '</section>' +
       // Удаление — в самом конце карточки, отдельным блоком: раньше красная кнопка
       // стояла в нижней полосе вплотную к «Закрыть» и «Сохранить».
@@ -1902,7 +1902,6 @@ function openClient(id) {
 }
 
 VIEWS.clients = {
-  subtitle: function () { return "Диалоги, следующие шаги и вся история общения"; },
   render: function (host, tab) {
     if (tab === "tasks") return renderTasks(host);
     if (tab === "pipeline") return renderPipeline(host);
@@ -1912,7 +1911,6 @@ VIEWS.clients = {
 };
 
 VIEWS.viewings = {
-  subtitle: function () { return "Встречи с клиентами: подтверждение, календарь и история"; },
   render: function (host) { renderViewings(host); },
 };
 `;

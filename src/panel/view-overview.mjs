@@ -313,7 +313,6 @@ async function loadReadiness(host) {
 }
 
 VIEWS.today = {
-  subtitle: function () { return "Что нужно сделать прямо сейчас"; },
   render: function (host) {
     var today = startOfToday(), week = startOfWeek();
     var waiting = waitingClients();
@@ -342,12 +341,12 @@ VIEWS.today = {
             (feedFilter === "done" ? doneRowsHtml() : "") +
             (feedFilter !== "done" && people.length > 1 ? '<div class="deeds-scope row wrap"><div class="tabs" id="deedScope"><button type="button" data-scope="all" class="' + (todayScope.mine ? "" : "active") + '">Все</button><button type="button" data-scope="mine" class="' + (todayScope.mine ? "active" : "") + '">Мои</button></div>' +
               '<label class="small muted" for="deedMe">Я —</label><select id="deedMe" style="width:auto;min-width:0">' + people.map(function (name) { return '<option value="' + esc(name) + '"' + (name === todayScope.me ? " selected" : "") + ">" + esc(name) + "</option>"; }).join("") + "</select>" +
-              (scoped.active && scoped.hidden ? '<span class="small faint">Ещё ' + num(scoped.hidden) + ' — чужие или не про клиентов: они в «Все»</span>' : "") + "</div>" : "") +
+              (scoped.active && scoped.hidden ? '<span class="small muted">Ещё ' + num(scoped.hidden) + ' — чужие или не про клиентов: они в «Все»</span>' : "") + "</div>" : "") +
             (feedFilter === "done" ? "" : deeds.length ? '<div class="deeds">' + deeds.map(function (item) {
               return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '">' +
                 '<span class="deed-icon">' + deedIcon(item) + '</span>' +
                 '<span class="deed-body"><b>' + esc(item.title) + '</b>' + (people.length > 1 && deedAssignee(item) === "" ? ' <span class="chip warn">без менеджера</span>' : "") + '<span>' + esc(item.text) + '</span></span>' +
-                '<span class="deed-actions"><button class="btn small" type="button" data-deed="' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
+                '<span class="deed-actions"><button class="btn secondary small" type="button" data-deed=""' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
                 '<button class="btn ghost small" type="button" data-deed-hide="' + esc(item.id) + '" title="Убрать из списка дел">Скрыть</button></span>' +
               '</div>';
             }).join("") + '</div>' : '<div class="empty"><b>' + (scoped.active ? "Своих дел нет" : "Дел нет") + '</b>' + (scoped.active ? "За вами закреплённых дел сейчас нет" : "Все клиенты отвечены, просмотры подтверждены") + '</div>') +
@@ -405,7 +404,7 @@ VIEWS.today = {
     // Быстрые действия — в шапке страницы, а не карточкой в самом низу.
     pageAction("＋ Объект", async function () {
       if (await go("objects", "list")) openRecordEditor("objects", null);
-    });
+    }, "secondary");
     pageAction("✉ Рассылка", async function () {
       if (await go("posts", "broadcast")) openCampaignEditor(null);
     }, "secondary");
@@ -437,7 +436,7 @@ function barList(rows, total) {
   if (!rows.length) return '<div class="empty">Пока нет данных</div>';
   var top = Math.max.apply(null, rows.map(function (row) { return row[1]; }).concat([1]));
   return '<div class="card-body">' + rows.map(function (row) {
-    return '<div class="bar-row"><span>' + esc(row[0]) + '<div class="bar"><span style="width:' + Math.round((row[1] / top) * 100) + '%"></span></div></span><b class="right">' + num(row[1]) + (total ? " <span class=\"faint small\">" + Math.round((row[1] / total) * 100) + "%</span>" : "") + "</b></div>";
+    return '<div class="bar-row"><span>' + esc(row[0]) + '<div class="bar"><span style="width:' + Math.round((row[1] / top) * 100) + '%"></span></div></span><b class="right">' + num(row[1]) + (total ? " <span class=\"muted small\">" + Math.round((row[1] / total) * 100) + "%</span>" : "") + "</b></div>";
   }).join("") + "</div>";
 }
 
@@ -456,7 +455,7 @@ function sourceTableCard() {
     total.users += row.users || 0; total.inquiries += row.inquiries || 0; total.viewings += row.viewings || 0; total.deals += row.deals || 0;
   });
   var username = (state.bot || {}).username || "";
-  return '<div class="card gap-bottom" id="sourceCard"><header><h3>Реклама: клиенты и сделки</h3><div class="actions"><span class="small faint">по метке ссылки, за всё время</span></div></header>' +
+  return '<div class="card gap-bottom" id="sourceCard"><header><h3>Реклама: клиенты и сделки</h3><div class="actions"><span class="small muted">по метке ссылки, за всё время</span></div></header>' +
     (rows.length ? '<div class="table-wrap"><table class="source-table table-stack"><thead><tr><th>Источник</th><th class="right">Клиентов</th><th class="right">Заявок</th><th class="right">Записались на просмотр</th><th class="right">Сделок</th><th></th></tr></thead><tbody>' +
       rows.map(function (row) {
         var label = row.source || "";
@@ -567,7 +566,7 @@ function weeklyCard(payload) {
         weekTile("Сделок", report.deals.count, weekTrend(report.deals.count, report.deals.previous)) +
         weekTile("Без ответа сейчас", report.waiting, report.waiting ? '<span class="week-trend down">ждут ответа</span>' : '<span class="week-trend up">все отвечены</span>') +
       "</div>" +
-      '<div class="small faint">Сравнение — ' + comparedWith + '.</div>' +
+      '<div class="small muted">Сравнение — ' + comparedWith + '.</div>' +
       (report.inquiries.byType.length ? '<div class="row wrap">' + report.inquiries.byType.map(function (row) { return '<span class="chip">' + esc(row[0]) + " — " + num(row[1]) + "</span>"; }).join("") + "</div>" : "") +
       '<div class="grid cols-2">' +
         '<div><div class="week-subtitle">Откуда пришли новые клиенты</div>' + barList(report.sources, report.users.count) + "</div>" +
@@ -623,7 +622,6 @@ async function loadWeekLine(host) {
 
 // Итоги недели и цифры за 30 дней — отдельный пункт меню «Отчёт».
 VIEWS.reports = {
-  subtitle: function () { return "Итоги недели, заявки, источники, объекты и рассылки"; },
   render: function (host) {
     var days = lastDays(30);
     // Заявки считаем по самому списку заявок и в одном окне — 30 дней: и плитка,
@@ -673,17 +671,17 @@ VIEWS.reports = {
             }).join("") + "</tbody></table></div>" : '<div class="empty">Рассылок ещё не было</div>') +
         "</div>" +
       "</div>" +
-      '<div class="card gap-bottom"><header><h3>Реакции клиентов</h3><div class="actions"><span class="small faint">всего ' + num((state.stats || {}).reactionsReceived) + "</span></div></header>" +
+      '<div class="card gap-bottom"><header><h3>Реакции клиентов</h3><div class="actions"><span class="small muted">всего ' + num((state.stats || {}).reactionsReceived) + "</span></div></header>" +
         (recentReactions().length ? '<div class="list">' + recentReactions().map(function (event) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(event.user.firstName)) + '</span><span class="grow"><b>' + esc(userName(event.user)) + "</b> " + esc(event.item.text || "") + "</span>" +
-            '<span class="small faint">' + ago(event.item.createdAt) + "</span></div>";
+            '<span class="small muted">' + ago(event.item.createdAt) + "</span></div>";
         }).join("") + "</div>" : '<div class="empty">Клиенты ещё не ставили реакции на сообщения бота</div>') +
       "</div>" +
-      '<div class="card"><header><h3>Эффективность объектов</h3><div class="actions"><span class="small faint">видели в каталоге · открыли карточку · заявки</span></div></header>' +
+      '<div class="card"><header><h3>Эффективность объектов</h3><div class="actions"><span class="small muted">видели в каталоге · открыли карточку · заявки</span></div></header>' +
         (properties.length ? '<div class="table-wrap"><table class="table-stack"><thead><tr><th>Объект</th><th class="right" title="Сколько раз объект показался клиенту в каталоге бота">Видели в каталоге</th><th class="right" title="Сколько раз открыли его карточку">Открыли карточку</th><th class="right">Заявки</th><th class="right" title="Какая доля увидевших открыла карточку">Доля открывших</th></tr></thead><tbody>' +
           properties.map(function (row) {
             var rate = row.views ? Math.round((row.details / row.views) * 100) : 0;
-            return '<tr class="clickable" data-property-insights="' + esc(row.id) + '"><td><b>' + esc(row.title) + '</b><br><span class="small faint">открыть клиентов и действия</span></td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + '%</td></tr>';
+            return '<tr class="clickable" data-property-insights="' + esc(row.id) + '"><td><b>' + esc(row.title) + '</b><br><span class="small muted">открыть клиентов и действия</span></td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + '%</td></tr>';
           }).join("") + "</tbody></table></div>" : '<div class="empty">Объектов пока нет</div>') +
       "</div></div></details>";
     loadWeekly(host);

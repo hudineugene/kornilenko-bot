@@ -508,7 +508,7 @@ test.describe('стили панели', () => {
     // Всё, что касается узкого экрана, лежит в одном блоке @media.
     const mobile = sheet.slice(sheet.lastIndexOf('@media', sheet.indexOf('.topbar{padding:var(--sp-3) var(--sp-4)')));
     assert.match(mobile, /\.topbar\{padding:var\(--sp-3\) var\(--sp-4\);flex-wrap:wrap\}/, 'верхняя полоса переносится, а не выталкивает кнопки за экран');
-    assert.match(mobile, /\.topbar #pageActions\{flex-wrap:wrap;width:100%\}/, 'кнопки действий делят строку');
+    assert.match(mobile, /\.topbar #pageActions\{flex-wrap:nowrap;width:100%;overflow-x:auto/, 'кнопки действий — одной строкой, при нехватке места листаются, страницу не раздвигают');
     assert.match(mobile, /\.drawer,\.drawer\.wide\{left:0;right:0;width:100%;max-width:100%\}/, 'выдвижное окно прижато к левому краю и занимает экран');
     // Страховка от горизонтальной прокрутки всей страницы.
     assert.match(sheet, /html,body\{max-width:100%;overflow-x:clip\}/);
@@ -728,6 +728,14 @@ test('набор токенов оформления: 22 цвета, четыр�
   assert.deepEqual(offScale, [], 'отступы вне шкалы: ' + offScale.join(', '));
   const radii = Array.from(PANEL_CSS.matchAll(/border-radius:([^;}]*)/g)).map((match) => match[1]);
   assert.ok(radii.every((value) => /^(var\(--radius(-sm|-pill)?\)|50%|0)( |$)/.test(value) || /^(var\(--radius(-sm)?\)|0)( (var\(--radius(-sm)?\)|0)){1,3}$/.test(value)), 'радиусы вне шкалы: ' + radii.filter((value) => !/var\(--radius/.test(value) && !/^(50%|0|999px)$/.test(value)).join(', '));
+  // Роли текста: название экрана, заголовок окна, заголовок карточки и подпись — четыре разных размера.
+  const px = (name) => Number((root.match(new RegExp('--' + name + ':\\s*(\\d+)px')) || [])[1]);
+  const roles = [px('fs-h1'), px('fs-h2'), px('fs-h3'), px('fs-xs')];
+  assert.equal(new Set(roles).size, 4, 'h1, h2, h3 и подпись: ' + roles.join('/'));
+  assert.ok(roles[0] > roles[1] && roles[1] > roles[2] && roles[2] > roles[3], 'размеры убывают: ' + roles.join('>'));
+  assert.match(PANEL_CSS, /h1\{font-size:var\(--fs-h1\)\}h2\{font-size:var\(--fs-h2\)\}h3\{font-size:var\(--fs-h3\)\}/);
+  assert.match(PANEL_CSS, /\.small\{font-size:var\(--fs-xs\)\}/, 'пояснение (.small) — 13 px, а не размер основного текста');
+  assert.ok(!/\.faint/.test(PANEL_CSS), '.faint слит с .muted');
   // Чернильный цвет, затемнение и «таблетка» — токены: ни голых rgba(16,24,40,…), ни 999px вне набора.
   assert.ok(!/rgba\(16, *24, *40/.test(PANEL_CSS), 'rgba(16,24,40,…) заменён на rgba(var(--ink-rgb),…)');
   assert.deepEqual(PANEL_CSS.match(/999px/g), ['999px'], '999px — только в определении --radius-pill');

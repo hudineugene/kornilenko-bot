@@ -122,7 +122,7 @@ function renderObjects(host) {
       '<select id="catalogStatus" class="field-sm"><option value="">Все статусы</option>' + PROPERTY_STATUS.map(function (item) {
         return '<option value="' + item[0] + '"' + (catalogStatus === item[0] ? " selected" : "") + ">" + item[1] + "</option>";
       }).join("") + "</select>" +
-      '<span class="small faint">' + counted(rows.length, "объект", "объекта", "объектов") + "</span></div>" +
+      '<span class="small muted">' + counted(rows.length, "объект", "объекта", "объектов") + "</span></div>" +
     '<div class="card"><div class="table-wrap"><table class="table-cards objects-table"><thead><tr><th class="thumb-xs"></th><th>Объект</th><th>Тип</th><th>Город</th><th class="right">Цена</th><th>Статус</th><th class="right">Эффективность</th><th></th></tr></thead><tbody>' +
     (rows.length ? rows.map(function (record, index) {
       var images = propertyImages(record, "ru");
@@ -130,9 +130,9 @@ function renderObjects(host) {
       return '<tr class="clickable" data-id="' + esc(record.id) + '">' +
         "<td>" + (images.length ? '<img class="thumb" loading="lazy" decoding="async" src="' + imageUrl("objects", record.id, images[0], "ru") + '" alt="">' : '<span class="thumb"></span>') + "</td>" +
         '<td class="clickable" data-edit="1"><b>' + esc(localized(record.title, "ru") || "Без названия") + "</b>" +
-          (record.reference ? ' <span class="small faint">' + esc(record.reference) + "</span>" : "") +
-          (missingLanguages(record).length ? '<br><span class="chip warn" title="' + esc(publicationSummary(record)) + '">не готово: ' + esc(missingLanguages(record).join(", ")) + "</span>" : '<br><span class="chip ok">карточка готова</span>') + "</td>" +
-        "<td>" + esc((PROPERTY_TYPES.find(function (type) { return type[0] === record.propertyType; }) || ["", "—"])[1]) + '<br><span class="small faint">' + (record.dealType === "rent" ? "аренда" : "продажа") + "</span></td>" +
+          (record.reference ? ' <span class="small muted">' + esc(record.reference) + "</span>" : "") +
+          (missingLanguages(record).length ? '<br><span class="chip warn" title="' + esc(publicationSummary(record)) + '">не готово: ' + esc(missingLanguages(record).join(", ")) + "</span>" : "") + "</td>" +
+        "<td>" + esc((PROPERTY_TYPES.find(function (type) { return type[0] === record.propertyType; }) || ["", "—"])[1]) + '<br><span class="small muted">' + (record.dealType === "rent" ? "аренда" : "продажа") + "</span></td>" +
         "<td>" + esc(localized(record.city, "ru") || "—") + "</td>" +
         '<td class="right nowrap">' + (record.priceValue ? esc(money(record.priceValue, record.currency)) : esc(localized(record.price, "ru") || "по запросу")) + "</td>" +
         '<td><span class="chip ' + statusKind(record.status) + '">' + esc(statusName(record.status)) + "</span></td>" +
@@ -315,14 +315,14 @@ async function openObjectInsights(id) {
       wide: true,
       body: '<div class="object-insights stack"><section class="object-insights-head">' +
           (image ? '<img loading="lazy" decoding="async" src="' + imageUrl("objects", record.id, image) + '" alt="">' : '<span class="object-insights-placeholder">⌂</span>') +
-          '<div><h2>' + esc(title) + '</h2><div class="small muted">' + esc([record.reference, location].filter(Boolean).join(" · ") || "Без номера и расположения") + '</div><div class="row wrap gap-top"><span class="chip ' + statusKind(record.status) + '">' + esc(statusName(record.status)) + '</span><span class="small faint">данные обновлены ' + (stats.updatedAt ? ago(stats.updatedAt) : "ещё не собирались") + '</span></div></div></section>' +
+          '<div><h2>' + esc(title) + '</h2><div class="small muted">' + esc([record.reference, location].filter(Boolean).join(" · ") || "Без номера и расположения") + '</div><div class="row wrap gap-top"><span class="chip ' + statusKind(record.status) + '">' + esc(statusName(record.status)) + '</span><span class="small muted">данные обновлены ' + (stats.updatedAt ? ago(stats.updatedAt) : "ещё не собирались") + '</span></div></div></section>' +
         '<div class="grid cols-4 object-insight-kpis">' + kpiCard("Видели в каталоге", num(impressions), "раз показана в каталоге") + kpiCard("Открыли карточку", num(details), percent(details, impressions) + " от увидевших") + kpiCard("Заявки", num(inquiries), percent(inquiries, impressions) + " от увидевших") + kpiCard("Записались на просмотр", num(viewings), percent(viewings, inquiries) + " от заявок") + '</div>' +
         '<section class="card"><header><div><h3>Путь клиента</h3><span class="small muted">События считаются с момента последнего обнуления статистики</span></div></header><div class="card-body"><div class="object-path"><div><b>' + num(impressions) + '</b><span>видели в каталоге</span></div><i>→</i><div><b>' + num(details) + '</b><span>открыли карточку</span></div><i>→</i><div><b>' + num(inquiries) + '</b><span>оставили заявку</span></div><i>→</i><div><b>' + num(viewings) + '</b><span>записались на просмотр</span></div></div><div class="row wrap object-signal-summary"><span class="chip">❤️ В избранном у клиентов: ' + num(summary.favorites) + '</span><span class="chip">⚖️ Сравнивают клиентов: ' + num(summary.comparisons) + '</span><span class="chip">Недавно смотрели клиентов: ' + num(summary.viewed) + '</span><span class="chip">Подходит по запросу клиентов: ' + num(summary.matches) + '</span><span class="chip">Фото листали раз: ' + num(stats.galleries) + '</span><span class="chip">Просили менеджера раз: ' + num(stats.managerContacts) + '</span></div></div></section>' +
         '<section class="card"><header><div><h3>Заинтересованные клиенты</h3><span class="small muted">Сначала показаны клиенты с заявками и сильными сигналами</span></div><span class="chip brand">' + num(summary.clients) + '</span></header>' +
           (clients.length ? '<div class="object-client-list">' + clients.map(function (client) {
             var displayName = client.contactName || [client.firstName, client.lastName].filter(Boolean).join(" ") || (client.username ? "@" + client.username : "Клиент " + client.id);
             return '<div class="object-client"><button class="object-client-main" data-insight-client="' + esc(client.id) + '" type="button"><span class="conversation-avatar">' + esc(initials(displayName)) + '</span><span class="object-client-copy"><b>' + esc(displayName) + '</b><small>' + esc([client.phone, client.username ? "@" + client.username : "", (client.preferredLanguage || "").toUpperCase()].filter(Boolean).join(" · ") || "контакты не указаны") + '</small><span class="row wrap">' + client.signals.map(function (signal) { return '<span class="chip ' + (signal === "inquiry" ? "brand" : "") + '">' + esc(insightSignalLabel(signal)) + '</span>'; }).join("") + '</span></span></button>' +
-              (client.latestInquiryId ? '<button class="btn secondary small" data-insight-conversation="' + esc(client.latestInquiryId) + '" type="button">Переписка' + (client.inquiryCount > 1 ? " · " + num(client.inquiryCount) : "") + '</button>' : '<span class="small faint">' + ago(client.lastSeenAt) + '</span>') + '</div>';
+              (client.latestInquiryId ? '<button class="btn secondary small" data-insight-conversation="' + esc(client.latestInquiryId) + '" type="button">Переписка' + (client.inquiryCount > 1 ? " · " + num(client.inquiryCount) : "") + '</button>' : '<span class="small muted">' + ago(client.lastSeenAt) + '</span>') + '</div>';
           }).join("") + '</div>' : '<div class="empty"><b>Сигналов интереса пока нет</b>Здесь появятся клиенты, которые смотрели, сохраняли, сравнивали объект или обращались по нему</div>') + '</section></div>',
       footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="editInsightObject" type="button">Редактировать объект</button>',
       ready: function (root) {
@@ -823,7 +823,7 @@ function renderOffers(host) {
       var displayStatus = promotionStatus(record);
       return '<tr data-id="' + esc(record.id) + '">' +
         "<td>" + (images.length ? '<img class="thumb" loading="lazy" decoding="async" src="' + imageUrl("promotions", record.id, images[0], "ru") + '" alt="">' : '<span class="thumb"></span>') + "</td>" +
-        '<td class="clickable" data-edit="1"><b>' + esc(localized(record.title, "ru") || "Без названия") + '</b><br><span class="small faint">' + esc(shortText(localized(record.text, "ru"), 70)) + "</span></td>" +
+        '<td class="clickable" data-edit="1"><b>' + esc(localized(record.title, "ru") || "Без названия") + '</b><br><span class="small muted">' + esc(shortText(localized(record.text, "ru"), 70)) + "</span></td>" +
         "<td>" + (record.startAt || record.endAt ? esc(dateShort(record.startAt) + " – " + dateShort(record.endAt)) : "без срока") + "</td>" +
         '<td><span class="chip ' + displayStatus.kind + '">' + displayStatus.label + "</span></td>" +
         '<td class="right nowrap"><button class="btn ghost small" data-more="1" title="Ещё действия" type="button">⋯</button></td></tr>';
@@ -902,7 +902,6 @@ function renderFeed(host) {
 }
 
 VIEWS.objects = {
-  subtitle: function () { return "Объекты и акции, которые видит клиент"; },
   render: function (host, tab) {
     if (tab === "offers") return renderOffers(host);
     renderObjects(host);

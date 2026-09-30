@@ -393,7 +393,7 @@ function renderData(host) {
     '<div class="card"><header><h3>Журнал ошибок</h3><div class="actions"><button class="btn ghost small" id="clearErrors" type="button">Очистить</button></div></header>' +
       ((state.errors || []).length ? '<div class="list">' + groupErrors(state.errors).slice(0, 20).map(function (error) {
         return '<div class="list-item"><span class="grow"><b>' + esc(error.area || error.context || "Ошибка") + '</b>' + (error.count > 1 ? ' <span class="chip warn">×' + error.count + "</span>" : "") + '<br><span class="muted small">' + esc(error.message) + "</span></span>" +
-          '<span class="small faint nowrap">' + (error.count > 1 ? "последняя " : "") + dateTime(error.createdAt || error.at) + "</span></div>";
+          '<span class="small muted nowrap">' + (error.count > 1 ? "последняя " : "") + dateTime(error.createdAt || error.at) + "</span></div>";
       }).join("") + "</div>" : '<div class="empty"><b>Ошибок нет</b></div>') +
     "</div>" +
     '<div class="card"><header><h3>Статистика и история</h3></header><div class="card-body stack">' +
@@ -465,7 +465,7 @@ function renderData(host) {
       var report = await api("/api/self-check");
       var summary = report.bad ? "Есть проблемы: " + report.bad : report.warn ? "Стоит посмотреть: " + report.warn : "Всё в порядке";
       body.innerHTML = '<div class="row wrap"><span class="chip ' + (report.bad ? "bad" : report.warn ? "warn" : "ok") + '">' + esc(summary) + "</span>" +
-        '<span class="small faint">проверено ' + dateTime(report.checkedAt) + "</span></div>" +
+        '<span class="small muted">проверено ' + dateTime(report.checkedAt) + "</span></div>" +
         '<div class="list">' + (report.checks || []).map(checkRow).join("") + "</div>";
     } catch (error) { body.innerHTML = '<div class="chip bad">' + esc(error.message) + "</div>"; }
   };
@@ -559,7 +559,6 @@ function renderAccess(host) {
 }
 
 VIEWS.settings = {
-  subtitle: function () { return "Компания, команда, подключение и данные"; },
   render: function (host, tab) {
     // Редкое и осторожное — токен, копии, доступ из интернета, загрузка с сайта — лежит
     // теми же вкладками, что и повседневное: отдельного «Обслуживания» третьего уровня нет.
