@@ -542,6 +542,9 @@ function bindTemplatesCard(host, redraw) {
 // перестраивается при каждом обновлении. Открытый диалог всегда виден, даже если он дальше.
 var CONVERSATIONS_PAGE = 100;
 var conversationsShown = CONVERSATIONS_PAGE;
+// Пакетный режим списка диалогов: отметить нескольких клиентов и закрыть или передать их одним действием.
+var batchMode = false;
+var batchPicked = {};
 
 function renderInquiryList(host) {
   screenSettled();
@@ -595,7 +598,8 @@ function renderInquiryList(host) {
     if (lastMessage && lastMessage.direction === "out" && preview) preview = (lastMessage.fromBot ? "Бот: " : "Вы: ") + preview;
     var stateText = group.waiting ? "Ждёт ответа · " + waitDuration(group.waitAge) : group.closed ? "Закрыт" : group.searchOnly ? "Ответ не нужен" : "Отвечено";
     var stateClass = group.waiting ? (group.waitLevel === "fresh" ? "warn" : group.waitLevel === "overdue" ? "bad overdue" : "bad") : group.closed ? "" : "ok";
-    return '<button class="conversation-item' + (selected ? " selected" : "") + (group.unread ? " unread" : "") + '" data-id="' + esc(group.active.id) + '" data-user="' + esc(group.userId) + '" type="button">' +
+    return '<button class="conversation-item' + (selected ? " selected" : "") + (group.unread ? " unread" : "") + (batchMode && batchPicked[group.userId] ? " batch-picked" : "") + '" data-id="' + esc(group.active.id) + '" data-user="' + esc(group.userId) + '" type="button">' +
+      (batchMode ? '<span class="batch-mark" aria-hidden="true">' + (batchPicked[group.userId] ? "☑" : "☐") + "</span>" : "") +
       '<span class="conversation-avatar">' + esc(initials(user.firstName)) + (group.unread ? '<i></i>' : '') + '</span>' +
       '<span class="conversation-item-body"><span class="conversation-item-top"><b>' + esc(userName(user)) + '</b>' + languageChip(user, item) + '<time>' + ago(item.clientMessageAt || item.updatedAt || item.createdAt) + '</time></span>' +
       '<span class="conversation-preview">' + esc(String(preview || "Вложение").replace(/\s+/g, " ").slice(0, 100)) + '</span>' +
@@ -620,7 +624,9 @@ function renderInquiryList(host) {
       "</div>" +
       clientFilterBar({ search: false, steps: true }) +
     "</div>" +
-    '<div class="messenger-shell' + (selectedInquiry ? " chat-open" : "") + '"><aside class="card conversation-list-panel"><header><div><h3>Диалоги</h3><span class="small muted">Один клиент — один диалог' + noConversation + '</span></div><span class="chip">' + rows.length + " из " + counts.all + '</span></header><div class="conversation-list">' +
+    '<div class="messenger-shell' + (selectedInquiry ? " chat-open" : "") + '"><aside class="card conversation-list-panel"><header><div><h3>Диалоги</h3><span class="small muted">Один клиент — один диалог' + noConversation + '</span></div><span class="chip">' + rows.length + " из " + counts.all + '</span><button class="btn ghost small" id="batchToggle" type="button">' + (batchMode ? "Готово" : "Выбрать") + "</button></header>" +
+      (batchMode ? '<div class="batch-bar row wrap" id="batchBar"><span class="small" id="batchCount"></span><div class="grow"></div>' + (transferStaff().length > 1 ? '<button class="btn secondary small" id="batchTransfer" type="button">Передать…</button>' : "") + '<button class="btn secondary small" id="batchClose" type="button">Закрыть</button></div>' : "") +
+      '<div class="conversation-list">' +
       (conversationItems || '<div class="empty"><b>Диалогов не найдено</b>Измените фильтр или поисковый запрос</div>') +
       (moreRows > 0 ? '<div class="card-body row"><span class="small muted">Показано ' + num(shownRows.length) + " из " + num(rows.length) + '</span><div class="grow"></div><button class="btn secondary small" id="moreConversations" type="button">Показать ещё ' + num(Math.min(CONVERSATIONS_PAGE, moreRows)) + "</button></div>" : "") +
     '</div></aside><section class="messenger-chat" id="inquiryCard"></section></div>';
@@ -641,9 +647,88 @@ function renderInquiryList(host) {
     renderInquiryList(host);
   };
   host.querySelectorAll(".conversation-item[data-id]").forEach(function (row) {
-    row.onclick = function () { selectConversation(row.dataset.id); renderInquiryList(host); };
+    row.onclick = function () {
+      if (!batchMode) { selectConversation(row.dataset.id); renderInquiryList(host); return; }
+      var picked = !batchPicked[row.dataset.user];
+      if (picked) batchPicked[row.dataset.user] = true; else delete batchPicked[row.dataset.user];
+      row.classList.toggle("batch-picked", picked);
+      var mark = row.querySelector(".batch-mark");
+      if (mark) mark.textContent = picked ? "☑" : "☐";
+      showBatchCount(host);
+    };
   });
+  var batchToggle = host.querySelector("#batchToggle");
+  if (batchToggle) batchToggle.onclick = function () { batchMode = !batchMode; batchPicked = {}; renderInquiryList(host); };
+  if (batchMode) {
+    showBatchCount(host);
+    var batchTransfer = host.querySelector("#batchTransfer");
+    if (batchTransfer) batchTransfer.onclick = function () { openBatchTransfer(host); };
+    host.querySelector("#batchClose").onclick = function () { closeBatch(host); };
+  }
   renderInquiryCard(host.querySelector("#inquiryCard"));
+}
+
+// Открытые заявки выбранных клиентов: по ним и работают пакетные действия.
+function batchInquiries() {
+  return (state.inquiries || []).filter(function (item) { return batchPicked[String(item.userId)] && item.status !== "closed"; });
+}
+function showBatchCount(host) {
+  var clients = Object.keys(batchPicked).length, open = batchInquiries().length;
+  var label = host.querySelector("#batchCount");
+  if (label) label.textContent = clients ? "Выбрано клиентов: " + clients + (open ? " · открытых заявок: " + open : " · открытых заявок нет") : "Отметьте клиентов в списке";
+  ["#batchTransfer", "#batchClose"].forEach(function (selector) {
+    var button = host.querySelector(selector);
+    if (button) button.disabled = !open;
+  });
+}
+function finishBatch() { batchMode = false; batchPicked = {}; }
+
+async function closeBatch(host) {
+  var items = batchInquiries();
+  if (!items.length) return;
+  if (!(await confirmDialog("Закрыть " + items.length + " " + plural(items.length, "заявку", "заявки", "заявок") + "?", "Клиентам ничего не отправится. Закрытые заявки лежат во вкладке «Закрытые»; сразу после закрытия это можно отменить.", "Закрыть"))) return;
+  var before = items.map(function (item) { return { id: item.id, state: inquiryStateBefore(item) }; });
+  try {
+    for (var index = 0; index < items.length; index += 1) await send("/api/inquiries/" + encodeURIComponent(items[index].id), "PATCH", { status: "closed" });
+    finishBatch();
+    toast("Закрыто заявок: " + items.length, false, { label: "Вернуть", run: async function () {
+      try {
+        for (var back = 0; back < before.length; back += 1) await restoreInquiryStateQuiet(before[back].id, before[back].state);
+        toast("Возвращено");
+        await reload();
+      } catch (error) { fail(error); }
+    } });
+    await reload();
+  } catch (error) { fail(error); await reload(); }
+}
+async function restoreInquiryStateQuiet(id, before) {
+  var body = { status: before.status, pipelineStage: before.pipelineStage };
+  if (before.wonAt) body.wonAt = before.wonAt;
+  await send("/api/inquiries/" + encodeURIComponent(id), "PATCH", body);
+}
+
+function openBatchTransfer(host) {
+  var items = batchInquiries().filter(function (item) { return !item.searchLead; });
+  if (!items.length) return toast("У выбранных клиентов нет заявок, которые можно передать", true);
+  openDialog({
+    title: "Передать выбранных",
+    body: '<div class="stack"><p class="muted small">Открытых заявок: <b>' + items.length + "</b>. Они перейдут к выбранному менеджеру; ему придёт одна сводка в Telegram.</p>" +
+      '<div class="field"><label for="batchTo">Кому передать</label><select id="batchTo">' + transferOptions(transferStaff(), false) + "</select></div></div>",
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="batchDo" type="button">Передать</button>',
+    ready: function (dialog) {
+      dialog.querySelector("#batchDo").onclick = async function () {
+        var to = dialog.querySelector("#batchTo").value;
+        if (!to) return;
+        try {
+          var result = await send("/api/inquiries/transfer", "POST", { ids: items.map(function (item) { return item.id; }), to: to });
+          dialog.closeClean();
+          finishBatch();
+          toast(result.moved ? transferDoneText(result, to) : "Все выбранные уже у этого менеджера");
+          await reload();
+        } catch (error) { fail(error); }
+      };
+    },
+  });
 }
 
 // Уборка списка: закрытые, отвеченные или всё подряд, с отсечкой по возрасту.

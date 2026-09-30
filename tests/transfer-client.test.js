@@ -118,6 +118,23 @@ test('передать всех клиентов человека (отпуск)
   assert.match(messages[0].body.text, /Борис/);
 });
 
+test('передать выбранные в списке диалогов (ids): только они, закрытые и уже у этого менеджера пропускаются, одна сводка', async () => {
+  const body = await (await post('/api/inquiries/transfer', { ids: ['a', 'closed', 'maria', 'nobody', 'нет'], to: 'Мария' })).json();
+  assert.equal(body.moved, 2, 'a и nobody: closed — история, maria уже у Марии, «нет» не существует');
+  assert.equal(assigneeOf('a'), 'Мария');
+  assert.equal(assigneeOf('nobody'), 'Мария');
+  assert.equal(assigneeOf('b'), 'Олег', 'невыбранный остался');
+  assert.equal(assigneeOf('closed'), 'Олег');
+  const messages = sentTo(MANAGER_CHAT);
+  assert.equal(messages.length, 1);
+  assert.match(messages[0].body.text, /Вам передано клиентов: 2/);
+  // Ничего подходящего — ничего не двигается и ничего не шлётся.
+  telegram.calls = [];
+  assert.equal((await (await post('/api/inquiries/transfer', { ids: ['a'], to: 'Мария' })).json()).moved, 0);
+  assert.equal(sentTo(MANAGER_CHAT).length, 0);
+  assert.equal((await post('/api/inquiries/transfer', { ids: ['a'], to: 'Призрак' })).status, 400);
+});
+
 test('передать всё, что ни за кем не закреплено', async () => {
   const body = await (await post('/api/inquiries/transfer', { from: '', to: 'Мария' })).json();
   assert.equal(body.moved, 1);

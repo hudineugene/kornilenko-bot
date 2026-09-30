@@ -4202,3 +4202,55 @@ test('выгрузка заявок: окно с выбором «как на э
   await dialog.querySelector('#exGo').onclick();
   assert.deepEqual(sent.pop(), { url: '/api/inquiries/export', body: { from: '2026-09-10', to: '2026-09-30' } });
 });
+
+test('«Диалоги»: режим «Выбрать» — отметки у строк, счёт, «Закрыть» закрывает открытые заявки выбранных с «Вернуть», «Передать» шлёт ids одним запросом', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const now = new Date().toISOString();
+  sandbox.state.config.adminName = 'Олег';
+  sandbox.state.config.managers = [{ id: 'm1', name: 'Мария', chatId: '1' }];
+  sandbox.state.users = [{ id: 'u1', firstName: 'Анна' }, { id: 'u2', firstName: 'Борис' }, { id: 'u3', firstName: 'Вера' }];
+  const make = (id, userId, extra) => Object.assign({ id, userId, type: 'general', text: 'Вопрос', status: 'new', pipelineStage: 'new', replies: [], awaitsReply: true, createdAt: now, updatedAt: now }, extra);
+  sandbox.state.inquiries = [make('a', 'u1'), make('b', 'u2', { status: 'in_progress', pipelineStage: 'contact' }), make('b-old', 'u2', { status: 'closed', pipelineStage: 'lost' }), make('c', 'u3')];
+  sandbox.inquiryFilter.status = '';
+  const toasts = [];
+  sandbox.toast = (message, bad, action) => toasts.push({ message: String(message), bad: Boolean(bad), action });
+  sandbox.confirmDialog = async () => true;
+  const host = fakeElement('main');
+  sandbox.renderInquiryList(host);
+  assert.ok(!/batch-mark/.test(String(host.innerHTML)), 'обычный режим — без отметок');
+  host.querySelector('#batchToggle').onclick();
+  assert.match(String(host.innerHTML), /class="batch-mark"/);
+  assert.match(String(host.innerHTML), /id="batchClose"/);
+  assert.match(String(host.innerHTML), /id="batchTransfer"/, 'менеджеров двое — «Передать» есть');
+
+  // Отмечены Анна и Борис: у Бориса одна открытая и одна закрытая заявка.
+  sandbox.batchPicked = { u1: true, u2: true };
+  assert.deepEqual(Array.from(sandbox.batchInquiries(), (item) => item.id).sort(), ['a', 'b']);
+
+  requests.length = 0;
+  await sandbox.closeBatch(host);
+  const patches = requests.filter((request) => request.method === 'PATCH');
+  assert.deepEqual(patches.map((request) => request.url).sort(), ['/api/inquiries/a', '/api/inquiries/b']);
+  assert.ok(patches.every((request) => request.body.status === 'closed'));
+  assert.equal(sandbox.batchMode, false, 'после действия режим выключен');
+  const done = toasts.find((item) => /Закрыто заявок: 2/.test(item.message));
+  assert.equal(done.action.label, 'Вернуть');
+  requests.length = 0;
+  await done.action.run();
+  const restored = Object.fromEntries(requests.filter((request) => request.method === 'PATCH').map((request) => [request.url, request.body]));
+  assert.deepEqual(JSON.parse(JSON.stringify(restored['/api/inquiries/a'])), { status: 'new', pipelineStage: 'new' });
+  assert.deepEqual(JSON.parse(JSON.stringify(restored['/api/inquiries/b'])), { status: 'in_progress', pipelineStage: 'contact' });
+
+  // Передача: одним запросом со списком заявок.
+  sandbox.batchMode = true;
+  sandbox.batchPicked = { u1: true, u3: true };
+  let dialog = null;
+  sandbox.openDialog = (opts) => { dialog = fakeElement('dialog'); dialog.closeClean = () => {}; if (opts.ready) opts.ready(dialog); return dialog; };
+  sandbox.openBatchTransfer(host);
+  dialog.querySelector('#batchTo').value = 'Мария';
+  requests.length = 0;
+  await dialog.querySelector('#batchDo').onclick();
+  const transfer = requests.find((request) => request.url === '/api/inquiries/transfer');
+  assert.deepEqual(JSON.parse(JSON.stringify(transfer.body)), { ids: ['a', 'c'], to: 'Мария' });
+});

@@ -616,9 +616,12 @@ async function handleClientsApi(req, res, url) {
     const names = staffNames();
     if (!to || !names.includes(to)) return json(res, 400, { error: 'Выберите, кому передать клиентов, из списка менеджеров' });
     if (from && !names.includes(from)) return json(res, 400, { error: 'Выберите, у кого забрать клиентов, из списка менеджеров' });
-    if (from === to) return json(res, 400, { error: 'Клиенты уже у этого менеджера' });
+    // Выбранные в списке диалогов заявки (ids) — вместо «всех у менеджера».
+    const ids = Array.isArray(body.ids) ? new Set(body.ids.map(String).slice(0, 2000)) : null;
+    if (!ids && from === to) return json(res, 400, { error: 'Клиенты уже у этого менеджера' });
     // Открытые заявки: закрытые остаются у прежнего — это история.
-    const moving = data.inquiries.filter((item) => item.status !== 'closed' && !item.searchLead && cleanText(item.assignee, 60) === from);
+    const moving = data.inquiries.filter((item) => item.status !== 'closed' && !item.searchLead
+      && (ids ? ids.has(item.id) && cleanText(item.assignee, 60) !== to : cleanText(item.assignee, 60) === from));
     const now = new Date().toISOString();
     for (const inquiry of moving) {
       inquiry.assignee = to;
