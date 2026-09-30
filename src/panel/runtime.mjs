@@ -4,9 +4,9 @@
 const PANEL_SHELL = String.raw`
 <section id="setupScreen" class="auth hidden">
   <form id="setupForm" class="auth-card">
-    <img src="/login-assets/logo.png" alt="">
+    <img class="auth-logo" src="/login-assets/logo.png" alt="Construcciones Kornilenko">
     <h1>Первая настройка</h1>
-    <p class="muted small">Укажите токен бота из BotFather и придумайте пароль от панели.</p>
+    <p class="auth-lead">Укажите токен бота из BotFather и придумайте пароль от панели.</p>
     <div class="stack">
       <div class="field"><label for="setupToken">Токен бота</label><input id="setupToken" required placeholder="123456:AA..." autocomplete="off"></div>
       <div class="field"><label for="setupPassword">Пароль администратора</label><input id="setupPassword" type="password" required minlength="8" autocomplete="new-password"></div>
@@ -17,17 +17,23 @@ const PANEL_SHELL = String.raw`
 </section>
 
 <section id="loginScreen" class="auth hidden">
+  <p class="auth-motto" aria-hidden="true">Надёжные пространства для будущего</p>
+  <p class="auth-slogan" aria-hidden="true">Строим сегодня для лучшего завтра</p>
   <form id="loginForm" class="auth-card">
-    <img src="/login-assets/logo.png" alt="">
-    <h1>Панель бота</h1>
-    <p class="muted small" id="loginSubtitle">Введите пароль администратора.</p>
+    <img class="auth-logo" src="/login-assets/logo.png" alt="Construcciones Kornilenko">
+    <h1>Вход в кабинет</h1>
+    <p class="auth-lead" id="loginSubtitle">Введите пароль администратора для управления Telegram-ботом</p>
     <div class="stack">
-      <div class="field"><label for="loginPassword">Пароль</label><input id="loginPassword" type="password" required autocomplete="current-password"></div>
+      <div class="field auth-password"><label class="sr-only" for="loginPassword">Пароль</label>
+        <svg class="auth-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        <input id="loginPassword" type="password" required autocomplete="current-password" placeholder="Пароль">
+        <button class="auth-reveal" id="loginReveal" type="button" aria-label="Показать пароль" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
       <div class="field hidden" id="loginCodeField"><label for="loginCode">Код из Telegram</label><input id="loginCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6 цифр"></div>
       <button class="btn" type="submit">Войти</button>
       <p id="loginError" class="small hidden" style="color:var(--bad)"></p>
     </div>
   </form>
+  <p class="auth-foot">© <span id="authYear">2026</span> Construcciones Kornilenko. Панель управления Telegram-ботом.<br>Строим сегодня для лучшего завтра.</p>
 </section>
 
 <div id="app" class="app hidden">
@@ -1648,6 +1654,16 @@ function bindShell() {
   };
   el("savebarSave").onclick = saveDirty;
   el("savebarReset").onclick = function () { clearDirty(); renderView(); };
+  el("authYear").textContent = String(new Date().getFullYear());
+  // «Глаз» в поле пароля: показать набранное, чтобы не промахнуться (на телефоне это главная причина «Неверный пароль»).
+  el("loginReveal").onclick = function () {
+    var field = el("loginPassword");
+    var show = field.type === "password";
+    field.type = show ? "text" : "password";
+    el("loginReveal").setAttribute("aria-pressed", String(show));
+    el("loginReveal").setAttribute("aria-label", show ? "Скрыть пароль" : "Показать пароль");
+    field.focus();
+  };
   el("loginForm").onsubmit = async function (event) {
     event.preventDefault();
     var error = el("loginError");

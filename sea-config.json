@@ -3,10 +3,12 @@
   "output": "dist/sea-prep.blob",
   "disableExperimentalSEAWarning": true,
   "assets": {
-    "login-background": "Kornilenko_Login_Codex_Assets/login_background_codex_1920x1080.png",
-    "login-logo": "Kornilenko_Login_Codex_Assets/kornilenko_logo_exact.png",
-    "admin-header": "Kornilenko_Admin_Codex_Assets/admin_header_background_1920x480.webp",
-    "admin-header-mobile": "Kornilenko_Admin_Codex_Assets/admin_header_background_mobile_960x480.webp",
-    "admin-sidebar-logo": "Kornilenko_Admin_Codex_Assets/kornilenko_logo_sidebar_320.png"
+    "login-background": "Kornilenko_Login_Codex_Assets/login_background_codex_1920x1080.webp",
+    "login-logo": "Kornilenko_Login_Codex_Assets/kornilenko_logo_login_440.png",
+    "admin-sidebar-logo": "Kornilenko_Admin_Codex_Assets/kornilenko_logo_sidebar_320.png",
+    "admin-app-icon-192": "Kornilenko_Admin_Codex_Assets/kornilenko_app_icon_192.png",
+    "admin-app-icon-512": "Kornilenko_Admin_Codex_Assets/kornilenko_app_icon_512.png",
+    "font-inter-latin": "panel-fonts/inter-latin-wght-normal.woff2",
+    "font-inter-cyrillic": "panel-fonts/inter-cyrillic-wght-normal.woff2"
   }
 }

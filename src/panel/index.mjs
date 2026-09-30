@@ -3,6 +3,7 @@
 // чтобы каркас (runtime) шёл первым.
 
 import { PANEL_CSS } from './styles.mjs';
+import { APP_NAME, THEME_COLOR } from './brand.mjs';
 import { PANEL_RUNTIME_JS, PANEL_SHELL } from './runtime.mjs';
 import { OVERVIEW_JS } from './view-overview.mjs';
 import { INQUIRIES_JS } from './view-inquiries.mjs';
@@ -36,10 +37,10 @@ const PANEL_HTML = String.raw`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Панель Telegram-бота</title>
-<link rel="icon" href="/login-assets/logo.png">
+<title>${APP_NAME}</title>
+<link rel="icon" href="/admin-assets/sidebar-logo.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#2f56d9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="${THEME_COLOR}" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#101828" media="(prefers-color-scheme: dark)">
 <link rel="apple-touch-icon" href="/admin-assets/sidebar-logo.png">
 <style>${PANEL_CSS}</style>

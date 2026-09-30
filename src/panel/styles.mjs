@@ -1,6 +1,10 @@
 // Оформление панели: плотная светлая тема и закреплённая верхняя навигация.
 
 const PANEL_CSS = String.raw`
+/* Inter встроен в программу: панель ничего не грузит из интернета. Две части (латиница с испанскими буквами и
+   кириллица), обе — переменные по весу; браузер берёт только ту, чьи знаки на странице есть. */
+@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url(/panel-fonts/inter-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url(/panel-fonts/inter-cyrillic.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
 *{box-sizing:border-box}
 html,body{max-width:100%;overflow-x:clip}
 :root{
@@ -26,14 +30,14 @@ html,body{max-width:100%;overflow-x:clip}
   /* Нижняя панель на телефоне и запас под закреплённой полосой сохранения: страница не должна прятаться под ними. */
   --tabbar-h:62px; --savebar-h:96px;
   /* Шкала размеров текста: 13, 14, 16, 20. Основной — 14 px. */
-  --fs-xs:13px; --fs-sm:14px; --fs-lg:16px; --fs-xl:20px;
+  --fs-xs:13px; --fs-sm:14px; --fs-lg:16px; --fs-xl:20px; --fs-display:28px;
   /* Одна шкала отступов: 4, 8, 12, 16, 24 (и 2 px — только для волосяных зазоров). */
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
 }
 html,body{margin:0;padding:0}
 /* Кнопки берут шрифт страницы: без этого браузер ставил им свои 13,33 px. */
 button{font:inherit}
-body{background:var(--bg);color:var(--text);font:400 var(--fs-sm)/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+body{background:var(--bg);color:var(--text);font:400 var(--fs-sm)/1.45 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
 h1,h2,h3,h4{margin:0;font-weight:650;letter-spacing:-.01em}
 h1{font-size:var(--fs-xl)}h2{font-size:var(--fs-lg)}h3{font-size:var(--fs-lg)}
 p{margin:0}
@@ -59,7 +63,7 @@ a:hover{text-decoration:underline}
 .app{min-height:100vh}
 .app-head{position:sticky;top:0;z-index:var(--z-head);min-height:var(--header);display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);box-shadow:var(--shadow)}
 .app-brand{display:flex;align-items:center;gap:var(--sp-2);flex:none;padding-right:var(--sp-1)}
-.app-brand img{width:34px;height:34px;border-radius:var(--radius);object-fit:contain}
+.app-brand img{height:44px;width:auto;max-width:50px;object-fit:contain}
 .app-brand b{font-size:var(--fs-sm);line-height:1.12;white-space:nowrap}
 .app-brand span{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:400}
 .head-nav{display:flex;align-items:center;gap:2px;min-width:0;flex:1 1 0;overflow-x:auto;scrollbar-width:none}
@@ -76,7 +80,7 @@ a:hover{text-decoration:underline}
 .global-empty{padding:var(--sp-3) var(--sp-3);color:var(--muted);font-size:var(--fs-sm)}
 .search-toggle{display:none}
 /* Поиск должен помещаться: на средней ширине текст состояния бота уступает ему место. */
-@media(max-width:1880px) and (min-width:861px){.head-tools #botStateText{display:none}}
+@media(max-width:1960px) and (min-width:861px){.head-tools #botStateText{display:none}}
 .nav-item{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-2);border:0;background:none;border-radius:var(--radius);color:var(--text);font:inherit;font-size:var(--fs-sm);text-align:left;cursor:pointer;white-space:nowrap}
 .nav-item:hover{background:var(--surface-soft)}
 .nav-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
@@ -681,18 +685,35 @@ dialog::backdrop{background:var(--overlay)}
 .publication-warning{padding:var(--sp-2) var(--sp-3);border-top:1px solid var(--warn-line);background:var(--warn-soft);color:var(--warn);font-size:var(--fs-sm)}
 
 /* --- Вход ------------------------------------------------------------------- */
-.auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:var(--sp-5);background:var(--bg)}
-.auth-card{width:min(400px,100%);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:var(--sp-5)}
-.auth-card img{width:56px;height:56px;border-radius:var(--radius);object-fit:contain;margin-bottom:var(--sp-4)}
-.auth-card h1{margin-bottom:var(--sp-1)}
-.auth-card .stack{margin-top:var(--sp-4)}
+.auth{position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-4);padding:var(--sp-5);background:var(--bg) url(/login-assets/background.webp) center/cover no-repeat}
+.auth-card{position:relative;width:min(440px,100%);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:var(--sp-5) calc(var(--sp-5) * 1.5) calc(var(--sp-5) * 1.5);text-align:center}
+.auth-card .auth-logo{display:block;width:min(200px,60%);height:auto;margin:0 auto var(--sp-4)}
+.auth-card h1{font-size:var(--fs-display);margin-bottom:var(--sp-2)}
+.auth-lead{color:var(--muted);margin:0 auto;max-width:32ch}
+.auth-card .stack{margin-top:var(--sp-5);text-align:left}
+.auth-card .btn{width:100%;min-height:48px;justify-content:center}
+.auth-card .field{margin:0}
+/* Поле пароля: замок слева, «показать» справа; подпись для чтения с экрана — невидимая. */
+.auth-password{position:relative}
+.auth-password input{padding-left:calc(var(--sp-5) * 1.6);padding-right:calc(var(--sp-5) * 1.8);min-height:48px}
+.auth-password .auth-lock{position:absolute;left:var(--sp-3);top:50%;width:20px;height:20px;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.auth-reveal{position:absolute;right:var(--sp-1);top:50%;width:40px;height:40px;transform:translateY(-50%);display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);cursor:pointer}
+.auth-reveal:hover{color:var(--text)}
+.auth-reveal svg{width:20px;height:20px}
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* Надписи с эталона на фоне: слева девиз, справа сверху слоган; внизу подпись. На узком экране остаются карточка и подпись. */
+.auth-motto{position:absolute;left:6%;top:50%;transform:translateY(-50%);margin:0;max-width:13ch;color:var(--muted);font-size:clamp(26px,2.4vw,36px);font-weight:300;line-height:1.25}
+.auth-motto::after,.auth-slogan::after{content:"";display:block;width:44px;height:2px;margin-top:var(--sp-4);background:var(--field-line)}
+.auth-slogan{position:absolute;right:5%;top:8%;margin:0;max-width:16ch;color:var(--muted);font-size:var(--fs-xs);font-weight:400;letter-spacing:.28em;line-height:1.9;text-transform:uppercase}
+.auth-foot{position:relative;margin:0;max-width:60ch;text-align:center;color:var(--muted);font-size:var(--fs-xs);line-height:1.6}
+@media(max-width:1180px){.auth-motto,.auth-slogan{display:none}}
 
 @media(max-width:1180px){.split{grid-template-columns:minmax(0,1fr)}.cols-4{grid-template-columns:repeat(2,minmax(0,1fr))}.messenger-shell{grid-template-columns:300px minmax(0,1fr)}}
 @media(max-width:860px){
   :root{--header:58px}
   .app-head{padding:var(--sp-2) var(--sp-3);gap:var(--sp-2)}
   .app-brand{padding:0}
-  .app-brand img{width:32px;height:32px}
+  .app-brand img{height:38px;max-width:44px}
   .app-brand b{font-size:var(--fs-sm)}
   .head-tools .state-line{padding:var(--sp-2);background:transparent}
   .head-tools #botStateText{display:none}
@@ -841,18 +862,18 @@ dialog::backdrop{background:var(--overlay)}
   .btn,.btn.small{min-height:44px}
   .markup-bar .btn,.toast-action,.reply-delivery .btn.small{min-height:0}
 }
-/* Ноутбук (1181–1880 px): восемь пунктов, поле поиска и значки справа не помещаются вместе с названием
+/* Ноутбук (1181–1960 px): восемь пунктов, поле поиска и значки справа не помещаются вместе с названием
    компании, и последний пункт («Настройки») уходил под поиск. Остаётся логотип, пункты без значков и с
    узкими отступами, поле поиска уже; название и значки видны на широком экране. Один диапазон вместо
-   пяти прежних (1600, 1500, 1480, 1340, 1240 px): на ширине 1481–1880 меню и раньше вылезало под поиск
-   (проверено измерением ширины меню на 1181, 1240, 1366, 1480, 1536, 1600, 1680, 1800, 1840, 1920; на 1801 старая раскладка ещё не помещалась). */
-@media(max-width:1880px) and (min-width:1181px){
+   пяти прежних (1600, 1500, 1480, 1340, 1240 px): на ширине 1481–1960 меню и раньше вылезало под поиск
+   (проверено измерением ширины меню на 1181…2200; со шрифтом Inter, он шире системного, границу пришлось сдвинуть с 1880 на 1960). */
+@media(max-width:1960px) and (min-width:1181px){
   .app-brand b{display:none}
-  .nav-item{padding-left:var(--sp-2);padding-right:var(--sp-2)}
-  .global-search{flex-basis:clamp(140px,12vw,240px);max-width:none}
+  .nav-item{padding-left:clamp(var(--sp-1),.4vw,var(--sp-2));padding-right:clamp(var(--sp-1),.4vw,var(--sp-2))}
+  .global-search{flex-basis:clamp(120px,11vw,240px);min-width:120px;max-width:none}
 }
 /* Значки пунктов меню — только на широком экране (и в нижней панели телефона). */
-@media(max-width:1880px) and (min-width:861px){.head-nav .nav-item .ico{display:none}}
+@media(max-width:1960px) and (min-width:861px){.head-nav .nav-item .ico{display:none}}
 @media(max-width:1180px) and (min-width:861px){
   .app-brand b{display:none}
   .app-head{gap:var(--sp-2);padding-left:var(--sp-3);padding-right:var(--sp-3)}

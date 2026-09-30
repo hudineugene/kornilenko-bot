@@ -1,7 +1,7 @@
 // HTTP-сервер панели.
 
 import http from 'node:http';
-import { ADMIN_ASSETS, LOGIN_ASSETS, PORT } from './config.mjs';
+import { ADMIN_ASSETS, FONT_ASSETS, LOGIN_ASSETS, PORT } from './config.mjs';
 import { sendPwaAsset } from './pwa.mjs';
 import { runDueBroadcasts } from './broadcasts.mjs';
 import { binaryLoginAsset, hostAllowed, html, json, securityHeaders } from './admin-http.mjs';
@@ -17,13 +17,14 @@ const server = http.createServer(async (req, res) => {
       return res.end('Недопустимый адрес панели');
     }
     const url = new URL(req.url, 'http://localhost');
-    if (url.pathname === '/login-assets/background.png' && req.method === 'GET') return binaryLoginAsset(req, res, LOGIN_ASSETS.background);
+    if (url.pathname === '/login-assets/background.webp' && req.method === 'GET') return binaryLoginAsset(req, res, LOGIN_ASSETS.background);
     if (url.pathname === '/login-assets/logo.png' && req.method === 'GET') return binaryLoginAsset(req, res, LOGIN_ASSETS.logo);
-    if (url.pathname === '/admin-assets/header.webp' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.header);
-    if (url.pathname === '/admin-assets/header-mobile.webp' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.headerMobile);
+    if (url.pathname === '/admin-assets/app-icon-192.png' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.appIcon192);
+    if (url.pathname === '/admin-assets/app-icon-512.png' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.appIcon512);
+    if (url.pathname === '/panel-fonts/inter-latin.woff2' && req.method === 'GET') return binaryLoginAsset(req, res, FONT_ASSETS.interLatin);
+    if (url.pathname === '/panel-fonts/inter-cyrillic.woff2' && req.method === 'GET') return binaryLoginAsset(req, res, FONT_ASSETS.interCyrillic);
     if (url.pathname === '/admin-assets/sidebar-logo.png' && req.method === 'GET') return binaryLoginAsset(req, res, ADMIN_ASSETS.sidebarLogo);
     if (url.pathname === '/manifest.webmanifest' && req.method === 'GET') return sendPwaAsset(res, 'manifest');
-    if (url.pathname === '/admin-assets/app-icon.svg' && req.method === 'GET') return sendPwaAsset(res, 'icon');
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
     if (url.pathname === '/' && req.method === 'GET') return html(res, PANEL_HTML, req);
     securityHeaders(res);

@@ -31,6 +31,7 @@ const ADMIN_ALLOWED_HOSTS = new Set(String(process.env.ADMIN_ALLOWED_HOSTS || ''
 
 const LOGIN_ASSET_DIRECTORY = path.join(APP_DIRECTORY, 'Kornilenko_Login_Codex_Assets');
 const ADMIN_ASSET_DIRECTORY = path.join(APP_DIRECTORY, 'Kornilenko_Admin_Codex_Assets');
+const FONT_DIRECTORY = path.join(APP_DIRECTORY, 'panel-fonts');
 
 function loadBundledAsset(assetDirectory, assetKey, fileName, mimeType) {
   let bytes = null;
@@ -53,15 +54,22 @@ function loadBundledAsset(assetDirectory, assetKey, fileName, mimeType) {
   };
 }
 
+// Всё, что панель показывает до входа и в шапке: фон входа (WebP, 89 КБ вместо PNG 1,3 МБ), логотип целиком
+// (равномерно уменьшенный, геометрия не тронута), шрифт Inter (латиница и кириллица, лицензия OFL).
 const LOGIN_ASSETS = {
-  background: loadBundledAsset(LOGIN_ASSET_DIRECTORY, 'login-background', 'login_background_codex_1920x1080.png', 'image/png'),
-  logo: loadBundledAsset(LOGIN_ASSET_DIRECTORY, 'login-logo', 'kornilenko_logo_exact.png', 'image/png'),
+  background: loadBundledAsset(LOGIN_ASSET_DIRECTORY, 'login-background', 'login_background_codex_1920x1080.webp', 'image/webp'),
+  logo: loadBundledAsset(LOGIN_ASSET_DIRECTORY, 'login-logo', 'kornilenko_logo_login_440.png', 'image/png'),
 };
 
 const ADMIN_ASSETS = {
-  header: loadBundledAsset(ADMIN_ASSET_DIRECTORY, 'admin-header', 'admin_header_background_1920x480.webp', 'image/webp'),
-  headerMobile: loadBundledAsset(ADMIN_ASSET_DIRECTORY, 'admin-header-mobile', 'admin_header_background_mobile_960x480.webp', 'image/webp'),
   sidebarLogo: loadBundledAsset(ADMIN_ASSET_DIRECTORY, 'admin-sidebar-logo', 'kornilenko_logo_sidebar_320.png', 'image/png'),
+  appIcon192: loadBundledAsset(ADMIN_ASSET_DIRECTORY, 'admin-app-icon-192', 'kornilenko_app_icon_192.png', 'image/png'),
+  appIcon512: loadBundledAsset(ADMIN_ASSET_DIRECTORY, 'admin-app-icon-512', 'kornilenko_app_icon_512.png', 'image/png'),
+};
+
+const FONT_ASSETS = {
+  interLatin: loadBundledAsset(FONT_DIRECTORY, 'font-inter-latin', 'inter-latin-wght-normal.woff2', 'font/woff2'),
+  interCyrillic: loadBundledAsset(FONT_DIRECTORY, 'font-inter-cyrillic', 'inter-cyrillic-wght-normal.woff2', 'font/woff2'),
 };
 
 export {
@@ -69,6 +77,7 @@ export {
   ADMIN_ASSETS,
   ADMIN_ASSET_DIRECTORY,
   APP_DIRECTORY,
+  FONT_ASSETS,
   DATA_FILE,
   HOST,
   LOGIN_ASSETS,
