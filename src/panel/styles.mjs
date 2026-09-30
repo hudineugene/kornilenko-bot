@@ -24,7 +24,7 @@ html,body{max-width:100%;overflow-x:clip}
   --z-sticky:20; --z-bar:40; --z-head:50; --z-toast:60; --z-popup:70;
   --header:60px;
   /* Нижняя панель на телефоне и запас под закреплённой полосой сохранения: страница не должна прятаться под ними. */
-  --tabbar-h:58px; --savebar-h:96px;
+  --tabbar-h:62px; --savebar-h:96px;
   /* Шкала размеров текста: 13, 14, 16, 20. Основной — 14 px. */
   --fs-xs:13px; --fs-sm:14px; --fs-lg:16px; --fs-xl:20px;
   /* Одна шкала отступов: 4, 8, 12, 16, 24 (и 2 px — только для волосяных зазоров). */
@@ -76,7 +76,7 @@ a:hover{text-decoration:underline}
 .global-empty{padding:var(--sp-3) var(--sp-3);color:var(--muted);font-size:var(--fs-sm)}
 .search-toggle{display:none}
 /* Поиск должен помещаться: на средней ширине текст состояния бота уступает ему место. */
-@media(max-width:1500px) and (min-width:861px){.head-tools #botStateText{display:none}.global-search{flex-basis:260px}}
+@media(max-width:1880px) and (min-width:861px){.head-tools #botStateText{display:none}}
 .nav-item{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-2);border:0;background:none;border-radius:var(--radius);color:var(--text);font:inherit;font-size:var(--fs-sm);text-align:left;cursor:pointer;white-space:nowrap}
 .nav-item:hover{background:var(--surface-soft)}
 .nav-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
@@ -341,7 +341,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-side{position:sticky;top:var(--sp-3)}
 .conversation-side-inner{background:var(--surface-soft);border:1px solid var(--line);border-radius:var(--radius);padding:var(--sp-3)}
 .conversation-side .conversation-save{display:flex;flex-direction:column;gap:var(--sp-2);align-items:stretch}
-@media (max-width:1100px){.conversation-split{grid-template-columns:minmax(0,1fr)}.conversation-side{position:static}}
+@media (max-width:1180px){.conversation-split{grid-template-columns:minmax(0,1fr)}.conversation-side{position:static}}
 .conversation-side-toggle,.side-close,.side-backdrop{display:none}
 .conversation-thread{display:flex;flex-direction:column;gap:var(--sp-2);min-height:300px;max-height:min(54vh,620px);overflow:auto;padding:var(--sp-3);border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--surface-soft);overscroll-behavior:contain}
 .conversation-line{display:flex;justify-content:flex-start}
@@ -687,7 +687,7 @@ dialog::backdrop{background:var(--overlay)}
 .auth-card h1{margin-bottom:var(--sp-1)}
 .auth-card .stack{margin-top:var(--sp-4)}
 
-@media(max-width:1100px){.split{grid-template-columns:minmax(0,1fr)}.cols-4{grid-template-columns:repeat(2,minmax(0,1fr))}.messenger-shell{grid-template-columns:300px minmax(0,1fr)}}
+@media(max-width:1180px){.split{grid-template-columns:minmax(0,1fr)}.cols-4{grid-template-columns:repeat(2,minmax(0,1fr))}.messenger-shell{grid-template-columns:300px minmax(0,1fr)}}
 @media(max-width:860px){
   :root{--header:58px}
   .app-head{padding:var(--sp-2) var(--sp-3);gap:var(--sp-2)}
@@ -841,25 +841,18 @@ dialog::backdrop{background:var(--overlay)}
   .btn,.btn.small{min-height:44px}
   .markup-bar .btn,.toast-action,.reply-delivery .btn.small{min-height:0}
 }
-/* Ноутбук (1181–1480 px): восемь пунктов, поле поиска и значки справа не помещаются
-   вместе с названием компании, и последний пункт («Настройки») уходил под поиск.
-   Остаётся логотип; название видно на широком экране. */
-@media(max-width:1480px) and (min-width:1181px){
+/* Ноутбук (1181–1880 px): восемь пунктов, поле поиска и значки справа не помещаются вместе с названием
+   компании, и последний пункт («Настройки») уходил под поиск. Остаётся логотип, пункты без значков и с
+   узкими отступами, поле поиска уже; название и значки видны на широком экране. Один диапазон вместо
+   пяти прежних (1600, 1500, 1480, 1340, 1240 px): на ширине 1481–1880 меню и раньше вылезало под поиск
+   (проверено измерением ширины меню на 1181, 1240, 1366, 1480, 1536, 1600, 1680, 1800, 1840, 1920; на 1801 старая раскладка ещё не помещалась). */
+@media(max-width:1880px) and (min-width:1181px){
   .app-brand b{display:none}
-}
-/* Восемь разделов с значками на ноутбучной ширине не помещались: «Настройки» уезжали за край меню. Значки остаются на широких экранах и в нижней панели телефона. */
-@media(max-width:1600px) and (min-width:861px){.head-nav .nav-item .ico{display:none}}
-@media(max-width:1340px) and (min-width:1181px){
   .nav-item{padding-left:var(--sp-2);padding-right:var(--sp-2)}
-  .global-search{flex-basis:170px;max-width:200px}
+  .global-search{flex-basis:clamp(140px,12vw,240px);max-width:none}
 }
-/* 1181–1240 px: поле поиска уходит за значок 🔍 и здесь (как на телефоне). */
-@media(max-width:1240px) and (min-width:1181px){
-  .search-toggle{display:inline-flex}
-  .global-search{display:none;position:fixed;left:10px;right:10px;top:calc(var(--header) + 6px);z-index:var(--z-toast);max-width:none;padding:var(--sp-2);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg)}
-  .global-search.open{display:block}
-  .global-results{position:static;margin-top:var(--sp-2);box-shadow:none;border:0;min-width:0;max-height:60vh}
-}
+/* Значки пунктов меню — только на широком экране (и в нижней панели телефона). */
+@media(max-width:1880px) and (min-width:861px){.head-nav .nav-item .ico{display:none}}
 @media(max-width:1180px) and (min-width:861px){
   .app-brand b{display:none}
   .app-head{gap:var(--sp-2);padding-left:var(--sp-3);padding-right:var(--sp-3)}

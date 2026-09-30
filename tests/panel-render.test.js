@@ -4307,6 +4307,14 @@ test('окна: фокус возвращается на кнопку-источ
   sandbox.document.querySelector = (selector) => (selector === '[data-label="Новый клиент"]' ? button({ name: 'by-label' }) : null);
   sandbox.restoreOpener(byLabel);
   assert.deepEqual(focusLog.splice(0), ['by-label']);
+  // Кнопка на время окна заблокирована: фокус ждёт, пока она снова станет доступной.
+  const locked = button({ name: 'locked', disabled: true });
+  sandbox.document.activeElement = locked;
+  sandbox.restoreOpener(sandbox.rememberOpener());
+  assert.deepEqual(focusLog.splice(0), [], 'заблокированной кнопке фокус не дать');
+  locked.disabled = false;
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.deepEqual(focusLog.splice(0), ['locked'], 'после разблокировки фокус вернулся');
   // Без источника (фокус был на странице) ничего не делаем и не падаем.
   sandbox.document.activeElement = sandbox.document.body;
   assert.equal(sandbox.rememberOpener(), null);

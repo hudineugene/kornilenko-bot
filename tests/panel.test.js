@@ -734,6 +734,11 @@ test('набор токенов оформления: 22 цвета, четыр�
   // Высоты нижней панели и запас под полосой сохранения — токены, а не магические 74/84/92/96 px.
   assert.ok(/--tabbar-h:\d+px/.test(root) && /--savebar-h:\d+px/.test(root), 'токены --tabbar-h и --savebar-h');
   assert.deepEqual(PANEL_CSS.match(/calc\((?:[^()]|\([^()]*\))*\b(?:74|84|92|96)px/g), null, 'в расчётах нет магических 74/84/92/96 px');
+  // Брейкпоинты — четыре (600, 860, 1180, 1880: последний — где шапка перестаёт помещаться с названием и
+  // значками; проверено измерением) и 400 для самых узких телефонов. Новые ширины — осознанно, а не «ещё одна».
+  const widths = new Set(Array.from(PANEL_CSS.matchAll(/@media[^{]*/g)).flatMap((media) => Array.from(media[0].matchAll(/(?:max|min)-width:\s*(\d+)px/g)).map((match) => Number(match[1]))));
+  const allowed = new Set([400, 600, 860, 861, 1180, 1181, 1880]);
+  assert.deepEqual(Array.from(widths).filter((width) => !allowed.has(width)).sort(), [], 'брейкпоинты вне набора');
   // Предупреждение «данные не сохраняются» лежит выше шапки, а не под ней.
   assert.match(PANEL_CSS, /\.save-alert\{[^}]*z-index:var\(--z-toast\)/, 'полоса о сбое записи выше шапки');
   // Слои — только токены (кроме 4 у липкой подписи языка внутри формы).

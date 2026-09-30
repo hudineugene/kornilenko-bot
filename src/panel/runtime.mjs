@@ -358,7 +358,14 @@ function restoreOpener(opener) {
   if (!target && opener.text) {
     target = Array.prototype.find.call(document.querySelectorAll("button"), function (button) { return String(button.textContent || "").trim() === opener.text; }) || null;
   }
-  if (target && target.focus) target.focus();
+  focusWhenReady(target, 20);
+}
+// Кнопка-источник на время окна заблокирована (нажатие внутри окна держит её до закрытия), так что в момент
+// закрытия фокус ей ещё не дать: ждём, пока разблокируется (не дольше секунды).
+function focusWhenReady(target, attempts) {
+  if (!target || !target.focus) return;
+  if (!target.disabled) { target.focus(); return; }
+  if (attempts > 0) setTimeout(function () { focusWhenReady(target, attempts - 1); }, 50);
 }
 
 function confirmDialog(title, text, confirmText, danger) {
