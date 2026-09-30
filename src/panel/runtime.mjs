@@ -899,6 +899,15 @@ function enhanceAccessibility(root) {
     row.setAttribute("tabindex", "0");
     row.setAttribute("data-kbd", "1");
   });
+  // Таблицы отчётов на телефоне — карточками: подписи столбцов берём из шапки и кладём в ячейки.
+  root.querySelectorAll("table.table-stack").forEach(function (table) {
+    if (table.getAttribute("data-labelled")) return;
+    var heads = Array.prototype.map.call(table.querySelectorAll("thead th"), function (cell) { return String(cell.textContent || "").trim(); });
+    Array.prototype.forEach.call(table.querySelectorAll("tbody tr"), function (row) {
+      Array.prototype.forEach.call(row.children, function (cell, index) { if (heads[index]) cell.setAttribute("data-label", heads[index]); });
+    });
+    table.setAttribute("data-labelled", "1");
+  });
   root.querySelectorAll(".tabs").forEach(function (tabs) {
     tabs.setAttribute("role", "tablist");
     Array.prototype.forEach.call(tabs.querySelectorAll("button"), function (button) {

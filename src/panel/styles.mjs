@@ -139,7 +139,19 @@ tbody tr.selected{background:var(--brand-soft)}
 .btn.small{padding:var(--sp-1) var(--sp-2);font-size:var(--fs-sm);border-radius:var(--radius-sm)}
 .btn.icon{padding:var(--sp-1) var(--sp-2)}
 .btn-ico{display:inline-flex;flex:none;width:16px;height:16px}
+@media (max-width:860px){.object-performance{min-height:44px}.objects-table .btn.icon,.objects-table [data-more]{min-width:44px;min-height:44px}}
 .hint-more{margin-top:var(--sp-1)}
+/* Подвал редактора на телефоне: пояснение сверху, главные кнопки рядом, «Отмена» — узкой строкой снизу.
+   Раньше «Отмена» тянулась во всю высоту, а кнопки шли лесенкой (около 170 px). */
+@media (max-width:600px){
+  .dialog-foot{flex-wrap:wrap;align-items:center}
+  .dialog-foot>.grow{display:none}
+  .dialog-foot .editor-foot{flex:1 1 100%;order:1;display:flex;flex-wrap:wrap;justify-content:stretch}
+  .dialog-foot .editor-foot .btn{flex:1 1 auto}
+  .dialog-foot .editor-foot .publish-why{flex:1 1 100%;order:-1}
+  /* «Отмена» на телефоне не нужна: в шапке окна есть «✕», и он спрашивает про несохранённое так же. */
+  .dialog-foot>.editor-cancel{display:none}
+}
 .hint-more>summary{cursor:pointer;color:var(--brand)}
 /* Пояснение к числу: на компьютере — подсказка при наведении (title), на телефоне наведения нет — подпись под числом. */
 .strip-hint{display:none;color:var(--muted);font-size:var(--fs-xs)}
@@ -173,6 +185,13 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
    поэтому порядок столбцов в разметке менять нельзя без правки этих правил
    (его сторожит тест). */
 @media (max-width:600px){
+  .table-stack,.table-stack tbody{display:block;width:100%}
+  .table-stack thead{display:none}
+  .table-stack tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-1) var(--sp-3);padding:var(--sp-3);border-bottom:1px solid var(--line)}
+  .table-stack td{display:block;padding:0;border:0;min-width:0;text-align:left}
+  .table-stack td:first-child{grid-column:1/-1}
+  .table-stack td[data-label]:not(:first-child)::before{content:attr(data-label) ": ";color:var(--muted);font-size:var(--fs-xs)}
+  .table-stack td.right{text-align:left}
   .table-cards,.table-cards tbody{display:block;width:100%}
   .table-cards thead{display:none}
   .table-cards tr{display:grid;gap:2px var(--sp-3);padding:var(--sp-3) var(--sp-3);border-bottom:1px solid var(--line);align-items:center}

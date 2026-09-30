@@ -436,7 +436,7 @@ function openRecordEditor(kind, id) {
     // публикуют, опубликованный сохраняют или снимают с публикации. Раньше
     // «Опубликовать» стояло в самом верху, а внизу была одна «Сохранить».
     footer: isObject
-      ? '<button class="btn secondary" data-close="1" type="button">Отмена</button><span class="grow"></span><span class="row wrap editor-foot" id="editorFoot"></span>'
+      ? '<button class="btn secondary editor-cancel" data-close="1" type="button">Отмена</button><span class="grow"></span><span class="row wrap editor-foot" id="editorFoot"></span>'
       : '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveRecord" type="button">Сохранить</button>',
     ready: function (dialog) {
       bindLanguageTabs(dialog);
@@ -541,6 +541,14 @@ function openRecordEditor(kind, id) {
             (status === "sold" ? '<button class="btn ghost small" data-set-status="active" type="button"' + (russianReady ? "" : " disabled") + '>Вернуть в продажу</button>' : "") +
           "</div>" : "") +
           (liveAndIncomplete ? '<div class="publication-warning">Сохранить карточку можно и так, но клиенты видят её только на тех языках, где заполнено всё. Пока не хватает данных, объект в каталоге не показывается.</div>' : "");
+        // Кнопка стоит в блоке готовности (не в подвале), поэтому привязывается здесь.
+        var copyButton = dialog.querySelector("#copyFromRu");
+        if (copyButton) copyButton.onclick = function () {
+          var count = copyFromRussian();
+          toast(count ? "Скопировано полей: " + count + ". Переведите их, когда будет время" : "Копировать нечего");
+          renderPublicationCheck();
+          renderRecordPreview();
+        };
         dialog.querySelectorAll("[data-set-status]").forEach(function (button) {
           button.onclick = function () {
             dialog.querySelector("#fStatus").value = button.dataset.setStatus;
@@ -553,7 +561,7 @@ function openRecordEditor(kind, id) {
         if (foot) {
           foot.innerHTML = live
             ? '<button class="btn secondary" id="unpublish" type="button" title="Объект пропадёт из каталога, переписка и заявки останутся">Снять с публикации</button>' +
-              '<button class="btn secondary" id="postToChannel" type="button"' + (record ? "" : " disabled") + ' title="' + (record ? "Пост с фотографией, ценой и кнопкой «Смотреть в боте»" : "Сначала сохраните объект") + '">➤ Опубликовать в канал</button>' +
+              '<button class="btn secondary" id="postToChannel" type="button"' + (record ? "" : " disabled") + ' title="' + (record ? "Пост с фотографией, ценой и кнопкой «Смотреть в боте»" : "Сначала сохраните объект") + '">➤ В канал</button>' +
               '<button class="btn" id="saveRecord" type="button">Сохранить</button>'
             : '<button class="btn secondary" id="saveDraft" type="button">' + (status === "sold" ? "Сохранить" : "Сохранить как черновик") + '</button>' +
               (status === "sold" || russianReady ? "" : '<span class="small warn-text publish-why" id="publishWhy">Опубликовать нельзя. ' + esc(missingLine) + "</span>") +
@@ -561,7 +569,6 @@ function openRecordEditor(kind, id) {
           var bind = function (id, handler) { var button = foot.querySelector(id); if (button) button.onclick = handler; };
           bind("#saveRecord", saveRecord);
           bind("#saveDraft", saveRecord);
-          bind("#copyFromRu", function () { var count = copyFromRussian(); toast(count ? "Скопировано полей: " + count + ". Переведите их, когда будет время" : "Копировать нечего"); renderPublicationCheck(); renderRecordPreview(); });
           bind("#publishNow", async function () {
             // Не хватает только английского и испанского — публикуем с русским текстом, но спрашиваем.
             if (!ready && russianReady && !(await confirmDialog("Опубликовать с русским текстом?", "Английский и испанский тексты, которых ещё нет, будут скопированы с русского. Клиенты на этих языках увидят русский текст с пометкой «Text in Russian». Перевести можно позже.", "Опубликовать"))) return;

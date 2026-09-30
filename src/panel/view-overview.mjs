@@ -457,7 +457,7 @@ function sourceTableCard() {
   });
   var username = (state.bot || {}).username || "";
   return '<div class="card gap-bottom" id="sourceCard"><header><h3>Реклама: клиенты и сделки</h3><div class="actions"><span class="small faint">по метке ссылки, за всё время</span></div></header>' +
-    (rows.length ? '<div class="table-wrap"><table class="source-table"><thead><tr><th>Источник</th><th class="right">Клиентов</th><th class="right">Заявок</th><th class="right">Записались на просмотр</th><th class="right">Сделок</th><th></th></tr></thead><tbody>' +
+    (rows.length ? '<div class="table-wrap"><table class="source-table table-stack"><thead><tr><th>Источник</th><th class="right">Клиентов</th><th class="right">Заявок</th><th class="right">Записались на просмотр</th><th class="right">Сделок</th><th></th></tr></thead><tbody>' +
       rows.map(function (row) {
         var label = row.source || "";
         return "<tr><td><b>" + esc(label || "без метки") + "</b></td><td class=\"right\">" + num(row.users) + "</td><td class=\"right\">" + num(row.inquiries) + "</td><td class=\"right\">" + num(row.viewings) + "</td><td class=\"right\">" + (row.deals ? "<b>" + num(row.deals) + "</b>" : "0") + "</td>" +
@@ -680,7 +680,7 @@ VIEWS.reports = {
         }).join("") + "</div>" : '<div class="empty">Клиенты ещё не ставили реакции на сообщения бота</div>') +
       "</div>" +
       '<div class="card"><header><h3>Эффективность объектов</h3><div class="actions"><span class="small faint">видели в каталоге · открыли карточку · заявки</span></div></header>' +
-        (properties.length ? '<div class="table-wrap"><table><thead><tr><th>Объект</th><th class="right" title="Сколько раз объект показался клиенту в каталоге бота">Видели в каталоге</th><th class="right" title="Сколько раз открыли его карточку">Открыли карточку</th><th class="right">Заявки</th><th class="right" title="Какая доля увидевших открыла карточку">Доля открывших</th></tr></thead><tbody>' +
+        (properties.length ? '<div class="table-wrap"><table class="table-stack"><thead><tr><th>Объект</th><th class="right" title="Сколько раз объект показался клиенту в каталоге бота">Видели в каталоге</th><th class="right" title="Сколько раз открыли его карточку">Открыли карточку</th><th class="right">Заявки</th><th class="right" title="Какая доля увидевших открыла карточку">Доля открывших</th></tr></thead><tbody>' +
           properties.map(function (row) {
             var rate = row.views ? Math.round((row.details / row.views) * 100) : 0;
             return '<tr class="clickable" data-property-insights="' + esc(row.id) + '"><td><b>' + esc(row.title) + '</b><br><span class="small faint">открыть клиентов и действия</span></td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + '%</td></tr>';
