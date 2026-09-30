@@ -162,6 +162,9 @@ function fakeFetch(state, texts, requests = []) {
       if (since && since === state.stateVersion) return answer({ unchanged: true, stateVersion: state.stateVersion });
       return answer(state);
     }
+    // Одна группа целиком (лента и заявки на вступление): состояние панели несёт её кратко.
+    const groupOne = path.match(/\/api\/groups\/([^/?]+)$/);
+    if (groupOne && !(options && options.method && options.method !== 'GET')) return answer({ group: bot.getData().groups.find((item) => item.id === decodeURIComponent(groupOne[1])) || null });
     if (path.includes('/api/interface-text')) return answer({ interfaceText: texts });
     if (path.includes('/api/autostart')) return answer({ supported: false, enabled: false });
     return answer({ ok: true });
@@ -2083,6 +2086,7 @@ test('группа с темами: в форме поста выбираетс�
 
   const post = fakeElement('main');
   sandbox.renderGroups(post, 'post');
+  await new Promise((resolve) => setTimeout(resolve, 30)); // лента группы приходит отдельным запросом
   const html = String(post.innerHTML) + String(post.querySelector('#groupBody').innerHTML);
   assert.match(html, /id="groupTopic"/, 'выбор темы есть');
   assert.match(html, /<option value="1" selected>Общая \(основная лента\)<\/option>/, 'по умолчанию — «Общая»');
@@ -4353,4 +4357,32 @@ test('окна: фокус возвращается на кнопку-источ
   // Родных prompt() в панели не осталось (в комментариях — можно).
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.ok(!/[^a-zA-Z.]prompt\(/.test(PANEL_HTML), 'prompt() заменён своим окном');
+});
+
+test('группа в панели: лента и заявки берутся отдельным запросом один раз, пока счётчики не изменились', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.groups.push({
+      id: '-100555', title: 'Канал новостей', type: 'channel', status: 'administrator', memberCount: 900, isForum: false, topics: [],
+      messages: [{ messageId: 1, name: 'Бот', text: 'Первый пост', kind: 'text', threadId: 0, fromBot: true, date: new Date().toISOString() }],
+      joinRequests: [],
+    });
+  });
+  const { sandbox, requests } = await panelSandbox();
+  assert.equal(sandbox.state.groups[0].messages, undefined, 'в состоянии ленты нет');
+  assert.equal(sandbox.state.groups[0].messageCount, 1);
+  requests.length = 0;
+  const host = fakeElement('main');
+  sandbox.renderGroups(host, 'post');
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(requests.filter((request) => /\/api\/groups\/-100555$/.test(request.url)).length, 1, 'группу запросили');
+  assert.match(String(host.querySelector('#groupBody').innerHTML), /Первый пост/, 'лента пришла и показана');
+  sandbox.renderGroups(host, 'post');
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(requests.filter((request) => /\/api\/groups\/-100555$/.test(request.url)).length, 1, 'счётчики те же — повторно не запрашиваем');
+  sandbox.state.groups[0].messageCount = 2;
+  sandbox.state.groups[0].lastMessageId = 2;
+  sandbox.renderGroups(host, 'post');
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(requests.filter((request) => /\/api\/groups\/-100555$/.test(request.url)).length, 2, 'пришло новое сообщение — запросили снова');
 });

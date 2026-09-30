@@ -914,7 +914,9 @@ function safeState(session) {
       buttonsPerRow,
       rubrics: rubrics.map((rubric) => ({ id: rubric.id, name: rubric.name, placement: rubric.placement, image: imageMeta(rubric.image) })),
     }))(normalizePublishing(data.config.publishing)),
-    groups: Array.isArray(data.groups) ? data.groups : [],
+    // Лента группы (до 200 сообщений) и заявки на вступление — самая тяжёлая часть, а нужны они только открытой
+    // группе: панель берёт их отдельно (GET /api/groups/:id). Здесь — краткий вид со счётчиками.
+    groups: (Array.isArray(data.groups) ? data.groups : []).map(groupSummary),
     // Панель показывает и те публикации, которые не состоялись: иначе о них
     // никто не узнает — пост просто не появится в группе.
     groupPosts: Array.isArray(data.groupPosts)
@@ -923,7 +925,19 @@ function safeState(session) {
   };
 }
 
+function groupSummary(group) {
+  const { messages, joinRequests, ...rest } = group;
+  const feed = Array.isArray(messages) ? messages : [];
+  return {
+    ...rest,
+    messageCount: feed.length,
+    lastMessageId: feed.length ? feed[feed.length - 1].messageId || 0 : 0,
+    joinRequestCount: Array.isArray(joinRequests) ? joinRequests.length : 0,
+  };
+}
+
 export {
+  groupSummary,
   requestAcceptsGzip,
   ownPageRequest,
   DOWNLOAD_TICKET_MS,

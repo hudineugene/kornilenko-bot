@@ -150,6 +150,15 @@ async function handleGroupApi(req, res, url) {
     }
   }
 
+  // Одна группа целиком, с лентой и заявками на вступление: состояние панели их не несёт.
+  const groupOneMatch = url.pathname.match(/^\/api\/groups\/([^/]+)$/);
+  if (groupOneMatch && req.method === 'GET') {
+    const group = groupById(decodeURIComponent(groupOneMatch[1]));
+    if (!group) json(res, 404, { error: 'Группа не найдена' });
+    else json(res, 200, { group });
+    return true;
+  }
+
   if (url.pathname === '/api/groups' && req.method === 'GET') {
     await refreshGroups().catch((error) => recordError('Обновление групп', error));
     json(res, 200, { groups: groupList(), posts: data.groupPosts || [] });

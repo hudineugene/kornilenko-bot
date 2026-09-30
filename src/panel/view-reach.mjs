@@ -545,7 +545,24 @@ function renderGroups(host, mode) {
   host.querySelectorAll("#groupPicker button").forEach(function (button) {
     button.onclick = function () { selectedGroup = button.dataset.group; renderGroups(host, mode); };
   });
-  renderGroupCard(host.querySelector("#groupBody"), current, mode);
+  showGroupCard(host.querySelector("#groupBody"), current, mode);
+}
+
+// Состояние панели несёт группу кратко (со счётчиками); ленту и заявки на вступление берём отдельно и
+// запоминаем: пока счётчики не изменились, повторно не запрашиваем.
+var groupDetails = {};
+function groupSignature(group) {
+  return [group.messageCount, group.lastMessageId, group.joinRequestCount, group.pinnedMessageId, group.status, (group.topics || []).length].join("|");
+}
+function showGroupCard(body, current, mode) {
+  var signature = groupSignature(current);
+  var cached = groupDetails[current.id];
+  if (cached && cached.signature === signature) return renderGroupCard(body, Object.assign({}, current, cached.detail), mode);
+  renderGroupCard(body, current, mode);
+  return api("/api/groups/" + encodeURIComponent(current.id)).then(function (result) {
+    groupDetails[current.id] = { signature: signature, detail: { messages: result.group.messages || [], joinRequests: result.group.joinRequests || [] } };
+    if (selectedGroup === current.id && body.isConnected !== false) renderGroupCard(body, Object.assign({}, current, groupDetails[current.id].detail), mode);
+  }).catch(function () {});
 }
 
 // Очередь отложенных публикаций этой группы: раньше запланированный пост
@@ -609,8 +626,8 @@ function renderGroupCard(host, group, mode) {
     (showManage ? numberStrip([
       [membersWord(group), num(group.memberCount), "", groupKindName(group)],
       ["Права бота", admin ? "администратор" : "участник", admin ? "" : "bad", admin ? "" : "Назначьте бота администратором"],
-      ["Сообщений в ленте", num((group.messages || []).length), "", "Бот хранит последние 200 сообщений группы"],
-      ["Заявок на вступление", num((group.joinRequests || []).length), (group.joinRequests || []).length ? "bad" : "", "Ждут решения"],
+      ["Сообщений в ленте", num(group.messages ? group.messages.length : group.messageCount), "", "Бот хранит последние 200 сообщений группы"],
+      ["Заявок на вступление", num(group.joinRequests ? group.joinRequests.length : group.joinRequestCount), (group.joinRequests ? group.joinRequests.length : group.joinRequestCount) ? "bad" : "", "Ждут решения"],
     ].concat(group.isForum ? [["Темы", num((group.topics || []).length), "", "В группе включены темы"]] : [])) : "") +
     (group.lastError ? '<div class="card gap-bottom"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
     '<div class="split">' + (showPost ? '<div class="stack">' +
