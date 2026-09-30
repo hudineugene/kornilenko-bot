@@ -282,6 +282,45 @@ async function handleClientsApi(req, res, url) {
     return json(res, 201, { ok: true, id: inquiry.id });
   }
 
+  // Следующий шаг у клиента: «позвонить в четверг». Если у клиента есть открытая заявка — дата ставится на неё;
+  // если заявок нет (позвонил и всё), создаётся заявка-«шаг»: так шаг попадает в «Следующие шаги», в список дел и в
+  // напоминания без отдельного механизма.
+  const stepMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/step$/);
+  if (stepMatch && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const user = userById(decodeURIComponent(stepMatch[1]));
+    if (!user) return json(res, 404, { error: 'Клиент не найден' });
+    const body = await readJson(req);
+    const date = cleanText(body.date, 10);
+    const time = cleanText(body.time, 5);
+    if (!DAY_KEY_PATTERN.test(date)) return json(res, 400, { error: 'Укажите день следующего шага' });
+    if (time && !CLOCK_TIME_PATTERN.test(time)) return json(res, 400, { error: 'Время укажите в формате ЧЧ:ММ' });
+    const note = cleanText(body.note, 300);
+    const open = data.inquiries.find((item) => String(item.userId) === String(user.id) && item.status !== 'closed' && !item.searchLead);
+    if (open) {
+      open.followUpDate = date;
+      open.followUpTime = time;
+      open.followUpNotifiedAt = '';
+      open.updatedAt = new Date().toISOString();
+      saveDataNow();
+      return json(res, 200, { ok: true, inquiryId: open.id, created: false });
+    }
+    const now = new Date().toISOString();
+    const inquiry = {
+      id: crypto.randomUUID(), userId: String(user.id), chatId: user.chatId ? String(user.chatId) : '',
+      language: ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'ru',
+      text: note || 'Следующий шаг', type: 'general', propertyId: '', sourceMessageId: null, lead: null, selection: null, matching: null, viewing: null,
+      status: 'in_progress', pipelineStage: 'contact', note: '', replies: [], messages: [], readAt: now, remindedAt: '',
+      followUpDate: date, followUpTime: time, followUpNotifiedAt: '', assignee: cleanText(data.config.adminName, 60) || 'Администратор',
+      createdAt: now, updatedAt: now, clientMessageAt: '',
+    };
+    data.inquiries.unshift(inquiry);
+    trimInquiries();
+    saveDataNow();
+    return json(res, 201, { ok: true, inquiryId: inquiry.id, created: true });
+  }
+
   if (url.pathname === '/api/users/export' && req.method === 'POST') {
     const session = requireAuth(req, res, true);
     if (!session) return;

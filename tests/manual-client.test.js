@@ -95,3 +95,31 @@ test('«＋ Просмотр»: встреча назначена по теле�
   assert.equal((await post('/api/viewings', { userId: id, date: day, propertyId: 'нет-такого' })).status, 400);
   assert.equal((await post('/api/viewings', { userId: 'нет', date: day })).status, 404);
 });
+
+test('следующий шаг у клиента без заявок: заводится заявка-«шаг» с датой; при открытой заявке дата ставится на неё', async () => {
+  const { id } = await (await post('/api/users', { name: 'Джон Смит', phone: '+34 600 111 222' })).json();
+  const day = tomorrow();
+  const created = await post('/api/users/' + id + '/step', { date: day, time: '10:00', note: 'Позвонить в четверг' });
+  assert.equal(created.status, 201);
+  assert.equal((await created.json()).created, true);
+  const step = bot.getData().inquiries.find((item) => item.userId === id);
+  assert.equal(step.followUpDate, day);
+  assert.equal(step.followUpTime, '10:00');
+  assert.equal(step.text, 'Позвонить в четверг');
+  assert.equal(step.status, 'in_progress');
+  assert.equal(bot.awaitingReply(step), false, 'ответа никто не ждёт');
+  // Повторно — дата ставится на ту же открытую заявку, вторая не создаётся.
+  const again = await post('/api/users/' + id + '/step', { date: day, time: '15:30' });
+  assert.equal(again.status, 200);
+  assert.equal((await again.json()).created, false);
+  assert.equal(bot.getData().inquiries.filter((item) => item.userId === id).length, 1);
+  assert.equal(step.followUpTime, '15:30');
+  // Проверки.
+  assert.equal((await post('/api/users/' + id + '/step', { date: '' })).status, 400);
+  assert.equal((await post('/api/users/' + id + '/step', { date: day, time: '99:99' })).status, 400);
+  assert.equal((await post('/api/users/нет/step', { date: day })).status, 404);
+  // Шаг виден в списке дел: «контакт сегодня/просрочен» строится по followUpDate заявки.
+  step.followUpDate = '2020-01-01';
+  const { currentAdminNotifications } = await import('../src/admin-notifications.mjs');
+  assert.ok(currentAdminNotifications().some((item) => item.kind === 'task' && item.id.includes(step.id)), 'просроченный шаг попал в дела');
+});

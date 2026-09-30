@@ -4076,3 +4076,27 @@ test('«＋ Клиент» и «＋ Просмотр»: кнопки в шапк
   const made = requests.find((request) => request.url === '/api/viewings' && request.method === 'POST');
   assert.deepEqual(JSON.parse(JSON.stringify(made.body)), { userId: 'u1', propertyId: 'villa-1', date: '2030-05-20', time: '11:30', note: 'Договорились по телефону' });
 });
+
+test('карточка клиента без заявок: можно поставить следующий шаг; запрос уходит с днём, временем и заметкой', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  sandbox.state.users = [{ id: 'n2', firstName: 'Джон', chatId: 0, favorites: [], recentlyViewed: [], tags: [], note: '' }];
+  sandbox.state.inquiries = [];
+  const toasts = [];
+  sandbox.toast = (message, bad) => toasts.push({ message: String(message), bad: Boolean(bad) });
+  let options = null;
+  let dialog = null;
+  sandbox.openDialog = (opts) => { options = opts; dialog = fakeElement('dialog'); dialog.closeClean = () => {}; if (opts.ready) opts.ready(dialog); return dialog; };
+  sandbox.openClient('n2');
+  assert.match(String(options.body), /id="clientStep"/, 'форма шага есть');
+  dialog.querySelector('#stepDate').value = '';
+  await dialog.querySelector('#clientStep').onclick();
+  assert.equal(toasts.pop().message, 'Выберите день следующего шага');
+  dialog.querySelector('#stepDate').value = '2030-05-23';
+  dialog.querySelector('#stepTime').value = '10:00';
+  dialog.querySelector('#stepNote').value = 'Позвонить в четверг';
+  requests.length = 0;
+  await dialog.querySelector('#clientStep').onclick();
+  const made = requests.find((request) => request.url === '/api/users/n2/step' && request.method === 'POST');
+  assert.deepEqual(JSON.parse(JSON.stringify(made.body)), { date: '2030-05-23', time: '10:00', note: 'Позвонить в четверг' });
+});
