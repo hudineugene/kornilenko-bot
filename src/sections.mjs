@@ -1,6 +1,6 @@
 // Акции, контакты, «О компании», помощь и обработка их кнопок.
 
-import { cleanText, fillTemplate } from './util.mjs';
+import { cleanText, fillTemplate, managerNameFor } from './util.mjs';
 import { defaultData, normalizeGuidePages } from './data-format.mjs';
 import { imageExists } from './media.mjs';
 import { COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LEAD_FORM_TEXT, LANGUAGE_SELECTED, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
@@ -66,7 +66,7 @@ async function sendContacts(chatId, user, token) {
   const contact = data.contacts || defaultData.contacts;
   const phones = String(contact.phone || '').match(/\+?\d[\d\s().-]{5,}\d/g) || [];
   const lines = [localizedExact(contact.text, language, 3200) || copy.intro];
-  const managerName = cleanText(contact.managerName, 160);
+  const managerName = managerNameFor(contact, language);
   const email = cleanText(contact.email, 254);
   // Лицо агента: покупателю из-за границы важно увидеть, с кем он говорит. Фото
   // идёт отдельным сообщением над экраном (правки текста экрана его не трогают)

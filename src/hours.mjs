@@ -6,7 +6,7 @@
 import { data, scheduleSave } from './store.mjs';
 import { normalizeWorkingHours } from './data-format.mjs';
 import { whatsappContactUrl } from './catalog.mjs';
-import { cleanText, localDayKey } from './util.mjs';
+import { cleanText, localDayKey, managerNameFor } from './util.mjs';
 
 const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
 // Without office hours set, admin messages keep the old daytime window.
@@ -120,7 +120,7 @@ function whatNextLines(language, now = new Date()) {
   const contacts = data.contacts || {};
   const hours = workingHours();
   const lines = [];
-  const manager = cleanText(contacts.managerName, 160);
+  const manager = managerNameFor(contacts, lang);
   if (manager) lines.push(copy.contact + manager);
   if (hours.enabled) lines.push(copy.hours + workingDaysLabel(hours.days, lang) + ' ' + hours.from.replace(/^0/, '') + '–' + hours.to.replace(/^0/, ''));
   const chat = contacts.whatsappEnabled === false ? '' : whatsappContactUrl(contacts.whatsapp);

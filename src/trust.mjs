@@ -4,7 +4,7 @@
 // Почему мы»); бот сам ничего не сочиняет. Пока не заполнено ни одного пункта,
 // экран и ведущие к нему кнопки клиентам не показываются.
 
-import { cleanText } from './util.mjs';
+import { cleanText, managerNameFor } from './util.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { normalizeUser } from './users.mjs';
 import { sendUiMessage, validHttpUrl } from './catalog.mjs';
@@ -90,7 +90,7 @@ function trustText(language) {
   const lines = [copy.title, ''];
   const years = Number(trust.yearsOnMarket) || 0;
   const deals = Number(trust.dealsCount) || 0;
-  const name = cleanText(contact.managerName, 160);
+  const name = managerNameFor(contact, language);
   if (name && !imageExists(contact.photo)) lines.push('👨‍💼 ' + name);
   if (years) lines.push(copy.years + years + ' ' + (language === 'ru' ? russianPlural(years, copy.yearsWord) : years === 1 ? copy.yearsWord[0] : copy.yearsWord[1]));
   if (deals) lines.push(copy.deals + deals);
@@ -132,7 +132,7 @@ function trustButtonRow(language) {
 async function sendTrust(chatId, user, token) {
   const language = user.preferredLanguage || 'ru';
   const contact = data.contacts || {};
-  const name = cleanText(contact.managerName, 160);
+  const name = managerNameFor(contact, language);
   const photoMessageId = await sendManagerPhoto(chatId, user, contact, name, token);
   const sent = await sendUiMessage(chatId, user, trustText(language), token, { reply_markup: trustMarkup(language) });
   if (photoMessageId && sent && Number.isFinite(Number(sent.message_id))) {

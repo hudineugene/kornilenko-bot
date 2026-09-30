@@ -92,12 +92,12 @@ test('без имени, телефона и фото — только общи�
 test('на английском и испанском — те же строки на языке клиента', async () => {
   withAgent();
   const en = (await confirmedCard('en')).text;
-  assert.match(en, /👨‍💼 Meeting you: Ольга Корниленко/);
+  assert.match(en, /👨‍💼 Meeting you: Olga Kornilenko/);
   assert.match(en, /☎️ Phone: \+34 600 111 222/);
   assert.match(en, /🪪 Bring a photo ID with you\./);
   assert.match(en, /⏳ Running late\?/);
   const es = (await confirmedCard('es')).text;
-  assert.match(es, /👨‍💼 Te recibe: Ольга Корниленко/);
+  assert.match(es, /👨‍💼 Te recibe: Olga Kornilenko/);
   assert.match(es, /☎️ Teléfono: \+34 600 111 222/);
   assert.match(es, /🪪 Lleva un documento de identidad\./);
   assert.match(es, /⏳ ¿Llegas tarde\?/);

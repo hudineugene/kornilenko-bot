@@ -97,6 +97,26 @@ function formatDayMonth(value, language = 'ru') {
   return pad(date.getDate()) + (language === 'ru' ? '.' : '/') + pad(date.getMonth() + 1);
 }
 
+// Имя менеджера одно, а клиентов трое языков: EN/ES-клиент видел «Meeting you: Ольга Корниленко».
+// Для не русского языка кириллическое имя показываем латиницей (Olga Kornilenko); латиница остаётся как есть.
+const CYRILLIC_TO_LATIN = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
+  с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+};
+
+function latinName(name) {
+  return String(name || '').replace(/[А-Яа-яЁё]/g, (letter) => {
+    const lower = letter.toLowerCase();
+    const latin = CYRILLIC_TO_LATIN[lower] || '';
+    return letter === lower ? latin : latin.charAt(0).toUpperCase() + latin.slice(1);
+  });
+}
+
+function managerNameFor(contact, language = 'ru') {
+  const name = cleanText(contact && contact.managerName, 160);
+  return language === 'ru' ? name : latinName(name);
+}
+
 function localDayKey(value = new Date()) {
   const date = new Date(value);
   return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
@@ -135,6 +155,8 @@ export {
   dateFromDayKey,
   dayKey,
   formatDayMonth,
+  latinName,
+  managerNameFor,
   localDayKey,
   parseMoneyAmount,
   delay,

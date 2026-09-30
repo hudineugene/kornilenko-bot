@@ -2,7 +2,7 @@
 // вопрос «как прошёл просмотр» и список просмотров на день для администратора.
 
 import crypto from 'node:crypto';
-import { cleanText, dateFromDayKey, delay, localDayKey } from './util.mjs';
+import { cleanText, dateFromDayKey, delay, localDayKey, managerNameFor } from './util.mjs';
 import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, PIPELINE_STAGES, normalizeViewing } from './data-format.mjs';
 import { INTERACTION_TEXT, MY_REQUESTS_TEXT, PROPERTY_ACTION_TEXT, VIEWING_FORM_TEXT, VIEWING_NOTICE_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
@@ -170,7 +170,7 @@ function viewingPlaceLines(property, language, copy) {
 // никого не найти. Строки про имя и телефон — только если владелец их заполнил.
 function meetingLines(language, copy) {
   const contacts = data.contacts || {};
-  const name = cleanText(contacts.managerName, 160);
+  const name = managerNameFor(contacts, language);
   const phone = (String(contacts.phone || '').match(/\+?\d[\d\s().-]{5,}\d/g) || [])[0];
   return [
     name ? copy.meets + name : '',
@@ -223,7 +223,7 @@ async function sendViewingConfirmation(inquiry, user, token = data.config.botTok
   // ниже заменённого сообщения.
   const contacts = data.contacts || {};
   if (!online && !options.editMessageId && imageExists(contacts.photo)) {
-    const name = cleanText(contacts.managerName, 160);
+    const name = managerNameFor(contacts, language);
     try {
       await sendPhotoMessage(user.chatId, contacts.photo, name ? '👨‍💼 ' + name : '', token, null);
     } catch (error) {

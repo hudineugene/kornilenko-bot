@@ -49,12 +49,12 @@ test('в рабочее время: кто на связи, часы работ�
   assert.ok(ru.endsWith('⏱ Обычно отвечаем за 30 минут.'), ru);
 
   const en = withOffHoursNote('Thanks!', 'en', MONDAY_LUNCH);
-  assert.match(en, /Your contact: Мария/);
+  assert.match(en, /Your contact: Mariya/);
   assert.match(en, /Working hours: Mon–Fri 9:00–19:00/);
   assert.ok(en.endsWith('We usually reply within 30 minutes.'), en);
 
   const es = withOffHoursNote('¡Gracias!', 'es', MONDAY_LUNCH);
-  assert.match(es, /Tu contacto: Мария/);
+  assert.match(es, /Tu contacto: Mariya/);
   assert.match(es, /Horario: lun–vie 9:00–19:00/);
 });
 

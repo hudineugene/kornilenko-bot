@@ -92,3 +92,16 @@ test('день и месяц — с ведущими нулями на всех 
   assert.equal(formatDayMonth(date, 'es'), '09/09');
   assert.equal(formatDayMonth(new Date(2026, 11, 29), 'es'), '29/12');
 });
+
+test('имя менеджера для EN/ES-клиента — латиницей, для русского — как записано', async () => {
+  const { latinName, managerNameFor } = await import('../src/util.mjs');
+  assert.equal(latinName('Ольга Корниленко'), 'Olga Kornilenko');
+  assert.equal(latinName('Юлия Щукина'), 'Yuliya Shchukina');
+  assert.equal(latinName('Ёлкин Жуков'), 'Elkin Zhukov');
+  assert.equal(latinName('Olga Kornilenko'), 'Olga Kornilenko', 'латиница остаётся как есть');
+  const contact = { managerName: 'Ольга Корниленко' };
+  assert.equal(managerNameFor(contact, 'ru'), 'Ольга Корниленко');
+  assert.equal(managerNameFor(contact, 'en'), 'Olga Kornilenko');
+  assert.equal(managerNameFor(contact, 'es'), 'Olga Kornilenko');
+  assert.equal(managerNameFor({}, 'en'), '');
+});
