@@ -3906,3 +3906,28 @@ test('чек-лист «Лицо агента»: если не хватает т
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /id="goReplyTime"[^>]*>Задать срок ответа</);
 });
+
+test('«Объекты»: клик по строке открывает редактор, «Эффективность» — только по своей кнопке; в «⋯» есть «Редактировать»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.state.objects = [{ id: 'o1', title: { ru: 'Вилла', en: '', es: '' }, propertyType: 'villa', dealType: 'sale', status: 'active', city: { ru: 'Альтея' }, imagesByLanguage: { ru: [] } }];
+  const host = fakeElement('main');
+  const row = host.querySelector('tr[data-id]');
+  row.dataset.id = 'o1';
+  const opened = [];
+  sandbox.openRecordEditor = (kind, id) => opened.push(kind + ':' + id);
+  sandbox.openObjectInsights = (id) => opened.push('insights:' + id);
+  sandbox.renderObjects(host);
+  assert.match(String(host.innerHTML), /<tr class="clickable" data-id="o1">/, 'строка кликабельна (и с клавиатуры)');
+  // Клик по пустому месту строки — редактор.
+  row.onclick({ target: { closest: () => null } });
+  assert.deepEqual(opened, ['objects:o1']);
+  // Клик по кнопке внутри строки строку не срабатывает.
+  row.onclick({ target: { closest: () => ({}) } });
+  assert.equal(opened.length, 1);
+  // Кнопка эффективности — своя.
+  row.querySelector('[data-insights]').onclick({ stopPropagation() {} });
+  assert.equal(opened[1], 'insights:o1');
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /data-edit-object="1" type="button">✎ Редактировать</, 'в «⋯» есть «Редактировать»');
+});

@@ -127,7 +127,7 @@ function renderObjects(host) {
     (rows.length ? rows.map(function (record, index) {
       var images = propertyImages(record, "ru");
       var stats = catalogPropertyStats(record);
-      return '<tr data-id="' + esc(record.id) + '">' +
+      return '<tr class="clickable" data-id="' + esc(record.id) + '">' +
         "<td>" + (images.length ? '<img class="thumb" loading="lazy" decoding="async" src="' + imageUrl("objects", record.id, images[0], "ru") + '" alt="">' : '<span class="thumb"></span>') + "</td>" +
         '<td class="clickable" data-edit="1"><b>' + esc(localized(record.title, "ru") || "Без названия") + "</b>" +
           (record.reference ? ' <span class="small faint">' + esc(record.reference) + "</span>" : "") +
@@ -149,7 +149,13 @@ function renderObjects(host) {
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     var id = row.dataset.id;
     row.querySelector("[data-edit]").onclick = function () { openRecordEditor("objects", id); };
-    row.querySelector("[data-insights]").onclick = function () { openObjectInsights(id); };
+    // Клик по любому месту строки, кроме кнопок, открывает редактор: «Эффективность» — только по своей кнопке.
+    row.onclick = function (event) {
+      var target = event && event.target;
+      if (target && target.closest && target.closest("button, a, label, input, select")) return;
+      openRecordEditor("objects", id);
+    };
+    row.querySelector("[data-insights]").onclick = function (event) { if (event && event.stopPropagation) event.stopPropagation(); openObjectInsights(id); };
     row.querySelector("[data-more]").onclick = function () { openObjectExtras(id); };
     row.querySelectorAll("[data-move]").forEach(function (button) {
       button.onclick = async function () {
@@ -175,6 +181,7 @@ function openObjectExtras(id) {
   openDialog({
     title: "Ещё действия",
     body: '<div class="stack"><div class="small muted">' + esc(title) + "</div>" +
+      '<button class="btn secondary" data-edit-object="1" type="button">✎ Редактировать</button>' +
       '<button class="btn" data-channel="1" type="button">➤ Опубликовать в канал</button>' +
       '<span class="small muted">Пост с фотографией, ценой и кнопкой «Смотреть в боте».</span>' +
       '<div class="row"><button class="btn secondary" data-move="up" type="button">↑ Поднять в списке</button>' +
@@ -185,6 +192,7 @@ function openObjectExtras(id) {
       '<span class="small muted">Карточка исчезнет из каталога бота. Если передумаете, 15 минут можно нажать «Вернуть».</span></div>',
     footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
     ready: function (dialog) {
+      dialog.querySelector("[data-edit-object]").onclick = function () { dialog.closeClean(); openRecordEditor("objects", id); };
       dialog.querySelector("[data-channel]").onclick = function () {
         dialog.closeClean();
         openChannelPost(id);
