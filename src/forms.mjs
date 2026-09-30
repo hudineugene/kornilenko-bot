@@ -306,7 +306,7 @@ async function submitLead(user, pending, token, language, message, extraRows = [
       : pending.instant
         ? copy.instantSuccess.replace('{phone}', () => (lead.phone))
         : copy.success;
-  await sendMessage(user.chatId, withOffHoursNote([success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), language), token, {
+  await sendMessage(user.chatId, withOffHoursNote([success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), language, { user }), token, {
     reply_markup: extraRows.length ? { inline_keyboard: extraRows } : menuKeyboard(language),
   });
 }
@@ -952,10 +952,10 @@ async function handleViewingFormMessage(message, user, token, context = null) {
       return true;
     }
     if (inline) {
-      await finish(withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || ''), '📅 ' + cleanText(pending.data.date, 160) + ' · ' + cleanText(pending.data.time, 160)].filter(Boolean).join('\n\n'), language));
+      await finish(withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || ''), '📅 ' + cleanText(pending.data.date, 160) + ' · ' + cleanText(pending.data.time, 160)].filter(Boolean).join('\n\n'), language, { user }));
       return true;
     }
-    await sendMessage(user.chatId, withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), language), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(user.chatId, withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
     return true;
   }
   return false;

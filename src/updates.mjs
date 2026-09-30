@@ -647,7 +647,7 @@ async function handleUpdate(update, token) {
   }
 
   if (answer) {
-    if (inquiryAnswer) answer = withOffHoursNote(answer, user.preferredLanguage);
+    if (inquiryAnswer) answer = withOffHoursNote(answer, user.preferredLanguage, { user });
     try {
       const sent = await sendMessage(message.chat.id, answer, token, {
         reply_markup: searchHint || menuKeyboard(user.preferredLanguage),

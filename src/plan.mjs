@@ -317,7 +317,7 @@ async function handlePlanCallback(query, token) {
     await acknowledgeCallback(query, token);
     createInquiry(user, fill(copy.helpRequest, { n: index + 1, title: step.title[language] || step.title.ru }), { type: 'question' });
     await showScreen(chatId, user, token, query, stepText(user, language, index), stepMarkup(user, language, index));
-    await sendMessage(chatId, withOffHoursNote(copy.helpSent, language), token);
+    await sendMessage(chatId, withOffHoursNote(copy.helpSent, language, { user }), token);
     return;
   }
   await acknowledgeCallback(query, token);

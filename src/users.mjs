@@ -191,6 +191,8 @@ function normalizeUser(from, chatId, countMessage = true) {
     goal: ['live', 'invest', 'browse'].includes(previous.goal) ? previous.goal : '',
     goalAt: cleanText(previous.goalAt, 40),
     goalAskedAt: cleanText(previous.goalAskedAt, 40),
+    // День (ГГГГ-ММ-ДД), когда клиенту последний раз показали блок «Что дальше» целиком.
+    whatNextDay: cleanText(previous.whatNextDay, 10),
     sourceAt: cleanText(previous.sourceAt, 40),
     alertsSent: previous.alertsSent && typeof previous.alertsSent === 'object' && !Array.isArray(previous.alertsSent) ? previous.alertsSent : {},
     // The client turned broadcasts off (the "Unsubscribe" button or settings).

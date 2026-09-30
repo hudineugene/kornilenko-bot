@@ -3,10 +3,10 @@
 // рабочие часы, сводка — к началу рабочего дня. Время — по часам этого
 // компьютера.
 
-import { data } from './store.mjs';
+import { data, scheduleSave } from './store.mjs';
 import { normalizeWorkingHours } from './data-format.mjs';
 import { whatsappContactUrl } from './catalog.mjs';
-import { cleanText } from './util.mjs';
+import { cleanText, localDayKey } from './util.mjs';
 
 const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
 // Without office hours set, admin messages keep the old daytime window.
@@ -128,10 +128,22 @@ function whatNextLines(language, now = new Date()) {
   return { details, whatsapp: chat ? copy.whatsapp + chat : '' };
 }
 
-function withOffHoursNote(text, language, now = new Date()) {
+// Третий аргумент — либо «сейчас» (Date), либо { now, user }. С клиентом блок «Что дальше» (на связи,
+// часы, WhatsApp) показывается полностью один раз в сутки: приклеенный к каждому подтверждению, он
+// за одну сессию повторялся пять раз. В остальные разы — только срок ответа или пометка о часах.
+function withOffHoursNote(text, language, options = {}) {
   if (!text) return text;
+  const settings = options instanceof Date ? { now: options } : options || {};
+  const now = settings.now || new Date();
+  const user = settings.user || null;
   const note = offHoursNote(language, now);
-  const next = whatNextLines(language, now);
+  const today = localDayKey(now);
+  const full = !user || user.whatNextDay !== today;
+  const next = full ? whatNextLines(language, now) : { details: '', whatsapp: '' };
+  if (user && full && (next.details || next.whatsapp)) {
+    user.whatNextDay = today;
+    scheduleSave();
+  }
   const promise = note ? '' : replyPromise(language, now);
   const parts = [text, next.details, next.whatsapp, note ? '🌙 ' + note : '', promise ? '⏱ ' + promise : ''].filter(Boolean);
   return parts.join('\n\n');

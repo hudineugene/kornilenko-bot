@@ -98,3 +98,34 @@ test('сообщение клиенту после заявки на звоно�
   assert.match(sent.last.text, /🕘 Часы работы:/);
   assert.ok(sent.last.text.endsWith('⏱ Обычно отвечаем за 15 минут.'), sent.last.text);
 });
+
+test('блок «Что дальше» — полностью один раз в сутки на клиента, дальше только срок ответа; на следующий день снова полностью', () => {
+  configure({ hours: { ...WEEKDAYS, replyMinutes: 30 }, managerName: 'Ольга', whatsapp: '+34 600 111 222' });
+  const user = { id: 'u1' };
+  const first = withOffHoursNote('Спасибо!', 'ru', { now: MONDAY_LUNCH, user });
+  assert.match(first, /На связи: Ольга/);
+  assert.match(first, /WhatsApp/);
+  assert.match(first, /Обычно отвечаем за 30 минут/);
+  assert.equal(user.whatNextDay, '2026-09-21');
+  // Второе и третье подтверждение в тот же день — без повторения блока.
+  for (let time = 0; time < 2; time += 1) {
+    const again = withOffHoursNote('Заявка принята', 'ru', { now: new Date(2026, 8, 21, 15, 0), user });
+    assert.ok(!/На связи|WhatsApp|Часы работы/.test(again), 'блок не повторяется: ' + again);
+    assert.match(again, /Обычно отвечаем за 30 минут/, 'срок ответа остаётся');
+  }
+  // Вне рабочих часов пометка о часах тоже остаётся.
+  const night = withOffHoursNote('Ещё вопрос', 'ru', { now: FRIDAY_EVENING, user: { id: 'u2', whatNextDay: '2026-09-18' } });
+  assert.ok(!/На связи/.test(night));
+  assert.match(night, /🌙/);
+  // Наутро — снова полностью.
+  const nextDay = withOffHoursNote('Спасибо!', 'ru', { now: new Date(2026, 8, 22, 11, 0), user });
+  assert.match(nextDay, /На связи: Ольга/);
+  // Без клиента (старый вызов с датой) — как раньше, полностью.
+  assert.match(withOffHoursNote('Спасибо!', 'ru', MONDAY_LUNCH), /На связи: Ольга/);
+});
+
+test('в заявках у клиента с пустыми настройками день не отмечается: нечего было показывать', () => {
+  const user = { id: 'u3' };
+  assert.equal(withOffHoursNote('Спасибо!', 'ru', { now: MONDAY_LUNCH, user }), 'Спасибо!');
+  assert.ok(!user.whatNextDay);
+});

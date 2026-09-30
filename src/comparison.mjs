@@ -248,7 +248,7 @@ async function handleComparisonCallback(query, token, notifyAction = null) {
     await acknowledge(query, token);
     const titles = records.map((record) => '• ' + (localizedExact(record.title, language, 160) || record.reference || record.id));
     createInquiry(user, [copy.discussRequest, ...titles].join('\n'), { type: 'question', propertyId: records[0].id });
-    await sendMessage(chatId, withOffHoursNote(copy.discussSent, language), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(chatId, withOffHoursNote(copy.discussSent, language, { user }), token, { reply_markup: menuKeyboard(language) });
     return;
   }
   if (action === 'remove') {
