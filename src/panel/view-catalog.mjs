@@ -603,6 +603,25 @@ function openRecordEditor(kind, id) {
         }
         return translatedValue("price", language) || actions.priceOnRequest || "";
       }
+      // Предпросмотр объекта: небольшая задержка, чтобы не слать запрос на каждую набранную букву, и номер запроса —
+      // ответ на устаревший запрос не затирает свежий.
+      var previewTimer = 0, previewSerial = 0;
+      function scheduleObjectPreview(language, imageHtml) {
+        clearTimeout(previewTimer);
+        var serial = ++previewSerial;
+        previewTimer = setTimeout(function () {
+          var fields = recordFields();
+          fields.language = language;
+          send("/api/preview/object", "POST", fields).then(function (card) {
+            if (serial !== previewSerial) return;
+            var button = function (text) { return '<div class="tg-button">' + esc(text) + "</div>"; };
+            dialog.querySelector("#recordPreview").innerHTML = '<div class="tg-bubble">' + imageHtml + '<div class="tg-text">' + card.caption + "</div></div>" +
+              ((card.rows || []).length ? '<div class="tg-buttons">' + card.rows.map(function (row) {
+                return row.length > 1 ? '<div class="row">' + row.map(button).join("") + "</div>" : button(row[0]);
+              }).join("") + "</div>" : "");
+          }).catch(function () {});
+        }, 180);
+      }
       function renderRecordPreview() {
         var language = dialog.dataset.activeLanguage || "ru";
         var words = previewWords[language] || previewWords.ru;
@@ -613,49 +632,18 @@ function openRecordEditor(kind, id) {
         var cover = dialog.querySelector('[data-images="' + language + '"] .media-thumb img')
           || dialog.querySelector('[data-images="ru"] .media-thumb img');
         var imageHtml = cover ? '<img src="' + esc(cover.src) + '" alt="">' : "";
+        // Карточка объекта собирается на сервере тем же кодом, что и карточка в боте: подпись и кнопки берутся оттуда.
+        if (isObject) {
+          if (!imageHtml && !translatedValue("title", language) && !value("fPrice") && !translatedValue("description", language)) {
+            preview.innerHTML = '<div class="editor-preview-empty">' + esc(words.empty) + "</div>";
+            return;
+          }
+          scheduleObjectPreview(language, imageHtml);
+          return;
+        }
         var lines = [];
         var buttons = [];
-        if (isObject) {
-          var actions = interfaceCopy("propertyActions", language);
-          var comparison = interfaceCopy("comparison", language);
-          var status = value("fStatus");
-          var statusText = status === "reserved" ? "🟡 " + (actions.reserved || "") : status === "sold" ? "⚪ " + words.sold : status === "hidden" ? "⚪ " + words.hidden : "🟢 " + (actions.available || "");
-          var typeText = interfaceCopy("propertyTypes", language)[value("fType")] || "";
-          var dealText = value("fDeal") === "rent" ? actions.forRent : actions.forSale;
-          var city = translatedValue("city", language), district = translatedValue("district", language);
-          var locale = language === "en" ? "en-US" : language === "es" ? "es-ES" : "ru-RU";
-          var metre = metreShort(language);
-          function factNumber(field) {
-            var raw = value(field);
-            var number = Number(raw);
-            return raw !== "" && Number.isFinite(number) ? new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(number) : raw;
-          }
-          var facts = [];
-          if (value("fBedrooms") !== "") facts.push("🛏 " + (actions.bedroomsLabel || "") + ": " + factNumber("fBedrooms"));
-          if (value("fBathrooms")) facts.push("🚿 " + (actions.bathroomsLabel || "") + ": " + factNumber("fBathrooms"));
-          if (value("fArea")) facts.push("📐 " + (actions.areaLabel || "") + ": " + factNumber("fArea") + " " + metre + "²");
-          if (value("fPlot")) facts.push("🌿 " + (actions.plotAreaLabel || "") + ": " + factNumber("fPlot") + " " + metre + "²");
-          if (value("fFloor") || value("fFloors")) facts.push("🏢 " + (actions.floor || "") + ": " + [value("fFloor"), value("fFloors")].filter(Boolean).join("/"));
-          if (value("fSea")) facts.push("🌊 " + (actions.distanceSeaLabel || "") + ": " + factNumber("fSea") + " " + metre);
-          var specs = [];
-          for (var factIndex = 0; factIndex < facts.length; factIndex += 2) specs.push(facts.slice(factIndex, factIndex + 2).join("   ·   "));
-          var badges = Array.from(dialog.querySelectorAll("[data-badge]:checked")).map(function (box) { return interfaceCopy("propertyBadges", language)[box.dataset.badge]; }).filter(Boolean);
-          if (titleText) lines.push(titleText);
-          lines.push([statusText.trim(), typeText, dealText].filter(Boolean).join(" · "));
-          if (badges.length) lines.push("✦ " + badges.join(" · "));
-          var shownPrice = pricePreview(language, actions);
-          if (shownPrice || city || district) lines.push("");
-          if (shownPrice) lines.push("💰 " + shownPrice);
-          if (city || district) lines.push("📍 " + [city, district].filter(Boolean).join(", "));
-          if (specs.length) lines.push("", ...specs);
-          var description = translatedValue("description", language).split("\n").map(function (line) { return line.trim(); }).find(Boolean) || "";
-          if (description) lines.push("", description.length > 150 ? description.slice(0, 149).trim() + "…" : description);
-          if ((!Number.isFinite(Number(value("fPrice"))) || Number(value("fPrice")) <= 0) && !translatedValue("price", language)) buttons.push('<div class="tg-button">💰 ' + esc(actions.askPrice || "") + "</div>");
-          if (status === "active") buttons.push('<div class="tg-button">📅 ' + esc(actions.viewing || "") + "</div>");
-          buttons.push('<div class="tg-button">📋 ' + esc(actions.details || "") + "</div>");
-          buttons.push('<div class="row"><div class="tg-button">❤️ ' + esc(actions.cardFavorite || "") + '</div><div class="tg-button">⚖️ ' + esc(comparison.cardAddShort || comparison.cardAdd || "") + "</div></div>");
-          buttons.push('<div class="tg-button">💬 ' + esc(actions.contactManager || "") + "</div>");
-        } else {
+        {
           var promoActions = interfaceCopy("propertyActions", language);
           if (titleText) lines.push(titleText);
           var promoText = translatedValue("text", language);
@@ -741,21 +729,14 @@ function openRecordEditor(kind, id) {
       // Предпросмотр говорит теми же словами, что бот: тексты интерфейса
       // грузятся отдельно, поэтому обновляем его, когда они приедут.
       loadInterfaceText().then(renderRecordPreview).catch(function () {});
-      async function saveRecord() {
-        // Незаполненную карточку сохраняем: клиент увидит её только на тех
-        // языках, где всё заполнено. Раньше кнопка «Сохранить» здесь молча
-        // ничего не делала, и поправить город в карточке было нельзя.
-        var incomplete = isObject && ["active", "reserved"].indexOf(value("fStatus")) >= 0
-          ? LANGUAGES.map(function (language) { return { language: language[0], issues: editorPublicationIssues(language[0]) }; }).filter(function (entry) { return entry.issues.length; })
-          : [];
-        var payload = {
+      // Поля карточки для сервера — и при сохранении, и для предпросмотра (без фотографий).
+      function recordFields() {
+        var fields = {
           title: collectTranslated(dialog, "title"),
           url: (dialog.querySelector("#fUrl") || {}).value || "",
-          imageDataUrlsByLanguage: pendingImages,
-          removeImageIdsByLanguage: removedImages,
         };
         if (isObject) {
-          Object.assign(payload, {
+          Object.assign(fields, {
             propertyType: dialog.querySelector("#fType").value,
             dealType: dialog.querySelector("#fDeal").value,
             status: dialog.querySelector("#fStatus").value,
@@ -781,13 +762,26 @@ function openRecordEditor(kind, id) {
             badges: Array.from(dialog.querySelectorAll("[data-badge]")).filter(function (box) { return box.checked; }).map(function (box) { return box.dataset.badge; }),
           });
         } else {
-          Object.assign(payload, {
+          Object.assign(fields, {
             text: collectTranslated(dialog, "text"),
             startAt: dialog.querySelector("#fStart").value,
             endAt: dialog.querySelector("#fEnd").value,
             enabled: dialog.querySelector("#fEnabled").checked,
           });
         }
+        return fields;
+      }
+      async function saveRecord() {
+        // Незаполненную карточку сохраняем: клиент увидит её только на тех
+        // языках, где всё заполнено. Раньше кнопка «Сохранить» здесь молча
+        // ничего не делала, и поправить город в карточке было нельзя.
+        var incomplete = isObject && ["active", "reserved"].indexOf(value("fStatus")) >= 0
+          ? LANGUAGES.map(function (language) { return { language: language[0], issues: editorPublicationIssues(language[0]) }; }).filter(function (entry) { return entry.issues.length; })
+          : [];
+        var payload = Object.assign(recordFields(), {
+          imageDataUrlsByLanguage: pendingImages,
+          removeImageIdsByLanguage: removedImages,
+        });
         try {
           var result = record
             ? await send("/api/" + kind + "/" + encodeURIComponent(record.id), "PATCH", payload)

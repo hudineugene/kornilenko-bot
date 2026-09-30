@@ -102,10 +102,9 @@ function fitCaption(text, limit = CAPTION_LIMIT) {
   return slice.replace(/[\s‍️]+$/u, '') + '…';
 }
 
-async function deliverPropertyCard(user, entry, record, token) {
-  const language = user.preferredLanguage || 'ru';
+// Подпись и кнопки карточки в рассылке. Отдельной функцией, чтобы предпросмотр в панели показывал ровно то же.
+function broadcastCardContent(record, language, intro) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
-  const intro = fillTemplate(localized(entry.messages, language), user);
   // Если всё не помещается, сокращаем вступление рассылки, а не описание объекта.
   // Тот же вид, что у карточки в каталоге: заголовок жирным, тип курсивом, цена жирной. Длину считаем по
   // простому тексту, вступление экранируем — разметка не должна порваться на обрезке.
@@ -119,8 +118,14 @@ async function deliverPropertyCard(user, entry, record, token) {
   if (record.status === 'active') rows.push([{ text: '📅 ' + copy.viewing, callback_data: 'property:viewing:' + record.id }]);
   rows.push([{ text: '📋 ' + copy.details, callback_data: 'property:card:' + record.id }]);
   rows.push([unsubscribe]);
+  return { caption, markup: { inline_keyboard: rows } };
+}
+
+async function deliverPropertyCard(user, entry, record, token) {
+  const language = user.preferredLanguage || 'ru';
+  const intro = fillTemplate(localized(entry.messages, language), user);
+  const { caption, markup } = broadcastCardContent(record, language, intro);
   const images = recordImages(record, language);
-  const markup = { inline_keyboard: rows };
   if (images.length) return sendPhotoMessage(user.chatId, images[0], caption, token, markup, { parseMode: 'HTML' });
   return sendMessage(user.chatId, caption, token, { reply_markup: markup, parse_mode: 'HTML' });
 }
@@ -297,6 +302,7 @@ async function runDueBroadcasts() {
 }
 
 export {
+  broadcastCardContent,
   BROADCAST_RESPONSE_FIELDS,
   BROADCAST_RESPONSE_WINDOW_MS,
   broadcastUsers,

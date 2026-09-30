@@ -6,15 +6,51 @@ import { normalizeBuyPlan, normalizeGuidePages, pruneOrphanPropertyAnalytics } f
 import { imageExists } from './media.mjs';
 import { peekDeleted, rememberDeleted, takeDeleted } from './trash.mjs';
 import { data, saveDataNow } from './store.mjs';
-import { recordImages } from './catalog.mjs';
+import { contentButtons, objectCaptionHtml, recordImages } from './catalog.mjs';
 import { binaryImage, json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
 import { parseContentRecord } from './admin-input.mjs';
 import { queuePropertyAlerts } from './alerts.mjs';
+import { broadcastCardContent } from './broadcasts.mjs';
 
 // Каждая ветка сама отвечает клиенту и возвращает управление. Если не подошла
 // ни одна, функция возвращает false — тогда запрос ищут в других модулях.
 
 async function handleContentApi(req, res, url) {
+  // Предпросмотр карточки объекта в редакторе: собирается тем же кодом, что и карточка в боте (подпись и кнопки из
+  // catalog.mjs), — а не второй копией правил в панели, которая отставала (показывала «Доступен» и характеристики по
+  // строке, когда бот уже давно писал иначе). Ничего не сохраняет.
+  // Рассылка с карточкой объекта: вступление и карточка ровно так, как уйдёт клиенту.
+  if (url.pathname === '/api/preview/broadcast' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const language = ['ru', 'en', 'es'].includes(body.language) ? body.language : 'ru';
+    const record = data.objects.find((item) => String(item.id) === String(body.propertyId || ''));
+    if (!record) return json(res, 404, { error: 'Объект не найден' });
+    const card = broadcastCardContent(record, language, cleanText(body.message, 1000));
+    return json(res, 200, { caption: card.caption, rows: card.markup.inline_keyboard.map((row) => row.map((button) => button.text)) });
+  }
+
+  if (url.pathname === '/api/preview/object' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    try {
+      const body = await readJson(req);
+      const language = ['ru', 'en', 'es'].includes(body.language) ? body.language : 'ru';
+      const empty = !['ru', 'en', 'es'].some((code) => cleanText(body.title && body.title[code], 160));
+      // Название в редакторе может быть ещё пустым — показываем карточку без него, а не ошибку.
+      const record = parseContentRecord({ ...body, title: empty ? { ru: '—' } : body.title, imageDataUrlsByLanguage: {}, removeImageIdsByLanguage: {} }, 'objects');
+      if (empty) record.title = { ru: '', en: '', es: '' };
+      const markup = contentButtons(record, language, null, 'property', null);
+      return json(res, 200, {
+        caption: objectCaptionHtml(record, language, { maximum: 900 }),
+        rows: markup ? markup.inline_keyboard.map((row) => row.map((button) => button.text)) : [],
+      });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+
   // Плашка рубрики лежит в настройках, а не в коллекции.
   const rubricMatch = url.pathname.match(/^\/api\/media\/rubrics\/([^/]+)$/);
   if (rubricMatch && req.method === 'GET') {

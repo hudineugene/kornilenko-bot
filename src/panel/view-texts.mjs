@@ -112,13 +112,20 @@ async function renderWelcome(host) {
       ? pending.dataUrl
       : pending && pending.remove ? "" : stored.exists ? "/api/images/" + language + "/welcome?rev=" + encodeURIComponent(stored.updatedAt || "") : "";
     var text = [greeting, catalogPreviewLine(language), hint].filter(Boolean).join("\n\n");
-    var buttons = MENU_FIELDS.filter(function (field) { return field[0] !== "placeholder"; })
-      .map(function (field) { return languageValue('[data-menu="' + field[0] + '"]', language); })
-      .filter(Boolean);
+    var label = function (key) { return languageValue('[data-menu="' + key + '"]', language); };
+    // Клавиатура меню — в том же порядке и рядах, что у бота: без акций 2-2-1, с акциями три ряда по два.
+    var hasPromotions = (state.promotions || []).some(function (promotion) { return promotion.enabled !== false; });
+    var layout = hasPromotions
+      ? [["objects", "selection"], ["contacts", "promotions"], ["guide", "more"]]
+      : [["objects", "selection"], ["guide", "more"], ["contacts"]];
+    var menuRows = layout.map(function (row) { return row.map(label).filter(Boolean); }).filter(function (row) { return row.length; });
     host.querySelector("#welcomePreview").innerHTML =
       '<div class="tg-bubble">' + (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="">' : "") +
         '<div class="tg-text">' + linkedPreview(text) + "</div></div>" +
-      (buttons.length ? '<div class="tg-buttons">' + buttons.map(function (label) { return '<div class="tg-button">' + esc(label) + "</div>"; }).join("") + "</div>" : "") +
+      (menuRows.length ? '<div class="tg-buttons">' + menuRows.map(function (row) {
+        var cells = row.map(function (item) { return '<div class="tg-button">' + esc(item) + "</div>"; }).join("");
+        return row.length > 1 ? '<div class="row">' + cells + "</div>" : cells;
+      }).join("") + "</div>" : "") +
       '<div class="tg-note">В поле ввода: ' + esc(languageValue('[data-menu="placeholder"]', language) || "—") + "</div>";
   }
   host.addEventListener("input", renderWelcomePreview);

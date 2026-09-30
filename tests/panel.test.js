@@ -226,13 +226,10 @@ test('редакторы объекта и рассылки имеют живо�
   assert.match(PANEL_HTML, /id="campaignPreview"/);
   assert.match(PANEL_HTML, /function renderCampaignPreview\(\)/);
   assert.ok((PANEL_HTML.match(/wide: true/g) || []).length >= 2, 'оба редактора должны использовать широкую компоновку');
+  assert.match(PANEL_HTML, /\/api\/preview\/object/, 'предпросмотр объекта берётся с сервера — тем же кодом, что карточка в боте');
   assert.match(PANEL_HTML, /Готовность карточки/);
   assert.match(PANEL_HTML, /клиенты видят её только на тех языках, где заполнено всё/, 'карточка объясняет готовность, а не запрещает сохранение');
   assert.match(PANEL_HTML, /encodeURIComponent\(record\.id\), "PATCH"/);
-  assert.match(PANEL_HTML, /comparison\.cardAddShort/, 'предпросмотр должен показывать компактную кнопку сравнения');
-  assert.match(PANEL_HTML, /actions\.bedroomsLabel/, 'характеристики в предпросмотре должны иметь локализованные подписи');
-  assert.match(PANEL_HTML, /facts\.slice\(factIndex, factIndex \+ 2\)/, 'в строке предпросмотра должно быть не больше двух характеристик');
-  assert.match(PANEL_HTML, /✦ /, 'премиальные метки должны совпадать с карточкой Telegram');
   assert.match(PANEL_HTML, /Цена по запросу \/ текст/);
   assert.match(PANEL_HTML, /Полный адрес показывается клиенту только после нажатия/);
 });

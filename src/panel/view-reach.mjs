@@ -239,6 +239,7 @@ function openCampaignEditor(id) {
         var input = dialog.querySelector('[data-tr="' + name + '"][data-lang="' + language + '"]');
         return input ? String(input.value || "").trim() : "";
       }
+      var campaignPreviewSerial = 0;
       function renderCampaignPreview() {
         var language = dialog.dataset.activeLanguage || "ru";
         var languageName = (LANGUAGES.find(function (item) { return item[0] === language; }) || ["", language])[1];
@@ -248,6 +249,19 @@ function openCampaignEditor(id) {
         var buttonUrl = String(dialog.querySelector("#campUrl").value || "").trim();
         var imageUrlValue = image ? image.dataUrl : savedImageUrl;
         var preview = dialog.querySelector("#campaignPreview");
+        // Рассылка с карточкой объекта уходит карточкой (подпись и кнопки — как в каталоге): показываем то, что соберёт сервер.
+        var cardProperty = dialog.querySelector("#campProperty") && dialog.querySelector("#campAsCard") && dialog.querySelector("#campAsCard").checked ? dialog.querySelector("#campProperty").value : "";
+        if (cardProperty) {
+          var serial = ++campaignPreviewSerial;
+          send("/api/preview/broadcast", "POST", { propertyId: cardProperty, language: language, message: message }).then(function (card) {
+            if (serial !== campaignPreviewSerial) return;
+            var button = function (text) { return '<div class="tg-button">' + esc(text) + "</div>"; };
+            preview.innerHTML = '<div class="tg-bubble"><div class="tg-text">' + card.caption + "</div></div>" +
+              '<div class="tg-buttons">' + card.rows.map(function (row) { return row.map(button).join(""); }).join("") + "</div>";
+          }).catch(function () {});
+          return;
+        }
+        ++campaignPreviewSerial;
         if (!message && !imageUrlValue) {
           preview.innerHTML = '<div class="editor-preview-empty">Введите сообщение или выберите изображение</div>';
           return;
