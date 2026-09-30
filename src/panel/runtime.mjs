@@ -343,8 +343,27 @@ function showLoadFailure(host, error, retry) {
 }
 
 // Диалоги: подтверждение и произвольная форма.
+// Окно закрылось — фокус возвращается на то, чем его открыли (иначе клавиатурный пользователь оказывается в
+// начале страницы). Если кнопку успели перерисовать, ищем такую же по id или подписи.
+function rememberOpener() {
+  var node = document.activeElement;
+  if (!node || node === document.body || !node.getAttribute) return null;
+  return { node: node, id: node.id || "", label: (node.dataset && node.dataset.label) || "", text: String(node.textContent || "").trim().slice(0, 60) };
+}
+function restoreOpener(opener) {
+  if (!opener) return;
+  var target = opener.node && opener.node.isConnected ? opener.node : null;
+  if (!target && opener.id) target = document.getElementById(opener.id);
+  if (!target && opener.label) target = document.querySelector('[data-label="' + opener.label + '"]');
+  if (!target && opener.text) {
+    target = Array.prototype.find.call(document.querySelectorAll("button"), function (button) { return String(button.textContent || "").trim() === opener.text; }) || null;
+  }
+  if (target && target.focus) target.focus();
+}
+
 function confirmDialog(title, text, confirmText, danger) {
   return new Promise(function (resolve) {
+    var opener = rememberOpener();
     var dialog = document.createElement("dialog");
     var confirmTitleId = "dialogTitle" + (++dialogSerial);
     dialog.setAttribute("aria-labelledby", confirmTitleId);
@@ -354,7 +373,7 @@ function confirmDialog(title, text, confirmText, danger) {
     dialog.querySelectorAll("button").forEach(function (button) {
       button.onclick = function () { dialog.close(button.value); };
     });
-    dialog.addEventListener("close", function () { resolve(dialog.returnValue === "ok"); dialog.remove(); });
+    dialog.addEventListener("close", function () { resolve(dialog.returnValue === "ok"); dialog.remove(); restoreOpener(opener); });
     dialog.showModal();
   });
 }
@@ -391,6 +410,7 @@ function askPassword(title, text, label) {
 var dialogSerial = 0;
 
 function openDialog(options) {
+  var opener = rememberOpener();
   var dialog = document.createElement("dialog");
   var dialogDirty = false, closingDialog = false;
   var titleId = "dialogTitle" + (++dialogSerial);
@@ -418,10 +438,31 @@ function openDialog(options) {
     dialog.addEventListener("change", function () { dialogDirty = true; });
     dialog.addEventListener("cancel", function (event) { event.preventDefault(); requestClose(); });
   }
-  dialog.addEventListener("close", function () { dialog.remove(); });
+  dialog.addEventListener("close", function () { dialog.remove(); restoreOpener(opener); });
   dialog.showModal();
   if (options.ready) options.ready(dialog);
   return dialog;
+}
+
+// Короткий вопрос одной строкой — своё окно вместо prompt(): оно в стиле панели, закрывается Escape и
+// возвращает фокус. Пустой ответ и отмена — "".
+function askText(title, label, initial, placeholder) {
+  return new Promise(function (resolve) {
+    var done = false;
+    openDialog({
+      title: title,
+      body: '<div class="field"><label for="askTextField">' + esc(label) + '</label><input id="askTextField" value="' + esc(initial || "") + '" placeholder="' + esc(placeholder || "") + '"></div>',
+      footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="askTextOk" type="button">Вставить</button>',
+      ready: function (node) {
+        var input = node.querySelector("#askTextField");
+        var accept = function () { done = true; node.closeClean(); resolve(input.value.trim()); };
+        node.querySelector("#askTextOk").onclick = accept;
+        input.onkeydown = function (event) { if (event.key === "Enter") { event.preventDefault(); accept(); } };
+        node.addEventListener("close", function () { if (!done) resolve(""); });
+        setTimeout(function () { input.focus(); }, 50);
+      },
+    });
+  });
 }
 
 // Кнопки разметки над полем. Работают там, где бот понимает разметку:
@@ -461,14 +502,14 @@ function bindMarkupToolbar(root) {
         else if (button.dataset.mark === "italic") insertAround(area, "__", "__", "текст");
         else if (button.dataset.mark === "line") insertAround(area, "\n━━━━━━━━━━━━━━━━━━\n", "", "");
         else if (button.dataset.mark === "mail") {
-          var address = prompt("Адрес электронной почты", "");
-          if (!address) return;
-          insertAround(area, "[", "](mailto:" + address.trim() + ")", "Mail");
+          askText("Ссылка на почту", "Адрес электронной почты", "", "name@example.com").then(function (address) {
+            if (address) insertAround(area, "[", "](mailto:" + address + ")", "Mail");
+          });
         }
         else {
-          var url = prompt("Адрес ссылки", "https://");
-          if (!url) return;
-          insertAround(area, "[", "](" + url + ")", "название");
+          askText("Ссылка надписью", "Адрес ссылки", "https://", "").then(function (url) {
+            if (url) insertAround(area, "[", "](" + url + ")", "название");
+          });
         }
       };
     });
@@ -914,7 +955,42 @@ function enhanceAccessibility(root) {
       button.setAttribute("role", "tab");
       button.setAttribute("aria-selected", String(button.classList.contains("active")));
     });
+    // Как в ARIA: в очереди Tab одна вкладка (активная), между вкладками ходят стрелки.
+    var hasActive = Boolean(tabs.querySelector("button.active"));
+    Array.prototype.forEach.call(tabs.querySelectorAll("button"), function (button) {
+      if (hasActive) button.setAttribute("tabindex", button.classList.contains("active") ? "0" : "-1");
+      else button.removeAttribute("tabindex");
+    });
   });
+}
+
+// ←/→ (и Home/End) переносят фокус на соседнюю вкладку; открывает её Enter или пробел, как обычную кнопку.
+function tabArrows(event) {
+  var target = event && event.target;
+  if (!target || !target.getAttribute || target.getAttribute("role") !== "tab") return false;
+  var keys = { ArrowRight: 1, ArrowLeft: -1, Home: "first", End: "last" };
+  if (!(event.key in keys)) return false;
+  var group = target.closest ? target.closest("[role=tablist]") : null;
+  if (!group) return false;
+  var tabs = Array.prototype.filter.call(group.querySelectorAll('[role="tab"]'), function (tab) { return !tab.disabled; });
+  var index = tabs.indexOf(target);
+  if (index < 0) return false;
+  var step = keys[event.key];
+  var next = step === "first" ? tabs[0] : step === "last" ? tabs[tabs.length - 1] : tabs[(index + step + tabs.length) % tabs.length];
+  if (event.preventDefault) event.preventDefault();
+  if (next && next.focus) next.focus();
+  return true;
+}
+
+// Escape закрывает лист «Ещё» на телефоне и возвращает фокус на кнопку «⋯».
+function closeMoreSheetOnEscape(event) {
+  if (!event || event.key !== "Escape") return false;
+  var sheet = el("moreSheet");
+  if (!sheet || sheet.classList.contains("hidden")) return false;
+  sheet.classList.add("hidden");
+  var more = el("tabMore");
+  if (more) { more.setAttribute("aria-expanded", "false"); if (more.focus) more.focus(); }
+  return true;
 }
 
 // Enter и пробел на самой строке — как нажатие мышью; вложенные кнопки и поля своё
@@ -981,6 +1057,8 @@ function iconifyButtons(root) {
 
 function initAccessibility() {
   document.addEventListener("keydown", keyboardActivate);
+  document.addEventListener("keydown", tabArrows);
+  document.addEventListener("keydown", closeMoreSheetOnEscape);
   var page = el("page");
   if (typeof MutationObserver === "function" && page) {
     var timer = 0;

@@ -3227,6 +3227,7 @@ test('клавиатура и скринридер: кликабельные с�
   assert.match(PANEL_HTML, /<div id="savebar" class="savebar hidden" role="status">/);
   assert.match(PANEL_HTML, /<div id="refreshHint" class="refresh-hint hidden" role="status">/);
 
+  const focused = [];
   // Поддельный узел с атрибутами и классами.
   const node = (classes = [], children = []) => {
     const attrs = {};
@@ -3236,7 +3237,11 @@ test('клавиатура и скринридер: кликабельные с�
       getAttribute(name) { return Object.hasOwn(attrs, name) ? attrs[name] : null; },
       hasAttribute(name) { return Object.hasOwn(attrs, name); },
       classList: { contains: (name) => classes.includes(name) },
-      querySelectorAll(selector) { return selector === 'button' ? children : []; },
+      removeAttribute(name) { delete attrs[name]; },
+      querySelectorAll(selector) { return selector === 'button' ? children : selector === '[role="tab"]' ? children : []; },
+      querySelector(selector) { return selector === 'button.active' ? children.find((child) => child.classList.contains('active')) || null : null; },
+      closest(selector) { return selector === '[role=tablist]' ? this.group || null : null; },
+      focus() { focused.push(this); },
       clicked: 0, click() { this.clicked += 1; },
     };
   };
@@ -3255,6 +3260,30 @@ test('клавиатура и скринридер: кликабельные с�
   assert.equal(first.getAttribute('role'), 'tab');
   assert.equal(first.getAttribute('aria-selected'), 'true', 'активная вкладка выбрана');
   assert.equal(second.getAttribute('aria-selected'), 'false');
+  assert.equal(first.getAttribute('tabindex'), '0', 'в очереди Tab одна вкладка — активная');
+  assert.equal(second.getAttribute('tabindex'), '-1');
+
+  // Стрелки переносят фокус по кругу, Home/End — на края; чужие клавиши и не-вкладки не трогаем.
+  first.group = tabs; second.group = tabs;
+  let arrowed = 0;
+  const arrow = (target, pressed) => ({ key: pressed, target, preventDefault() { arrowed += 1; } });
+  assert.equal(sandbox.tabArrows(arrow(first, 'ArrowRight')), true);
+  assert.equal(focused.pop(), second);
+  assert.equal(sandbox.tabArrows(arrow(second, 'ArrowRight')), true);
+  assert.equal(focused.pop(), first, 'после последней — первая');
+  assert.equal(sandbox.tabArrows(arrow(first, 'ArrowLeft')), true);
+  assert.equal(focused.pop(), second, 'перед первой — последняя');
+  assert.equal(sandbox.tabArrows(arrow(second, 'Home')), true);
+  assert.equal(focused.pop(), first);
+  assert.equal(sandbox.tabArrows(arrow(first, 'End')), true);
+  assert.equal(focused.pop(), second);
+  assert.equal(arrowed, 5);
+  assert.equal(sandbox.tabArrows(arrow(first, 'a')), false);
+  assert.equal(sandbox.tabArrows(arrow(node(), 'ArrowRight')), false, 'не вкладка');
+  // Без активной вкладки — все остаются в очереди Tab.
+  const lone = node([], [node(), node()]);
+  sandbox.enhanceAccessibility({ querySelectorAll: (selector) => (selector === '.tabs' ? [lone] : []) });
+  assert.equal(lone.children[0].getAttribute('tabindex'), null);
 
   // Enter и пробел на самой строке — нажатие; на другом — нет; вложенная кнопка своё нажатие сохраняет.
   let prevented = 0;
@@ -4253,4 +4282,67 @@ test('«Диалоги»: режим «Выбрать» — отметки у с
   await dialog.querySelector('#batchDo').onclick();
   const transfer = requests.find((request) => request.url === '/api/inquiries/transfer');
   assert.deepEqual(JSON.parse(JSON.stringify(transfer.body)), { ids: ['a', 'c'], to: 'Мария' });
+});
+
+test('окна: фокус возвращается на кнопку-источник (в том числе перерисованную); Escape закрывает лист «Ещё»; вместо prompt() — своё окно', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const focusLog = [];
+  const button = (extra) => Object.assign({ id: '', dataset: {}, textContent: '', isConnected: true, getAttribute: () => null, focus() { focusLog.push(this.name); } }, extra);
+
+  // Кнопка на месте — фокус на неё же.
+  const original = button({ name: 'original', id: 'addThing' });
+  sandbox.document.activeElement = original;
+  const opener = sandbox.rememberOpener();
+  sandbox.restoreOpener(opener);
+  assert.deepEqual(focusLog.splice(0), ['original']);
+  // Кнопку перерисовали (узел отвалился): ищем по id, потом по подписи, потом по тексту.
+  original.isConnected = false;
+  const realGetById = sandbox.document.getElementById;
+  sandbox.document.getElementById = (id) => (id === 'addThing' ? button({ name: 'by-id' }) : null);
+  sandbox.restoreOpener(opener);
+  assert.deepEqual(focusLog.splice(0), ['by-id']);
+  sandbox.document.activeElement = button({ name: 'l', dataset: { label: 'Новый клиент' }, isConnected: false });
+  const byLabel = sandbox.rememberOpener();
+  sandbox.document.querySelector = (selector) => (selector === '[data-label="Новый клиент"]' ? button({ name: 'by-label' }) : null);
+  sandbox.restoreOpener(byLabel);
+  assert.deepEqual(focusLog.splice(0), ['by-label']);
+  // Без источника (фокус был на странице) ничего не делаем и не падаем.
+  sandbox.document.activeElement = sandbox.document.body;
+  assert.equal(sandbox.rememberOpener(), null);
+  sandbox.restoreOpener(null);
+
+  sandbox.document.getElementById = realGetById;
+  // Escape: лист «Ещё» закрывается, фокус — на «⋯»; закрытый лист и другие клавиши не трогаем.
+  const sheet = sandbox.el('moreSheet');
+  const more = sandbox.el('tabMore');
+  more.focus = () => focusLog.push('more');
+  sheet.classList.remove('hidden');
+  assert.equal(sandbox.closeMoreSheetOnEscape({ key: 'a' }), false);
+  assert.equal(sandbox.closeMoreSheetOnEscape({ key: 'Escape' }), true);
+  assert.ok(sheet.classList.contains('hidden'));
+  assert.deepEqual(focusLog.splice(0), ['more']);
+  assert.equal(sandbox.closeMoreSheetOnEscape({ key: 'Escape' }), false, 'лист уже закрыт');
+
+  // askText: Enter и «Вставить» отдают строку без пробелов по краям; закрытие окна — пустую.
+  let node = null;
+  const closeHandlers = [];
+  sandbox.openDialog = (options) => {
+    node = fakeElement('dialog');
+    node.closeClean = () => {};
+    node.addEventListener = (type, handler) => { if (type === 'close') closeHandlers.push(handler); };
+    options.ready(node);
+    return node;
+  };
+  const answer = sandbox.askText('Ссылка надписью', 'Адрес ссылки', 'https://', '');
+  node.querySelector('#askTextField').value = '  https://example.com  ';
+  node.querySelector('#askTextOk').onclick();
+  assert.equal(await answer, 'https://example.com');
+  const cancelled = sandbox.askText('Ссылка надписью', 'Адрес ссылки', '', '');
+  closeHandlers[closeHandlers.length - 1]();
+  assert.equal(await cancelled, '');
+
+  // Родных prompt() в панели не осталось (в комментариях — можно).
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.ok(!/[^a-zA-Z.]prompt\(/.test(PANEL_HTML), 'prompt() заменён своим окном');
 });
