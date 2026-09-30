@@ -3,11 +3,11 @@
 import { markMessageNotificationsRead } from './admin-notifications.mjs';
 import crypto from 'node:crypto';
 import { cleanText, localDayKey } from './util.mjs';
-import { CLIENT_NOTE_LIMIT, CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAGES } from './data-format.mjs';
+import { CLIENT_NOTE_LIMIT, CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAGES, normalizeViewing } from './data-format.mjs';
 import { MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
-import { eraseUserData, markUnavailable, userByChatId, userById, userDataExport } from './users.mjs';
+import { eraseUserData, markUnavailable, normalizeUser, userByChatId, userById, userDataExport } from './users.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
 import { appendInquiryMessage, awaitingReply, inquiryChats, inquiryTimelineMessage, trimInquiries } from './inquiries.mjs';
@@ -225,6 +225,63 @@ async function handleClientsApi(req, res, url) {
 
   // Клиенты одним файлом: панель присылает номера тех, кого показывает (с учётом
   // выбранного этапа и поиска); без номеров выгружаются все.
+  // Клиент, позвонивший по телефону или написавший в WhatsApp, заводится руками — без бота и без чата в
+  // Telegram: имя, телефон, язык, источник и заметка. Ему нельзя писать из панели (нет чата), но он есть в
+  // базе, ему можно поставить шаг и назначить просмотр.
+  if (url.pathname === '/api/users' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const name = cleanText(body.name, 120);
+    if (!name) return json(res, 400, { error: 'Укажите имя клиента' });
+    const phone = cleanText(body.phone, 80);
+    if (phone && !/^[+()\d\s.-]{5,}$/.test(phone)) return json(res, 400, { error: 'Телефон: цифры, пробелы, «+», «-» и скобки' });
+    if (body.language != null && !['ru', 'en', 'es', ''].includes(body.language)) return json(res, 400, { error: 'Язык — русский, английский или испанский' });
+    const id = 'manual-' + crypto.randomBytes(5).toString('hex');
+    const now = new Date().toISOString();
+    data.users[id] = {
+      id, contactName: name, phone, preferredLanguage: body.language || '', note: cleanText(body.note, CLIENT_NOTE_LIMIT),
+      source: cleanText(body.source, 40) || 'вручную', sourceAt: now, firstSeenAt: now,
+    };
+    const user = normalizeUser({ id, first_name: name }, null, false);
+    user.contactName = name;
+    user.lastSeenAt = '';
+    saveDataNow();
+    return json(res, 201, { ok: true, id });
+  }
+
+  // Встреча, назначенная по телефону: «просмотр» без заявки из бота. Сразу подтверждена; клиенту в Telegram
+  // ничего не уходит (у него может не быть чата), менеджер видит её в календаре и в утренней сводке.
+  if (url.pathname === '/api/viewings' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const user = userById(String(body.userId || ''));
+    if (!user) return json(res, 404, { error: 'Клиент не найден' });
+    const date = cleanText(body.date, 10);
+    const time = cleanText(body.time, 5);
+    if (!DAY_KEY_PATTERN.test(date)) return json(res, 400, { error: 'Укажите дату просмотра' });
+    if (date < localDayKey()) return json(res, 400, { error: 'Дата просмотра уже прошла' });
+    if (time && !CLOCK_TIME_PATTERN.test(time)) return json(res, 400, { error: 'Время укажите в формате ЧЧ:ММ' });
+    const propertyId = cleanText(body.propertyId, 100);
+    if (propertyId && !data.objects.some((item) => item.id === propertyId)) return json(res, 400, { error: 'Такого объекта нет' });
+    const now = new Date().toISOString();
+    const admin = cleanText(data.config.adminName, 60) || 'Администратор';
+    const inquiry = {
+      id: crypto.randomUUID(), userId: String(user.id), chatId: user.chatId ? String(user.chatId) : '',
+      language: ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'ru',
+      text: cleanText(body.note, 4000) || 'Просмотр назначен вручную', type: 'viewing', propertyId, sourceMessageId: null,
+      lead: null, selection: null, matching: null,
+      viewing: normalizeViewing({ date, timeText: time, confirmedDate: date, confirmedTime: time, confirmedAt: now }),
+      status: 'in_progress', pipelineStage: 'viewing', note: '', replies: [], messages: [], readAt: now, remindedAt: '',
+      followUpDate: '', followUpTime: '', followUpNotifiedAt: '', assignee: admin, createdAt: now, updatedAt: now, clientMessageAt: '',
+    };
+    data.inquiries.unshift(inquiry);
+    trimInquiries();
+    saveDataNow();
+    return json(res, 201, { ok: true, id: inquiry.id });
+  }
+
   if (url.pathname === '/api/users/export' && req.method === 'POST') {
     const session = requireAuth(req, res, true);
     if (!session) return;
