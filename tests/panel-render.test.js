@@ -4135,3 +4135,26 @@ test('карточка клиента: тот же телефон у друго�
   sandbox.openClient('777');
   assert.match(String(options.body), /Оба пишут через Telegram — объединить нельзя/);
 });
+
+test('шаблоны ответов: на языке клиента, {имя} и {объект} подставляются; нет языка — русский и предупреждение; метка EN в списке диалогов', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.state.objects = [{ id: 'villa-1', title: { ru: 'Вилла у моря', en: 'Sea villa', es: 'Villa' } }];
+  const template = { id: 't1', title: 'Привет', text: { ru: 'Здравствуйте, {имя}! Про «{объект}» отвечу днём.', en: 'Hello {name}! About {property} I will reply today.', es: '' } };
+  const en = sandbox.templateFor(template, { language: 'en', propertyId: 'villa-1' }, { firstName: 'John', preferredLanguage: 'en' });
+  assert.equal(en.text, 'Hello John! About Sea villa I will reply today.');
+  assert.equal(en.missing, false);
+  const es = sandbox.templateFor(template, { language: 'es', propertyId: 'villa-1' }, { firstName: 'Ana', preferredLanguage: 'es' });
+  assert.equal(es.text, 'Здравствуйте, Ana! Про «Вилла у моря» отвечу днём.', 'испанского нет — берётся русский, но имя и объект подставлены');
+  assert.equal(es.missing, true);
+  const ru = sandbox.templateFor(template, { language: 'ru' }, { firstName: 'Анна' });
+  assert.match(ru.text, /^Здравствуйте, Анна!/);
+  // Вставка предупреждает о подмене языка.
+  const toasts = [];
+  sandbox.toast = (message, bad) => toasts.push({ message: String(message), bad });
+  const field = { value: '' };
+  assert.equal(sandbox.insertTemplate(template, { language: 'es', propertyId: 'villa-1' }, { firstName: 'Ana', preferredLanguage: 'es' }, field), true);
+  assert.match(toasts.pop().message, /Шаблона на языке клиента \(ES\) нет/);
+  assert.equal(sandbox.languageChip({ preferredLanguage: 'en' }, {}).includes('>EN<'), true);
+  assert.equal(sandbox.languageChip({}, { language: 'ru' }), '');
+});

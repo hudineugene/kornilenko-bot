@@ -285,6 +285,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-item-top{display:flex;align-items:center;gap:var(--sp-2);min-width:0}
 .conversation-item-top b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conversation-item-top time{margin-left:auto;color:var(--muted);font-size:var(--fs-xs);font-weight:400;white-space:nowrap}
+.lang-chip{font-size:var(--fs-xs);padding:0 var(--sp-2);flex:none}
 .conversation-preview{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:var(--fs-sm)}
 .conversation-item-meta{display:flex;align-items:center;gap:var(--sp-2);min-width:0;color:var(--muted);font-size:var(--fs-xs)}
 .conversation-item-meta>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

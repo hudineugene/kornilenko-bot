@@ -136,6 +136,11 @@ var PIPELINE_STAGES = [
 function userOf(item) {
   return userById(item.userId) || { firstName: "Клиент", id: item.userId };
 }
+// Клиент пишет не по-русски — метка EN/ES рядом с именем: видно до открытия диалога, на каком языке отвечать.
+function languageChip(user, item) {
+  var language = String((user && user.preferredLanguage) || (item && item.language) || "ru");
+  return language !== "ru" && LANGUAGE_WORDS[language] ? ' <span class="chip lang-chip" title="Клиент пишет на языке: ' + LANGUAGE_WORDS[language] + '">' + language.toUpperCase() + "</span>" : "";
+}
 function userName(user) {
   return [user.firstName, user.lastName].filter(Boolean).join(" ") || "Без имени";
 }
@@ -468,6 +473,7 @@ function renderTasks(host) {
 function templatesCardHtml() {
   var templates = state.replyTemplates || [];
   return '<div class="card"><header><h3>Шаблоны ответов</h3><div class="actions"><button class="btn secondary small" id="addTemplate" type="button">＋ Шаблон</button></div></header>' +
+    '<div class="card-body"><span class="hint">В тексте можно писать {имя} и {объект}: подставятся имя клиента и название объекта. Нет текста на языке клиента — вставится русский, панель предупредит.</span></div>' +
     '<div class="card-body stack" id="templateList">' + (templates.length ? templates.map(function (template) {
       return '<div class="card flat"><div class="card-body stack" data-template="' + esc(template.id) + '">' +
         '<input data-field="title" value="' + esc(template.title) + '" placeholder="Название шаблона">' +
@@ -591,7 +597,7 @@ function renderInquiryList(host) {
     var stateClass = group.waiting ? (group.waitLevel === "fresh" ? "warn" : group.waitLevel === "overdue" ? "bad overdue" : "bad") : group.closed ? "" : "ok";
     return '<button class="conversation-item' + (selected ? " selected" : "") + (group.unread ? " unread" : "") + '" data-id="' + esc(group.active.id) + '" data-user="' + esc(group.userId) + '" type="button">' +
       '<span class="conversation-avatar">' + esc(initials(user.firstName)) + (group.unread ? '<i></i>' : '') + '</span>' +
-      '<span class="conversation-item-body"><span class="conversation-item-top"><b>' + esc(userName(user)) + '</b><time>' + ago(item.clientMessageAt || item.updatedAt || item.createdAt) + '</time></span>' +
+      '<span class="conversation-item-body"><span class="conversation-item-top"><b>' + esc(userName(user)) + '</b>' + languageChip(user, item) + '<time>' + ago(item.clientMessageAt || item.updatedAt || item.createdAt) + '</time></span>' +
       '<span class="conversation-preview">' + esc(String(preview || "Вложение").replace(/\s+/g, " ").slice(0, 100)) + '</span>' +
       '<span class="conversation-item-meta"><span>' + esc(inquiryTypeName(item)) + (group.inquiries.length > 1 ? " · " + group.inquiries.length + " заявки" : "") + '</span><span class="conversation-state ' + stateClass + '">' + stateText + '</span>' +
       (group.unread ? '<span class="unread-count">' + group.unread + '</span>' : '') + '</span></span></button>';
@@ -948,9 +954,7 @@ function openQuickReply(inquiryId, handledBefore) {
       (state.replyTemplates || []).forEach(function (template) {
         var button = dialog.querySelector('[data-template="' + template.id + '"]');
         if (button) button.onclick = function () {
-          var body = localized(template.text, item.language || "ru") || template.text.ru || "";
-          if (!body) return;
-          text.value = withTemplate(text.value, body);
+          if (!insertTemplate(template, item, user, text)) return;
           if (text.focus) text.focus();
         };
       });
@@ -989,6 +993,27 @@ function openQuickReply(inquiryId, handledBefore) {
       if (text.focus) text.focus();
     },
   });
+}
+
+// Текст шаблона для этого клиента: на его языке, а если такого нет — русский (или любой заполненный).
+// {имя} и {объект} подставляются: имя клиента и название объекта из его заявки на языке клиента.
+// missing — шаблона на языке клиента нет, менеджер должен об этом знать до отправки.
+function templateFor(template, item, user) {
+  var language = String((user && user.preferredLanguage) || item.language || "ru");
+  var texts = template.text || {};
+  var own = String(texts[language] || "");
+  var body = own || String(texts.ru || texts.en || texts.es || "");
+  var object = (state.objects || []).find(function (record) { return String(record.id) === String(item.propertyId || ""); });
+  var name = String((user && (user.contactName || user.firstName)) || "");
+  body = body.replace(/\{(?:имя|name)\}/gi, name || "").replace(/\{(?:объект|property)\}/gi, object ? localized(object.title, own ? language : "ru") : "");
+  return { text: body, missing: language !== "ru" && !own && Boolean(body), language: language };
+}
+function insertTemplate(template, item, user, field) {
+  var found = templateFor(template, item, user);
+  if (!found.text) return false;
+  field.value = withTemplate(field.value, found.text);
+  if (found.missing) toast("Шаблона на языке клиента (" + found.language.toUpperCase() + ") нет — вставлен русский текст. Переведите его перед отправкой.", true);
+  return true;
 }
 
 function withTemplate(current, text) {
@@ -1298,9 +1323,7 @@ function renderInquiryCard(host) {
     button.onclick = function () {
       var template = (state.replyTemplates || []).find(function (entry) { return entry.id === button.dataset.template; });
       if (!template) return;
-      var text = localized(template.text, item.language || "ru") || template.text.ru || "";
-      if (!text) return;
-      replyText.value = withTemplate(replyText.value, text);
+      if (!insertTemplate(template, item, userOf(item), replyText)) return;
       freshRequest();
       if (replyText.focus) replyText.focus();
       // Курсор — в конец вставленного: можно сразу дописать своё.
