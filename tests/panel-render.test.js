@@ -14,6 +14,10 @@ test.after(cleanup);
 // --- Заглушка браузера -------------------------------------------------------
 // Умеет ровно то, что нужно отрисовке: собрать разметку строкой, найти в ней
 // элемент, повесить обработчик. Списки возвращает пустыми.
+// Значение полей по умолчанию и учёт созданных элементов: обычные тесты берут '1' (ветки «поле заполнено»),
+// проход «пустые поля» — '' и обходит все обработчики (см. ниже).
+const fieldDefaults = { value: '1', track: null };
+
 function fakeElement(tag = 'div') {
   // Один и тот же селектор должен возвращать один и тот же элемент: иначе
   // назначенный обработчик тут же терялся бы, и проверить нажатие было нельзя.
@@ -26,7 +30,7 @@ function fakeElement(tag = 'div') {
     textContent: '',
     // Непустое значение: иначе ветки «если поле заполнено» никогда не выполнятся
     // и ошибка внутри них останется незамеченной.
-    value: '1',
+    value: fieldDefaults.value,
     checked: false,
     disabled: false,
     hidden: false,
@@ -50,7 +54,7 @@ function fakeElement(tag = 'div') {
     },
     querySelector: (selector) => {
       const key = String(selector);
-      if (!found.has(key)) found.set(key, fakeElement());
+      if (!found.has(key)) { const child = fakeElement(); child.selector = key; found.set(key, child); }
       return found.get(key);
     },
     // Один элемент, а не пустота: панель назначает почти все обработчики
@@ -80,6 +84,7 @@ function fakeElement(tag = 'div') {
     scrollHeight: 100,
     scrollTop: 0,
   };
+  if (fieldDefaults.track) fieldDefaults.track.push(node);
   return node;
 }
 
@@ -4385,4 +4390,77 @@ test('группа в панели: лента и заявки берутся о
   sandbox.renderGroups(host, 'post');
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.equal(requests.filter((request) => /\/api\/groups\/-100555$/.test(request.url)).length, 2, 'пришло новое сообщение — запросили снова');
+});
+
+test('пустые поля: на каждом экране и в каждом окне нажатие любой кнопки не роняет код (ветки «ничего не введено»)', async () => {
+  fieldDefaults.value = '';
+  fieldDefaults.track = [];
+  try {
+    resetData((data) => {
+      data.config.active = true;
+      data.objects.push(property('villa-1', 'Вилла у моря', 'active'));
+      data.promotions.push({ id: 'promo-1', title: { ru: 'Скидка недели' }, description: { ru: 'Три объекта' }, enabled: true });
+      data.users['700001'] = { id: '700001', chatId: 700001, firstName: 'Анна', preferredLanguage: 'ru', activity: [], lastSeenAt: new Date().toISOString() };
+      data.inquiries.push({ id: 'inq-1', userId: '700001', chatId: '700001', language: 'ru', type: 'general', text: 'Есть ли парковка?', status: 'new', pipelineStage: 'new', replies: [], messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), clientMessageAt: new Date().toISOString() });
+    });
+    const { sandbox, errors } = await panelSandbox();
+    sandbox.confirmDialog = async () => false; // на вопросы «Удалить?» отвечаем «нет»: нажатия ничего не стирают
+    sandbox.askPassword = async () => '';
+    sandbox.window.confirm = () => false;
+    const opened = [];
+    sandbox.openDialog = (options) => { const dialog = fakeElement('dialog'); dialog.closeClean = () => {}; opened.push(dialog); if (options.ready) options.ready(dialog); return dialog; };
+
+    const failures = [];
+    let pressed = 0;
+    const sweep = async (label) => {
+      // Заглушка отдаёт элемент на любой селектор, а в настоящей странице часть кнопок есть только при условии
+      // (#linkedProperty — только у заявки с объектом): такие нажатия в проход не берём.
+      const onlyWhenPresent = ['#linkedProperty'];
+      const elements = fieldDefaults.track.splice(0).filter((element) => /^#[A-Za-z]/.test(String(element.selector || '')) && !onlyWhenPresent.includes(element.selector));
+      for (const element of elements) {
+        for (const kind of ['onclick', 'onchange']) {
+          if (typeof element[kind] !== 'function') continue;
+          pressed += 1;
+          try {
+            await Promise.race([Promise.resolve(element[kind]({ target: element, preventDefault() {}, stopPropagation() {}, key: 'Enter' })), new Promise((resolve) => setTimeout(resolve, 40))]);
+          } catch (error) {
+            failures.push(label + ' ' + element.selector + ' ' + kind + ': ' + (error && error.message) + ' @ ' + String(error && error.stack).split(String.fromCharCode(10))[1]);
+          }
+        }
+      }
+    };
+
+    const screens = [];
+    for (const item of sandbox.navItems()) for (const tab of (item.tabs && item.tabs.length ? item.tabs.map((entry) => entry[0]) : [''])) screens.push([item.id, tab]);
+    for (const [view, tab] of screens) {
+      const host = fakeElement('main');
+      try { await sandbox.VIEWS[view].render(host, tab); } catch (error) { failures.push(view + '/' + tab + ' отрисовка: ' + error.message); continue; }
+      await sweep(view + '/' + tab);
+    }
+    const inquiry = sandbox.state.inquiries[0];
+    const dialogs = [
+      ['редактор объекта', () => sandbox.openRecordEditor('objects', 'villa-1')],
+      ['новый объект', () => sandbox.openRecordEditor('objects', null)],
+      ['редактор акции', () => sandbox.openRecordEditor('promotions', 'promo-1')],
+      ['обращение', () => sandbox.openInquiry(inquiry.id)],
+      ['карточка клиента', () => sandbox.openClient(inquiry.userId)],
+      ['быстрый ответ', () => sandbox.openQuickReply(inquiry.id, [])],
+      ['новый клиент', () => sandbox.openManualClient()],
+      ['новый просмотр', () => sandbox.openManualViewing('')],
+      ['выгрузка заявок', () => sandbox.openExportDialog()],
+      ['очистка обращений', () => sandbox.openCleanup()],
+      ['рассылка', () => sandbox.openCampaignEditor(null)],
+      ['правило автоответа', () => sandbox.openRuleEditor(null)],
+    ];
+    for (const [name, open] of dialogs) {
+      try { await open(); } catch (error) { failures.push(name + ' открытие: ' + error.message); continue; }
+      await sweep(name);
+    }
+    assert.deepEqual(failures.slice(0, 15), [], 'падения при пустых полях');
+    assert.ok(pressed > 80, 'проход действительно нажимает кнопки: ' + pressed);
+    assert.deepEqual(errors.filter((line) => /ReferenceError|TypeError|not defined/.test(line)), [], 'ошибок в консоли нет');
+  } finally {
+    fieldDefaults.value = '1';
+    fieldDefaults.track = null;
+  }
 });

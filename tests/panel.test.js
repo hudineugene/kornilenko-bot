@@ -812,3 +812,30 @@ test('подсказки в разметке не длиннее 200 знако�
   assert.deepEqual(long, [], 'длинные подсказки: ' + long.join(' | '));
   assert.match(PANEL_HTML, /function hintMore\(short, more\)/);
 });
+
+test('бюджет страницы по сжатию: в браузер уходит не больше 150 КБ gzip (панель отдаётся сжатой)', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const zlib = require('node:zlib');
+  const kilobytes = zlib.gzipSync(Buffer.from(PANEL_HTML), { level: 6 }).length / 1024;
+  assert.ok(kilobytes <= 150, 'страница сжатая ' + kilobytes.toFixed(0) + ' КБ, бюджет 150');
+});
+
+test('вкладки: каждая, что обрабатывает экран, есть в меню, и каждая из меню обрабатывается экраном', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const declared = new Map();
+  // Меню: navItems() — «{ id: "objects", … tabs: [["list", …], ["offers", …]] }».
+  for (const item of PANEL_HTML.match(/\{ id: "[a-z]+", icon: navIcon[^\n]*tabs: \[\[[^\n]*\]\] \}/g) || []) {
+    const view = item.match(/id: "([a-z]+)"/)[1];
+    declared.set(view, Array.from(item.matchAll(/\["([a-z]+)", "/g)).map((match) => match[1]));
+  }
+  assert.ok(declared.size >= 4, 'нашлись пункты меню с вкладками: ' + declared.size);
+  const handled = new Set(Array.from(PANEL_HTML.matchAll(/if \(tab === "([a-z]+)"\) return render/g)).map((match) => match[1]));
+  assert.ok(handled.size >= 10, 'нашлись обработчики вкладок: ' + handled.size);
+  const menuTabs = new Set(Array.from(declared.values()).flat());
+  const unreachable = Array.from(handled).filter((tab) => !menuTabs.has(tab));
+  assert.deepEqual(unreachable, [], 'экран обрабатывает вкладку, которой нет в меню (до неё не добраться)');
+  // Первая вкладка каждого пункта открывается «по умолчанию» и отдельной проверки не требует; остальные — обязаны.
+  const unhandled = [];
+  for (const [view, tabs] of declared) for (const tab of tabs.slice(1)) if (!handled.has(tab)) unhandled.push(view + '/' + tab);
+  assert.deepEqual(unhandled, [], 'вкладка есть в меню, но экран её не обрабатывает (откроется первая)');
+});
