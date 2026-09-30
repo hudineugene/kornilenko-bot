@@ -195,7 +195,7 @@ test.describe('callback request form', () => {
     await chat.press('lead:call');
     const step = await chat.say(ru.cancel);
     assert.equal(step.last.text, ru.cancelled);
-    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.contacts }], [{ text: MENU.ru.guide }, { text: MENU.ru.more }]] }));
+    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.guide }, { text: MENU.ru.more }], [{ text: MENU.ru.contacts }]] }));
     assert.equal(chat.user.pendingAction, null);
     assert.equal(chat.inquiries.length, 0);
   });
@@ -679,10 +679,11 @@ test.describe('property card', () => {
     const step = await chat.say(MENU.ru.objects);
     const card = step.calls.find((call) => call.method === 'sendPhoto');
     const caption = card.body.caption;
-    assert.match(caption, /💰 850\s000 €/, 'the currency is a symbol');
+    assert.match(caption, /<b>850\s000 €/, 'the currency is a symbol');
     assert.match(caption, /📍 Марбелья, Сьерра-Бланка\n/, 'city and district only');
     assert.match(caption, /🛏 4 · 🚿 1 · 📐 80 м²/, 'характеристики одной строкой значками');
-    assert.match(caption, /💰 850\s000 € · 10\s625 €\/м²/, 'у продажи видна цена за метр');
+    assert.match(caption, /<b>850\s000 € · 10\s625 €\/м²<\/b>/, 'у продажи видна цена за метр; без значка 💰 — цена и так жирная');
+    assert.ok(!caption.includes('💰'), 'значка 💰 на карточке нет');
     assert.match(caption, /<i>Вилла · Продажа<\/i>/, 'доступность не пишем — она и так по умолчанию');
     assert.ok(!caption.includes('🟢'), 'зелёного «Доступен» на карточке нет');
     assert.ok(!caption.includes('Calle Sol'), 'the address is in Details');
@@ -748,7 +749,8 @@ test.describe('property card', () => {
       const updatedSecondary = updatedMarkup.inline_keyboard
         .find((row) => row.some((button) => button.callback_data === 'property:favorite:villa-marbella-01'));
       assert.equal(updatedSecondary.length, 2, language + ': saving a property does not break the row');
-      assert.equal(updatedSecondary[0].text, '💔', language + ': в ряду значков только значок');
+      assert.equal(updatedSecondary[0].text, '❤️', language + ': в избранном — красное сердце');
+      assert.equal(secondary[0].text, '🤍', language + ': ещё не в избранном — белое');
     }
 
     const originalManagerLabel = PROPERTY.es.contact;
@@ -790,7 +792,7 @@ test.describe('property card', () => {
     const card = step.calls.find((call) => call.method === 'sendPhoto');
     assert.equal(card.body.parse_mode, 'HTML');
     assert.match(card.body.caption, /<b>Вилла &lt;вид на море&gt;<\/b>/);
-    assert.match(card.body.caption, /<b>💰 725[^<]+<\/b>/);
+    assert.match(card.body.caption, /<b>725[^<]+<\/b>/);
   });
 
   test('the same premium field order is used for every supported language', () => {
@@ -800,11 +802,11 @@ test.describe('property card', () => {
     for (const language of ['ru', 'en', 'es']) {
       const caption = bot.objectCaptionHtml(record, language);
       const actions = PROPERTY[language];
-      assert.ok(caption.indexOf('💰 ') < caption.indexOf('🛏 '), language + ': commercial block precedes characteristics');
+      assert.ok(caption.indexOf('📍 ') < caption.indexOf('🛏 '), language + ': commercial block precedes characteristics');
       assert.ok(caption.indexOf('🛏 ') < caption.indexOf('📐 '), language + ': characteristics keep one order');
       assert.match(caption, new RegExp('🌊 750 ' + (language === 'ru' ? 'м' : 'm')), language + ': на карточке значок и число');
       const factRows = caption.split('\n').filter((line) => /^(🛏|🚿|📐|🌿|🏢|🌊)/u.test(line));
-      assert.equal(factRows.length, 1, language + ': характеристики занимают одну строку, а не три');
+      assert.ok(factRows.length <= 2 && factRows.every((line) => Array.from(line).length <= 30), language + ': характеристики — не больше двух коротких строк (≤ 30 знаков), а не три и не длинная с переносом');
 
       // В «Подробнее» подписи остаются: там есть место и нужна точность.
       const full = bot.objectCaptionHtml(record, language, { full: true });
@@ -828,8 +830,8 @@ test.describe('property card', () => {
     const chat = createChat();
     const step = await chat.say('/menu');
     // Без акций — пять кнопок: объекты, подбор, связаться, «Как купить», «Моё».
-    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 1, 2]);
-    assert.deepEqual(step.last.buttons, [MENU.ru.objects, MENU.ru.selection, MENU.ru.contacts, MENU.ru.guide, MENU.ru.more]);
+    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 2, 1], '2-2-1: «Связаться» полным рядом внизу, а не одинокой кнопкой посередине');
+    assert.deepEqual(step.last.buttons, [MENU.ru.objects, MENU.ru.selection, MENU.ru.guide, MENU.ru.more, MENU.ru.contacts]);
     assert.ok(!step.last.buttons.includes(MENU.ru.promotions), 'пустой раздел акций в меню не висит');
     assert.ok(!step.last.buttons.includes(MENU.ru.favorites), 'избранное живёт в «Моё»');
 

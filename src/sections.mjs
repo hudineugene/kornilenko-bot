@@ -210,9 +210,9 @@ async function sendGuidePage(chatId, user, token, index = 0, query = null) {
   const text = ['<b>' + escapeTelegramHtml(page.title[language] || page.title.ru) + '</b>', escapeTelegramHtml(page.text[language] || page.text.ru)].join('\n\n');
   const rows = [];
   const pager = [];
-  if (safeIndex > 0) pager.push({ text: '⬅️', callback_data: 'guide:page:' + (safeIndex - 1) });
+  if (safeIndex > 0) pager.push({ text: '◀️', callback_data: 'guide:page:' + (safeIndex - 1) });
   pager.push({ text: String(safeIndex + 1) + ' / ' + String(pages.length), callback_data: 'guide:none' });
-  if (safeIndex < pages.length - 1) pager.push({ text: '➡️', callback_data: 'guide:page:' + (safeIndex + 1) });
+  if (safeIndex < pages.length - 1) pager.push({ text: '▶️', callback_data: 'guide:page:' + (safeIndex + 1) });
   rows.push(pager);
   rows.push([{ text: navigation.guideConsult, callback_data: 'contact:lead' }]);
   rows.push(planGuideRow(language));
@@ -589,13 +589,14 @@ async function handlePropertyCallback(query, token) {
     const external = validHttpUrl(record.url);
     const map = validHttpUrl(record.mapUrl);
     const share = propertyShareUrl(record, language);
-    if (external) links.push({ text: '🌐 ' + text.viewWebsite, url: external });
-    if (map) links.push({ text: '📍 ' + text.openMap, url: map });
-    if (share) links.push({ text: '📤 ' + text.share, url: share });
+    // Ссылки идут по три в ряду, поэтому подписи короткие: «Сайт», «Карта», «Друзьям».
+    if (external) links.push({ text: '🌐 ' + (text.siteShort || text.viewWebsite), url: external });
+    if (map) links.push({ text: '📍 ' + (text.mapShort || text.openMap), url: map });
+    if (share) links.push({ text: '📤 ' + (text.shareShort || text.share), url: share });
     const extra = [];
-    const calculator = calculatorButton(record, language);
+    const calculator = calculatorButton(record, language, true);
     if (calculator) extra.push(calculator);
-    extra.push({ text: '🏘 ' + text.similar, callback_data: 'property:similar:' + record.id });
+    extra.push({ text: '🏘 ' + (text.similarShort || text.similar), callback_data: 'property:similar:' + record.id });
 
     await acknowledgeCallback(query, token);
     // Подпись под фотографией Telegram ограничивает 1024 знаками — считаем по
@@ -605,7 +606,7 @@ async function handlePropertyCallback(query, token) {
     if (isCard && plainLength <= 1024) {
       const rows = [
         ...(record.status === 'active'
-          ? [[{ text: mobileButtonText('📅', text.viewing), callback_data: 'property:viewing:' + record.id },
+          ? [[{ text: mobileButtonText('📅', text.viewingShort || text.viewing), callback_data: 'property:viewing:' + record.id },
             { text: mobileButtonText('💬', text.contact), callback_data: 'property:manager:' + record.id }]]
           : [[{ text: mobileButtonText('💬', text.contact), callback_data: 'property:manager:' + record.id }]]),
         extra,
@@ -633,7 +634,7 @@ async function handlePropertyCallback(query, token) {
     const rows = [];
     if (!isCard) {
       rows.push(record.status === 'active'
-        ? [{ text: mobileButtonText('📅', text.viewing), callback_data: 'property:viewing:' + record.id },
+        ? [{ text: mobileButtonText('📅', text.viewingShort || text.viewing), callback_data: 'property:viewing:' + record.id },
           { text: mobileButtonText('💬', text.contact), callback_data: 'property:manager:' + record.id }]
         : [{ text: mobileButtonText('💬', text.contact), callback_data: 'property:manager:' + record.id }]);
     }

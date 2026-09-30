@@ -230,7 +230,8 @@ function propertyAlertDeliveries(record, before) {
       const key = priceDropped ? 'price:' + record.id + ':' + newPrice : 'available:' + record.id + ':' + localDayKey();
       if (user.alertsSent && user.alertsSent[key]) continue;
       const heading = priceDropped
-        ? copy.priceDrop + '\n💰 ' + objectPriceText({ ...record, priceValue: oldPrice }, user.preferredLanguage) + ' → ' + objectPriceText(record, user.preferredLanguage)
+        // Прежняя цена уже стоит на карточке зачёркнутой рядом с новой — в заголовке её не повторяем.
+        ? copy.priceDrop
         : copy.backAvailable;
       deliveries.push({ user, record, heading, key });
       notified.add(user.id);

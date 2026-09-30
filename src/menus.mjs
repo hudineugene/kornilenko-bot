@@ -32,15 +32,20 @@ function activePromotionCount(language) {
 function menuKeyboard(language) {
   const labels = MENU_LABELS[language] || MENU_LABELS.ru;
   const promotions = activePromotionCount(language);
-  const rows = [
-    [{ text: labels.objects }, { text: labels.selection }],
-    promotions
-      ? [{ text: labels.contacts }, { text: labels.promotions + ' · ' + promotions }]
-      : [{ text: labels.contacts }],
-    // Гид «Как купить в Испании» — на виду, в главном меню: раньше он был
-    // седьмым рядом экрана «Связаться», и покупатель его не находил.
-    [{ text: labels.guide }, { text: labels.more }],
-  ];
+  // Без акций — 2-2-1: «Связаться» полным рядом внизу, а не одинокой кнопкой посередине. С акциями — три ряда
+  // по две. Гид «Как купить в Испании» — на виду, в главном меню: раньше он был седьмым рядом экрана
+  // «Связаться», и покупатель его не находил.
+  const rows = promotions
+    ? [
+      [{ text: labels.objects }, { text: labels.selection }],
+      [{ text: labels.contacts }, { text: labels.promotions + ' · ' + promotions }],
+      [{ text: labels.guide }, { text: labels.more }],
+    ]
+    : [
+      [{ text: labels.objects }, { text: labels.selection }],
+      [{ text: labels.guide }, { text: labels.more }],
+      [{ text: labels.contacts }],
+    ];
   return {
     keyboard: rows,
     resize_keyboard: true,

@@ -138,7 +138,7 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     const askPrice = priceOnRequest(record, language);
     const canVisit = record.status === 'active';
     if (askPrice) first.push({ text: mobileButtonText('💰', action.askPrice), callback_data: 'property:price:' + record.id });
-    else if (canVisit) first.push({ text: mobileButtonText('📅', action.viewing), callback_data: 'property:viewing:' + record.id });
+    else if (canVisit) first.push({ text: mobileButtonText('📅', action.viewingShort || action.viewing), callback_data: 'property:viewing:' + record.id });
     first.push({ text: mobileButtonText('💬', action.contact), callback_data: 'property:manager:' + record.id });
     rows.push(first);
 
@@ -147,7 +147,7 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     const photos = recordImages(record, language);
     const second = [];
     // Цену спросили в первом ряду — запись на просмотр не теряется, а стоит тут.
-    if (askPrice && canVisit) second.push({ text: mobileButtonText('📅', action.viewing), callback_data: 'property:viewing:' + record.id });
+    if (askPrice && canVisit) second.push({ text: mobileButtonText('📅', action.viewingShort || action.viewing), callback_data: 'property:viewing:' + record.id });
     if (photos.length > 1) second.push({ text: '📷 ' + action.photos + ' · ' + photos.length, callback_data: 'property:gallery:' + record.id });
     second.push({ text: mobileButtonText('📋', action.details), callback_data: 'property:details:' + record.id });
     rows.push(second);
@@ -158,15 +158,16 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     const compared = Boolean(user && Array.isArray(user.comparisonIds) && user.comparisonIds.includes(record.id));
     const comparisonCount = user ? catalogRecords(user, 'comparison').length : 0;
     const icons = [
-      { text: isFavorite ? '💔' : '❤️', callback_data: 'property:favorite:' + record.id },
+      // Значок показывает состояние, а не действие: 🤍 — не в избранном, ❤️ — в избранном.
+      { text: isFavorite ? '❤️' : '🤍', callback_data: 'property:favorite:' + record.id },
       { text: compared ? '⚖️ · ' + comparisonCount : '⚖️', callback_data: compared ? 'compare:view' : 'property:compare:' + record.id },
     ];
     if (catalog && catalog.totalPages > 1) {
       const previousPage = (catalog.page - 1 + catalog.totalPages) % catalog.totalPages;
       const nextPage = (catalog.page + 1) % catalog.totalPages;
-      icons.push({ text: '⬅️', callback_data: 'catalog:' + catalog.mode + ':' + previousPage });
+      icons.push({ text: '◀️', callback_data: 'catalog:' + catalog.mode + ':' + previousPage });
       icons.push({ text: String(catalog.page + 1) + ' / ' + String(catalog.totalPages), callback_data: 'catalog:none:0' });
-      icons.push({ text: '➡️', callback_data: 'catalog:' + catalog.mode + ':' + nextPage });
+      icons.push({ text: '▶️', callback_data: 'catalog:' + catalog.mode + ':' + nextPage });
     }
     rows.push(icons);
   }
@@ -303,10 +304,21 @@ function propertySpecRows(record, language, options = {}) {
     facts.push(fact('🏢', copy.floor, floorValue));
   }
   if (distanceSea) facts.push(fact('🌊', copy.distanceSeaLabel, distanceSea + ' ' + metre));
-  if (compact) return facts.length ? [facts.join(' · ')] : [];
-  const rows = [];
-  for (let index = 0; index < facts.length; index += 2) rows.push(facts.slice(index, index + 2).join('   ·   '));
-  return rows;
+  if (compact) {
+    // Одна длинная строка переносилась на экране телефона («🌊 150 м» оставалась сиротой): собираем строки до 30 знаков.
+    const lines = [];
+    let current = '';
+    for (const item of facts) {
+      const next = current ? current + ' · ' + item : item;
+      if (current && Array.from(next).length > 30) {
+        lines.push(current);
+        current = item;
+      } else current = next;
+    }
+    if (current) lines.push(current);
+    return lines;
+  }
+  return facts;
 }
 
 // Цена за метр — то, чем покупатели сравнивают объекты между собой. Считаем
@@ -320,6 +332,13 @@ function pricePerSquareMetre(record, language) {
   const perMetre = Math.round(price / area);
   const symbol = record.currency === 'USD' ? '$' : record.currency === 'GBP' ? '£' : '€';
   return formatMoney(perMetre, symbol, language, 0) + '/' + metre + '²';
+}
+
+// Строка цены карточки: цена и, для продажи, цена за метр. Без значка 💰: она и так единственная жирная.
+function objectPriceLine(record, language) {
+  const price = objectPriceText(record, language);
+  const perMetre = pricePerSquareMetre(record, language);
+  return price ? price + (perMetre ? ' · ' + perMetre : '') : '';
 }
 
 function objectCaption(record, language, options = {}) {
@@ -347,11 +366,11 @@ function objectCaption(record, language, options = {}) {
   // «Доступен» не пишем: это состояние по умолчанию, а строка съедала место.
   // Важно обратное — что объект уже забронирован.
   const status = record.status === 'reserved' ? '🟡 ' + copy.reserved : '';
-  const header = [title, [status, type, deal].filter(Boolean).join(' · ')];
-  if (badgeNames.length) header.push('✦ ' + badgeNames.join(' · '));
+  // Метка («Новинка») — в той же строке, что тип и сделка: отдельная строка съедала место карточки.
+  const header = [title, [status, type, deal, badgeNames.length ? '✦ ' + badgeNames.join(' · ') : ''].filter(Boolean).join(' · ')];
   const commercial = [];
-  const perMetre = pricePerSquareMetre(record, language);
-  if (price) commercial.push('💰 ' + price + (perMetre ? ' · ' + perMetre : ''));
+  const priceLine = objectPriceLine(record, language);
+  if (priceLine) commercial.push(priceLine);
   if (location) commercial.push('📍 ' + location);
   const specs = propertySpecRows(record, language, { compact: !full });
   if (!full) {
@@ -396,6 +415,7 @@ function priceDropVisible(record, now = Date.now()) {
 function objectCaptionHtml(record, language, options = {}) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const headings = new Set([copy.specificationsTitle, copy.descriptionTitle]);
+  const priceLine = objectPriceLine(record, language);
   let contentLines = 0;
   return objectCaption(record, language, options).split('\n').map((line) => {
     const escaped = escapeTelegramHtml(line);
@@ -404,15 +424,15 @@ function objectCaptionHtml(record, language, options = {}) {
     if (contentLines === 1) return '<b>' + escaped + '</b>';
     // Вторая строка — «тип · сделка» (и «Забронирован», если он есть). Раньше
     // она узнавалась по значку состояния, но «Доступен» мы больше не пишем.
-    if (contentLines === 2 && !line.startsWith('💰 ') && !line.startsWith('📍 ')) return '<i>' + escaped + '</i>';
-    if (line.startsWith('🟡 ') || line.startsWith('✦ ') || line.startsWith(copy.updated + ':')) return '<i>' + escaped + '</i>';
+    if (contentLines === 2 && line !== priceLine && !line.startsWith('📍 ')) return '<i>' + escaped + '</i>';
+    if (line.startsWith('🟡 ') || line.startsWith(copy.updated + ':')) return '<i>' + escaped + '</i>';
     // Цена снизилась — прежняя остаётся рядом зачёркнутой: клиенту видно, что
     // объект подешевел, а не просто «стоит столько».
-    if (line.startsWith('💰 ') && priceDropVisible(record)) {
+    if (line === priceLine && priceDropVisible(record)) {
       const previous = escapeTelegramHtml(objectPriceText({ ...record, priceValue: record.previousPriceValue }, language));
-      return '<b>💰 <s>' + previous + '</s> ' + escaped.slice('💰 '.length) + '</b>';
+      return '<b><s>' + previous + '</s> ' + escaped + '</b>';
     }
-    if (line.startsWith('💰 ') || headings.has(line)) return '<b>' + escaped + '</b>';
+    if (line === priceLine || headings.has(line)) return '<b>' + escaped + '</b>';
     return escaped;
   }).join('\n');
 }
@@ -590,6 +610,12 @@ function catalogFacetCount(records, filter, facet, choice, language) {
 
 function countedFilterLabel(text, count, selected = false) {
   return (selected ? '✓ ' : '') + text + ' · ' + count;
+}
+
+// Кнопки главного экрана фильтра — без счётчиков: «✓ Продажа и аренда · 5» в тройном ряду обрезалось, а
+// «· 5» на коротких кнопках читалось как «1+·4». Число подходящих объектов — на «Показать» и в заголовке.
+function markedFilterLabel(text, selected = false) {
+  return (selected ? '✓ ' : '') + text;
 }
 
 function formattedPriceLimit(value, language) {
@@ -844,7 +870,10 @@ function similarPropertyHtml(user, record, language, mode) {
 
 function propertyCardCaption(user, record, language, catalog) {
   // Номер объекта в списке не повторяем: он и так на кнопке между стрелками.
-  const heading = cleanText(catalog && catalog.heading, 160);
+  // Общий каталог заголовка над карточкой не получает: «🏘 Объекты» съедало две строки. Он нужен там, где
+  // список особый — избранное, похожие, подобранные, сравнение.
+  const plainHeading = cleanText(catalog && catalog.heading, 160);
+  const heading = plainHeading === (MENU_LABELS[language] || MENU_LABELS.ru).objects ? '' : plainHeading;
   const position = '';
   const context = heading ? '<i>' + escapeTelegramHtml(heading) + '</i>' : '';
   const recommendation = selectionMatchHtml(user, record, language, catalog && catalog.mode)
@@ -1033,8 +1062,20 @@ function catalogListLine(record, language, number) {
   const city = localizedExact(record.city, language, 80);
   const price = objectPriceText(record, language);
   const bedrooms = Number(record.bedrooms) > 0 ? record.bedrooms + ' ' + (language === 'ru' ? 'сп.' : language === 'es' ? 'dorm.' : 'bed') : '';
-  const parts = [type, city, price, bedrooms].filter(Boolean);
-  return String(number) + '. ' + parts.join(' · ');
+  // Строка не длиннее 34 знаков: длиннее — переносится, и восемь объектов занимают шестнадцать строк. Сначала
+  // отпадают спальни, потом город сокращается (или уходит): тип и цена остаются всегда.
+  const LIMIT = 34;
+  const prefix = String(number) + '. ';
+  const build = (list) => prefix + list.filter(Boolean).join(' · ');
+  const fits = (list) => Array.from(build(list)).length <= LIMIT;
+  let shownCity = city;
+  let shownBedrooms = bedrooms;
+  if (!fits([type, shownCity, price, shownBedrooms])) shownBedrooms = '';
+  if (!fits([type, shownCity, price, shownBedrooms]) && shownCity) {
+    const room = LIMIT - Array.from(build([type, price])).length - 3;
+    shownCity = room >= 4 ? shortenedText(shownCity, room) : '';
+  }
+  return build([type, shownCity, price, shownBedrooms]);
 }
 
 function catalogListPanel(user, records, page, mode) {
@@ -1055,9 +1096,9 @@ function catalogListPanel(user, records, page, mode) {
   }
   if (pages > 1) {
     rows.push([
-      { text: '⬅️', callback_data: 'clist:' + mode + ':' + ((safePage - 1 + pages) % pages) },
+      { text: '◀️', callback_data: 'clist:' + mode + ':' + ((safePage - 1 + pages) % pages) },
       { text: String(safePage + 1) + ' / ' + String(pages), callback_data: 'catalog:none:0' },
-      { text: '➡️', callback_data: 'clist:' + mode + ':' + ((safePage + 1) % pages) },
+      { text: '▶️', callback_data: 'clist:' + mode + ':' + ((safePage + 1) % pages) },
     ]);
   }
   rows.push([{ text: copy.cardMode, callback_data: 'catalog:' + mode + ':' + (safePage * CATALOG_LIST_PAGE_SIZE) }]);
@@ -1255,10 +1296,8 @@ async function showPropertyPhoto(chatId, user, token, message, record, index) {
   const current = ((Number(index) || 0) % total + total) % total;
   const image = images[current];
   const title = localizedExact(record.title, language) || record.reference || '';
-  const caption = [
-    title ? '<b>' + escapeTelegramHtml(title) + '</b>' : '',
-    '<i>' + escapeTelegramHtml(action.photos + ' ' + (current + 1) + ' / ' + total) + '</i>',
-  ].filter(Boolean).join('\n');
+  // Номер фотографии — только на кнопке между стрелками: в подписи он повторялся.
+  const caption = title ? '<b>' + escapeTelegramHtml(title) + '</b>' : '';
 
   const rows = [];
   if (total > 1) {
@@ -1269,7 +1308,7 @@ async function showPropertyPhoto(chatId, user, token, message, record, index) {
     ]);
   }
   const actions = [];
-  if (record.status === 'active') actions.push({ text: mobileButtonText('📅', action.viewing), callback_data: 'property:viewing:' + record.id });
+  if (record.status === 'active') actions.push({ text: mobileButtonText('📅', action.viewingShort || action.viewing), callback_data: 'property:viewing:' + record.id });
   actions.push({ text: mobileButtonText('💬', action.contact), callback_data: 'property:manager:' + record.id });
   rows.push(actions);
   rows.push([{ text: '↩️ ' + navigation.backToCard, callback_data: 'property:card:' + record.id }]);
@@ -1425,9 +1464,9 @@ function catalogLocationPanel(user, facet = 'city', requestedPage = 0) {
   }
   if (totalPages > 1) {
     rows.push([
-      { text: '⬅️', callback_data: 'cfilter:' + (isDistrict ? 'districts' : 'cities') + ':' + Math.max(0, page - 1) },
+      { text: '◀️', callback_data: 'cfilter:' + (isDistrict ? 'districts' : 'cities') + ':' + Math.max(0, page - 1) },
       { text: String(page + 1) + ' / ' + String(totalPages), callback_data: 'cfilter:locationnone:0' },
-      { text: '➡️', callback_data: 'cfilter:' + (isDistrict ? 'districts' : 'cities') + ':' + Math.min(totalPages - 1, page + 1) },
+      { text: '▶️', callback_data: 'cfilter:' + (isDistrict ? 'districts' : 'cities') + ':' + Math.min(totalPages - 1, page + 1) },
     ]);
   }
   if (isDistrict) rows.push([{ text: '↩ ' + copy.changeCity, callback_data: 'cfilter:cities:0' }]);
@@ -1602,7 +1641,7 @@ function catalogFilterPanel(user) {
   const mark = (selected, text) => (selected ? '✓ ' : '') + text;
   const facetButton = (facet, choice, text, selected, callback) => {
     const count = catalogFacetCount(published, filter, facet, choice, language);
-    return { count, selected, button: { text: countedFilterLabel(text, count, selected), callback_data: callback } };
+    return { count, selected, button: { text: markedFilterLabel(text, selected), callback_data: callback } };
   };
   // Options with no possible result disappear, except for the selected one:
   // the client must always be able to see and clear their current choice.
@@ -1624,8 +1663,11 @@ function catalogFilterPanel(user) {
   const typeRows = [];
   for (let index = 0; index < shownTypes.length; index += 3) typeRows.push(shownTypes.slice(index, index + 3));
 
-  const bedroomRows = [[facetButton('bedrooms', 0, copy.anyBedrooms, !filter.bedrooms, 'cfilter:bed:0').button]
-    .concat(visibleButtons(CATALOG_FILTER_BEDROOMS.map((count) => facetButton('bedrooms', count, count + '+', filter.bedrooms === count, 'cfilter:bed:' + count))))];
+  // Спальни — два ряда: «любое» с подписью в первом, числа во втором. Одним рядом длинная первая кнопка
+  // обрезалась («✓ Спа…», «✓ Do…»), а остальные четыре делили ширину поровну.
+  const bedroomRows = [[facetButton('bedrooms', 0, copy.anyBedrooms, !filter.bedrooms, 'cfilter:bed:0').button]];
+  const bedroomCounts = visibleButtons(CATALOG_FILTER_BEDROOMS.map((count) => facetButton('bedrooms', count, count + '+', filter.bedrooms === count, 'cfilter:bed:' + count)));
+  if (bedroomCounts.length) bedroomRows.push(bedroomCounts);
 
   // Город и район — кнопки-списки в одном ряду: раньше каждый город занимал
   // отдельный ряд и каталог из восьми городов съедал весь экран.
@@ -1636,13 +1678,13 @@ function catalogFilterPanel(user) {
   const locationRow = [];
   if (cities.length > 1 || filter.city) {
     locationRow.push({
-      text: countedFilterLabel(filter.city || copy.chooseCity, found, Boolean(filter.city)),
+      text: markedFilterLabel(filter.city || copy.chooseCity, Boolean(filter.city)),
       callback_data: 'cfilter:cities:0',
     });
   }
   if (districtCity && (districts.length > 1 || filter.district)) {
     locationRow.push({
-      text: countedFilterLabel(filter.district || copy.chooseDistrict, found, Boolean(filter.district)),
+      text: markedFilterLabel(filter.district || copy.chooseDistrict, Boolean(filter.district)),
       callback_data: 'cfilter:districts:0',
     });
   }
@@ -1652,7 +1694,7 @@ function catalogFilterPanel(user) {
   // отдельном экране, а здесь видно выбранное.
   const priceDeal = catalogPriceDeal(filter, published);
   const priceRows = priceDeal
-    ? [[{ text: countedFilterLabel(catalogPriceLabel(filter, language), found, Boolean(filter.minPrice || filter.maxPrice)), callback_data: 'cfilter:prices:0' }]]
+    ? [[{ text: markedFilterLabel(catalogPriceLabel(filter, language), Boolean(filter.minPrice || filter.maxPrice)), callback_data: 'cfilter:prices:0' }]]
     : [];
 
   const tail = [
@@ -1667,7 +1709,12 @@ function catalogFilterPanel(user) {
     while (total() > MAX_ROWS && block.length > 1) block.pop();
   }
   const rows = blocks.reduce((all, block) => all.concat(block), []).concat(tail);
-  return { text: copy.title, markup: { inline_keyboard: rows } };
+  // Заголовок — состояние: что выбрано и сколько подходит (раньше выбранное было видно только по галочкам в семи рядах).
+  const conditions = catalogFilterSummary(filter, language);
+  const wizard = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
+  const foundText = (found === 1 && wizard.wizardFoundOne ? wizard.wizardFoundOne : wizard.wizardFound).replace('{count}', () => String(found));
+  const heading = [copy.button, [foundText, conditions].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
+  return { text: heading, markup: { inline_keyboard: rows } };
 }
 
 // Подпись кнопки цены: «Цена: любая» или выбранные границы.
@@ -1958,9 +2005,9 @@ function promotionButtons(record, language, page, totalPages) {
     const previousPage = (page - 1 + totalPages) % totalPages;
     const nextPage = (page + 1) % totalPages;
     rows.push([
-      { text: '⬅️', callback_data: 'promotions:' + previousPage },
+      { text: '◀️', callback_data: 'promotions:' + previousPage },
       { text: String(page + 1) + ' / ' + String(totalPages), callback_data: 'promotions:none' },
-      { text: '➡️', callback_data: 'promotions:' + nextPage },
+      { text: '▶️', callback_data: 'promotions:' + nextPage },
     ]);
   }
   return rows.length ? { inline_keyboard: rows } : null;

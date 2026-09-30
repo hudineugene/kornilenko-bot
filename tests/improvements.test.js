@@ -227,7 +227,7 @@ test.describe('property alerts', () => {
     const deliveries = bot.propertyAlertDeliveries(record, { status: 'active', priceValue: 500000 });
     assert.deepEqual(deliveries.map((delivery) => delivery.user.id), [fan.id, spanish.id], 'opted out and blocked clients are skipped');
     assert.match(deliveries[0].heading, new RegExp('^' + ALERTS.ru.priceDrop));
-    assert.match(deliveries[0].heading, /500\s000 € → 450\s000 €/);
+    assert.equal(deliveries[0].heading, ALERTS.ru.priceDrop, 'прежняя цена — на карточке зачёркнутой, в заголовке её нет');
 
     telegram.calls = [];
     assert.equal(await bot.deliverPropertyAlerts(deliveries, TOKEN), 2);
@@ -573,7 +573,8 @@ test.describe('каталог списком', () => {
     assert.match(body.text, new RegExp(FILTER.listTitle + ' · 12'), 'видно, сколько всего объектов');
     const lines = body.text.split('\n').filter((line) => /^\d+\. /.test(line));
     assert.equal(lines.length, 8, 'восемь строк на странице');
-    assert.match(lines[0].replace(/[   ]/g, ' '), /^1\. Квартира · Бенидорм · 210 000 € · 2 сп\.$/, 'строка коротко описывает объект');
+    assert.match(lines[0].replace(/[   ]/g, ' '), /^1\. Квартира · Бенидорм · 210 000 €$/, 'строка коротко описывает объект: спальни отпали, чтобы уложиться в 34 знака');
+    assert.ok(lines.every((line) => Array.from(line).length <= 34), 'ни одна строка списка не длиннее 34 знаков (иначе на телефоне переносится)');
 
     const callbacks = callbacksOf(body.reply_markup);
     assert.ok(callbacks.includes('catalog:all:0'), 'номер открывает карточку');
@@ -710,7 +711,7 @@ test.describe('catalog filter', () => {
     assert.ok(callbacksOf(cardMarkup()).includes('cfilter:open'));
 
     const panel = await chat.press('cfilter:open');
-    assert.equal(panel.last.text, FILTER.title);
+    assert.ok(panel.last.text.startsWith(FILTER.button + String.fromCharCode(10)), 'заголовок — состояние: «Фильтр», сколько подходит и условия');
     assert.ok(panel.last.buttons.some((label) => withoutCount(label) === '✓ ' + FILTER.anyDeal));
     assert.ok(panel.last.buttons.includes(FILTER.show + ': 7'));
     assert.ok(panel.last.buttons.some((label) => withoutCount(label) === 'Вилла')
@@ -722,7 +723,7 @@ test.describe('catalog filter', () => {
     assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => withoutCount(button.text) === '✓ Аренда'));
     assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === FILTER.show + ': 3'));
     assert.ok(!edited.body.reply_markup.inline_keyboard.flat().some((button) => withoutCount(button.text) === 'Вилла'), 'an impossible type is not offered');
-    assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === 'Квартира · 2'), 'available choices show their result count');
+    assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === 'Квартира'), 'available choices — без счётчика на кнопке: число подходящих — на «Показать» и в заголовке');
     await chat.press('cfilter:bed:2');
     assert.deepEqual(chat.user.catalogFilter, { deal: 'rent', type: '', bedrooms: 2, city: '', district: '', minPrice: 0, maxPrice: 0, sort: '' });
 
@@ -1400,13 +1401,14 @@ test('фотографии листаются в карточке, а чат н�
   const opened = await chat.press('property:gallery:flip-01', { card: true });
   const firstEdit = opened.calls.filter((call) => call.method === 'editMessageMedia');
   assert.equal(firstEdit.length, 1, 'открылась первая фотография прямо в карточке');
-  assert.match(mediaOf(firstEdit[0]).caption, /Фото 1 \/ 3/, 'видно, какая это фотография из скольких');
+  assert.ok(!/1 \/ 3/.test(mediaOf(firstEdit[0]).caption), 'номер фотографии — на кнопке между стрелками, в подписи его нет');
+  assert.ok(opened.calls.some((call) => JSON.stringify(call.body.reply_markup || '').includes('1 / 3')), 'на кнопке видно, какая это фотография из скольких');
   assert.equal(opened.calls.some((call) => call.method === 'sendPhoto' || call.method === 'sendMediaGroup'), false, 'новых сообщений в чате не появилось');
 
   const next = await chat.press('property:photo:1:flip-01', { card: true });
   const secondEdit = next.calls.filter((call) => call.method === 'editMessageMedia');
   assert.equal(secondEdit.length, 1, 'следующая фотография тоже меняется на месте');
-  assert.match(mediaOf(secondEdit[0]).caption, /Фото 2 \/ 3/);
+  assert.ok(JSON.stringify(secondEdit[0].body.reply_markup).includes('2 / 3'), 'номер — на кнопке');
   const buttons = secondEdit[0].body.reply_markup.inline_keyboard.flat().map((button) => button.callback_data);
   assert.ok(buttons.includes('property:photo:0:flip-01'), 'есть шаг назад');
   assert.ok(buttons.includes('property:photo:2:flip-01'), 'и шаг вперёд');
@@ -1415,7 +1417,7 @@ test('фотографии листаются в карточке, а чат н�
 
   // Последняя фотография ведёт на первую: листать можно по кругу.
   const wrapped = await chat.press('property:photo:3:flip-01', { card: true });
-  assert.match(mediaOf(wrapped.calls.filter((call) => call.method === 'editMessageMedia')[0]).caption, /Фото 1 \/ 3/);
+  assert.ok(JSON.stringify(wrapped.calls.filter((call) => call.method === 'editMessageMedia')[0].body.reply_markup).includes('1 / 3'), 'по кругу: снова первая, номер — на кнопке');
 
   const back = await chat.press('property:card:flip-01', { card: true });
   const restored = back.calls.filter((call) => call.method === 'editMessageMedia');

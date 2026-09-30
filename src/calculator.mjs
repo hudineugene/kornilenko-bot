@@ -109,9 +109,11 @@ function estimateText(record, language, estimate = purchaseEstimate(record)) {
   return lines.filter((line, index) => line !== '' || index > 0).join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
-function calculatorButton(record, language) {
+// short — для ряда из двух кнопок под карточкой: полная подпись обрезалась («🧮 Расчёт покупки и ип…»).
+function calculatorButton(record, language, short = false) {
   if (!calculatorAvailable(record)) return null;
-  return { text: (CALCULATOR_TEXT[language] || CALCULATOR_TEXT.ru).openButton, callback_data: 'calc:' + record.id };
+  const copy = CALCULATOR_TEXT[language] || CALCULATOR_TEXT.ru;
+  return { text: short && copy.openButtonShort ? copy.openButtonShort : copy.openButton, callback_data: 'calc:' + record.id };
 }
 
 async function handleCalculatorCallback(query, token) {

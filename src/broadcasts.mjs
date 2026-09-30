@@ -8,7 +8,7 @@ import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mj
 import { recordError } from './analytics.mjs';
 import { markUnavailable } from './users.mjs';
 import { sendMessage, sendPhotoMessage } from './telegram.mjs';
-import { localized, objectCaption, propertyReadyForLanguage, recordImages, validHttpUrl } from './catalog.mjs';
+import { escapeTelegramHtml, localized, objectCaptionHtml, propertyReadyForLanguage, recordImages, validHttpUrl } from './catalog.mjs';
 
 function broadcastUsers(entry) {
   const languages = Array.isArray(entry.languages) ? entry.languages.filter((language) => ['ru', 'en', 'es'].includes(language)) : [];
@@ -107,18 +107,22 @@ async function deliverPropertyCard(user, entry, record, token) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const intro = fillTemplate(localized(entry.messages, language), user);
   // Если всё не помещается, сокращаем вступление рассылки, а не описание объекта.
-  const card = objectCaption(record, language);
+  // Тот же вид, что у карточки в каталоге: заголовок жирным, тип курсивом, цена жирной. Длину считаем по
+  // простому тексту, вступление экранируем — разметка не должна порваться на обрезке.
+  // Берём длину с разметкой (она больше): так подпись укладывается в лимит при любом способе счёта.
+  const card = objectCaptionHtml(record, language);
   const introRoom = CAPTION_LIMIT - card.length - 2;
-  const caption = fitCaption([introRoom >= 20 ? fitCaption(intro, introRoom) : '', card].filter(Boolean).join('\n\n'));
+  const introText = introRoom >= 20 ? fitCaption(intro, introRoom) : '';
+  const caption = [introText ? escapeTelegramHtml(introText) : '', card].filter(Boolean).join('\n\n');
   const unsubscribe = { text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).unsubscribe, callback_data: 'subs:news:off:bc' };
   const rows = [];
   if (record.status === 'active') rows.push([{ text: '📅 ' + copy.viewing, callback_data: 'property:viewing:' + record.id }]);
-  rows.push([{ text: 'ℹ️ ' + copy.details, callback_data: 'property:card:' + record.id }]);
+  rows.push([{ text: '📋 ' + copy.details, callback_data: 'property:card:' + record.id }]);
   rows.push([unsubscribe]);
   const images = recordImages(record, language);
   const markup = { inline_keyboard: rows };
-  if (images.length) return sendPhotoMessage(user.chatId, images[0], caption, token, markup);
-  return sendMessage(user.chatId, caption, token, { reply_markup: markup });
+  if (images.length) return sendPhotoMessage(user.chatId, images[0], caption, token, markup, { parseMode: 'HTML' });
+  return sendMessage(user.chatId, caption, token, { reply_markup: markup, parse_mode: 'HTML' });
 }
 
 async function deliverBroadcast(user, entry, token = data.config.botToken) {
