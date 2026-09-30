@@ -83,3 +83,12 @@ test('обновление с версии 47: нетронутые прежни
   assert.equal(custom.config.messages.en.help, 'My own help text');
   assert.equal(custom.interfaceText.menuLabels.en.selection, '✨ Find me a home');
 });
+
+test('день и месяц — с ведущими нулями на всех языках: «09.09», «09/09» (Intl для es-ES отдавал «9/9»)', async () => {
+  const { formatDayMonth } = await import('../src/util.mjs');
+  const date = new Date(2026, 8, 9);
+  assert.equal(formatDayMonth(date, 'ru'), '09.09');
+  assert.equal(formatDayMonth(date, 'en'), '09/09');
+  assert.equal(formatDayMonth(date, 'es'), '09/09');
+  assert.equal(formatDayMonth(new Date(2026, 11, 29), 'es'), '29/12');
+});

@@ -7,6 +7,7 @@ import { normalizeUser } from './users.mjs';
 import { localized, localizedExact, sendUiMessage, shortenedText } from './catalog.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 import { cancelViewing, viewingIsUpcoming, viewingWhen } from './viewings.mjs';
+import { formatDayMonth } from './util.mjs';
 import { parsePlanHelp } from './plan.mjs';
 
 const MY_REQUESTS_SHOWN = 5;
@@ -68,7 +69,7 @@ function myRequestsView(user) {
     } else {
       const sent = new Date(inquiry.createdAt);
       details = Number.isFinite(sent.getTime())
-        ? copy.sentOn + ' ' + new Intl.DateTimeFormat(LOCALES[language] || LOCALES.ru, { day: '2-digit', month: '2-digit' }).format(sent)
+        ? copy.sentOn + ' ' + formatDayMonth(sent, language)
         : '';
     }
     if (inquiry.type === 'viewing' && viewingIsUpcoming(inquiry)) {

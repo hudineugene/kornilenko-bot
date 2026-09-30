@@ -89,6 +89,14 @@ function dayKey(value = new Date()) {
 
 // Календарная дата по часовому поясу бота (он задаётся в настройках и
 // выставляется процессу при запуске): просмотры, сутки статистики, «сегодня».
+// «09.09» / «09/09»: день и месяц с ведущими нулями на всех языках. Intl для es-ES отдаёт «9/9»
+// (в отличие от ru и en-GB), из-за чего в одном ответе даты выглядели по-разному.
+function formatDayMonth(value, language = 'ru') {
+  const date = new Date(value);
+  const pad = (number) => String(number).padStart(2, '0');
+  return pad(date.getDate()) + (language === 'ru' ? '.' : '/') + pad(date.getMonth() + 1);
+}
+
 function localDayKey(value = new Date()) {
   const date = new Date(value);
   return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
@@ -126,6 +134,7 @@ export {
   clone,
   dateFromDayKey,
   dayKey,
+  formatDayMonth,
   localDayKey,
   parseMoneyAmount,
   delay,

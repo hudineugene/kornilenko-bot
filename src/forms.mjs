@@ -1,7 +1,7 @@
 // Формы заявки на звонок, записи на просмотр и подбора объекта.
 
 import { PENDING_ACTION_TTL_MS } from './config.mjs';
-import { cleanText } from './util.mjs';
+import { cleanText, formatDayMonth } from './util.mjs';
 import { CATALOG_FILTER_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, PRIVACY_TEXT, MANAGER_CONTACT_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
@@ -537,7 +537,7 @@ function viewingDateValue(value, copy, language, now = new Date()) {
   const date = new Date(now);
   const locale = language === 'en' ? 'en-GB' : language === 'es' ? 'es-ES' : 'ru-RU';
   if (index === 2) {
-    const formatter = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit' });
+    const formatter = { format: (value) => formatDayMonth(value, language) };
     // On Sunday "at the weekend" means today, not the next weekend.
     if (date.getDay() === 0) return value + ' (' + formatter.format(date) + ')';
     const daysUntilSaturday = 6 - date.getDay();
