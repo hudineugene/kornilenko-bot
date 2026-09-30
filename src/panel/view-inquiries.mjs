@@ -844,6 +844,8 @@ async function openNextQuickReply(handled) {
   return true;
 }
 
+var LANGUAGE_WORDS = { en: "английский", es: "испанский" };
+
 function openQuickReply(inquiryId, handledBefore) {
   var handled = (handledBefore || []).slice();
   var item = (state.inquiries || []).find(function (entry) { return entry.id === inquiryId; });
@@ -852,11 +854,15 @@ function openQuickReply(inquiryId, handledBefore) {
   var last = item.lastMessage;
   var lastText = String((last && last.direction !== "out" && (last.text || last.fileName)) || item.text || "").replace(/\s+/g, " ");
   var waiting = inquiryState(item);
+  var clientLanguage = String(user.preferredLanguage || item.language || "ru");
   var requestKey = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : "quick-" + Date.now() + "-" + Math.random().toString(16).slice(2);
   openDialog({
     title: "Ответ: " + userName(user),
     body: '<div class="stack"><div class="row wrap"><span class="chip ' + esc(waiting.chip) + '">' + esc(waiting.text) + '</span><span class="small muted">' + esc(inquiryTypeName(item)) + '</span></div>' +
       '<div class="msg qr-last">' + esc(lastText) + "</div>" +
+      // Клиент пишет не по-русски — сказать об этом заранее: отвечать надо на его языке.
+      (clientLanguage !== "ru" && LANGUAGE_WORDS[clientLanguage] ? '<div class="small"><span class="chip brand">' + esc(clientLanguage.toUpperCase()) + '</span> Клиент пишет на языке: ' + esc(LANGUAGE_WORDS[clientLanguage]) + ' — ответьте на нём; шаблоны подставятся на этом языке.</div>' : "") +
+      ((state.replyTemplates || []).length ? "" : '<div class="small muted">Шаблонов ответов пока нет. <button class="btn ghost small" id="qrTemplates" type="button">Создать шаблон</button></div>') +
       ((state.replyTemplates || []).length ? '<div class="reply-templates">' + state.replyTemplates.map(function (template) {
         return '<button class="btn secondary small template-chip" type="button" data-template="' + esc(template.id) + '" title="' + esc(String(localized(template.text, "ru") || "").slice(0, 120)) + '">' + esc(template.title) + "</button>";
       }).join("") + "</div>" : "") +
@@ -867,6 +873,8 @@ function openQuickReply(inquiryId, handledBefore) {
     ready: function (dialog) {
       var text = dialog.querySelector("#qrText");
       var error = dialog.querySelector("#qrError");
+      var makeTemplate = dialog.querySelector("#qrTemplates");
+      if (makeTemplate) makeTemplate.onclick = function () { dialog.closeClean(); go("texts", "rules"); };
       (state.replyTemplates || []).forEach(function (template) {
         var button = dialog.querySelector('[data-template="' + template.id + '"]');
         if (button) button.onclick = function () {

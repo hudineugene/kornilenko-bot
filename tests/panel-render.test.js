@@ -3982,3 +3982,29 @@ test('заметка и теги клиента — одинаково назв�
   assert.match(PANEL_HTML, /if \(noteNow !== \(user\.note \|\| ""\)\) payload\.note = noteNow;/, 'карточка тоже');
   assert.ok(!/patch = \{\s*note: /.test(PANEL_HTML), 'заметка не уходит с каждым сохранением диалога');
 });
+
+test('быстрый ответ: клиент пишет по-испански — об этом сказано; шаблонов нет — есть «Создать шаблон»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const now = new Date().toISOString();
+  sandbox.state.users = [{ id: 'u1', firstName: 'Diego', preferredLanguage: 'es' }];
+  sandbox.state.inquiries = [{ id: 'q1', userId: 'u1', type: 'general', text: '¿Hay parking?', status: 'new', replies: [], awaitsReply: true, language: 'es', createdAt: now, updatedAt: now, clientMessageAt: now }];
+  sandbox.state.replyTemplates = [];
+  const dialogs = [];
+  const routes = [];
+  sandbox.openDialog = (options) => { const dialog = fakeElement('dialog'); dialog.closeClean = () => {}; dialogs.push({ options, dialog }); if (options.ready) options.ready(dialog); return dialog; };
+  sandbox.go = async (view, tab) => { routes.push(view + '/' + tab); return true; };
+  sandbox.openQuickReply('q1', []);
+  const body = dialogs[0].options.body;
+  assert.match(body, /<span class="chip brand">ES<\/span> Клиент пишет на языке: испанский/);
+  assert.match(body, /id="qrTemplates"[^>]*>Создать шаблон</);
+  dialogs[0].dialog.querySelector('#qrTemplates').onclick();
+  assert.deepEqual(routes, ['texts/rules']);
+  // Русскому клиенту про язык не говорим; при готовых шаблонах кнопки создания нет.
+  sandbox.state.users[0].preferredLanguage = 'ru';
+  sandbox.state.inquiries[0].language = 'ru';
+  sandbox.state.replyTemplates = [{ id: 't1', title: 'Привет', text: { ru: 'Здравствуйте' } }];
+  sandbox.openQuickReply('q1', []);
+  assert.ok(!/Клиент пишет на языке/.test(dialogs[1].options.body));
+  assert.ok(!/qrTemplates/.test(dialogs[1].options.body));
+});
