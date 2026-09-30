@@ -4023,3 +4023,56 @@ test('карточка нового клиента: цифры одной стр
   assert.match(html, /клиент пока не оставлял ни сохранённого поиска, ни заявки на подбор/, 'одна строка вместо двух пустых полей');
   assert.match(html, /Интересы пока не сформированы/, 'и одна строка вместо пустого блока интересов');
 });
+
+test('«＋ Клиент» и «＋ Просмотр»: кнопки в шапке, формы отправляют запросы; без имени, клиента и дня — подсказка', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox, requests } = await panelSandbox();
+  const dialogs = [];
+  const toasts = [];
+  sandbox.openDialog = (options) => { const dialog = fakeElement('dialog'); dialog.closeClean = () => {}; dialogs.push({ options, dialog }); if (options.ready) options.ready(dialog); return dialog; };
+  sandbox.toast = (message, bad) => toasts.push({ message: String(message), bad: Boolean(bad) });
+  sandbox.openClient = () => {};
+  sandbox.state.users = [{ id: 'u1', firstName: 'Анна', phone: '+34 600' }];
+  sandbox.state.inquiries = [];
+  sandbox.el('pageActions').children.length = 0;
+  sandbox.renderClients(fakeElement('main'));
+  sandbox.renderViewings(fakeElement('main'));
+  const labels = sandbox.el('pageActions').children.map((button) => button.dataset && button.dataset.label);
+  assert.ok(labels.includes('＋ Клиент') && labels.includes('＋ Просмотр'), 'кнопки в шапке: ' + labels);
+
+  // Клиент: без имени — подсказка, с именем — запрос на бота.
+  sandbox.openManualClient();
+  const client = dialogs[0].dialog;
+  client.querySelector('#mcName').value = '  ';
+  await client.querySelector('#mcCreate').onclick();
+  assert.equal(toasts.pop().message, 'Укажите имя клиента');
+  client.querySelector('#mcName').value = 'Джон Смит';
+  client.querySelector('#mcPhone').value = '+34 600 111 222';
+  client.querySelector('#mcLanguage').value = 'en';
+  client.querySelector('#mcSource').value = 'звонок';
+  client.querySelector('#mcNote').value = 'Просил перезвонить';
+  requests.length = 0;
+  await client.querySelector('#mcCreate').onclick();
+  const created = requests.find((request) => request.url === '/api/users' && request.method === 'POST');
+  assert.deepEqual(JSON.parse(JSON.stringify(created.body)), { name: 'Джон Смит', phone: '+34 600 111 222', language: 'en', source: 'звонок', note: 'Просил перезвонить' });
+
+  // Просмотр: нужен клиент и день.
+  sandbox.openManualViewing('u1');
+  assert.match(dialogs[1].options.body, /<option value="u1" selected>Анна · \+34 600<\/option>/, 'клиент из карточки выбран заранее');
+  const viewing = dialogs[1].dialog;
+  viewing.querySelector('#mvUser').value = '';
+  await viewing.querySelector('#mvCreate').onclick();
+  assert.equal(toasts.pop().message, 'Выберите клиента');
+  viewing.querySelector('#mvUser').value = 'u1';
+  viewing.querySelector('#mvDate').value = '';
+  await viewing.querySelector('#mvCreate').onclick();
+  assert.equal(toasts.pop().message, 'Выберите день');
+  viewing.querySelector('#mvDate').value = '2030-05-20';
+  viewing.querySelector('#mvTime').value = '11:30';
+  viewing.querySelector('#mvObject').value = 'villa-1';
+  viewing.querySelector('#mvNote').value = 'Договорились по телефону';
+  requests.length = 0;
+  await viewing.querySelector('#mvCreate').onclick();
+  const made = requests.find((request) => request.url === '/api/viewings' && request.method === 'POST');
+  assert.deepEqual(JSON.parse(JSON.stringify(made.body)), { userId: 'u1', propertyId: 'villa-1', date: '2030-05-20', time: '11:30', note: 'Договорились по телефону' });
+});

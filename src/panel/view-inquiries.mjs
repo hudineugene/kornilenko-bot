@@ -690,6 +690,80 @@ function transferDoneText(result, who) {
     (result.notified ? "Уведомление ушло в Telegram." : "Уведомление в Telegram не отправлено — сообщите ему сами.");
 }
 
+// Клиент, которого нет в боте (позвонил, написал в WhatsApp): заводим руками. Чата в Telegram у него не
+// будет — писать ему из панели нельзя, но он есть в базе, ему можно поставить шаг и назначить просмотр.
+function openManualClient() {
+  var sources = ["звонок", "WhatsApp", "знакомые", "сайт", "реклама"];
+  openDialog({
+    title: "Новый клиент",
+    body: '<div class="stack"><p class="muted small">Для тех, кто позвонил или написал в WhatsApp: в боте его нет, но в базе он будет. Писать ему из панели нельзя — только вести заметки и назначать просмотры.</p>' +
+      '<div class="field"><label for="mcName">Имя <span class="required">*</span></label><input id="mcName" placeholder="Джон Смит"></div>' +
+      '<div class="grid cols-2"><div class="field"><label for="mcPhone">Телефон</label><input id="mcPhone" placeholder="+34 …"></div>' +
+      '<div class="field"><label for="mcLanguage">Язык</label><select id="mcLanguage"><option value="">Не выбран</option><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option></select></div></div>' +
+      '<div class="field"><label for="mcSource">Откуда</label><input id="mcSource" list="mcSourceList" value="звонок"><datalist id="mcSourceList">' + sources.map(function (name) { return '<option value="' + esc(name) + '">'; }).join("") + '</datalist></div>' +
+      '<div class="field"><label for="mcNote">Заметка</label><textarea id="mcNote" placeholder="Что просил, когда удобно"></textarea></div></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="mcCreate" type="button">Добавить клиента</button>',
+    protectChanges: true,
+    ready: function (dialog) {
+      dialog.querySelector("#mcCreate").onclick = async function () {
+        var name = dialog.querySelector("#mcName").value.trim();
+        if (!name) return toast("Укажите имя клиента", true);
+        try {
+          var result = await send("/api/users", "POST", {
+            name: name,
+            phone: dialog.querySelector("#mcPhone").value.trim(),
+            language: dialog.querySelector("#mcLanguage").value,
+            source: dialog.querySelector("#mcSource").value.trim(),
+            note: dialog.querySelector("#mcNote").value,
+          });
+          dialog.closeClean();
+          toast("Клиент добавлен");
+          await reload();
+          openClient(result.id);
+        } catch (error) { fail(error); }
+      };
+    },
+  });
+}
+
+// Встреча, назначенная по телефону: клиент из списка, объект (по желанию), день и время. Подтверждена сразу;
+// клиенту в Telegram ничего не уходит.
+function openManualViewing(userId) {
+  var users = (state.users || []).slice().sort(function (a, b) { return userName(a).localeCompare(userName(b), "ru"); });
+  var objects = (state.objects || []).filter(function (record) { return ["active", "reserved"].indexOf(record.status) >= 0; });
+  var now = new Date();
+  var minDay = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+  openDialog({
+    title: "Назначить просмотр",
+    body: '<div class="stack"><p class="muted small">Встреча, о которой договорились по телефону. Клиенту в Telegram сообщение не уйдёт — она появится в календаре и в утренней сводке.</p>' +
+      '<div class="field"><label for="mvUser">Клиент <span class="required">*</span></label><select id="mvUser"><option value="">Выберите клиента</option>' + users.map(function (user) {
+        return '<option value="' + esc(user.id) + '"' + (String(user.id) === String(userId) ? " selected" : "") + ">" + esc(userName(user) + (user.phone ? " · " + user.phone : "")) + "</option>";
+      }).join("") + '</select><div class="hint">Нет в списке? Сначала «＋ Клиент» в «Базе клиентов».</div></div>' +
+      '<div class="field"><label for="mvObject">Объект</label><select id="mvObject"><option value="">Не выбран</option>' + objects.map(function (record) {
+        return '<option value="' + esc(record.id) + '">' + esc(localized(record.title, "ru") || record.reference || record.id) + "</option>";
+      }).join("") + '</select></div>' +
+      '<div class="grid cols-2"><div class="field"><label for="mvDate">День <span class="required">*</span></label><input type="date" id="mvDate" min="' + minDay + '"></div>' +
+      '<div class="field"><label for="mvTime">Время</label><input type="time" id="mvTime"></div></div>' +
+      '<div class="field"><label for="mvNote">Заметка</label><textarea id="mvNote" placeholder="О чём договорились"></textarea></div></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="mvCreate" type="button">Назначить</button>',
+    protectChanges: true,
+    ready: function (dialog) {
+      dialog.querySelector("#mvCreate").onclick = async function () {
+        var chosen = dialog.querySelector("#mvUser").value;
+        var day = dialog.querySelector("#mvDate").value;
+        if (!chosen) return toast("Выберите клиента", true);
+        if (!day) return toast("Выберите день", true);
+        try {
+          await send("/api/viewings", "POST", { userId: chosen, propertyId: dialog.querySelector("#mvObject").value, date: day, time: dialog.querySelector("#mvTime").value, note: dialog.querySelector("#mvNote").value });
+          dialog.closeClean();
+          toast("Просмотр назначен");
+          await reload();
+        } catch (error) { fail(error); }
+      };
+    },
+  });
+}
+
 async function openTransferDialog(mode, item) {
   var names = transferStaff();
   if (mode === "one") {
@@ -1408,6 +1482,7 @@ function viewingHistoryHtml(rows, today) {
 }
 function renderViewings(host) {
   screenSettled();
+  pageAction("＋ Просмотр", function () { openManualViewing(""); });
   var today = pipelineToday();
   var rows = (state.inquiries || []).filter(function (item) { return item.type === "viewing" && item.viewing; });
   var active = rows.filter(function (item) { return !item.viewing.cancelledAt && item.status !== "closed"; });
@@ -1510,6 +1585,7 @@ var clientsShown = CLIENTS_PAGE;
 
 function renderClients(host) {
   screenSettled();
+  pageAction("＋ Клиент", openManualClient);
   var rows = (state.users || []).map(function (user) {
     var inquiries = inquiriesOfUser(user.id);
     return { user: user, inquiries: inquiries, latest: clientActiveInquiry(inquiries), active: clientOpenInquiry(inquiries) };
@@ -1571,7 +1647,7 @@ function openClient(id) {
       '<div class="client-facts"><div><span>Источник</span><b>' + esc(user.source || "без метки") + '</b></div>' + (user.plan && user.plan.startedAt ? '<div><span>План покупки</span><b>' + Object.keys(user.plan.done || {}).length + ' из 10 шагов' + (Object.keys(user.plan.help || {}).length ? ', просит помощи' : '') + '</b></div>' : "") + (user.goal ? '<div><span>Цель</span><b>' + esc({ live: "купить для жизни", invest: "инвестиция и аренда", browse: "пока смотрит" }[user.goal] || "") + '</b></div>' : "") + '<div><span>Первый контакт</span><b>' + dateTime(user.firstSeenAt) + '</b></div><div><span>Последняя активность</span><b>' + dateTime(user.lastSeenAt) + '</b></div>' + (latest ? '<div><span>Этап</span><b>' + esc(clientStageLabel(latest)) + '</b></div>' : "") + '</div>' +
       '<div class="client-edit stack"><div class="grid cols-2"><div class="field"><label for="clientContactName">Имя для связи</label><input id="clientContactName" data-client-edit value="' + esc(user.contactName || userName(user)) + '"></div><div class="field"><label for="clientLanguage">Язык</label><select id="clientLanguage" data-client-edit><option value="">Не выбран</option>' + [["ru", "Русский"], ["en", "English"], ["es", "Español"]].map(function (language) { return '<option value="' + language[0] + '"' + (user.preferredLanguage === language[0] ? " selected" : "") + '>' + language[1] + "</option>"; }).join("") + '</select></div></div><div class="field"><label for="clientPhone">Телефон</label><input id="clientPhone" data-client-edit value="' + esc(user.phone || "") + '" placeholder="+34 …"></div><div class="field"><label for="clientContactTime">Когда удобно связаться</label><input id="clientContactTime" data-client-edit value="' + esc(user.preferredContactTime || "") + '"></div><div class="field"><label for="clientTags">Теги клиента</label><input id="clientTags" data-client-edit value="' + esc((user.tags || []).join(", ")) + '"></div><div class="field"><label for="clientNote">Заметка о клиенте</label><textarea id="clientNote" data-client-edit>' + esc(user.note || "") + '</textarea></div><label class="check"><input type="checkbox" id="clientBlocked" data-client-edit' + (user.blocked ? " checked" : "") + '> не писать этому клиенту</label></div></aside>' +
       '<main class="client-profile-main">' + numberStrip([["Сообщений", num(clientMessageTotal(user, inquiries))], ["Заявок", num(inquiries.length)], ["Избранное", num((user.favorites || []).length)], ["Просмотрено", num((user.recentlyViewed || []).length)]]) +
-      '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит клиенту в Telegram</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть диалог →</button></div></section>' +
+      '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит клиенту в Telegram</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть диалог →</button><button class="btn secondary" id="clientViewing" type="button">Назначить просмотр</button>' + (!user.chatId ? '<div class="small muted">Клиент заведён вручную: в боте его нет, писать ему из панели нельзя.</div>' : '') + '</div></section>' +
       '<div class="grid cols-2 client-interest-grid">' + (!hasWish ? '<section class="card"><div class="card-body"><span class="small muted">Условия поиска: клиент пока не оставлял ни сохранённого поиска, ни заявки на подбор.</span></div></section>' : '<section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section>') + '<section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="empty"><b>Активных заявок нет</b></div>') + '</div></section></div>' +
       '<section class="card"><header><h3>Объекты и интересы</h3><div class="actions"><span class="small faint">избранное · сравнение · история · подбор</span></div></header>' + clientPropertiesHtml(user) + '</section>' +
       '<section class="card"><header><h3>История заявок</h3></header>' + (inquiries.length ? '<div class="client-inquiries">' + inquiries.slice(0, 20).map(function (item) { return '<button class="client-inquiry" data-client-inquiry="' + esc(item.id) + '" type="button"><span><b>' + esc(inquiryTypeName(item)) + '</b><small>' + esc(String(item.text || "").replace(/\s+/g, " ").slice(0, 100)) + '</small></span><span class="chip ' + (awaitsReply(item) ? "bad" : item.status === "closed" ? "" : "ok") + '">' + (awaitsReply(item) ? "ждёт ответа" : item.status === "closed" ? "закрыто" : "в работе") + '</span><time>' + dateTime(item.updatedAt || item.createdAt) + '</time><i>→</i></button>'; }).join("") + '</div>' : '<div class="empty"><b>Заявок ещё нет</b></div>') + '</section>' +
@@ -1616,6 +1692,8 @@ function openClient(id) {
       dialog.querySelectorAll("[data-client-inquiry]").forEach(function (button) { button.onclick = function () { openConversation(button.dataset.clientInquiry); }; });
       var openTask = dialog.querySelector("#clientOpenTask");
       if (openTask && active) openTask.onclick = function () { openConversation(active.id); };
+      var viewingButton = dialog.querySelector("#clientViewing");
+      if (viewingButton) viewingButton.onclick = function () { dialog.closeClean(); openManualViewing(user.id); };
       var writeButton = dialog.querySelector("#clientWrite");
       if (writeButton) writeButton.onclick = function () { openConversation((active || latest || {}).id || ""); };
       dialog.querySelectorAll("[data-client-object]").forEach(function (button) {
