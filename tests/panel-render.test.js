@@ -1883,7 +1883,7 @@ test('числа на экранах не спорят: «Сообщений» �
   let options = null;
   sandbox.openDialog = (dialogOptions) => { options = dialogOptions; return original(dialogOptions); };
   sandbox.openClient('720001');
-  assert.match(String(options.body), /Сообщений<\/span><span class="value">2</, 'в профиле 0, а в переписке два сообщения клиента — показано два');
+  assert.match(String(options.body), /Сообщений: <b>2<\/b>/, 'в профиле 0, а в переписке два сообщения клиента — показано два');
 
   // Рассылка: рядом с числом получателей — почему их меньше, чем «можно писать».
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
@@ -4007,4 +4007,20 @@ test('быстрый ответ: клиент пишет по-испански �
   sandbox.openQuickReply('q1', []);
   assert.ok(!/Клиент пишет на языке/.test(dialogs[1].options.body));
   assert.ok(!/qrTemplates/.test(dialogs[1].options.body));
+});
+
+test('карточка нового клиента: цифры одной строкой, вместо трёх пустых блоков-заглушек — короткие строки', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.state.users = [{ id: 'n1', firstName: 'Новый', chatId: 5, favorites: [], recentlyViewed: [], tags: [], note: '' }];
+  sandbox.state.inquiries = [];
+  let options = null;
+  sandbox.openDialog = (opts) => { options = opts; const dialog = fakeElement('dialog'); dialog.closeClean = () => {}; return dialog; };
+  sandbox.openClient('n1');
+  const html = String(options.body);
+  assert.match(html, /<div class="today-numbers">/, 'цифры — строкой, как на других экранах');
+  assert.ok(!/class="grid cols-4"><div class="kpi/.test(html), 'карточек-плиток нет');
+  for (const stub of ['Сохранённый поиск', 'Последняя заявка на подбор', 'Интересы ещё не сформированы', 'Сохранённый поиск не настроен']) assert.ok(!html.includes(stub), 'заглушки «' + stub + '» нет');
+  assert.match(html, /клиент пока не оставлял ни сохранённого поиска, ни заявки на подбор/, 'одна строка вместо двух пустых полей');
+  assert.match(html, /Интересы пока не сформированы/, 'и одна строка вместо пустого блока интересов');
 });
