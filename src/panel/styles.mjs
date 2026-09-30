@@ -14,12 +14,17 @@ html,body{max-width:100%;overflow-x:clip}
   --warn:#b54708; --warn-soft:#fffaeb; --warn-line:#fedf89;
   --bad:#b42318; --bad-soft:#fef3f2; --bad-line:#fecdca;
   /* Радиусы: маленький, обычный и «таблетка» (круг — 50%). */
-  --radius-sm:6px; --radius:10px;
+  --radius-sm:6px; --radius:10px; --radius-pill:999px;
   /* Тени: обычная и для всплывающего. */
-  --shadow:0 1px 2px rgba(16,24,40,.06); --shadow-lg:0 12px 32px rgba(16,24,40,.14);
+  --ink-rgb:16,24,40;
+  --shadow:0 1px 2px rgba(var(--ink-rgb),.06); --shadow-lg:0 12px 32px rgba(var(--ink-rgb),.14);
+  /* Затемнение под окнами и шторкой меню; тёмная «стеклянная» подложка под мелкими значками на фото. */
+  --overlay:rgba(var(--ink-rgb),.45); --glass:rgba(var(--ink-rgb),.76);
   /* Слои сверху вниз: закреплённая полоса, панели, шапка, всплывающее, окна. */
   --z-sticky:20; --z-bar:40; --z-head:50; --z-toast:60; --z-popup:70;
   --header:60px;
+  /* Нижняя панель на телефоне и запас под закреплённой полосой сохранения: страница не должна прятаться под ними. */
+  --tabbar-h:58px; --savebar-h:96px;
   /* Шкала размеров текста: 13, 14, 16, 20. Основной — 14 px. */
   --fs-xs:13px; --fs-sm:14px; --fs-lg:16px; --fs-xl:20px;
   /* Одна шкала отступов: 4, 8, 12, 16, 24 (и 2 px — только для волосяных зазоров). */
@@ -91,7 +96,7 @@ a:hover{text-decoration:underline}
 .main{min-width:0;display:flex;flex-direction:column}
 .topbar{position:sticky;top:var(--header);z-index:var(--z-sticky);display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);background:rgba(245,246,248,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .topbar .sub{font-size:var(--fs-sm);color:var(--muted)}
-.page{padding:var(--sp-4) var(--sp-5) 96px;max-width:1560px;width:100%;margin:0 auto}
+.page{padding:var(--sp-4) var(--sp-5) var(--savebar-h);max-width:1560px;width:100%;margin:0 auto}
 
 /* --- Карточки и таблицы ----------------------------------------------------- */
 /* Карточка — одна поверхность для всех: обычная, карточка воронки, дела. Цветная кромка слева
@@ -157,7 +162,7 @@ tbody tr.selected{background:var(--brand-soft)}
 .strip-hint{display:none;color:var(--muted);font-size:var(--fs-xs)}
 @media(max-width:860px){.today-numbers .strip-hint{display:block}}
 .btn-ico svg{width:100%;height:100%}
-.chip{display:inline-flex;align-items:center;gap:var(--sp-1);padding:2px var(--sp-2);border-radius:999px;border:1px solid var(--line);background:var(--surface-soft);font-size:var(--fs-sm);font-weight:600;color:var(--muted);white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:var(--sp-1);padding:2px var(--sp-2);border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface-soft);font-size:var(--fs-sm);font-weight:600;color:var(--muted);white-space:nowrap}
 .chip.ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok)}
 .chip.warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn)}
 .chip.bad{background:var(--bad-soft);border-color:var(--bad-line);color:var(--bad)}
@@ -269,7 +274,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .messenger-filter-compact{display:none}
 .conversation-back{display:none}
 .messenger-shell{display:grid;grid-template-columns:340px minmax(0,1fr);gap:var(--sp-3);align-items:start}
-.conversation-list-panel{position:sticky;top:calc(var(--header) + 70px);display:flex;flex-direction:column;max-height:calc(100vh - var(--header) - 92px);overflow:hidden}
+.conversation-list-panel{position:sticky;top:calc(var(--header) + 70px);display:flex;flex-direction:column;max-height:calc(100vh - var(--header) - var(--savebar-h));overflow:hidden}
 .conversation-list-panel>header{flex:none}
 .conversation-list-panel>header .chip{margin-left:auto}
 .conversation-list{overflow:auto;overscroll-behavior:contain}
@@ -623,7 +628,7 @@ code{padding:0px var(--sp-1);border-radius:var(--radius-sm);background:var(--sur
 .quick-times{display:flex;gap:var(--sp-2);margin-top:var(--sp-2)}
 .toast-action{margin-left:var(--sp-2);padding:2px var(--sp-3);border:1px solid rgba(255,255,255,.55);border-radius:var(--radius-sm);background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer}
 dialog{border:0;border-radius:var(--radius);padding:0;background:var(--surface);box-shadow:var(--shadow-lg);max-width:min(720px,calc(100vw - 32px));width:100%}
-dialog::backdrop{background:rgba(16,24,40,.45)}
+dialog::backdrop{background:var(--overlay)}
 .dialog-head{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--line-soft)}
 .dialog-body{padding:var(--sp-4);max-height:min(70vh,640px);overflow:auto}
 .dialog-foot{display:flex;gap:var(--sp-2);justify-content:flex-end;padding:var(--sp-3) var(--sp-4);border-top:1px solid var(--line-soft);background:var(--surface-soft);border-radius:0 0 var(--radius) var(--radius)}
@@ -650,7 +655,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
 .image-list{display:flex;flex-wrap:wrap;gap:var(--sp-2);min-height:4px;margin-bottom:var(--sp-2)}
 .media-thumb{position:relative;display:block;width:86px;height:64px;border-radius:var(--radius-sm);overflow:hidden;background:var(--surface-soft);border:1px solid var(--line)}
 .media-thumb img{width:100%;height:100%;display:block;object-fit:cover}
-.media-thumb .media-remove{position:absolute;right:3px;top:3px;width:23px;height:23px;min-height:0;padding:0;border:0;border-radius:50%;background:rgba(16,24,40,.76);color:var(--surface);line-height:23px}
+.media-thumb .media-remove{position:absolute;right:3px;top:3px;width:23px;height:23px;min-height:0;padding:0;border:0;border-radius:50%;background:var(--glass);color:var(--surface);line-height:23px}
 .image-upload-row{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
 .file-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .recipient-summary{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);border-radius:var(--radius);background:var(--brand-soft);color:var(--brand-dark)}
@@ -695,7 +700,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .head-nav{display:none;position:fixed;left:10px;right:10px;top:calc(var(--header) + 6px);max-height:calc(100vh - var(--header) - 18px);overflow:auto;padding:var(--sp-2);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg)}
   .head-nav.open{display:block}
   .head-nav>.nav-item{width:100%;padding:var(--sp-3)}
-  .page{padding:var(--sp-4) var(--sp-4) 92px}
+  .page{padding:var(--sp-4) var(--sp-4) var(--savebar-h)}
   /* Верхняя полоса на телефоне переносится: две кнопки действий («Рассылка» и
      «Пост в канал») рядом не помещаются в 375 px и растягивали всю страницу —
      а вместе с ней и выдвижные окна, которые «уезжали» вправо. */
@@ -775,7 +780,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .global-search{display:none;position:fixed;left:10px;right:10px;top:calc(var(--header) + 6px);z-index:var(--z-toast);max-width:none;padding:var(--sp-2);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg)}
   .global-search.open{display:block}
   .global-results{position:static;margin-top:var(--sp-2);box-shadow:none;border:0;min-width:0;max-height:60vh}
-  .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:var(--z-head);display:flex;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -2px 10px rgba(16,24,40,.06);padding-bottom:env(safe-area-inset-bottom)}
+  .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:var(--z-head);display:flex;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -2px 10px rgba(var(--ink-rgb),.06);padding-bottom:env(safe-area-inset-bottom)}
   .tab{position:relative;flex:1 1 0;min-width:0;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:var(--sp-2) 2px;border:0;background:none;color:var(--muted);font:inherit;font-size:var(--fs-xs);cursor:pointer}
   .tab-ico{display:inline-flex;width:24px;height:24px;line-height:1}
   .tab-title{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -788,7 +793,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .more-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
   .more-item .ico{display:inline-flex;width:22px;height:22px;justify-content:center}
   /* Всё, что висит над экраном, поднимаем выше нижней панели. */
-  .page{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  .page{padding-bottom:calc(var(--savebar-h) + env(safe-area-inset-bottom))}
   .savebar,.refresh-hint{bottom:calc(66px + env(safe-area-inset-bottom))}
   .toast{bottom:calc(72px + env(safe-area-inset-bottom));right:14px;left:14px;max-width:none}
   /* Шапка страницы уезжает вместе с прокруткой: липкая, она съедала пятую часть экрана. */
@@ -798,8 +803,8 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .phone-chat .page{padding-top:var(--sp-2)}
   /* Диалог на телефоне — экран мессенджера: страница не прокручивается, переписка
      занимает всё свободное место и прокручивается сама, поле ответа — под ней. */
-  .phone-chat .page{padding:0 var(--sp-2) calc(74px + env(safe-area-inset-bottom))}
-  .phone-chat .conversation-card{display:flex;flex-direction:column;height:calc(100dvh - var(--header) - 84px - env(safe-area-inset-bottom));min-height:0}
+  .phone-chat .page{padding:0 var(--sp-2) calc(var(--tabbar-h) + var(--sp-4) + env(safe-area-inset-bottom))}
+  .phone-chat .conversation-card{display:flex;flex-direction:column;height:calc(100dvh - var(--header) - var(--tabbar-h) - var(--sp-5) - env(safe-area-inset-bottom));min-height:0}
   .phone-chat .conversation-card>.conversation-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:var(--sp-2)}
   .phone-chat .conversation-head{flex:none;flex-wrap:wrap}
   .phone-chat .conversation-main{flex:1 1 auto;min-height:0}
@@ -816,10 +821,10 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
   .conversation-thread{max-height:42vh}
   .conversation-side-toggle{display:inline-flex}
   /* Статус, этап, заметка и следующий шаг — панель, выезжающая справа. */
-  .conversation-side{position:fixed;top:0;right:0;bottom:0;z-index:calc(var(--z-popup) + 1);width:min(92vw,400px);margin:0;padding:calc(8px + env(safe-area-inset-top)) var(--sp-3) calc(84px + env(safe-area-inset-bottom));overflow:auto;background:var(--surface);box-shadow:var(--shadow-lg);transform:translateX(105%);transition:transform .2s ease}
+  .conversation-side{position:fixed;top:0;right:0;bottom:0;z-index:calc(var(--z-popup) + 1);width:min(92vw,400px);margin:0;padding:calc(8px + env(safe-area-inset-top)) var(--sp-3) calc(var(--tabbar-h) + var(--sp-5) + env(safe-area-inset-bottom));overflow:auto;background:var(--surface);box-shadow:var(--shadow-lg);transform:translateX(105%);transition:transform .2s ease}
   .side-open .conversation-side{transform:none}
   .side-close{display:inline-flex;margin-bottom:var(--sp-2)}
-  .side-backdrop{position:fixed;inset:0;z-index:var(--z-popup);background:rgba(16,24,40,.4)}
+  .side-backdrop{position:fixed;inset:0;z-index:var(--z-popup);background:var(--overlay)}
   .side-open .side-backdrop{display:block}
   .conversation-side-details>summary{display:none}
   /* Воронка и календарь просмотров на телефоне — вертикальные списки, а не
@@ -879,7 +884,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}
 /* Телефон: цели касания не меньше 44 px, полоса вкладок с затухающей кромкой
    вместо серой полосы прокрутки, подписи нижней панели помещаются целиком. */
 @media(max-width:860px){
-  .tabs{scrollbar-width:none;background:linear-gradient(to right,var(--surface-soft) 30%,transparent) left center/32px 100% no-repeat local,linear-gradient(to left,var(--surface-soft) 30%,transparent) right center/32px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(16,24,40,.22),transparent) left center/12px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(16,24,40,.22),transparent) right center/12px 100% no-repeat scroll,var(--surface-soft)}
+  .tabs{scrollbar-width:none;background:linear-gradient(to right,var(--surface-soft) 30%,transparent) left center/32px 100% no-repeat local,linear-gradient(to left,var(--surface-soft) 30%,transparent) right center/32px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(var(--ink-rgb),.22),transparent) left center/12px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(var(--ink-rgb),.22),transparent) right center/12px 100% no-repeat scroll,var(--surface-soft)}
   .tabs::-webkit-scrollbar{display:none}
   .tabs button{flex:none;min-height:44px;white-space:nowrap}
   input,select{min-height:44px}

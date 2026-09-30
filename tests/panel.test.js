@@ -727,7 +727,13 @@ test('набор токенов оформления: 22 цвета, четыр�
   const offScale = spaces.flatMap((value) => Array.from(value.replace(/\([^)]*\)/g, '').matchAll(/(?<![\w.-])-?(\d+)px/g)).map((m) => Number(m[1]))).filter((n) => ![0, 1, 2].includes(n) && n < 28);
   assert.deepEqual(offScale, [], 'отступы вне шкалы: ' + offScale.join(', '));
   const radii = Array.from(PANEL_CSS.matchAll(/border-radius:([^;}]*)/g)).map((match) => match[1]);
-  assert.ok(radii.every((value) => /^(var\(--radius(-sm)?\)|50%|0|999px)( |$)/.test(value) || /^(var\(--radius(-sm)?\)|0)( (var\(--radius(-sm)?\)|0)){1,3}$/.test(value)), 'радиусы вне шкалы: ' + radii.filter((value) => !/var\(--radius/.test(value) && !/^(50%|0|999px)$/.test(value)).join(', '));
+  assert.ok(radii.every((value) => /^(var\(--radius(-sm|-pill)?\)|50%|0)( |$)/.test(value) || /^(var\(--radius(-sm)?\)|0)( (var\(--radius(-sm)?\)|0)){1,3}$/.test(value)), 'радиусы вне шкалы: ' + radii.filter((value) => !/var\(--radius/.test(value) && !/^(50%|0|999px)$/.test(value)).join(', '));
+  // Чернильный цвет, затемнение и «таблетка» — токены: ни голых rgba(16,24,40,…), ни 999px вне набора.
+  assert.ok(!/rgba\(16, *24, *40/.test(PANEL_CSS), 'rgba(16,24,40,…) заменён на rgba(var(--ink-rgb),…)');
+  assert.deepEqual(PANEL_CSS.match(/999px/g), ['999px'], '999px — только в определении --radius-pill');
+  // Высоты нижней панели и запас под полосой сохранения — токены, а не магические 74/84/92/96 px.
+  assert.ok(/--tabbar-h:\d+px/.test(root) && /--savebar-h:\d+px/.test(root), 'токены --tabbar-h и --savebar-h');
+  assert.deepEqual(PANEL_CSS.match(/calc\((?:[^()]|\([^()]*\))*\b(?:74|84|92|96)px/g), null, 'в расчётах нет магических 74/84/92/96 px');
   // Предупреждение «данные не сохраняются» лежит выше шапки, а не под ней.
   assert.match(PANEL_CSS, /\.save-alert\{[^}]*z-index:var\(--z-toast\)/, 'полоса о сбое записи выше шапки');
   // Слои — только токены (кроме 4 у липкой подписи языка внутри формы).
