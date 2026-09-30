@@ -777,3 +777,14 @@ test('словарь: одно слово — одна вещь (просроч�
   assert.equal(previews.length, 1);
   assert.match(previews[0], /fromBot \? "Бот: " : "Вы: "/);
 });
+
+test('объект можно опубликовать по-русски: «Скопировать тексты из русского», «Опубликовать» при готовой русской карточке, с вопросом', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /function copyFromRussian\(\)/);
+  assert.match(PANEL_HTML, /id="copyFromRu"[^>]*>Скопировать тексты из русского</);
+  // Кнопка «Опубликовать» зависит от русской карточки, а не от всех трёх языков.
+  assert.match(PANEL_HTML, /id="publishNow" type="button"' \+ \(russianReady \? "" : " disabled"\)/);
+  assert.match(PANEL_HTML, /Опубликовать с русским текстом\?/, 'публикация без перевода — с вопросом');
+  assert.match(PANEL_HTML, /Text in Russian/, 'клиент увидит пометку — об этом сказано в вопросе');
+  assert.ok(!/publishNow" type="button"' \+ \(ready \?/.test(PANEL_HTML), 'прежней привязки к трём языкам нет');
+});

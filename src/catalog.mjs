@@ -330,6 +330,9 @@ function objectCaption(record, language, options = {}) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const title = localizedExact(record.title, language);
   const description = localizedExact(record.description, language);
+  // Владелец опубликовал объект по-русски и скопировал русский текст в английскую/испанскую карточку:
+  // клиент честно видит пометку, а не выдуманный перевод.
+  const inRussian = language !== 'ru' && description && description === localizedExact(record.description, 'ru');
   const address = localizedExact(record.address, language);
   const price = objectPriceText(record, language);
   const type = (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[record.propertyType] || '';
@@ -353,7 +356,7 @@ function objectCaption(record, language, options = {}) {
   const specs = propertySpecRows(record, language, { compact: !full });
   if (!full) {
     const teaser = descriptionTeaser(description);
-    const sections = [header.filter(Boolean), commercial, specs, teaser ? [teaser] : []].filter((section) => section.length);
+    const sections = [header.filter(Boolean), commercial, specs, teaser ? [teaser] : [], inRussian && copy.inRussian ? [copy.inRussian] : []].filter((section) => section.length);
     return shortenedText(sections.map((section) => section.join('\n')).join('\n\n'), maximum);
   }
   const details = [...specs];
@@ -363,7 +366,7 @@ function objectCaption(record, language, options = {}) {
   if (record.reference) details.push('🏷 ' + copy.reference + ' ' + cleanText(record.reference, 80));
   const sections = [header.filter(Boolean), commercial];
   if (details.length) sections.push([copy.specificationsTitle, ...details]);
-  if (description) sections.push([copy.descriptionTitle, description]);
+  if (description) sections.push([copy.descriptionTitle, description, ...(inRussian && copy.inRussian ? ['', copy.inRussian] : [])]);
   if (record.updatedAt) {
     const date = new Date(record.updatedAt);
     if (Number.isFinite(date.getTime())) {

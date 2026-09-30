@@ -470,12 +470,35 @@ function openRecordEditor(kind, id) {
         }
         return issues;
       }
+      // Тексты, которые различаются по языкам: название, описание, город и остальное с data-tr.
+      // Пустые английские и испанские поля можно заполнить русским текстом, чтобы объект вышел
+      // в каталог сегодня, а не после перевода трёх полей на каждом языке.
+      function copyFromRussian() {
+        var copied = 0;
+        dialog.querySelectorAll('[data-tr][data-lang="ru"]').forEach(function (source) {
+          var text = String(source.value || "").trim();
+          if (!text) return;
+          ["en", "es"].forEach(function (code) {
+            var target = dialog.querySelector('[data-tr="' + source.dataset.tr + '"][data-lang="' + code + '"]');
+            if (target && !String(target.value || "").trim()) { target.value = text; copied += 1; }
+          });
+        });
+        return copied;
+      }
+      function russianTextsReady() {
+        return ["title", "description", "city"].every(function (name) { return Boolean(translatedValue(name, "ru")); });
+      }
       function renderPublicationCheck() {
         if (!isObject) return;
         var rows = LANGUAGES.map(function (language) {
           return { code: language[0], name: language[1], issues: editorPublicationIssues(language[0]) };
         });
         var ready = rows.every(function (row) { return !row.issues.length; });
+        // Опубликовать можно, когда готова русская карточка: английскую и испанскую владелец
+        // копирует с русской (клиент увидит пометку «на русском») и переводит, когда дойдут руки.
+        var russianReady = !rows[0].issues.length;
+        var textIssues = ["название", "описание", "город"];
+        var copyable = russianReady && rows.some(function (row) { return row.code !== "ru" && row.issues.some(function (issue) { return textIssues.indexOf(issue) >= 0; }); });
         var status = value("fStatus");
         var liveAndIncomplete = ["active", "reserved"].indexOf(status) >= 0 && !ready;
         // Значок говорит про то, что видит клиент, а не про заполненность полей:
@@ -500,13 +523,14 @@ function openRecordEditor(kind, id) {
                 return '<div class="publication-row"><b>' + row.code.toUpperCase() + '</b><span class="grow">' + esc(row.name) + '</span><span class="' + (row.issues.length ? "warn-text" : "ok-text") + '">' + (row.issues.length ? esc(row.issues.join(", ")) : "готово") + "</span></div>";
               }).join("") + "</div></details>"
             : '<div class="publication-ready ok-text">Все поля заполнены на трёх языках</div>') +
+          (copyable ? '<div class="publication-actions"><button class="btn secondary small" id="copyFromRu" type="button">Скопировать тексты из русского</button><span class="small muted">Пустые английские и испанские поля заполнятся русским текстом; клиент увидит пометку «на русском».</span></div>' : "") +
           // Состояние объекта на рынке: бронь и продажа — отдельные пометки, а не
           // поле «Статус», которое дублировало кнопку «Опубликовать».
           (live || status === "sold" ? '<div class="publication-actions">' +
             (status === "active" ? '<button class="btn ghost small" data-set-status="reserved" type="button">Отметить забронированным</button>' : "") +
             (status === "reserved" ? '<button class="btn ghost small" data-set-status="active" type="button">Снять бронь</button>' : "") +
             (live ? '<button class="btn ghost small" data-set-status="sold" type="button">Отметить проданным</button>' : "") +
-            (status === "sold" ? '<button class="btn ghost small" data-set-status="active" type="button"' + (ready ? "" : " disabled") + '>Вернуть в продажу</button>' : "") +
+            (status === "sold" ? '<button class="btn ghost small" data-set-status="active" type="button"' + (russianReady ? "" : " disabled") + '>Вернуть в продажу</button>' : "") +
           "</div>" : "") +
           (liveAndIncomplete ? '<div class="publication-warning">Сохранить карточку можно и так, но клиенты видят её только на тех языках, где заполнено всё. Пока не хватает данных, объект в каталоге не показывается.</div>' : "");
         dialog.querySelectorAll("[data-set-status]").forEach(function (button) {
@@ -524,12 +548,19 @@ function openRecordEditor(kind, id) {
               '<button class="btn secondary" id="postToChannel" type="button"' + (record ? "" : " disabled") + ' title="' + (record ? "Пост с фотографией, ценой и кнопкой «Смотреть в боте»" : "Сначала сохраните объект") + '">➤ Опубликовать в канал</button>' +
               '<button class="btn" id="saveRecord" type="button">Сохранить</button>'
             : '<button class="btn secondary" id="saveDraft" type="button">' + (status === "sold" ? "Сохранить" : "Сохранить как черновик") + '</button>' +
-              (status === "sold" || ready ? "" : '<span class="small warn-text publish-why" id="publishWhy">Опубликовать нельзя. ' + esc(missingLine) + "</span>") +
-              (status === "sold" ? "" : '<button class="btn" id="publishNow" type="button"' + (ready ? "" : " disabled") + ' title="' + (ready ? "Объект сразу появится в каталоге у клиентов" : "Сначала заполните то, чего не хватает") + '">Опубликовать</button>');
+              (status === "sold" || russianReady ? "" : '<span class="small warn-text publish-why" id="publishWhy">Опубликовать нельзя. ' + esc(missingLine) + "</span>") +
+              (status === "sold" ? "" : '<button class="btn" id="publishNow" type="button"' + (russianReady ? "" : " disabled") + ' title="' + (ready ? "Объект сразу появится в каталоге у клиентов" : russianReady ? "Появится в каталоге; английский и испанский тексты будут русскими" : "Сначала заполните русскую карточку") + '">Опубликовать</button>');
           var bind = function (id, handler) { var button = foot.querySelector(id); if (button) button.onclick = handler; };
           bind("#saveRecord", saveRecord);
           bind("#saveDraft", saveRecord);
-          bind("#publishNow", function () { dialog.querySelector("#fStatus").value = "active"; saveRecord(); });
+          bind("#copyFromRu", function () { var count = copyFromRussian(); toast(count ? "Скопировано полей: " + count + ". Переведите их, когда будет время" : "Копировать нечего"); renderPublicationCheck(); renderRecordPreview(); });
+          bind("#publishNow", async function () {
+            // Не хватает только английского и испанского — публикуем с русским текстом, но спрашиваем.
+            if (!ready && russianReady && !(await confirmDialog("Опубликовать с русским текстом?", "Английский и испанский тексты, которых ещё нет, будут скопированы с русского. Клиенты на этих языках увидят русский текст с пометкой «Text in Russian». Перевести можно позже.", "Опубликовать"))) return;
+            if (!ready) copyFromRussian();
+            dialog.querySelector("#fStatus").value = "active";
+            saveRecord();
+          });
           bind("#unpublish", function () { dialog.querySelector("#fStatus").value = "hidden"; saveRecord(); });
           bind("#postToChannel", function () { if (record) openChannelPost(record.id); });
         }
