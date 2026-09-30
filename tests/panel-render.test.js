@@ -871,14 +871,14 @@ test('редактор объекта: «Готовность карточки»
   const check = String(dialog.querySelector('#publicationCheck').innerHTML);
 
   // Один список сверху, а не три одинаковых подряд.
-  assert.match(check, /<summary class="warn-text">Не хватает: 3 поля \(номер объекта, площадь, название\)<\/summary>/, 'одна строка с числом и первыми названиями');
+  assert.match(check, /<summary class="warn-text">Не хватает: 3\s+поля \(номер объекта, площадь, название\)<\/summary>/, 'одна строка с числом и первыми названиями');
   assert.equal((check.match(/<summary/g) || []).length, 1, 'общая строка одна, а не по строке на язык');
   assert.ok(check.indexOf('<details') < check.indexOf('publication-rows'), 'разбор по языкам — внутри раскрывающегося блока');
   assert.match(check, /<b>EN<\/b>[\s\S]*?название, номер объекта, площадь/, 'у английского не хватает и названия');
 
   // Причина неактивной «Опубликовать» — текстом рядом, а не подсказкой title.
   const foot = String(dialog.querySelector('#editorFoot').innerHTML);
-  assert.match(foot, /id="publishWhy">Опубликовать нельзя\. Не хватает: 3 поля/, 'причина видна без наведения мыши');
+  assert.match(foot, /id="publishWhy">Опубликовать нельзя\. Не хватает: 3\s+поля/, 'причина видна без наведения мыши');
   assert.ok(foot.indexOf('publishWhy') < foot.indexOf('id="publishNow"'), 'подпись стоит перед кнопкой');
   assert.match(foot, /id="publishNow"[^>]*disabled/, 'кнопка недоступна');
 });
@@ -1070,7 +1070,7 @@ test('«Просмотры» открываются на очереди подт
   sandbox.state.inquiries[0].viewing.online = true;
   sandbox.openViewingSchedule(sandbox.state.inquiries[0]);
   assert.match(String(dialogOptions.body), /онлайн-просмотр по видеосвязи/, 'в окне подтверждения');
-  assert.match(sandbox.viewingOnlineTag(sandbox.state.inquiries[0]), /📹 онлайн/, 'и пометка в очереди');
+  assert.match(sandbox.viewingOnlineTag(sandbox.state.inquiries[0]), /ico-inline[\s\S]*онлайн/, 'и пометка в очереди (значок видео и слово)');
   assert.equal(sandbox.viewingOnlineTag({ viewing: {} }), '', 'у обычного показа пометки нет');
 });
 
@@ -1686,9 +1686,9 @@ test('«Состояние бота» на «Сегодня»: здоровье 
   ] });
   const html = String(sandbox.healthHtml(rows));
   assert.equal(rows.map((row) => row.title).join('|'), 'Telegram|Диск|Копия данных|Файлы картинок|Каналы и группы');
-  assert.match(html, /<span class="chip ok">✓<\/span><span>Telegram: принят Telegram, связь есть<\/span>/);
-  assert.match(html, /<span class="chip warn">!<\/span><span>Диск: осталось 0,8 ГБ/, 'предупреждение — со словами');
-  assert.match(html, /<span class="chip bad">✕<\/span><span>Файлы картинок: нет файлов: 2 из 84/, 'беда — красным');
+  assert.match(html, /<span class="chip ok"><span class="ico-inline">[\s\S]*?<\/span><\/span><span>Telegram: принят Telegram, связь есть<\/span>/);
+  assert.match(html, /<span class="chip warn"><span class="ico-inline">[\s\S]*?<\/span><\/span><span>Диск: осталось 0,8\s+ГБ/, 'предупреждение — со словами');
+  assert.match(html, /<span class="chip bad"><span class="ico-inline">[\s\S]*?<\/span><\/span><span>Файлы картинок: нет файлов: 2\s+из\s+84/, 'беда — красным');
   assert.match(html, /Каналы и группы: подключено 1/, 'вышедший из группы бот не считается');
   // Нет данных самопроверки — блока нет, а не пустая рамка.
   assert.equal(String(sandbox.healthHtml(sandbox.healthRows({}))), '');
@@ -1713,18 +1713,18 @@ test('возраст ожидания: цвет и время у «Ждёт от
   assert.equal(sandbox.waitLevel(waiting(150), now), 'late');
 
   // Как это выглядит: время и цвет.
-  assert.equal(sandbox.waitDuration(5 * 60000), '5 мин');
-  assert.equal(sandbox.waitDuration(3 * 3600000 + 20 * 60000), '3 ч');
-  assert.equal(sandbox.waitDuration(50 * 3600000), '2 дн');
+  assert.equal(sandbox.waitDuration(5 * 60000), '5\u00a0мин', 'число и единица не разрываются');
+  assert.equal(sandbox.waitDuration(3 * 3600000 + 20 * 60000), '3 ч');
+  assert.equal(sandbox.waitDuration(50 * 3600000), '2 дн');
   assert.equal(sandbox.waitDuration(20000), 'меньше минуты');
   const fresh = sandbox.inquiryState(waiting(10));
-  assert.match(fresh.text, /^Ждёт ответа · 10 мин$/);
+  assert.match(fresh.text, /^Ждёт ответа · 10 мин$/);
   assert.equal(fresh.chip, 'warn', 'в норме — не красный');
   const late = sandbox.inquiryState(waiting(5 * 60));
   assert.equal(late.chip, 'bad');
   const overdue = sandbox.inquiryState(waiting(50 * 60));
   assert.equal(overdue.chip, 'bad overdue', 'просроченное — самое яркое');
-  assert.match(overdue.text, /2 дн/);
+  assert.match(overdue.text, /2\s+дн/);
 
   // Список «Ждут ответа»: сначала ждущий дольше всех (Николай, 9 минут), а не самый свежий.
   sandbox.inquiryFilter.status = 'waiting';
@@ -1899,7 +1899,7 @@ test('числа на экранах не спорят: «Сообщений» �
   // «Диалоги»: сказано, сколько клиентов в базе ещё ничего не писали.
   const inbox = fakeElement('main');
   sandbox.renderInquiryList(inbox);
-  assert.match(String(inbox.innerHTML), /в базе ещё 2 клиента без переписки/, 'в базе три клиента, в диалогах один');
+  assert.match(String(inbox.innerHTML), /в базе ещё 2\s+клиента без переписки/, 'в базе три клиента, в диалогах один');
 });
 
 test('переключатели «Бот включён» на «Сегодня» и в «Подключении» шлют одно поле active, а не все настройки', async () => {
@@ -3794,7 +3794,7 @@ test('сбой не пропадает сам: тост ошибки держи�
   sandbox.fail(new Error('Не удалось создать копию: диск занят'));
   assert.equal(box._timer, undefined, 'сбой таймером не убирается');
   assert.equal(box.classList.contains('hidden'), false);
-  const close = box.children.find((child) => child.textContent === '✕');
+  const close = box.children.find((child) => child.attrs ? false : (child.getAttribute && child.getAttribute('aria-label') === 'Закрыть') || String(child.innerHTML).includes('<svg'));
   assert.ok(close, 'у сбоя есть «✕»');
   close.onclick();
   assert.equal(box.classList.contains('hidden'), true, '«✕» закрывает');

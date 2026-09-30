@@ -173,8 +173,8 @@ test('«Публикации» — две кнопки, общая очеред�
 test('в списке объектов цифры подписаны, а редкие действия — под «⋯»', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   // Колонка «Эффективность»: видно, что за числа.
-  assert.match(PANEL_HTML, /👁 в каталоге: ' \+ num\(stats\.impressions\)/, 'показы карточки в каталоге — «в каталоге», не «показы»');
-  assert.match(PANEL_HTML, /📩 ' \+ counted\(stats\.inquiries, "заявка", "заявки", "заявок"\)/);
+  assert.match(PANEL_HTML, /iconSpan\("eye"\) \+ ' в каталоге: ' \+ num\(stats\.impressions\)/, 'показы карточки в каталоге — «в каталоге», не «показы»');
+  assert.match(PANEL_HTML, /iconSpan\("inbox"\) \+ ' ' \+ counted\(stats\.inquiries, "заявка", "заявки", "заявок"\)/);
 
   // Вместо четырёх значков в строке — одно меню.
   assert.match(PANEL_HTML, /function openObjectExtras\(id\)/);
@@ -354,7 +354,7 @@ test('флажки не мельче 18 px', async () => {
 test('в шапке — одно поле поиска по клиентам, объектам и сообщениям, на телефоне за значком 🔍', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /id="globalSearch" type="search" placeholder="Поиск: клиент, объект, сообщение"/);
-  assert.match(PANEL_HTML, /id="searchToggle"[^>]*>🔍</, 'значок поиска для телефона');
+  assert.match(PANEL_HTML, /id="searchToggle"[^>]*>\s*<svg/, 'значок поиска для телефона');
   assert.match(PANEL_HTML, /\/api\/conversations\/search\?q=/, 'сообщения ищет бот по всей переписке');
   for (const id of ['inqSearch', 'clientSearch', 'catalogSearch']) assert.ok(!PANEL_HTML.includes('id="' + id + '"'), 'прежнего поля ' + id + ' нет');
 });
@@ -876,4 +876,42 @@ test('состояния элементов: одно кольцо фокуса 
   assert.match(PANEL_CSS, /\.thumb\{[^}]*data:image\/svg\+xml/, 'у миниатюры до загрузки — значок дома');
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /var BUSY_LABELS = \{[^}]*saveInq: "Сохраняем…"/, 'пока идёт запрос, главная кнопка говорит «Сохраняем…»');
+});
+
+test('значки: в интерфейсе панели один набор линейных SVG, эмодзи и глифы остались только там, где панель показывает то, что видит клиент', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const code = PANEL_HTML.replace(/\/\*[\s\S]*?\*\//g, '').split(String.fromCharCode(10)).filter((line) => !/GLYPH_ICONS|ICON_ONLY/.test(line)).join(String.fromCharCode(10));
+  // Шапка, предупреждения, карточки, статусы — значки, а не эмодзи.
+  const gone = ['🔍', '🔇', '🔊', '🔔', '⚠️', '👁', '📩', '⏻', '⌂', '📹', '👥', '⏱', '⚙'];
+  const left = gone.filter((glyph) => code.includes(glyph));
+  assert.deepEqual(left, [], 'эмодзи в интерфейсе панели');
+  // Кнопки из одного глифа (✕, ⋯, ←) становятся значками с подписью для скринридера.
+  assert.match(PANEL_HTML, /var ICON_ONLY = \{ "✕": \["close", "Закрыть"\], "⋯": \["more", "Ещё"\]/);
+  assert.match(PANEL_HTML, /if \(!button\.getAttribute\("aria-label"\)\) button\.setAttribute\("aria-label"/);
+  assert.match(PANEL_HTML, /id="soundToggle"[^>]*aria-label="Звук уведомлений"/, 'у кнопки звука есть имя');
+  // Нужные значки есть в наборе.
+  for (const name of ['close', 'more', 'search', 'bell', 'sound-on', 'sound-off', 'warning', 'power', 'calendar', 'clock', 'users', 'eye', 'inbox', 'video', 'arrow-left', 'arrow-right']) {
+    assert.ok(new RegExp('(?:^|[\\s,{])"?' + name + '"?: \'<').test(PANEL_HTML), 'значок ' + name + ' в наборе');
+  }
+});
+
+test('типографика: веса 400/600/700, три высоты строки, движение можно отключить, поля закреплённых элементов — один токен', async () => {
+  const { PANEL_CSS } = await import('../src/panel/styles.mjs');
+  const weights = new Set(Array.from(PANEL_CSS.replace(/@font-face\{[^}]*\}/g, '').matchAll(/font-weight:(\d+)/g)).map((match) => Number(match[1])));
+  assert.deepEqual(Array.from(weights).sort(), [400, 600, 700], 'веса шрифта: ' + Array.from(weights));
+  const lines = new Set(Array.from(PANEL_CSS.matchAll(/line-height:([^;}]+)/g)).map((match) => match[1].trim()));
+  const allowed = new Set(['1', 'var(--lh-tight)', 'var(--lh)', 'var(--lh-loose)']);
+  assert.deepEqual(Array.from(lines).filter((value) => !allowed.has(value) && !/^\d+px$/.test(value)), [], 'высоты строки вне набора');
+  assert.match(PANEL_CSS, /@media\(prefers-reduced-motion:reduce\)/);
+  assert.match(PANEL_CSS, /--gutter:20px/);
+  assert.ok(!/(?:left|right):(?:10|14|18|20)px/.test(PANEL_CSS.replace(/\.search::before[^}]*\}/, '')), 'поля закреплённых элементов — токен --gutter');
+  assert.ok(!/#[0-9a-fA-F]{3,6}\b/.test(PANEL_CSS.slice(PANEL_CSS.indexOf('\n}', PANEL_CSS.indexOf(':root{')))), 'цвета вне палитры (:root) не пишутся значением');
+});
+
+test('неразрывный пробел между числом и единицей: помощники и общий проход по тексту', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /function counted\(value, one, few, many\) \{ return num\(value\) \+ "\\u00a0"/);
+  assert.match(PANEL_HTML, /function money\(value, currency\) \{ return num\(value\) \+ "\\u00a0"/);
+  assert.match(PANEL_HTML, /function tightenSpaces\(root\)/);
+  assert.match(PANEL_HTML, /iconifyButtons\(document\.body\); tightenSpaces\(document\.body\)/, 'проход по тексту идёт после каждой перерисовки');
 });

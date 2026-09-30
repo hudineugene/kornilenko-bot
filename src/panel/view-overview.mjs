@@ -111,7 +111,7 @@ function deedAction(item) {
 }
 
 function deedIcon(item) {
-  return { message: "✉", task: "⏱", viewing: "📅", catalog: "⌂", group: "👥", broadcast: "➤", error: "!", system: "⚙" }[item.kind] || "•";
+  return iconSpan({ message: "mail", task: "clock", viewing: "calendar", catalog: "home", group: "users", broadcast: "send", error: "warning", system: "gear" }[item.kind] || "info");
 }
 
 // «Мои / Все»: пока менеджер один, переключателя нет. С двумя и больше на
@@ -252,7 +252,7 @@ function readinessCard(items) {
   var done = items.filter(function (item) { return item.ok; }).length;
   return '<div class="card gap-bottom readiness"><header><h3>Готовность к запуску</h3><div class="actions"><span class="chip ' + (done === items.length - 1 ? "warn" : "brand") + '">Готово ' + done + " из " + items.length + "</span></div></header>" +
     '<div class="list">' + items.map(function (item) {
-      return '<div class="list-item"><span class="chip ' + (item.ok ? "ok" : "warn") + '">' + (item.ok ? "✓" : "!") + "</span>" +
+      return '<div class="list-item"><span class="chip ' + (item.ok ? "ok" : "warn") + '">' + iconSpan(item.ok ? "check" : "warning") + "</span>" +
         '<span class="grow"><b>' + esc(item.title) + "</b>" + (item.ok || !item.detail ? "" : '<br><span class="muted small">' + esc(item.detail) + "</span>") + "</span>" +
         (item.ok ? "" : '<button class="btn secondary small" type="button" data-ready-go="' + esc(item.route.join("/")) + '">Настроить</button>') + "</div>";
     }).join("") + "</div></div>";
@@ -282,7 +282,7 @@ function healthHtml(rows) {
   if (!rows.length) return "";
   return '<div class="stack health">' + rows.map(function (row) {
     var kind = row.status === "bad" ? "bad" : row.status === "warn" ? "warn" : "ok";
-    var mark = row.status === "bad" ? "✕" : row.status === "warn" ? "!" : "✓";
+    var mark = iconSpan(row.status === "bad" ? "close" : row.status === "warn" ? "warning" : "check");
     return '<div class="row"><span class="chip ' + kind + '">' + mark + "</span><span>" + esc(row.title + ": " + row.detail) + "</span></div>";
   }).join("") + "</div>";
 }
@@ -575,7 +575,7 @@ function weeklyCard(payload) {
         }).join("") + "</div>" : '<div class="empty"><b>Заявок по объектам не было</b></div>') + "</div>" +
       "</div>" +
       funnelBlock(report.funnel) +
-      (report.broadcasts.count ? '<div class="small muted">✉️ Рассылок: ' + num(report.broadcasts.count) + ", получили " + num(report.broadcasts.sent) + ", откликнулись " + num(report.broadcasts.responded) + "</div>" : "") +
+      (report.broadcasts.count ? '<div class="small muted">' + iconSpan("mail") + ' Рассылок: ' + num(report.broadcasts.count) + ", получили " + num(report.broadcasts.sent) + ", откликнулись " + num(report.broadcasts.responded) + "</div>" : "") +
     "</div></div>";
 }
 

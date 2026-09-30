@@ -454,7 +454,7 @@ function renderData(host) {
   };
   function checkRow(check) {
     var kind = check.status === "bad" ? "bad" : check.status === "warn" ? "warn" : "ok";
-    var mark = check.status === "bad" ? "✕" : check.status === "warn" ? "!" : "✓";
+    var mark = iconSpan(check.status === "bad" ? "close" : check.status === "warn" ? "warning" : "check");
     return '<div class="list-item"><span class="grow"><b>' + esc(check.title) + "</b><br><span class=\"muted small\">" + esc(check.detail) +
       (check.hint ? " · " + esc(check.hint) : "") + '</span></span><span class="chip ' + kind + '">' + mark + "</span></div>";
   }

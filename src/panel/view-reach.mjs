@@ -34,7 +34,7 @@ function campaignAudienceLabel(entry) {
   if ((entry.sources || []).length) parts.push("источник: " + entry.sources.join(", "));
   if (entry.propertyId) {
     var record = (state.objects || []).find(function (item) { return String(item.id) === String(entry.propertyId); });
-    parts.push((record ? localized(record.title, "ru") || record.reference : "объект удалён") + " · " + campaignPropertySignalLabel(entry.propertySignal));
+    parts.push((record ? localized(record.title, "ru") || record.reference : "Объект удалён") + " · " + campaignPropertySignalLabel(entry.propertySignal));
   }
   if ((entry.tags || []).length) parts.push("теги: " + entry.tags.join(", "));
   return parts.join(" · ") || "все доступные клиенты";
@@ -222,7 +222,7 @@ function openCampaignEditor(id) {
         // Карточкой — то есть с фотографией объекта и кнопками «Записаться» и
         // «Подробнее». Без выбранного объекта отправлять нечего.
         '<label class="check"><input type="checkbox" id="campAsCard"' + (entry && entry.sendAsCard ? " checked" : "") + (selectedProperty ? "" : " disabled") + '> отправить карточкой этого объекта: фото, цена и кнопки «Записаться» и «Подробнее»</label>' +
-        '<div class="recipient-summary"><span>👥</span><div><b id="campEstimate">Считаем получателей…</b><small id="campEstimateDetails">Проверяем выбранный сегмент</small></div></div>' +
+        '<div class="recipient-summary"><span>' + iconSpan("users") + '</span><div><b id="campEstimate">Считаем получателей…</b><small id="campEstimateDetails">Проверяем выбранный сегмент</small></div></div>' +
       "</div></details>" +
       '<details class="editor-section" open><summary><b>Время отправки</b><span>сейчас или по расписанию</span></summary><div class="editor-section-body">' +
         '<div class="field"><label for="campDate">Отправить позже</label><input id="campDate" type="datetime-local" value="' + esc(entry && entry.scheduledAt ? dateTimeLocalValue(entry.scheduledAt) : "") + '"><div class="hint">Оставьте поле пустым для отправки сейчас. Часовой пояс: ' + esc(timeZoneName()) + "</div></div>" +

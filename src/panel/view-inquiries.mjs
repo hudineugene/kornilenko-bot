@@ -212,9 +212,9 @@ function viewingCardHtml(item, property) {
       ? { text: "Подтверждён", chip: "ok" }
       : { text: "Ждёт подтверждения", chip: "warn" };
   return '<div class="viewing-card' + (viewing.confirmedAt ? " confirmed" : "") + '">' +
-    '<div class="viewing-card-head"><b>📅 Запись на просмотр</b><span class="chip ' + state.chip + '">' + state.text + "</span></div>" +
+    '<div class="viewing-card-head"><b>' + iconSpan("calendar") + ' Запись на просмотр</b><span class="chip ' + state.chip + '">' + state.text + "</span></div>" +
     '<div class="viewing-card-when">' + esc(when) + "</div>" +
-    (property ? '<div class="small muted">⌂ ' + esc(localized(property.title, "ru") || property.reference || property.id) + "</div>" : "") +
+    (property ? '<div class="small muted">' + iconSpan("home") + ' ' + esc(localized(property.title, "ru") || property.reference || property.id) + "</div>" : "") +
     (viewing.cancelledAt ? "" : '<button class="btn secondary small" id="confirmViewingInline" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + "</button>") +
     "</div>";
 }
@@ -341,7 +341,7 @@ function pipelineCardHtml(row) {
   var due = item.followUpDate && item.followUpDate <= pipelineToday();
   return '<article class="funnel-card' + (due ? " due" : "") + '">' +
     '<button class="funnel-open" data-inquiry="' + esc(item.id) + '" type="button"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><span class="funnel-person"><b>' + esc(userName(user)) + '</b><small>' + esc(inquiryTypeName(item)) + '</small></span><span class="funnel-arrow">→</span></button>' +
-    (property ? '<div class="funnel-property">⌂ ' + esc(localized(property.title, "ru") || property.reference || property.id) + '</div>' : "") +
+    (property ? '<div class="funnel-property">' + iconSpan("home") + ' ' + esc(localized(property.title, "ru") || property.reference || property.id) + '</div>' : "") +
     '<div class="funnel-signals">' +
       // Значок — только то, что требует внимания: «Отвечено» — обычное состояние, а
       // «без менеджера» имеет смысл, когда в команде есть кому назначить.
@@ -433,7 +433,7 @@ function taskCardHtml(row, scope) {
   var property = item.propertyId ? (state.objects || []).find(function (record) { return record.id === item.propertyId; }) : null;
   var stage = PIPELINE_STAGES.find(function (entry) { return entry[0] === row.stage; });
   return '<article class="task-card ' + scope + '"><div class="task-main"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><div class="task-copy"><div class="row wrap"><b>' + esc(userName(user)) + '</b>' + taskStatusHtml(scope, item) + '</div><div class="small muted">' + esc(inquiryTypeName(item)) + (stage ? " · этап: " + esc(stage[1]) : "") + (item.assignee ? " · менеджер: " + esc(item.assignee) : " · менеджер не назначен") + '</div>' +
-    (property ? '<div class="task-property">⌂ ' + esc(localized(property.title, "ru") || property.reference || property.id) + '</div>' : "") +
+    (property ? '<div class="task-property">' + iconSpan("home") + ' ' + esc(localized(property.title, "ru") || property.reference || property.id) + '</div>' : "") +
     ((user.note || item.note) ? '<div class="task-note">' + esc(user.note || item.note) + '</div>' : "") +
     '</div></div><div class="task-actions"><button class="btn ghost small" data-task-open="' + esc(item.id) + '" type="button">Открыть диалог</button><button class="btn secondary small" data-task-plan="' + esc(item.id) + '" type="button">' + (item.followUpDate ? "Перенести" : "Назначить дату") + '</button>' +
     (item.followUpDate ? '<button class="btn secondary small" data-task-done="' + esc(item.id) + '" type="button">✓ Выполнено</button>' : "") + '</div></article>';
@@ -1201,7 +1201,7 @@ function conversationMessageHtml(message) {
   var type = message.kind !== "text" ? '<div class="message-kind">' + esc(icons[message.kind] || icons.other) + (message.fileName ? " · " + esc(message.fileName) : "") + "</div>" : "";
   var reactions = message.reactions && message.reactions.length ? '<span class="message-reactions">' + esc(message.reactions.join(" ")) + "</span>" : "";
   var quote = message.replyToTelegramMessageId ? '<div class="message-quote-preview"><span>Ответ на сообщение</span>' + esc(message.replyToText || "Сообщение клиента") + "</div>" : "";
-  var delivery = message.direction === "out" ? '<span class="message-delivery ' + (message.deliveryStatus === "failed" ? "bad" : "ok") + '">' + (message.deliveryStatus === "failed" ? "не доставлено" : "✓ доставлено") + "</span>" : "";
+  var delivery = message.direction === "out" ? '<span class="message-delivery ' + (message.deliveryStatus === "failed" ? "bad" : "ok") + '">' + (message.deliveryStatus === "failed" ? "не доставлено" : iconSpan("check") + " доставлено") + "</span>" : "";
   var reply = message.direction === "in" && Number.isFinite(Number(message.telegramMessageId)) ? '<button class="message-reply-button" data-reply-target="' + esc(message.telegramMessageId) + '" type="button" title="Ответить на это сообщение" aria-label="Ответить на это сообщение">↩ Ответить</button>' : "";
   return '<div class="conversation-line ' + (message.direction === "out" ? "out" : "in") + '"><div class="msg ' + (message.direction === "out" ? "out" : "") + '">' + quote + type + attachment + (message.text ? '<div class="message-text">' + esc(message.text) + "</div>" : "") + '<div class="msg-meta"><span>' + esc(message.direction === "out" ? message.by || "панель" : "клиент") + " · " + dateTime(message.createdAt) + reactions + delivery + "</span>" + reply + "</div></div></div>";
 }
@@ -1244,7 +1244,7 @@ function renderInquiryCard(host) {
       '<div class="conversation-main">' +
       '<div class="conversation-context">' +
         (related.length > 1 ? '<div class="field grow"><label for="activeInquiry">Текущая заявка</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + inquiryState(entry).text + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущая заявка</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
-        (property ? '<button class="property-link" id="linkedProperty" type="button">🏠 ' + esc(localized(property.title, "ru") || property.reference || property.id) + '<span>Открыть →</span></button>' : item.propertyId ? '<div class="chip bad">Связанный объект удалён</div>' : "") +
+        (property ? '<button class="property-link" id="linkedProperty" type="button">' + iconSpan("home") + ' ' + esc(localized(property.title, "ru") || property.reference || property.id) + '<span>Открыть →</span></button>' : item.propertyId ? '<div class="chip bad">Объект удалён</div>' : "") +
       '</div>' +
       viewingCardHtml(item, property) +
       '<div class="conversation-thread">' + (timeline.length
@@ -1420,7 +1420,7 @@ function renderInquiryCard(host) {
       var result = await send("/api/inquiries/" + encodeURIComponent(item.id) + "/reply", "POST", payload);
       forgetConversation(item.userId);
       replyDelivery.classList.add("ok");
-      replyDeliveryText.textContent = result.duplicate ? "✓ Сообщение уже было доставлено" : "✓ Доставлено в Telegram";
+      replyDeliveryText.textContent = result.duplicate ? "Сообщение уже было доставлено" : "Доставлено в Telegram";
       toast(result.duplicate ? "Сообщение уже было доставлено" : "Ответ доставлен");
       // Остаёмся в той же беседе и на том же месте страницы.
       await reload();
@@ -1558,14 +1558,14 @@ function viewingSort(a, b) {
 // Онлайн-показ по видеосвязи: менеджеру надо видеть это сразу, чтобы не
 // готовить адрес и ключи.
 function viewingOnlineTag(item) {
-  return item && item.viewing && item.viewing.online ? ' <span class="chip brand">📹 онлайн</span>' : "";
+  return item && item.viewing && item.viewing.online ? ' <span class="chip brand">' + iconSpan("video") + ' онлайн</span>' : "";
 }
 function viewingEventHtml(item, today, compact) {
   var user = userOf(item), property = viewingProperty(item), status = viewingStatus(item, today);
   return '<article class="viewing-event ' + status.event + '">' +
     '<div class="viewing-event-head"><b class="viewing-event-time">' + esc(viewingTimeLabel(item)) + '</b><span class="chip ' + status.chip + '">' + esc(status.text) + '</span></div>' +
     '<div class="viewing-event-client">' + esc(userName(user)) + '</div>' +
-    '<div class="viewing-event-property">⌂ ' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + viewingOnlineTag(item) + '</div>' +
+    '<div class="viewing-event-property">' + iconSpan("home") + ' ' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + viewingOnlineTag(item) + '</div>' +
     (!compact && user.phone ? '<div class="small muted">' + esc(user.phone) + '</div>' : "") +
     '<div class="viewing-event-actions"><button class="btn ghost small" data-viewing-open="' + esc(item.id) + '" type="button">Заявка</button>' +
     (!item.viewing.cancelledAt && item.status !== "closed" ? '<button class="btn secondary small" data-viewing-schedule="' + esc(item.id) + '" type="button">' + (item.viewing.confirmedAt ? "Перенести" : "Подтвердить") + '</button>' : "") + '</div></article>';
@@ -1586,7 +1586,7 @@ function openViewingSchedule(item) {
     protectChanges: true,
     body: '<div class="stack"><div class="viewing-dialog-context"><span class="conversation-avatar">' + esc(initials(user.firstName)) + '</span><div><b>' + esc(userName(user)) + '</b><span>' + esc(property ? localized(property.title, "ru") || property.reference || property.id : "Объект не найден") + '</span></div></div>' +
       (requested ? '<div class="msg">📝 Клиент просил: ' + esc(requested) + '</div>' : '') +
-      (viewing.online ? '<div class="msg">📹 Клиент выбрал онлайн-просмотр по видеосвязи: адрес ему не отправится, ссылку на видеосвязь пришлите в переписке.</div>' : '') +
+      (viewing.online ? '<div class="msg">' + iconSpan("video") + ' Клиент выбрал онлайн-просмотр по видеосвязи: адрес ему не отправится, ссылку на видеосвязь пришлите в переписке.</div>' : '') +
       (currentDate ? '' : '<div class="msg attention">Дату из просьбы клиента бот не разобрал — выберите её сами. Клиент получит именно то, что здесь указано.</div>') +
       '<div class="grid cols-2"><div class="field"><label for="viewingScheduleDate">Дата</label><input id="viewingScheduleDate" type="date" min="' + esc(pipelineToday()) + '" value="' + esc(currentDate) + '"></div><div class="field"><label for="viewingScheduleTime">Время</label><input id="viewingScheduleTime" type="time" value="' + esc(currentTime) + '"><div class="quick-times">' + VIEWING_QUICK_TIMES.map(function (time) { return '<button class="btn ghost small" type="button" data-quick-time="' + time + '">' + time + '</button>'; }).join("") + '</div></div></div>' +
       '<div class="msg">После сохранения клиент получит ' + (moving ? "обновлённые" : "подтверждённые") + ' дату и время в Telegram.</div></div>',

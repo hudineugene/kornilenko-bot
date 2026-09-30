@@ -139,8 +139,8 @@ function renderObjects(host) {
         // Цифры с подписями: сколько показов и сколько заявок. Иначе два числа подряд
         // читаются как что угодно.
         '<td class="right"><button class="object-performance" data-insights="1" type="button" title="Открыть аналитику объекта">' +
-          '<span>👁 в каталоге: ' + num(stats.impressions) + "</span>" +
-          '<span>📩 ' + counted(stats.inquiries, "заявка", "заявки", "заявок") + "</span></button></td>" +
+          '<span>' + iconSpan("eye") + ' в каталоге: ' + num(stats.impressions) + "</span>" +
+          '<span>' + iconSpan("inbox") + ' ' + counted(stats.inquiries, "заявка", "заявки", "заявок") + "</span></button></td>" +
         '<td class="right nowrap"><button class="btn ghost small" data-more="1" title="Ещё действия">⋯</button></td></tr>';
     }).join("") : '<tr><td colspan="8"><div class="empty"><b>Объектов нет</b>Добавьте первый или загрузите выгрузку с сайта</div></td></tr>') +
     "</tbody></table></div></div>";
@@ -314,7 +314,7 @@ async function openObjectInsights(id) {
       drawer: true,
       wide: true,
       body: '<div class="object-insights stack"><section class="object-insights-head">' +
-          (image ? '<img loading="lazy" decoding="async" src="' + imageUrl("objects", record.id, image) + '" alt="">' : '<span class="object-insights-placeholder">⌂</span>') +
+          (image ? '<img loading="lazy" decoding="async" src="' + imageUrl("objects", record.id, image) + '" alt="">' : '<span class="object-insights-placeholder">' + iconSpan("home") + '</span>') +
           '<div><h2>' + esc(title) + '</h2><div class="small muted">' + esc([record.reference, location].filter(Boolean).join(" · ") || "Без номера и расположения") + '</div><div class="row wrap gap-top"><span class="chip ' + statusKind(record.status) + '">' + esc(statusName(record.status)) + '</span><span class="small muted">данные обновлены ' + (stats.updatedAt ? ago(stats.updatedAt) : "ещё не собирались") + '</span></div></div></section>' +
         '<div class="grid cols-4 object-insight-kpis">' + kpiCard("Видели в каталоге", num(impressions), "раз показана в каталоге") + kpiCard("Открыли карточку", num(details), percent(details, impressions) + " от увидевших") + kpiCard("Заявки", num(inquiries), percent(inquiries, impressions) + " от увидевших") + kpiCard("Записались на просмотр", num(viewings), percent(viewings, inquiries) + " от заявок") + '</div>' +
         '<section class="card"><header><div><h3>Путь клиента</h3><span class="small muted">События считаются с момента последнего обнуления статистики</span></div></header><div class="card-body"><div class="object-path"><div><b>' + num(impressions) + '</b><span>видели в каталоге</span></div><i>→</i><div><b>' + num(details) + '</b><span>открыли карточку</span></div><i>→</i><div><b>' + num(inquiries) + '</b><span>оставили заявку</span></div><i>→</i><div><b>' + num(viewings) + '</b><span>записались на просмотр</span></div></div><div class="row wrap object-signal-summary"><span class="chip">❤️ В избранном у клиентов: ' + num(summary.favorites) + '</span><span class="chip">⚖️ Сравнивают клиентов: ' + num(summary.comparisons) + '</span><span class="chip">Недавно смотрели клиентов: ' + num(summary.viewed) + '</span><span class="chip">Подходит по запросу клиентов: ' + num(summary.matches) + '</span><span class="chip">Фото листали раз: ' + num(stats.galleries) + '</span><span class="chip">Просили менеджера раз: ' + num(stats.managerContacts) + '</span></div></div></section>' +

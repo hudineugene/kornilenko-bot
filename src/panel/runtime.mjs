@@ -49,9 +49,9 @@ const PANEL_SHELL = String.raw`
       <div class="global-results hidden" id="globalResults"></div>
     </div>
     <div class="head-tools">
-      <button class="btn ghost icon search-toggle" id="searchToggle" type="button" aria-label="Поиск">🔍</button>
-      <button class="btn ghost icon" id="soundToggle" type="button" aria-pressed="false" title="Звук о новом сообщении: выключен">🔇</button>
-      <button class="notification-bell" id="notificationBell" type="button" aria-label="Открыть уведомления"><span aria-hidden="true">🔔</span><b class="hidden" id="notificationCount">0</b></button>
+      <button class="btn ghost icon search-toggle" id="searchToggle" type="button" aria-label="Поиск"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ico-svg"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></button>
+      <button class="btn ghost icon" id="soundToggle" type="button" aria-label="Звук уведомлений" aria-pressed="false" title="Звук о новом сообщении: выключен"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ico-svg"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg></button>
+      <button class="notification-bell" id="notificationBell" type="button" aria-label="Открыть уведомления"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ico-svg"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></span><b class="hidden" id="notificationCount">0</b></button>
       <div class="state-line" id="botState"><span class="dot"></span><span id="botStateText">Загрузка…</span></div>
       <button class="btn ghost small" id="logoutBtn" type="button">Выйти</button>
     </div>
@@ -71,7 +71,7 @@ const PANEL_SHELL = String.raw`
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 <div id="savebar" class="savebar hidden" role="status"><span class="grow" id="savebarText">Есть несохранённые изменения</span><button class="btn secondary" id="savebarReset" type="button">Отменить</button><button class="btn" id="savebarSave" type="button">Сохранить</button></div>
 <div id="refreshHint" class="refresh-hint hidden" role="status"><span class="grow">Появились новые данные</span><button class="btn secondary" id="refreshHintApply" type="button">Обновить экран</button></div>
-<div id="saveAlert" class="save-alert hidden" role="alert"><b>⚠️ Бот не может сохранить данные на диск</b><span id="saveAlertText"></span></div>
+<div id="saveAlert" class="save-alert hidden" role="alert"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ico-svg"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.2v.1"/></svg> Бот не может сохранить данные на диск</b><span id="saveAlertText"></span></div>
 `;
 
 const PANEL_RUNTIME_JS = String.raw`
@@ -92,8 +92,24 @@ function el(id) { return document.getElementById(id); }
 function esc(value) { return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
 function num(value) { return new Intl.NumberFormat("ru-RU").format(Number(value || 0)); }
 function plural(value, one, few, many) { var n = Math.abs(Number(value || 0)) % 100, last = n % 10; return n > 10 && n < 20 ? many : last === 1 ? one : last >= 2 && last <= 4 ? few : many; }
-function counted(value, one, few, many) { return num(value) + " " + plural(value, one, few, many); }
-function money(value, currency) { return num(value) + " " + (currency === "USD" ? "$" : currency === "GBP" ? "£" : "€"); }
+// Число и единица не разрываются переносом строки («7 дней», «350 000 €»): между ними неразрывный пробел (U+00A0).
+function counted(value, one, few, many) { return num(value) + "\u00a0" + plural(value, one, few, many); }
+function money(value, currency) { return num(value) + "\u00a0" + (currency === "USD" ? "$" : currency === "GBP" ? "£" : "€"); }
+// То же для готовых фраз: цифра, пробел и короткая единица (ч, мин, дн, км, м², €, %).
+function tightenText(text) {
+  return String(text).replace(/(\d) (?=(?:ч|мин|дн|сек|км|м²|м|€|\$|£|%)(?![а-яёa-z]))/g, "$1\u00a0");
+}
+function tightenSpaces(root) {
+  if (!root || !document.createTreeWalker) return;
+  var walker = document.createTreeWalker(root, 4);
+  var node;
+  while ((node = walker.nextNode())) {
+    var parent = node.parentNode;
+    if (parent && /^(SCRIPT|STYLE|TEXTAREA)$/.test(parent.nodeName)) continue;
+    var fixed = tightenText(node.nodeValue);
+    if (fixed !== node.nodeValue) node.nodeValue = fixed;
+  }
+}
 function panelTimeZone() { return state && state.config && state.config.timeZone || "Europe/Madrid"; }
 // Часовой пояс человеческими словами: «Испания — материк», а не Europe/Madrid.
 var TIME_ZONE_NAMES = { "Europe/Madrid": "Испания — материк", "Atlantic/Canary": "Канарские острова", "Europe/Moscow": "Москва", "Europe/Kyiv": "Киев", "Europe/Lisbon": "Португалия", "Europe/London": "Лондон", "UTC": "UTC" };
@@ -326,7 +342,7 @@ function toast(text, bad, action, sticky) {
     close.type = "button";
     close.className = "toast-action";
     close.setAttribute("aria-label", "Закрыть");
-    close.textContent = "✕";
+    close.innerHTML = icon("close");
     close.onclick = function () { box.classList.add("hidden"); };
     box.appendChild(document.createTextNode(" "));
     box.appendChild(close);
@@ -874,10 +890,10 @@ function waitLevel(inquiry, now) {
 function waitDuration(ms) {
   var minutes = Math.floor(ms / 60000);
   if (minutes < 1) return "меньше минуты";
-  if (minutes < 60) return minutes + " мин";
+  if (minutes < 60) return minutes + "\u00a0мин";
   var hours = Math.floor(minutes / 60);
-  if (hours < 24) return hours + " ч";
-  return Math.floor(hours / 24) + " дн";
+  if (hours < 24) return hours + "\u00a0ч";
+  return Math.floor(hours / 24) + "\u00a0дн";
 }
 // Сколько клиентов ждут дольше срока (одного клиента с несколькими заявками — один раз).
 function overdueClients() {
@@ -927,10 +943,10 @@ function renderTabBar() {
     return '<button class="tab' + (item.id === currentView ? " active" : "") + '" data-tab-view="' + item.id + '" type="button"' + (item.id === currentView ? ' aria-current="page"' : "") + (item.hint ? ' aria-label="' + esc(item.title + ": " + item.hint) + '"' : "") + '>' +
       '<span class="tab-ico">' + item.icon + '</span><span class="tab-title">' + esc(item.title) + '</span>' +
       (item.count ? '<b class="tab-count">' + num(item.count) + '</b>' : "") + '</button>';
-  }).join("") + '<button class="tab' + (moreActive ? " active" : "") + '" id="tabMore" type="button" aria-haspopup="true" aria-expanded="false"><span class="tab-ico">⋯</span><span class="tab-title">Ещё</span></button>';
+  }).join("") + '<button class="tab' + (moreActive ? " active" : "") + '" id="tabMore" type="button" aria-haspopup="true" aria-expanded="false"><span class="tab-ico">' + icon("more") + '</span><span class="tab-title">Ещё</span></button>';
   el("moreSheet").innerHTML = rest.map(function (item) {
     return '<button class="more-item' + (item.id === currentView ? " active" : "") + '" data-tab-view="' + item.id + '" type="button"><span class="ico">' + item.icon + '</span><span>' + esc(item.title) + '</span></button>';
-  }).join("") + '<button class="more-item" id="moreLogout" type="button"><span class="ico">⏻</span><span>Выйти</span></button>';
+  }).join("") + '<button class="more-item" id="moreLogout" type="button"><span class="ico">' + icon("power") + '</span><span>Выйти</span></button>';
   function closeSheet() {
     el("moreSheet").classList.add("hidden");
     var more = el("tabMore");
@@ -1059,7 +1075,36 @@ var BUTTON_ICONS = {
   down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
   home: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/>',
 };
-var GLYPH_ICONS = { "＋": "plus", "⇩": "download", "⬇": "download", "⬆": "upload", "✉": "mail", "➤": "send", "✎": "edit", "⧉": "copy", "✓": "check", "↩": "reply", "🔁": "transfer", "🧹": "clean", "📎": "clip", "📌": "pin", "↑": "up", "↓": "down", "🏠": "home" };
+Object.assign(BUTTON_ICONS, {
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
+  "arrow-left": '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  "arrow-right": '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+  bell: '<path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  "sound-on": '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
+  "sound-off": '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>',
+  warning: '<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.2v.1"/>',
+  power: '<path d="M12 3v8"/><path d="M6.5 6.5a8 8 0 1 0 11 0"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  users: '<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.5-3.2 3-5 5.5-5s5 1.8 5.5 5"/><path d="M16 6.2a3 3 0 0 1 0 5.6M17.5 14.2c2 .4 3.4 2 3.8 4.8"/>',
+  eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
+  inbox: '<path d="M4 13l2-7h12l2 7v5H4z"/><path d="M4 13h5l1 2h4l1-2h5"/>',
+  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/>',
+  phone: '<path d="M6 4h3l1.5 4-2 1.5a10 10 0 0 0 6 6L16 13.5l4 1.5v3a2 2 0 0 1-2 2A14 14 0 0 1 4 6a2 2 0 0 1 2-2z"/>',
+  place: '<path d="M12 21s6-5.4 6-10a6 6 0 0 0-12 0c0 4.6 6 10 6 10z"/><circle cx="12" cy="11" r="2.2"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
+});
+var GLYPH_ICONS = { "✕": "close", "⋯": "more", "←": "arrow-left", "🌐": "globe", "📅": "calendar", "📹": "video", "⏱": "clock", "👥": "users", "⌂": "home", "💬": "chat", "📞": "phone", "📍": "place", "＋": "plus", "⇩": "download", "⬇": "download", "⬆": "upload", "✉": "mail", "➤": "send", "✎": "edit", "⧉": "copy", "✓": "check", "↩": "reply", "🔁": "transfer", "🧹": "clean", "📎": "clip", "📌": "pin", "↑": "up", "↓": "down", "🏠": "home" };
+
+// Значок внутри строки текста (в чипе, в заголовке карточки): тот же набор, что и в кнопках.
+function iconSpan(name) { return '<span class="ico-inline">' + icon(name) + "</span>"; }
+// Кнопка из одного глифа (✕, ⋯, ←) — значок; подпись для скринридера берётся из aria-label, title или из таблицы.
+var ICON_ONLY = { "✕": ["close", "Закрыть"], "⋯": ["more", "Ещё"], "←": ["arrow-left", "Назад"], "→": ["arrow-right", "Далее"] };
 
 function icon(name) {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (BUTTON_ICONS[name] || "") + "</svg>";
@@ -1068,8 +1113,27 @@ function icon(name) {
 // Ведущий глиф текста кнопки → значок. Кнопка, где кроме глифа ничего нет, остаётся как есть.
 function iconifyButtons(root) {
   if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll("button").forEach(function (button) {
+    if (button.getAttribute("data-iconified")) return;
+    var only = ICON_ONLY[String(button.textContent || "").trim()];
+    if (only && !button.children.length) {
+      button.setAttribute("data-iconified", "1");
+      if (!button.getAttribute("aria-label")) button.setAttribute("aria-label", button.getAttribute("title") || only[1]);
+      button.innerHTML = '<span class="btn-ico" aria-hidden="true">' + icon(only[0]) + "</span>";
+    }
+  });
   root.querySelectorAll(".btn").forEach(function (button) {
     if (button.getAttribute("data-iconified")) return;
+    // Хвостовая стрелка («Открыть отчёт →») — значок справа.
+    var tail = button.lastChild;
+    if (tail && tail.nodeType === 3 && /\s*→\s*$/.test(String(tail.nodeValue)) && String(tail.nodeValue).replace(/\s*→\s*$/, "").trim()) {
+      tail.nodeValue = String(tail.nodeValue).replace(/\s*→\s*$/, "");
+      var arrow = document.createElement("span");
+      arrow.className = "btn-ico";
+      arrow.setAttribute("aria-hidden", "true");
+      arrow.innerHTML = icon("arrow-right");
+      button.appendChild(arrow);
+    }
     var node = button.firstChild;
     if (!node || node.nodeType !== 3) return;
     var text = String(node.nodeValue || "").replace(/^\s+/, "").replace(/^([^\s])\uFE0F/, "$1");
@@ -1096,7 +1160,7 @@ function initAccessibility() {
     var timer = 0;
     new MutationObserver(function () {
       clearTimeout(timer);
-      timer = setTimeout(function () { enhanceAccessibility(page); enhanceAccessibility(document.querySelector(".topbar")); iconifyButtons(document.body); }, 30);
+      timer = setTimeout(function () { enhanceAccessibility(page); enhanceAccessibility(document.querySelector(".topbar")); iconifyButtons(document.body); tightenSpaces(document.body); }, 30);
     }).observe(document.body, { childList: true, subtree: true });
   }
   enhanceAccessibility(page);
@@ -1375,7 +1439,7 @@ function checkNewClientMessage() {
 }
 function renderSoundToggle() {
   var button = el("soundToggle");
-  button.textContent = alertKit.sound ? "🔊" : "🔇";
+  button.innerHTML = icon(alertKit.sound ? "sound-on" : "sound-off");
   button.setAttribute("aria-pressed", String(alertKit.sound));
   var waiting = alertKit.sound && alertKit.audio && alertKit.audio.state === "suspended";
   button.title = "Звук о новом сообщении: " + (alertKit.sound ? (waiting ? "включён, но браузер ждёт первого нажатия на странице" : "включён") : "выключен");
