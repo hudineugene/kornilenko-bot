@@ -446,12 +446,8 @@ function renderTasks(host) {
     if (a.item.followUpDate && !b.item.followUpDate) return -1;
     return String(a.item.followUpDate || "").localeCompare(String(b.item.followUpDate || "")) || String(a.item.followUpTime || "").localeCompare(String(b.item.followUpTime || ""));
   });
-  host.innerHTML = numberStrip([
-      ["К выполнению", num(counts.action), counts.action ? "bad" : "", "Шаг на сегодня или уже просрочен"],
-      ["Шаг просрочен", num(counts.overdue), counts.overdue ? "bad" : ""],
-      ["Запланировано", num(counts.future), "", "На будущие даты"],
-      ["Без следующего шага", num(counts.none), counts.none ? "bad" : "", "Клиенты в работе без даты шага"],
-    ]) + '<div class="task-toolbar"><div class="tabs" id="taskScope">' +
+  // Числа стоят в самих вкладках («К выполнению · 1»): отдельная строка тех же счётчиков другими словами только повторяла их.
+  host.innerHTML = '' + '<div class="task-toolbar"><div class="tabs" id="taskScope">' +
       [["action", "К выполнению", counts.action], ["overdue", "Шаг просрочен", counts.overdue], ["future", "Будущие", counts.future], ["none", "Без даты", counts.none], ["all", "Все", counts.all]].map(function (entry) { return '<button type="button" data-scope="' + entry[0] + '" class="' + (taskFilter.scope === entry[0] ? "active" : "") + '">' + entry[1] + " · " + entry[2] + "</button>"; }).join("") +
       '</div></div>' + clientFilterBar({ search: true, steps: false }) +
     '<div class="task-list">' + (rows.length ? rows.map(function (row) { return taskCardHtml(row, row.taskScope); }).join("") : '<div class="card empty"><b>Дел в этой группе нет</b>Можно перейти к другим группам или открыть воронку</div>') + "</div>";

@@ -1586,11 +1586,10 @@ test('нижняя панель: четыре главных раздела и �
   assert.match(String(sandbox.document.getElementById('tabbar').innerHTML), /class="tab active" id="tabMore"/);
 });
 
-test('на пяти экранах цифры — одной строкой, а не рядом из четырёх карточек', async () => {
+test('на четырёх экранах цифры — одной строкой, а не рядом из четырёх карточек (в «Следующих шагах» они стоят в самих вкладках)', async () => {
   twoWaitingConversations();
   const { sandbox } = await panelSandbox();
   const screens = [
-    ['clients', 'tasks', /К выполнению: <b/],
     ['clients', 'pipeline', /В работе: <b/],
     ['viewings', '', /Ждут подтверждения: <b/],
     ['reports', '', /Всего клиентов: <b/],
