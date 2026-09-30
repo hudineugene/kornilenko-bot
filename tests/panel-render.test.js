@@ -2111,7 +2111,7 @@ test('группа с темами: в форме поста выбираетс�
   const manage = fakeElement('main');
   sandbox.renderGroupCard(manage, sandbox.state.groups[0], 'manage');
   const manageHtml = String(manage.innerHTML);
-  for (const word of ['Темы группы', 'Создать новую тему', 'Добавить существующую тему', 'Копировать ссылку', 'data-forget-topic="12"', 'закрыта']) assert.ok(manageHtml.includes(word), 'на экране есть: ' + word);
+  for (const word of ['Темы группы', 'Создать новую тему', 'Добавить существующую тему', 'Копировать ссылку', 'data-forget-topic="12"', 'Закрыта']) assert.ok(manageHtml.includes(word), 'на экране есть: ' + word);
   assert.ok(!manageHtml.includes('data-forget-topic="1"'), '«Общую» убрать нельзя');
   assert.ok(!manageHtml.includes('нет права «Управление темами»'), 'право у бота есть — предупреждения нет');
 
@@ -2307,8 +2307,8 @@ test('«Сегодня»: «Мои / Все» появляется при дву
   // Новое обращение, за которым ещё никто не закреплён, видят все: иначе в «Мои»
   // оно не показывалось бы никому и могло ждать, пока его заметят в «Все».
   assert.ok(html.includes('Николай'), 'ничей клиент в «Мои» виден');
-  assert.match(html, /<span class="chip warn">без менеджера<\/span>/, 'с пометкой «без менеджера»');
-  assert.equal((html.match(/без менеджера<\/span>/g) || []).length, 1, 'пометка только у ничьего, не у клиентки Марии');
+  assert.match(html, /<span class="chip warn">Без менеджера<\/span>/, 'с пометкой «без менеджера»');
+  assert.equal((html.match(/Без менеджера<\/span>/g) || []).length, 1, 'пометка только у ничьего, не у клиентки Марии');
   data.inquiries.find((item) => item.id === 'inq-nikolay').assignee = 'Олег';
   ({ sandbox } = await panelSandbox());
   sandbox.todayScope.mine = true;
@@ -2720,7 +2720,7 @@ test('воронка без шума: «без менеджера» — толь
 
   // Один человек в команде: назначать некому, «без менеджера» — пустой шум.
   let html = await board();
-  assert.ok(!/без менеджера<\/span>/.test(html), 'значка «без менеджера» на карточках нет');
+  assert.ok(!/Без менеджера<\/span>/.test(html), 'значка «без менеджера» на карточках нет');
   assert.ok(!/Без менеджера/.test(html), 'и в цифрах, и в фильтре — тоже');
   assert.ok(!/class="chip ok">Отвечено</.test(html), 'значка «Отвечено» нет: это обычное состояние');
   assert.match(html, /Ждёт ответа/, 'а то, что требует внимания, — на месте');
@@ -2735,7 +2735,7 @@ test('воронка без шума: «без менеджера» — толь
   // Команда из двух и больше: пометка возвращается — её можно исправить.
   sandbox.state.config.managers = [{ id: 'm1', name: 'Мария', chatId: '1', verifiedAt: '' }];
   html = await board();
-  assert.match(html, /<span class="chip warn">без менеджера<\/span>/);
+  assert.match(html, /<span class="chip warn">Без менеджера<\/span>/);
   assert.match(html, /Без менеджера/);
 });
 

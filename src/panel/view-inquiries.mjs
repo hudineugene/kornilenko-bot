@@ -195,9 +195,9 @@ function selectionMatchingPanel(item) {
     return '<div class="list-item start"><div class="grow"><div class="row wrap"><b>' + esc(title) + '</b><span class="chip ' + tier[1] + '">' + tier[0] + '</span><span class="small muted">оценка ' + Math.max(0, Math.min(100, Number(result.score) || 0)) + '%</span></div>' +
       (reasons.length ? '<div class="small muted gap-top-sm">Совпало: ' + esc(reasons.join(", ")) + '</div>' : "") +
       (warnings.length ? '<div class="small gap-top-sm ' + (needsData ? "bad-text" : "warn-text") + '">Учесть: ' + esc(warnings.join(", ")) + '</div>' : "") +
-      '</div>' + (property ? '<button class="btn ghost small" type="button" data-match-property="' + esc(property.id) + '">Карточка</button>' : '<span class="chip bad">объект удалён</span>') + '</div>';
+      '</div>' + (property ? '<button class="btn ghost small" type="button" data-match-property="' + esc(property.id) + '">Карточка</button>' : '<span class="chip bad">Объект удалён</span>') + '</div>';
   }).join("");
-  return '<div class="card flat"><header><h3>Автоматический подбор</h3><div class="actions"><span class="chip ok">точно ' + counts.exact + '</span><span class="chip warn">близко ' + counts.close + '</span><span class="chip">рассмотреть ' + counts.consider + '</span></div></header><div class="list">' + rows + '</div></div>';
+  return '<div class="card flat"><header><h3>Автоматический подбор</h3><div class="actions"><span class="chip ok">Точно ' + counts.exact + '</span><span class="chip warn">Близко ' + counts.close + '</span><span class="chip">Рассмотреть ' + counts.consider + '</span></div></header><div class="list">' + rows + '</div></div>';
 }
 // Просмотр — не обычное сообщение: у него есть дата, время и одно действие,
 // которого от менеджера ждут. Показываем его карточкой прямо в переписке.
@@ -346,8 +346,8 @@ function pipelineCardHtml(row) {
       // Значок — только то, что требует внимания: «Отвечено» — обычное состояние, а
       // «без менеджера» имеет смысл, когда в команде есть кому назначить.
       (row.group.waiting ? '<span class="chip ' + WAIT_CHIP[row.group.waitLevel] + '">Ждёт ответа · ' + waitDuration(row.group.waitAge) + '</span>' : "") +
-      (item.assignee ? '<span class="chip">' + esc(item.assignee) + '</span>' : transferStaff().length > 1 ? '<span class="chip warn">без менеджера</span>' : "") +
-      (item.followUpDate ? '<span class="chip ' + (due ? "bad" : "") + '">⏱ ' + pipelineDate(item.followUpDate) + (item.followUpTime ? " " + esc(item.followUpTime) : "") + '</span>' : "") +
+      (item.assignee ? '<span class="chip">' + esc(item.assignee) + '</span>' : transferStaff().length > 1 ? '<span class="chip warn">Без менеджера</span>' : "") +
+      (item.followUpDate ? stepChip(item.followUpDate, item.followUpTime) : "") +
     '</div><select class="pipeline-stage-select" data-pipeline-stage="' + esc(item.id) + '" aria-label="Перенести на другой этап">' + pipelineMoveOptions(row.stage) + '</select></article>';
 }
 function renderPipeline(host) {
@@ -396,10 +396,17 @@ function taskScopeOf(row, today) {
   if (row.item.followUpDate === today) return "today";
   return "future";
 }
+// Дата следующего шага — одним видом везде (дела, воронка, база): просрочен — красный, сегодня — жёлтый
+// (человек должен решить), впереди — синий (идёт своим чередом).
+function stepChip(date, time) {
+  var when = pipelineDate(date) + (time ? " · " + esc(time) : "");
+  var today = pipelineToday();
+  if (date < today) return '<span class="chip bad">Шаг просрочен · ' + pipelineDate(date) + "</span>";
+  if (date === today) return '<span class="chip warn">Сегодня' + (time ? " · " + esc(time) : "") + "</span>";
+  return '<span class="chip brand">' + when + "</span>";
+}
 function taskStatusHtml(scope, item) {
-  if (scope === "overdue") return '<span class="chip bad">Шаг просрочен · ' + pipelineDate(item.followUpDate) + '</span>';
-  if (scope === "today") return '<span class="chip warn">Сегодня' + (item.followUpTime ? " · " + esc(item.followUpTime) : "") + '</span>';
-  if (scope === "future") return '<span class="chip brand">' + pipelineDate(item.followUpDate) + (item.followUpTime ? " · " + esc(item.followUpTime) : "") + '</span>';
+  if (item.followUpDate) return stepChip(item.followUpDate, item.followUpTime);
   return '<span class="chip">Дата не назначена</span>';
 }
 function openTaskSchedule(item) {
@@ -1236,13 +1243,13 @@ function renderInquiryCard(host) {
     '<div class="card-body conversation-body conversation-split">' +
       '<div class="conversation-main">' +
       '<div class="conversation-context">' +
-        (related.length > 1 ? '<div class="field grow"><label>Текущая заявка</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + inquiryState(entry).text + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущая заявка</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
+        (related.length > 1 ? '<div class="field grow"><label for="activeInquiry">Текущая заявка</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + inquiryState(entry).text + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущая заявка</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
         (property ? '<button class="property-link" id="linkedProperty" type="button">🏠 ' + esc(localized(property.title, "ru") || property.reference || property.id) + '<span>Открыть →</span></button>' : item.propertyId ? '<div class="chip bad">Связанный объект удалён</div>' : "") +
       '</div>' +
       viewingCardHtml(item, property) +
       '<div class="conversation-thread">' + (timeline.length
         ? timeline.map(conversationMessageHtml).join("")
-        : conversationLoading[String(item.userId)] ? '<div class="empty"><b>Загружаем сообщения…</b></div>'
+        : conversationLoading[String(item.userId)] ? '<div class="empty"><b>Загрузка…</b></div>'
           : conversationFailed[String(item.userId)]
             ? '<div class="empty"><b>Не удалось загрузить сообщения</b>' + esc(conversationFailed[String(item.userId)]) + '<button class="btn secondary small" id="retryConversation" type="button">Повторить</button></div>'
             : '<div class="empty"><b>Сообщений пока нет</b></div>') + "</div>" +
@@ -1737,9 +1744,9 @@ function renderClients(host) {
       return '<tr class="clickable" data-id="' + esc(user.id) + '"><td><div class="row"><span class="avatar">' + esc(initials(user.firstName)) + "</span><span><b>" + esc(userName(user)) + "</b>" +
         (user.username ? ' <span class="small muted">@' + esc(user.username) + "</span>" : "") +
         (user.phone ? '<br><span class="small muted">' + esc(user.phone) + "</span>" : "") + "</span></div></td>" +
-        "<td>" + esc(user.source || "без метки") + ' <span class="chip">' + esc((user.preferredLanguage || "—").toUpperCase()) + "</span>" + (user.blocked ? ' <span class="chip bad">недоступен</span>' : "") + "</td>" +
+        "<td>" + esc(user.source || "без метки") + ' <span class="chip">' + esc((user.preferredLanguage || "—").toUpperCase()) + "</span>" + (user.blocked ? ' <span class="chip bad">Недоступен</span>' : "") + "</td>" +
         "<td>" + (latest ? '<span class="chip brand">' + esc(clientStageLabel(latest)) + "</span>" : "—") + "</td>" +
-        "<td>" + (active && active.followUpDate ? '<span class="chip ' + (active.followUpDate <= pipelineToday() ? "bad" : "") + '">' + pipelineDate(active.followUpDate) + (active.followUpTime ? " · " + esc(active.followUpTime) : "") + "</span>" : "—") + "</td>" +
+        "<td>" + (active && active.followUpDate ? stepChip(active.followUpDate, active.followUpTime) : "—") + "</td>" +
         '<td class="right small muted nowrap">' + ago(user.lastSeenAt) + "</td></tr>";
     }).join("") : '<tr><td colspan="5"><div class="empty"><b>Никого не найдено</b></div></td></tr>') +
     "</tbody></table></div>" +
@@ -1815,8 +1822,8 @@ function openClient(id) {
         return '<section class="card"><div class="card-body row wrap"><span class="chip warn">Возможный дубль</span><span>Тот же телефон у клиента «' + esc(userName(other)) + '»' + (other.chatId ? "" : " (заведён вручную)") + '</span>' +
           (mergePlan(user, other) ? '<button class="btn secondary small" type="button" data-client-merge="' + esc(other.id) + '">Объединить</button>' : '<span class="small muted">Оба пишут через Telegram — объединить нельзя</span>') + '</div></section>';
       }).join("") + numberStrip([["Сообщений", num(clientMessageTotal(user, inquiries))], ["Заявок", num(inquiries.length)], ["Избранное", num((user.favorites || []).length)], ["Просмотрено", num((user.recentlyViewed || []).length)]]) +
-      '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит клиенту в Telegram</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть диалог →</button><button class="btn secondary" id="clientViewing" type="button">Назначить просмотр</button>' + (!user.chatId ? '<div class="small muted">Клиент заведён вручную: в боте его нет, писать ему из панели нельзя.</div>' : '') + '</div></section>' +
-      '<div class="grid cols-2 client-interest-grid">' + (!hasWish ? '<section class="card"><div class="card-body"><span class="small muted">Условия поиска: клиент пока не оставлял ни сохранённого поиска, ни заявки на подбор.</span></div></section>' : '<section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section>') + '<section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="stack"><div class="muted small">Активных заявок нет. Можно поставить шаг — например, «позвонить в четверг»: он появится в «Следующих шагах» и в напоминаниях.</div><div class="grid cols-2"><div class="field"><label for="stepDate">День</label><input type="date" id="stepDate"></div><div class="field"><label for="stepTime">Время</label><input type="time" id="stepTime"></div></div><div class="field"><label for="stepNote">Что сделать</label><input id="stepNote" maxlength="300" placeholder="Позвонить, уточнить бюджет"></div><button class="btn secondary small" id="clientStep" type="button">Поставить шаг</button></div>') + '</div></section></div>' +
+      '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит клиенту в Telegram</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">Отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть диалог →</button><button class="btn secondary" id="clientViewing" type="button">Назначить просмотр</button>' + (!user.chatId ? '<div class="small muted">Клиент заведён вручную: в боте его нет, писать ему из панели нельзя.</div>' : '') + '</div></section>' +
+      '<div class="grid cols-2 client-interest-grid">' + (!hasWish ? '<section class="card"><div class="card-body"><span class="small muted">Условия поиска: клиент пока не оставлял ни сохранённого поиска, ни заявки на подбор.</span></div></section>' : '<section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section>') + '<section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">Менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="stack"><div class="muted small">Активных заявок нет. Можно поставить шаг — например, «позвонить в четверг»: он появится в «Следующих шагах» и в напоминаниях.</div><div class="grid cols-2"><div class="field"><label for="stepDate">День</label><input type="date" id="stepDate"></div><div class="field"><label for="stepTime">Время</label><input type="time" id="stepTime"></div></div><div class="field"><label for="stepNote">Что сделать</label><input id="stepNote" maxlength="300" placeholder="Позвонить, уточнить бюджет"></div><button class="btn secondary small" id="clientStep" type="button">Поставить шаг</button></div>') + '</div></section></div>' +
       '<section class="card"><header><h3>Объекты и интересы</h3><div class="actions"><span class="small muted">избранное · сравнение · история · подбор</span></div></header>' + clientPropertiesHtml(user) + '</section>' +
       '<section class="card"><header><h3>История заявок</h3></header>' + (inquiries.length ? '<div class="client-inquiries">' + inquiries.slice(0, 20).map(function (item) { return '<button class="client-inquiry" data-client-inquiry="' + esc(item.id) + '" type="button"><span><b>' + esc(inquiryTypeName(item)) + '</b><small>' + esc(String(item.text || "").replace(/\s+/g, " ").slice(0, 100)) + '</small></span><span class="chip ' + (awaitsReply(item) ? "bad" : item.status === "closed" ? "" : "ok") + '">' + (awaitsReply(item) ? "ждёт ответа" : item.status === "closed" ? "закрыто" : "в работе") + '</span><time>' + dateTime(item.updatedAt || item.createdAt) + '</time><i>→</i></button>'; }).join("") + '</div>' : '<div class="empty"><b>Заявок ещё нет</b></div>') + '</section>' +
       // Удаление — в самом конце карточки, отдельным блоком: раньше красная кнопка

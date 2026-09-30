@@ -136,6 +136,15 @@ tbody tr.selected{background:var(--brand-soft)}
 /* --- Элементы --------------------------------------------------------------- */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);border:1px solid var(--brand);border-radius:var(--radius);background:var(--brand);color:var(--surface);font:inherit;font-weight:600;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap}
 .btn:hover{background:var(--brand-dark);border-color:var(--brand-dark)}
+/* Две высоты кнопок на компьютере (36 и 30) и одна на телефоне (44, ниже). */
+.btn{min-height:36px}
+.btn.small{min-height:30px}
+/* Сообщение-полоса: одна конструкция для «внимание», «ошибка», «готово» и справки; цветная кромка — только слева. */
+.banner{--flag:var(--brand);padding:var(--sp-2) var(--sp-3);border:1px solid var(--line);border-left:4px solid var(--flag);border-radius:var(--radius);background:var(--surface-soft);font-size:var(--fs-sm);overflow-wrap:anywhere}
+.banner.warn{--flag:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
+.banner.bad{--flag:var(--bad);background:var(--bad-soft);border-color:var(--bad-line);color:var(--bad)}
+.banner.ok{--flag:var(--ok);background:var(--ok-soft);border-color:var(--ok-line)}
+.banner.warn,.banner.bad,.banner.ok{border-left-color:var(--flag)}
 .btn:disabled{opacity:.55;cursor:not-allowed}
 .btn.secondary{background:var(--surface);color:var(--text);border-color:var(--line)}
 .btn.secondary:hover{background:var(--surface-soft)}

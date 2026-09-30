@@ -250,7 +250,7 @@ function openChannelPost(id) {
       '<div class="field"><label for="channelLanguage">Язык поста</label><select id="channelLanguage">' + LANGUAGES.map(function (language) {
         return '<option value="' + language[0] + '">' + language[1] + "</option>";
       }).join("") + "</select></div>" +
-      '<div class="field"><label for="channelText">Текст поста</label><textarea id="channelText" class="area-sm" placeholder="Загружаем текст карточки…"></textarea>' +
+      '<div class="field"><label for="channelText">Текст поста</label><textarea id="channelText" class="area-sm" placeholder="Загрузка…"></textarea>' +
       '<div class="hint">По умолчанию — та же подпись, что видит клиент в карточке объекта.</div></div>' +
       '<div class="grid cols-2"><div class="field"><label for="channelButton">Кнопка</label><input id="channelButton" value="🏠 Смотреть в боте"></div>' +
       '<div class="field"><label for="channelWhen">Отправить позже</label><input id="channelWhen" type="datetime-local"></div></div>' +
@@ -817,7 +817,7 @@ function shortText(value, limit) {
 function renderOffers(host) {
   var rows = state.promotions || [];
   pageAction("＋ Акция", function () { openRecordEditor("promotions", null); });
-  host.innerHTML = '<div class="card"><div class="table-wrap"><table><thead><tr><th class="thumb-xs"></th><th>Акция</th><th>Срок</th><th>Статус</th><th></th></tr></thead><tbody>' +
+  host.innerHTML = '<div class="card"><div class="table-wrap"><table class="table-stack"><thead><tr><th class="thumb-xs"></th><th>Акция</th><th>Срок</th><th>Статус</th><th></th></tr></thead><tbody>' +
     (rows.length ? rows.map(function (record) {
       var images = propertyImages(record, "ru");
       var displayStatus = promotionStatus(record);
@@ -872,7 +872,7 @@ function renderFeed(host) {
     '<div class="card"><header><h3>Последняя загрузка</h3></header><div class="card-body stack">' +
       (settings.lastRunAt ? '<div class="small muted">' + dateTime(settings.lastRunAt) + "</div>" : '<div class="muted">Загрузок ещё не было</div>') +
       (last ? '<div class="grid cols-3">' + kpiCard("Добавлено", num(last.added)) + kpiCard("Обновлено", num(last.updated)) + kpiCard("Фото", num(last.photos)) + "</div>" : "") +
-      (settings.lastError ? '<div class="chip bad">' + esc(settings.lastError) + "</div>" : "") +
+      (settings.lastError ? '<div class="banner bad">' + esc(settings.lastError) + "</div>" : "") +
       '<div class="hint">Объекты сопоставляются по номеру объекта из выгрузки. Тексты, которые вы правили в панели, не перезаписываются.</div>' +
     "</div></div></div>";
 
@@ -888,7 +888,7 @@ function renderFeed(host) {
   };
   host.querySelector("#feedImport").onclick = async function () {
     if (!(await confirmDialog("Загрузить объекты?", "Новые объекты добавятся, существующие обновятся по номеру.", "Загрузить"))) return;
-    host.querySelector("#feedResult").textContent = "Загружаем, это может занять несколько минут…";
+    host.querySelector("#feedResult").textContent = "Загрузка… это может занять несколько минут";
     try {
       var result = await send("/api/feed/import", "POST", payload());
       toast("Добавлено " + result.added + ", обновлено " + result.updated);

@@ -345,7 +345,7 @@ VIEWS.today = {
             (feedFilter === "done" ? "" : deeds.length ? '<div class="deeds">' + deeds.map(function (item) {
               return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '">' +
                 '<span class="deed-icon">' + deedIcon(item) + '</span>' +
-                '<span class="deed-body"><b>' + esc(item.title) + '</b>' + (people.length > 1 && deedAssignee(item) === "" ? ' <span class="chip warn">без менеджера</span>' : "") + '<span>' + esc(item.text) + '</span></span>' +
+                '<span class="deed-body"><b>' + esc(item.title) + '</b>' + (people.length > 1 && deedAssignee(item) === "" ? ' <span class="chip warn">Без менеджера</span>' : "") + '<span>' + esc(item.text) + '</span></span>' +
                 '<span class="deed-actions"><button class="btn secondary small" type="button" data-deed=""' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
                 '<button class="btn ghost small" type="button" data-deed-hide="' + esc(item.id) + '" title="Убрать из списка дел">Скрыть</button></span>' +
               '</div>';
@@ -433,7 +433,7 @@ function inquiryTypeName(item) {
 }
 
 function barList(rows, total) {
-  if (!rows.length) return '<div class="empty">Пока нет данных</div>';
+  if (!rows.length) return '<div class="empty"><b>Пока нет данных</b></div>';
   var top = Math.max.apply(null, rows.map(function (row) { return row[1]; }).concat([1]));
   return '<div class="card-body">' + rows.map(function (row) {
     return '<div class="bar-row"><span>' + esc(row[0]) + '<div class="bar"><span style="width:' + Math.round((row[1] / top) * 100) + '%"></span></div></span><b class="right">' + num(row[1]) + (total ? " <span class=\"muted small\">" + Math.round((row[1] / total) * 100) + "%</span>" : "") + "</b></div>";
@@ -526,7 +526,7 @@ function funnelSteps(funnel) {
 
 function funnelTable(title, rows, tracked, labelOf) {
   if (!rows.length) return "";
-  return '<div><div class="week-subtitle">' + esc(title) + '</div><div class="table-wrap"><table class="funnel-table"><thead><tr><th></th><th class="right">Зашли</th>' +
+  return '<div><div class="week-subtitle">' + esc(title) + '</div><div class="table-wrap"><table class="funnel-table table-stack"><thead><tr><th></th><th class="right">Зашли</th>' +
     (tracked ? '<th class="right">Каталог</th><th class="right">«Подробнее»</th>' : "") +
     '<th class="right">Заявка</th><th class="right">Запись</th><th class="right">Подтв.</th></tr></thead><tbody>' +
     rows.map(function (row) {
@@ -572,7 +572,7 @@ function weeklyCard(payload) {
         '<div><div class="week-subtitle">Откуда пришли новые клиенты</div>' + barList(report.sources, report.users.count) + "</div>" +
         '<div><div class="week-subtitle">Больше всего заявок</div>' + (report.topProperties.length ? '<div class="list">' + report.topProperties.map(function (row) {
           return '<div class="list-item"><span class="grow">' + esc(row.name) + "</span><b>" + num(row.count) + "</b></div>";
-        }).join("") + "</div>" : '<div class="empty">Заявок по объектам не было</div>') + "</div>" +
+        }).join("") + "</div>" : '<div class="empty"><b>Заявок по объектам не было</b></div>') + "</div>" +
       "</div>" +
       funnelBlock(report.funnel) +
       (report.broadcasts.count ? '<div class="small muted">✉️ Рассылок: ' + num(report.broadcasts.count) + ", получили " + num(report.broadcasts.sent) + ", откликнулись " + num(report.broadcasts.responded) + "</div>" : "") +
@@ -644,7 +644,7 @@ VIEWS.reports = {
     var campaigns = (state.broadcasts || []).filter(function (entry) { return entry.sent; });
 
     host.innerHTML =
-      '<div id="weeklyReport"><div class="card gap-bottom"><div class="empty">Считаем неделю…</div></div></div>' +
+      '<div id="weeklyReport"><div class="card gap-bottom"><div class="empty"><b>Загрузка…</b></div></div></div>' +
       sourceTableCard() +
       '<details class="card gap-bottom report-more"><summary>Подробнее: 30 дней, источники, языки, рассылки, объекты</summary><div class="card-body">' +
       numberStrip([
@@ -665,24 +665,24 @@ VIEWS.reports = {
           return [{ ru: "Русский", en: "English", es: "Español", unknown: "Язык не выбран" }[code] || code, languages[code]];
         }), counts.all) + "</div>" +
         '<div class="card"><header><h3>Рассылки</h3></header>' +
-          (campaigns.length ? '<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Отправлено</th><th>Отклики</th><th>Отписки</th></tr></thead><tbody>' +
+          (campaigns.length ? '<div class="table-wrap"><table class="table-stack"><thead><tr><th>Дата</th><th>Отправлено</th><th>Отклики</th><th>Отписки</th></tr></thead><tbody>' +
             campaigns.slice(0, 8).map(function (entry) {
               return "<tr><td>" + dateShort(entry.startedAt) + "</td><td>" + num(entry.sent) + "</td><td>" + num(entry.responses) + "</td><td>" + num(entry.unsubscribes) + "</td></tr>";
-            }).join("") + "</tbody></table></div>" : '<div class="empty">Рассылок ещё не было</div>') +
+            }).join("") + "</tbody></table></div>" : '<div class="empty"><b>Рассылок ещё не было</b></div>') +
         "</div>" +
       "</div>" +
       '<div class="card gap-bottom"><header><h3>Реакции клиентов</h3><div class="actions"><span class="small muted">всего ' + num((state.stats || {}).reactionsReceived) + "</span></div></header>" +
         (recentReactions().length ? '<div class="list">' + recentReactions().map(function (event) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(event.user.firstName)) + '</span><span class="grow"><b>' + esc(userName(event.user)) + "</b> " + esc(event.item.text || "") + "</span>" +
             '<span class="small muted">' + ago(event.item.createdAt) + "</span></div>";
-        }).join("") + "</div>" : '<div class="empty">Клиенты ещё не ставили реакции на сообщения бота</div>') +
+        }).join("") + "</div>" : '<div class="empty"><b>Реакций пока нет</b>Клиенты ещё не ставили реакции на сообщения бота</div>') +
       "</div>" +
       '<div class="card"><header><h3>Эффективность объектов</h3><div class="actions"><span class="small muted">видели в каталоге · открыли карточку · заявки</span></div></header>' +
         (properties.length ? '<div class="table-wrap"><table class="table-stack"><thead><tr><th>Объект</th><th class="right" title="Сколько раз объект показался клиенту в каталоге бота">Видели в каталоге</th><th class="right" title="Сколько раз открыли его карточку">Открыли карточку</th><th class="right">Заявки</th><th class="right" title="Какая доля увидевших открыла карточку">Доля открывших</th></tr></thead><tbody>' +
           properties.map(function (row) {
             var rate = row.views ? Math.round((row.details / row.views) * 100) : 0;
             return '<tr class="clickable" data-property-insights="' + esc(row.id) + '"><td><b>' + esc(row.title) + '</b><br><span class="small muted">открыть клиентов и действия</span></td><td class="right">' + num(row.views) + '</td><td class="right">' + num(row.details) + '</td><td class="right">' + num(row.inquiries) + '</td><td class="right">' + rate + '%</td></tr>';
-          }).join("") + "</tbody></table></div>" : '<div class="empty">Объектов пока нет</div>') +
+          }).join("") + "</tbody></table></div>" : '<div class="empty"><b>Объектов пока нет</b></div>') +
       "</div></div></details>";
     loadWeekly(host);
     bindSourceLink(host);

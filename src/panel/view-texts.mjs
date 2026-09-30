@@ -34,7 +34,7 @@ var EXAMPLE_QUERY = { ru: "Альтеа, 3 спальни, до 350 000 €", en
 async function renderWelcome(host) {
   // Подписи кнопок приезжают отдельным запросом: рисуем экран, когда они уже
   // есть, иначе поля окажутся пустыми и сохранение сотрёт подписи.
-  host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загружаю тексты…</p></div></div>';
+  host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загрузка…</p></div></div>';
   try {
     await loadInterfaceText();
   } catch (error) {
@@ -364,11 +364,11 @@ var RULE_TYPES = [["contains", "содержит"], ["exact", "точное со
 function renderRules(host) {
   var rules = (state.rules || []).slice().sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); });
   pageAction("＋ Автоответ", function () { openRuleEditor(null); });
-  host.innerHTML = '<div class="split"><div class="stack"><div class="card"><div class="table-wrap"><table><thead><tr><th>Если сообщение</th><th>Ответ</th><th>Язык</th><th></th></tr></thead><tbody>' +
+  host.innerHTML = '<div class="split"><div class="stack"><div class="card"><div class="table-wrap"><table class="table-stack"><thead><tr><th>Если сообщение</th><th>Ответ</th><th>Язык</th><th></th></tr></thead><tbody>' +
     (rules.length ? rules.map(function (rule) {
       return '<tr data-id="' + esc(rule.id) + '"><td class="clickable" data-edit="1"><b>' + esc(rule.trigger) + '</b><br><span class="small muted">' + esc((RULE_TYPES.find(function (type) { return type[0] === rule.type; }) || ["", ""])[1]) + "</span></td>" +
         "<td>" + esc(String(rule.answer).slice(0, 80)) + "</td><td>" + esc(rule.language === "all" ? "все" : rule.language.toUpperCase()) + "</td>" +
-        '<td class="right nowrap">' + (rule.enabled === false ? '<span class="chip">выключен</span>' : "") +
+        '<td class="right nowrap">' + (rule.enabled === false ? '<span class="chip">Выключен</span>' : "") +
         '<button class="btn ghost small" data-move="up" title="Проверять раньше">↑</button>' +
         '<button class="btn ghost small" data-move="down" title="Проверять позже">↓</button>' +
         '<button class="btn ghost small" data-delete="1">✕</button></td></tr>';
@@ -536,7 +536,7 @@ function interfacePlaceholderHint(value) {
 }
 
 async function renderInterface(host) {
-  host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загружаю тексты…</p></div></div>';
+  host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загрузка…</p></div></div>';
   var texts;
   try {
     texts = await loadInterfaceText();

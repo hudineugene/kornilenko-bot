@@ -947,6 +947,7 @@ function renderTabBar() {
 // Кликабельные строки таблиц встают в очередь Tab и нажимаются Enter или пробелом;
 // группы вкладок объявлены как tablist, активная — aria-selected. Разметку строят
 // десятки функций, поэтому доводим её одним проходом после любой перерисовки экрана.
+var fieldLabelSerial = 0;
 function enhanceAccessibility(root) {
   if (!root || !root.querySelectorAll) return;
   root.querySelectorAll("tr.clickable").forEach(function (row) {
@@ -962,6 +963,15 @@ function enhanceAccessibility(root) {
       Array.prototype.forEach.call(row.children, function (cell, index) { if (heads[index]) cell.setAttribute("data-label", heads[index]); });
     });
     table.setAttribute("data-labelled", "1");
+  });
+  // Подпись группы полей (дни недели, языки, кнопки) — не <label> одного поля: связываем её с группой, чтобы
+  // скринридер называл флажки «Рабочие дни: Пн», а не просто «Пн».
+  root.querySelectorAll(".field > .field-label").forEach(function (label) {
+    var field = label.parentNode;
+    if (!field || label.tagName === "LABEL" || (field.hasAttribute && field.hasAttribute("role"))) return;
+    if (!label.id) label.id = "fieldLabel" + (++fieldLabelSerial);
+    field.setAttribute("role", "group");
+    field.setAttribute("aria-labelledby", label.id);
   });
   root.querySelectorAll(".tabs").forEach(function (tabs) {
     tabs.setAttribute("role", "tablist");

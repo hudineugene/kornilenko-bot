@@ -19,12 +19,12 @@ function campaignPropertySignalLabel(signal) {
 }
 // Пауза из-за обрыва связи — не ошибка: рассылка продолжится сама.
 function campaignStatusChip(entry) {
-  if (entry.status === "failed") return '<span class="chip bad">ошибка</span>';
+  if (entry.status === "failed") return '<span class="chip bad">Ошибка</span>';
   if (entry.status === "queued" && entry.pausedAt) {
     return '<span class="chip warn" title="' + esc(entry.error || "") + '">пауза, продолжится сама</span>';
   }
-  if (entry.status === "queued" || entry.status === "running") return '<span class="chip warn">идёт</span>';
-  return '<span class="chip ok">отправлена</span>';
+  if (entry.status === "queued" || entry.status === "running") return '<span class="chip warn">Идёт</span>';
+  return '<span class="chip ok">Отправлена</span>';
 }
 
 function campaignAudienceLabel(entry) {
@@ -107,7 +107,7 @@ function renderPublications(host) {
   pageAction("✉ Рассылка клиентам", function () { openCampaignEditor(null); });
   pageAction("➤ Пост в канал", openChannelComposer, "secondary");
   host.innerHTML =
-    '<div class="card gap-bottom"><header><h3>Очередь</h3><div class="actions"><span class="small muted">черновики и запланированное</span></div></header><div class="table-wrap"><table><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th></th></tr></thead><tbody>' +
+    '<div class="card gap-bottom"><header><h3>Очередь</h3><div class="actions"><span class="small muted">черновики и запланированное</span></div></header><div class="table-wrap"><table class="table-stack"><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th></th></tr></thead><tbody>' +
     (queue.length ? queue.map(function (row) {
       return '<tr data-kind="' + row.kind + '" data-id="' + esc(row.id) + '">' +
         '<td class="nowrap">' + (row.status === "draft" ? "черновик" : dateTime(row.at)) + "</td>" +
@@ -116,7 +116,7 @@ function renderPublications(host) {
         '<td class="right"><button class="btn ghost small" data-drop="1" title="Убрать из очереди">✕</button></td></tr>';
     }).join("") : '<tr><td colspan="4"><div class="empty"><b>Очередь пуста</b>Запланированные рассылки и посты появятся здесь</div></td></tr>') +
     "</tbody></table></div></div>" +
-    '<div class="card"><header><h3>История</h3><div class="actions"><span class="small muted">отправлено · отклики · отписки</span></div></header><div class="table-wrap"><table><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
+    '<div class="card"><header><h3>История</h3><div class="actions"><span class="small muted">отправлено · отклики · отписки</span></div></header><div class="table-wrap"><table class="table-stack"><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
     (history.length ? history.map(function (row) {
       return "<tr><td class=\"nowrap\">" + dateShort(row.at) + "</td><td class=\"small\">" + esc(row.where) + "</td><td>" + esc(row.text || "без текста") + "</td>" +
         '<td class="right">' + (row.kind === "broadcast" ? num(row.sent) : "—") + "</td>" +
@@ -608,7 +608,7 @@ function topicsCard(group) {
     (topics.length ? '<div class="list">' + topics.map(function (topic) {
       var seen = (group.messages || []).filter(function (message) { return (message.threadId || 0) === topic.id; }).length;
       return '<div class="list-item"><span class="grow"><b>' + esc(topicLabel(group, topic.id)) + "</b>" +
-        (topic.closed ? ' <span class="chip warn">закрыта</span>' : "") +
+        (topic.closed ? ' <span class="chip warn">Закрыта</span>' : "") +
         '<br><span class="small muted">№ ' + topic.id + (seen ? " · сообщений в ленте: " + seen : "") + (topic.lastMessageAt ? " · " + esc(dateShort(topic.lastMessageAt)) : "") + "</span></span>" +
         (topic.id === 1 ? "" : '<button class="btn ghost small" data-forget-topic="' + topic.id + '" type="button">Убрать</button>') + "</div>";
     }).join("") + "</div>" : "") +
@@ -632,7 +632,7 @@ function renderGroupCard(host, group, mode) {
       ["Сообщений в ленте", num(group.messages ? group.messages.length : group.messageCount), "", "Бот хранит последние 200 сообщений группы"],
       ["Заявок на вступление", num(group.joinRequests ? group.joinRequests.length : group.joinRequestCount), (group.joinRequests ? group.joinRequests.length : group.joinRequestCount) ? "bad" : "", "Ждут решения"],
     ].concat(group.isForum ? [["Темы", num((group.topics || []).length), "", "В группе включены темы"]] : [])) : "") +
-    (group.lastError ? '<div class="card gap-bottom"><div class="card-body"><span class="chip bad">' + esc(group.lastError) + "</span></div></div>" : "") +
+    (group.lastError ? '<div class="banner bad gap-bottom">' + esc(group.lastError) + "</div>" : "") +
     '<div class="split">' + (showPost ? '<div class="stack">' +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Опубликовать в канале" : "Написать в группу") + '</h3></header><div class="card-body stack">' +
         topicPicker(group) +
@@ -659,7 +659,7 @@ function renderGroupCard(host, group, mode) {
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small muted">историю Telegram не отдаёт</span></div></header>' +
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
-            '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">от бота</span>' : "") +
+            '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">От бота</span>' : "") +
             (message.kind !== "text" ? ' <span class="chip">' + esc(GROUP_MESSAGE_KINDS[message.kind] || message.kind) + "</span>" : "") +
             (group.isForum && message.threadId ? ' <span class="chip">' + esc(topicLabel(group, message.threadId)) + "</span>" : "") +
             '<br><span class="muted small">' + esc(String(message.text || "").slice(0, 120)) + "</span></span>" +
@@ -690,7 +690,7 @@ function renderGroupCard(host, group, mode) {
       '<div class="card"><header><h3>Администраторы</h3><div class="actions"><button class="btn ghost small" id="loadAdmins" type="button">Показать</button></div></header><div class="card-body" id="adminsBox"><span class="muted small">Список ' + (group.type === "channel" ? "подписчиков" : "участников") + " Telegram не отдаёт — только администраторов.</span></div></div>" +
       '<div class="card"><header><h3>Опасная зона</h3></header><div class="card-body row wrap">' +
         '<button class="btn ghost small" id="unpinAll" type="button">Открепить всё</button>' +
-        '<button class="btn danger small" id="leaveGroup" type="button">' + (group.type === "channel" ? "Покинуть канал" : "Выйти из группы") + "</button></div></div>" +
+        '<button class="btn danger-outline small" id="leaveGroup" type="button">' + (group.type === "channel" ? "Покинуть канал" : "Выйти из группы") + "</button></div></div>" +
     "</div>" : "") + "</div>";
 
   var base = "/api/groups/" + encodeURIComponent(group.id);
@@ -942,7 +942,7 @@ function renderGroupCard(host, group, mode) {
       var result = await api(base + "/admins");
       host.querySelector("#adminsBox").innerHTML = '<div class="list">' + result.admins.map(function (admin) {
         return '<div class="list-item"><span class="avatar">' + esc(initials(admin.name)) + '</span><span class="grow"><b>' + esc(admin.name) + "</b>" +
-          (admin.username ? ' <span class="small muted">@' + esc(admin.username) + "</span>" : "") + (admin.isBot ? ' <span class="chip">бот</span>' : "") +
+          (admin.username ? ' <span class="small muted">@' + esc(admin.username) + "</span>" : "") + (admin.isBot ? ' <span class="chip">Бот</span>' : "") +
           '<br><span class="small muted">' + esc(admin.status === "creator" ? "владелец" : "администратор") + (admin.customTitle ? " · " + esc(admin.customTitle) : "") + "</span></span>" +
           (admin.status !== "creator" && !admin.isBot ? '<button class="btn ghost small" data-ban="' + esc(admin.userId) + '" type="button">Забанить</button>' : "") + "</div>";
       }).join("") + "</div>";

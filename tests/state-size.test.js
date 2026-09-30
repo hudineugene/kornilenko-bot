@@ -114,7 +114,7 @@ test('клиент, который давно не писал, не остаёт
 test('панель грузит переписку сама и показывает список клиентов порциями', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /\/timeline/, 'панель просит переписку отдельно');
-  assert.match(PANEL_HTML, /Загружаем сообщения…/, 'и показывает, что она грузится');
+  assert.ok(PANEL_HTML.includes('<b>Загрузка…</b>'), 'и показывает, что она грузится');
   assert.match(PANEL_HTML, /Показать ещё /, 'список клиентов продолжается по кнопке');
   assert.doesNotMatch(PANEL_HTML, /rows\.slice\(0, 300\)/, 'молчаливого обрыва на 300 строках больше нет');
 });

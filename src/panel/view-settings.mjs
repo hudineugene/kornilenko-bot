@@ -52,7 +52,7 @@ function renderConnection(host) {
     '<div class="card"><header><h3>Админ-чат в Telegram</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="setAdminChat">Telegram-чат администратора</label><input id="setAdminChat" value="' + esc(config.adminChatId || "") + '" placeholder="узнать: напишите боту /myid"></div>' +
       '<div class="row wrap"><button class="btn secondary small" id="testAdmin" type="button">Отправить тест</button>' +
-        (config.adminNotificationVerifiedAt ? '<span class="chip ok">проверен ' + dateShort(config.adminNotificationVerifiedAt) + "</span>" : '<span class="chip warn">не проверен</span>') + "</div>" +
+        (config.adminNotificationVerifiedAt ? '<span class="chip ok">Проверен ' + dateShort(config.adminNotificationVerifiedAt) + "</span>" : '<span class="chip warn">Не проверен</span>') + "</div>" +
       '<div class="field"><label for="setNotify">Что присылать в Telegram</label><select id="setNotify">' +
         '<option value="inquiries"' + (config.notifyMode !== "all" ? " selected" : "") + ">Только заявки клиентов</option>" +
         '<option value="all"' + (config.notifyMode === "all" ? " selected" : "") + ">Все действия клиентов</option></select></div>" +
@@ -112,7 +112,7 @@ function renderConnection(host) {
     list.innerHTML = managers.length ? managers.map(function (manager, index) {
       return '<div class="row" data-manager="' + index + '"><input class="grow" data-field="name" value="' + esc(manager.name || "") + '" placeholder="Имя">' +
         '<input class="field-sm" data-field="chatId" value="' + esc(manager.chatId || "") + '" placeholder="Telegram-чат">' +
-        (manager.verifiedAt ? '<span class="chip ok">ок</span>' : manager.id ? '<button class="btn ghost small" data-test="' + esc(manager.id) + '" type="button">Тест</button>' : "") +
+        (manager.verifiedAt ? '<span class="chip ok">Ок</span>' : manager.id ? '<button class="btn ghost small" data-test="' + esc(manager.id) + '" type="button">Тест</button>' : "") +
         '<button class="btn ghost small" data-drop="' + index + '" type="button">✕</button></div>';
     }).join("") : '<span class="muted small">Менеджеров нет — заявки приходят только администратору.</span>';
     list.querySelectorAll("[data-drop]").forEach(function (button) {
@@ -341,9 +341,9 @@ function mediaCheckHtml(report) {
     '<span class="chip ' + (missing.length ? "bad" : "ok") + '">' + (missing.length
       ? "нет файлов: " + missing.length + (report.missingRefs > missing.length ? " (ссылок на них: " + report.missingRefs + ")" : "")
       : "все файлы на месте") + "</span>" +
-    '<span class="chip">картинок в данных: ' + Number(report.total || 0) + "</span>" +
-    (report.orphans ? '<span class="chip warn">лишних файлов: ' + Number(report.orphans) + "</span>" : "") +
-    (typeof report.restored === "number" && report.restored ? '<span class="chip ok">вернули из копии: ' + report.restored + "</span>" : "") +
+    '<span class="chip">Картинок в данных: ' + Number(report.total || 0) + "</span>" +
+    (report.orphans ? '<span class="chip warn">Лишних файлов: ' + Number(report.orphans) + "</span>" : "") +
+    (typeof report.restored === "number" && report.restored ? '<span class="chip ok">Вернули из копии: ' + report.restored + "</span>" : "") +
     "</div>";
   if (missing.length) {
     rows += '<div class="list">' + missing.slice(0, 20).map(function (name) {
@@ -381,7 +381,7 @@ function renderData(host) {
       '<div class="field"><label for="tgBackupPass">Пароль шифрования</label><input id="tgBackupPass" type="password" placeholder="' + (backup.passwordSet ? "пароль сохранён" : "минимум 10 символов") + '"></div>' +
       '</div><div class="row wrap"><button class="btn ghost small" id="sendTgBackup" type="button">Отправить сейчас</button></div>' +
       (backup.lastSentAt ? '<div class="small muted">Последняя копия: ' + dateTime(backup.lastSentAt) + "</div>" : "") +
-      (backup.lastError ? '<div class="chip bad">' + esc(backup.lastError) + "</div>" : "") +
+      (backup.lastError ? '<div class="banner bad">' + esc(backup.lastError) + "</div>" : "") +
       '<div class="hint">Файл .kbk можно восстановить здесь же — понадобится этот пароль.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Самопроверка</h3><div class="actions"><button class="btn secondary small" id="runSelfCheck" type="button">Проверить сейчас</button></div></header>' +
@@ -467,7 +467,7 @@ function renderData(host) {
       body.innerHTML = '<div class="row wrap"><span class="chip ' + (report.bad ? "bad" : report.warn ? "warn" : "ok") + '">' + esc(summary) + "</span>" +
         '<span class="small muted">проверено ' + dateTime(report.checkedAt) + "</span></div>" +
         '<div class="list">' + (report.checks || []).map(checkRow).join("") + "</div>";
-    } catch (error) { body.innerHTML = '<div class="chip bad">' + esc(error.message) + "</div>"; }
+    } catch (error) { body.innerHTML = '<div class="banner bad">' + esc(error.message) + "</div>"; }
   };
   host.querySelector("#checkMedia").onclick = async function () {
     var body = host.querySelector("#mediaCheckBody");
@@ -483,7 +483,7 @@ function renderData(host) {
           toast(done.restored ? "Вернули файлов: " + done.restored : "В копии этих файлов нет");
         } catch (error) { fail(error); }
       };
-    } catch (error) { body.innerHTML = '<div class="chip bad">' + esc(error.message) + "</div>"; }
+    } catch (error) { body.innerHTML = '<div class="banner bad">' + esc(error.message) + "</div>"; }
   };
   host.querySelector("#clearErrors").onclick = async function () {
     try { await api("/api/errors", { method: "DELETE" }); await reload(); } catch (error) { fail(error); }

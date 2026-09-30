@@ -847,3 +847,24 @@ test('вкладки: каждая, что обрабатывает экран, 
   for (const [view, tabs] of declared) for (const tab of tabs.slice(1)) if (!handled.has(tab)) unhandled.push(view + '/' + tab);
   assert.deepEqual(unhandled, [], 'вкладка есть в меню, но экран её не обрабатывает (откроется первая)');
 });
+
+test('одинаковые вещи выглядят одинаково: пустые состояния с заголовком, таблицы с телефонной раскладкой, ошибки не в чипах, две высоты кнопок', async () => {
+  const { PANEL_HTML, } = await import('../src/panel/index.mjs');
+  const { PANEL_CSS } = await import('../src/panel/styles.mjs');
+  // Пустое состояние: что пусто — жирным заголовком (пояснение и кнопка — по желанию).
+  const bare = Array.from(PANEL_HTML.matchAll(/class="empty[^"]*"[^>]*>(?!\s*<b>)([^<]{1,60})/g)).map((match) => match[1]);
+  assert.deepEqual(bare, [], 'пустые состояния без заголовка');
+  // Загрузка — одна фраза.
+  assert.ok(!/Загружаю|Загружаем/.test(PANEL_HTML), '«Загрузка…» везде одинаково');
+  // Каждая таблица, кроме двух карточных (объекты и клиенты), разворачивается карточками на телефоне.
+  const tables = Array.from(PANEL_HTML.matchAll(/<table([^>]*)>/g)).map((match) => match[1]).filter((attrs) => !/table-cards/.test(attrs));
+  assert.ok(tables.length >= 6 && tables.every((attrs) => /table-stack/.test(attrs)), 'таблицы без телефонной раскладки: ' + tables.filter((attrs) => !/table-stack/.test(attrs)).length);
+  // Текст ошибки — в полосе (banner), а не в чипе: чип для короткого статуса.
+  assert.ok(!/chip bad">' \+ esc\((?:[a-z]+\.)?(?:lastError|message)/.test(PANEL_HTML), 'текст ошибки внутри чипа');
+  assert.match(PANEL_CSS, /\.banner\{/);
+  // Две высоты кнопок на компьютере; красная залитая — только в окнах подтверждения.
+  assert.match(PANEL_CSS, /\.btn\{min-height:36px\}\s*\.btn\.small\{min-height:30px\}/);
+  assert.match(PANEL_HTML, /<button class="btn danger-outline small" id="leaveGroup"/, '«Покинуть канал» в теле страницы — контуром');
+  // Подписи групп полей связаны с группой.
+  assert.match(PANEL_HTML, /field\.setAttribute\("aria-labelledby", label\.id\)/);
+});
