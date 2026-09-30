@@ -1663,11 +1663,10 @@ function catalogFilterPanel(user) {
   const typeRows = [];
   for (let index = 0; index < shownTypes.length; index += 3) typeRows.push(shownTypes.slice(index, index + 3));
 
-  // Спальни — два ряда: «любое» с подписью в первом, числа во втором. Одним рядом длинная первая кнопка
-  // обрезалась («✓ Спа…», «✓ Do…»), а остальные четыре делили ширину поровну.
-  const bedroomRows = [[facetButton('bedrooms', 0, copy.anyBedrooms, !filter.bedrooms, 'cfilter:bed:0').button]];
-  const bedroomCounts = visibleButtons(CATALOG_FILTER_BEDROOMS.map((count) => facetButton('bedrooms', count, count + '+', filter.bedrooms === count, 'cfilter:bed:' + count)));
-  if (bedroomCounts.length) bedroomRows.push(bedroomCounts);
+  // Спальни — один ряд: короткое «🛏 Любые» и числа «1+ … 4+» (длинная подпись первой кнопки обрезалась).
+  const bedroomRow = [facetButton('bedrooms', 0, copy.anyBedrooms, !filter.bedrooms, 'cfilter:bed:0').button]
+    .concat(visibleButtons(CATALOG_FILTER_BEDROOMS.map((count) => facetButton('bedrooms', count, count + '+', filter.bedrooms === count, 'cfilter:bed:' + count))));
+  const bedroomRows = [bedroomRow];
 
   // Город и район — кнопки-списки в одном ряду: раньше каждый город занимал
   // отдельный ряд и каталог из восьми городов съедал весь экран.
@@ -1697,9 +1696,9 @@ function catalogFilterPanel(user) {
     ? [[{ text: markedFilterLabel(catalogPriceLabel(filter, language), Boolean(filter.minPrice || filter.maxPrice)), callback_data: 'cfilter:prices:0' }]]
     : [];
 
+  // «Показать» и «Ещё» — одним рядом: экран фильтра не длиннее шести рядов.
   const tail = [
-    [{ text: copy.show + ' ' + found, callback_data: 'cfilter:show' }],
-    [{ text: '⋯ ' + copy.moreOptions, callback_data: 'cfilter:more' }],
+    [{ text: copy.show + ' ' + found, callback_data: 'cfilter:show' }, { text: '⋯ ' + copy.moreOptions, callback_data: 'cfilter:more' }],
   ];
   // Если в каталоге много типов или цен, лишние ряды убираем — сначала у цен,
   // потом у типов. Хотя бы один ряд у каждого остаётся.

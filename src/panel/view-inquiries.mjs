@@ -194,8 +194,8 @@ function selectionMatchingPanel(item) {
     var needsData = (result.warnings || []).some(function (key) { return key === "priceMissing" || key === "bedroomsMissing"; });
     return '<div class="list-item start"><div class="grow"><div class="row wrap"><b>' + esc(title) + '</b><span class="chip ' + tier[1] + '">' + tier[0] + '</span><span class="small muted">оценка ' + Math.max(0, Math.min(100, Number(result.score) || 0)) + '%</span></div>' +
       (reasons.length ? '<div class="small muted gap-top-sm">Совпало: ' + esc(reasons.join(", ")) + '</div>' : "") +
-      (warnings.length ? '<div class="small gap-top-sm ' + (needsData ? "bad-text" : "warn-text") + '">Учесть: ' + esc(warnings.join(", ")) + '</div>' : "") +
-      '</div>' + (property ? '<button class="btn ghost small" type="button" data-match-property="' + esc(property.id) + '">Карточка</button>' : '<span class="chip bad">Объект удалён</span>') + '</div>';
+      (warnings.length ? '<div class="banner gap-top-sm ' + (needsData ? "bad" : "warn") + '">Учесть: ' + esc(warnings.join(", ")) + '</div>' : "") +
+      '</div>' + (property ? '<button class="btn ghost small" type="button" data-match-property="' + esc(property.id) + '">Карточка</button>' : chip("bad", 'Объект удалён')) + '</div>';
   }).join("");
   return '<div class="card flat"><header><h3>Автоматический подбор</h3><div class="actions"><span class="chip ok">Точно ' + counts.exact + '</span><span class="chip warn">Близко ' + counts.close + '</span><span class="chip">Рассмотреть ' + counts.consider + '</span></div></header><div class="list">' + rows + '</div></div>';
 }
@@ -346,7 +346,7 @@ function pipelineCardHtml(row) {
       // Значок — только то, что требует внимания: «Отвечено» — обычное состояние, а
       // «без менеджера» имеет смысл, когда в команде есть кому назначить.
       (row.group.waiting ? '<span class="chip ' + WAIT_CHIP[row.group.waitLevel] + '">Ждёт ответа · ' + waitDuration(row.group.waitAge) + '</span>' : "") +
-      (item.assignee ? '<span class="chip">' + esc(item.assignee) + '</span>' : transferStaff().length > 1 ? '<span class="chip warn">Без менеджера</span>' : "") +
+      (item.assignee ? '<span class="chip">' + esc(item.assignee) + '</span>' : transferStaff().length > 1 ? chip("warn", 'Без менеджера') : "") +
       (item.followUpDate ? stepChip(item.followUpDate, item.followUpTime) : "") +
     '</div><select class="pipeline-stage-select" data-pipeline-stage="' + esc(item.id) + '" aria-label="Перенести на другой этап">' + pipelineMoveOptions(row.stage) + '</select></article>';
 }
@@ -407,7 +407,7 @@ function stepChip(date, time) {
 }
 function taskStatusHtml(scope, item) {
   if (item.followUpDate) return stepChip(item.followUpDate, item.followUpTime);
-  return '<span class="chip">Дата не назначена</span>';
+  return chip("", 'Дата не назначена');
 }
 function openTaskSchedule(item) {
   openDialog({
@@ -417,7 +417,7 @@ function openTaskSchedule(item) {
     ready: function (dialog) {
       dialog.querySelector("#saveTaskDate").onclick = async function () {
         var date = dialog.querySelector("#taskDate").value;
-        if (!date) return toast("Выберите дату", true);
+        if (!date) return fieldError(dialog.querySelector("#taskDate"), "Выберите дату");
         try {
           await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", { followUpDate: date, followUpTime: dialog.querySelector("#taskTime").value });
           dialog.close();
@@ -719,7 +719,7 @@ function openBatchTransfer(host) {
   if (!items.length) return toast("У выбранных клиентов нет заявок, которые можно передать", true);
   openDialog({
     title: "Передать выбранных",
-    body: '<div class="stack"><p class="muted small">Открытых заявок: <b>' + items.length + "</b>. Они перейдут к выбранному менеджеру; ему придёт одна сводка в Telegram.</p>" +
+    body: '<div class="stack"><p class="small muted">Открытых заявок: <b>' + items.length + "</b>. Они перейдут к выбранному менеджеру; ему придёт одна сводка в Telegram.</p>" +
       '<div class="field"><label for="batchTo">Кому передать</label><select id="batchTo">' + transferOptions(transferStaff(), false) + "</select></div></div>",
     footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="batchDo" type="button">Передать</button>',
     ready: function (dialog) {
@@ -794,7 +794,7 @@ function openManualClient() {
   var sources = ["звонок", "WhatsApp", "знакомые", "сайт", "реклама"];
   openDialog({
     title: "Новый клиент",
-    body: '<div class="stack"><p class="muted small">Для тех, кто позвонил или написал в WhatsApp: в боте его нет, но в базе он будет. Писать ему из панели нельзя — только вести заметки и назначать просмотры.</p>' +
+    body: '<div class="stack"><p class="small muted">Для тех, кто позвонил или написал в WhatsApp: в боте его нет, но в базе он будет. Писать ему из панели нельзя — только вести заметки и назначать просмотры.</p>' +
       '<div class="field"><label for="mcName">Имя <span class="required">*</span></label><input id="mcName" placeholder="Джон Смит"></div>' +
       '<div class="grid cols-2"><div class="field"><label for="mcPhone">Телефон</label><input id="mcPhone" placeholder="+34 …"></div>' +
       '<div class="field"><label for="mcLanguage">Язык</label><select id="mcLanguage"><option value="">Не выбран</option><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option></select></div></div>' +
@@ -805,7 +805,7 @@ function openManualClient() {
     ready: function (dialog) {
       dialog.querySelector("#mcCreate").onclick = async function () {
         var name = dialog.querySelector("#mcName").value.trim();
-        if (!name) return toast("Укажите имя клиента", true);
+        if (!name) return fieldError(dialog.querySelector("#mcName"), "Укажите имя клиента");
         try {
           var result = await send("/api/users", "POST", {
             name: name,
@@ -833,7 +833,7 @@ function openManualViewing(userId) {
   var minDay = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
   openDialog({
     title: "Назначить просмотр",
-    body: '<div class="stack"><p class="muted small">Встреча, о которой договорились по телефону. Клиенту в Telegram сообщение не уйдёт — она появится в календаре и в утренней сводке.</p>' +
+    body: '<div class="stack"><p class="small muted">Встреча, о которой договорились по телефону. Клиенту в Telegram сообщение не уйдёт — она появится в календаре и в утренней сводке.</p>' +
       '<div class="field"><label for="mvUser">Клиент <span class="required">*</span></label><select id="mvUser"><option value="">Выберите клиента</option>' + users.map(function (user) {
         return '<option value="' + esc(user.id) + '"' + (String(user.id) === String(userId) ? " selected" : "") + ">" + esc(userName(user) + (user.phone ? " · " + user.phone : "")) + "</option>";
       }).join("") + '</select><div class="hint">Нет в списке? Сначала «＋ Клиент» в «Базе клиентов».</div></div>' +
@@ -849,8 +849,8 @@ function openManualViewing(userId) {
       dialog.querySelector("#mvCreate").onclick = async function () {
         var chosen = dialog.querySelector("#mvUser").value;
         var day = dialog.querySelector("#mvDate").value;
-        if (!chosen) return toast("Выберите клиента", true);
-        if (!day) return toast("Выберите день", true);
+        if (!chosen) return fieldError(dialog.querySelector("#mvUser"), "Выберите клиента");
+        if (!day) return fieldError(dialog.querySelector("#mvDate"), "Выберите день");
         try {
           await send("/api/viewings", "POST", { userId: chosen, propertyId: dialog.querySelector("#mvObject").value, date: day, time: dialog.querySelector("#mvTime").value, note: dialog.querySelector("#mvNote").value });
           dialog.closeClean();
@@ -869,7 +869,7 @@ async function openTransferDialog(mode, item) {
     var user = userOf(item);
     openDialog({
       title: "Передать клиента",
-      body: '<div class="stack"><p class="muted small"><b>' + esc(userName(user)) + "</b> перейдёт к выбранному менеджеру и появится у него в «Мои». Ему придёт уведомление в Telegram — на него можно ответить, и ответ уйдёт клиенту.</p>" +
+      body: '<div class="stack"><p class="small muted"><b>' + esc(userName(user)) + "</b> перейдёт к выбранному менеджеру и появится у него в «Мои». Ему придёт уведомление в Telegram — на него можно ответить, и ответ уйдёт клиенту.</p>" +
         '<div class="field"><label for="transferTo">Кому передать</label><select id="transferTo">' + transferOptions(names.filter(function (name) { return name !== item.assignee; }), false) + "</select></div></div>",
       footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="doTransfer" type="button">Передать</button>',
       ready: function (dialog) {
@@ -892,7 +892,7 @@ async function openTransferDialog(mode, item) {
   };
   openDialog({
     title: "Передать всех клиентов менеджера",
-    body: '<div class="stack"><p class="muted small">Открытые заявки перейдут к выбранному менеджеру. Закрытые останутся как история. Ему придёт одна сводка в Telegram.</p>' +
+    body: '<div class="stack"><p class="small muted">Открытые заявки перейдут к выбранному менеджеру. Закрытые останутся как история. Ему придёт одна сводка в Telegram.</p>' +
       '<div class="field"><label for="transferFrom">У кого забрать</label><select id="transferFrom">' + transferOptions(names, true) + "</select></div>" +
       '<div class="field"><label for="transferTo">Кому передать</label><select id="transferTo">' + transferOptions(names, false) + "</select></div>" +
       '<div class="chip warn" id="transferCount"></div><div class="small bad-text" id="transferHint"></div></div>',
@@ -932,7 +932,7 @@ function openCleanup() {
   openDialog({
     title: "Очистить заявки",
     body: '<div class="stack">' +
-      '<p class="muted small">Заявки удаляются из панели без возможности восстановления. Клиенты и переписка в Telegram остаются.</p>' +
+      '<p class="small muted">Заявки удаляются из панели без возможности восстановления. Клиенты и переписка в Telegram остаются.</p>' +
       '<div class="field"><label for="cleanScope">Какие удалить</label><select id="cleanScope">' +
         '<option value="closed">Только закрытые (' + closed + ")</option>" +
         '<option value="answered">Закрытые и отвеченные (' + countFor("answered") + ")</option>" +
@@ -989,8 +989,8 @@ function openExportDialog() {
       dialog.querySelector("#exGo").onclick = async function () {
         var period = dialog.querySelector('[name="exScope"][value="period"]').checked;
         var from = dialog.querySelector("#exFrom").value, to = dialog.querySelector("#exTo").value;
-        if (period && (!from || !to)) return toast("Укажите обе даты периода", true);
-        if (period && from > to) return toast("Начало периода позже конца", true);
+        if (period && (!from || !to)) return fieldError(dialog.querySelector(from ? "#exTo" : "#exFrom"), "Укажите обе даты периода");
+        if (period && from > to) return fieldError(dialog.querySelector("#exFrom"), "Начало периода позже конца");
         dialog.closeClean();
         await exportInquiries(period ? { from: from, to: to } : null);
       };
@@ -1078,7 +1078,7 @@ function openQuickReply(inquiryId, handledBefore) {
       });
       async function submit(goNext, button) {
         var message = text.value.trim();
-        if (!message) return toast("Введите сообщение", true);
+        if (!message) return fieldError(text, "Введите сообщение");
         button.disabled = true;
         error.textContent = "";
         try {
@@ -1265,7 +1265,7 @@ function renderInquiryCard(host) {
       '<div class="reply-quote hidden" id="replyQuote"><div><span>Ответ на сообщение клиента</span><b id="replyQuoteText"></b></div><button class="reply-quote-remove" id="clearReplyQuote" type="button" aria-label="Убрать цитату">×</button></div>' +
       '<textarea id="replyText" maxlength="3800" placeholder="Напишите сообщение клиенту…"></textarea>' +
       '<div class="reply-attachments"><input class="hidden" id="replyFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,application/pdf,text/plain"><label class="btn secondary small" for="replyFile">📎 Добавить файл</label><span class="reply-file-name muted" id="replyFileName">Фотография до 5 МБ или документ до 10 МБ</span><button class="btn ghost small hidden" id="clearReplyFile" type="button">Убрать</button></div>' +
-      '<details class="conversation-details"><summary><span><b>Кнопка-ссылка</b><small>клиент увидит её под сообщением</small></span><i>⌄</i></summary><div class="conversation-details-body"><div class="grid cols-2"><div class="field"><label for="replyButtonText">Текст кнопки</label><input id="replyButtonText" placeholder="Посмотреть объект"></div><div class="field"><label for="replyButtonUrl">Ссылка</label><input id="replyButtonUrl" placeholder="https://…"></div></div></div></details>' +
+      '<details class="editor-section"><summary><b>Кнопка-ссылка</b><span>клиент увидит её под сообщением</span></summary><div class="editor-section-body"><div class="grid cols-2"><div class="field"><label for="replyButtonText">Текст кнопки</label><input id="replyButtonText" placeholder="Посмотреть объект"></div><div class="field"><label for="replyButtonUrl">Ссылка</label><input id="replyButtonUrl" placeholder="https://…"></div></div></div></details>' +
       '<div class="reply-delivery hidden" id="replyDelivery" aria-live="polite"><span id="replyDeliveryText"></span><button class="btn ghost small hidden" id="retryReply" type="button">Повторить отправку</button></div>' +
       '<div class="reply-actions"><button class="btn" id="sendReply" type="button">Отправить сообщение</button><span class="small muted">После ответа заявка станет «Отвечено». Закрыть её можно справа.</span></div></div>' +
       '</div>' +
@@ -1596,8 +1596,8 @@ function openViewingSchedule(item) {
       var timeInput = dialog.querySelector("#viewingScheduleTime");
       var save = dialog.querySelector("#saveViewingSchedule");
       save.onclick = async function () {
-        if (!dateInput.value || !timeInput.value) return toast("Укажите дату и время просмотра", true);
-        if (dateInput.value < pipelineToday()) return toast("Нельзя назначить просмотр на прошедшую дату", true);
+        if (!dateInput.value || !timeInput.value) return fieldError(dateInput.value ? timeInput : dateInput, "Укажите дату и время просмотра");
+        if (dateInput.value < pipelineToday()) return fieldError(dateInput, "Нельзя назначить просмотр на прошедшую дату");
         save.disabled = true;
         try {
           await send("/api/inquiries/" + encodeURIComponent(item.id) + "/viewing", "POST", { date: dateInput.value, time: timeInput.value });
@@ -1744,7 +1744,7 @@ function renderClients(host) {
       return '<tr class="clickable" data-id="' + esc(user.id) + '"><td><div class="row"><span class="avatar">' + esc(initials(user.firstName)) + "</span><span><b>" + esc(userName(user)) + "</b>" +
         (user.username ? ' <span class="small muted">@' + esc(user.username) + "</span>" : "") +
         (user.phone ? '<br><span class="small muted">' + esc(user.phone) + "</span>" : "") + "</span></div></td>" +
-        "<td>" + esc(user.source || "без метки") + ' <span class="chip">' + esc((user.preferredLanguage || "—").toUpperCase()) + "</span>" + (user.blocked ? ' <span class="chip bad">Недоступен</span>' : "") + "</td>" +
+        "<td>" + esc(user.source || "без метки") + ' <span class="chip">' + esc((user.preferredLanguage || "—").toUpperCase()) + "</span>" + (user.blocked ? ' ' + chip("bad", 'Недоступен') : "") + "</td>" +
         "<td>" + (latest ? '<span class="chip brand">' + esc(clientStageLabel(latest)) + "</span>" : "—") + "</td>" +
         "<td>" + (active && active.followUpDate ? stepChip(active.followUpDate, active.followUpTime) : "—") + "</td>" +
         '<td class="right small muted nowrap">' + ago(user.lastSeenAt) + "</td></tr>";
@@ -1819,11 +1819,11 @@ function openClient(id) {
       '<div class="client-facts"><div><span>Источник</span><b>' + esc(user.source || "без метки") + '</b></div>' + (user.plan && user.plan.startedAt ? '<div><span>План покупки</span><b>' + Object.keys(user.plan.done || {}).length + ' из 10 шагов' + (Object.keys(user.plan.help || {}).length ? ', просит помощи' : '') + '</b></div>' : "") + (user.goal ? '<div><span>Цель</span><b>' + esc({ live: "купить для жизни", invest: "инвестиция и аренда", browse: "пока смотрит" }[user.goal] || "") + '</b></div>' : "") + '<div><span>Первый контакт</span><b>' + dateTime(user.firstSeenAt) + '</b></div><div><span>Последняя активность</span><b>' + dateTime(user.lastSeenAt) + '</b></div>' + (latest ? '<div><span>Этап</span><b>' + esc(clientStageLabel(latest)) + '</b></div>' : "") + '</div>' +
       '<div class="client-edit stack"><div class="grid cols-2"><div class="field"><label for="clientContactName">Имя для связи</label><input id="clientContactName" data-client-edit value="' + esc(user.contactName || userName(user)) + '"></div><div class="field"><label for="clientLanguage">Язык</label><select id="clientLanguage" data-client-edit><option value="">Не выбран</option>' + [["ru", "Русский"], ["en", "English"], ["es", "Español"]].map(function (language) { return '<option value="' + language[0] + '"' + (user.preferredLanguage === language[0] ? " selected" : "") + '>' + language[1] + "</option>"; }).join("") + '</select></div></div><div class="field"><label for="clientPhone">Телефон</label><input id="clientPhone" data-client-edit value="' + esc(user.phone || "") + '" placeholder="+34 …"></div><div class="field"><label for="clientContactTime">Когда удобно связаться</label><input id="clientContactTime" data-client-edit value="' + esc(user.preferredContactTime || "") + '"></div><div class="field"><label for="clientTags">Теги клиента</label><input id="clientTags" data-client-edit value="' + esc((user.tags || []).join(", ")) + '"></div><div class="field"><label for="clientNote">Заметка о клиенте</label><textarea id="clientNote" data-client-edit>' + esc(user.note || "") + '</textarea></div><label class="check"><input type="checkbox" id="clientBlocked" data-client-edit' + (user.blocked ? " checked" : "") + '> не писать этому клиенту</label></div></aside>' +
       '<main class="client-profile-main">' + duplicatesOf(user).map(function (other) {
-        return '<section class="card"><div class="card-body row wrap"><span class="chip warn">Возможный дубль</span><span>Тот же телефон у клиента «' + esc(userName(other)) + '»' + (other.chatId ? "" : " (заведён вручную)") + '</span>' +
+        return '<section class="card"><div class="card-body row wrap">' + chip("warn", 'Возможный дубль') + '<span>Тот же телефон у клиента «' + esc(userName(other)) + '»' + (other.chatId ? "" : " (заведён вручную)") + '</span>' +
           (mergePlan(user, other) ? '<button class="btn secondary small" type="button" data-client-merge="' + esc(other.id) + '">Объединить</button>' : '<span class="small muted">Оба пишут через Telegram — объединить нельзя</span>') + '</div></section>';
       }).join("") + numberStrip([["Сообщений", num(clientMessageTotal(user, inquiries))], ["Заявок", num(inquiries.length)], ["Избранное", num((user.favorites || []).length)], ["Просмотрено", num((user.recentlyViewed || []).length)]]) +
-      '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит клиенту в Telegram</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">Отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть диалог →</button><button class="btn secondary" id="clientViewing" type="button">Назначить просмотр</button>' + (!user.chatId ? '<div class="small muted">Клиент заведён вручную: в боте его нет, писать ему из панели нельзя.</div>' : '') + '</div></section>' +
-      '<div class="grid cols-2 client-interest-grid">' + (!hasWish ? '<section class="card"><div class="card-body"><span class="small muted">Условия поиска: клиент пока не оставлял ни сохранённого поиска, ни заявки на подбор.</span></div></section>' : '<section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section>') + '<section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">Менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="stack"><div class="muted small">Активных заявок нет. Можно поставить шаг — например, «позвонить в четверг»: он появится в «Следующих шагах» и в напоминаниях.</div><div class="grid cols-2"><div class="field"><label for="stepDate">День</label><input type="date" id="stepDate"></div><div class="field"><label for="stepTime">Время</label><input type="time" id="stepTime"></div></div><div class="field"><label for="stepNote">Что сделать</label><input id="stepNote" maxlength="300" placeholder="Позвонить, уточнить бюджет"></div><button class="btn secondary small" id="clientStep" type="button">Поставить шаг</button></div>') + '</div></section></div>' +
+      '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит клиенту в Telegram</span></div>' + (user.blocked || !user.chatId ? chip("bad", 'Отправка недоступна') : chip("ok", 'Telegram доступен')) + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть диалог →</button><button class="btn secondary" id="clientViewing" type="button">Назначить просмотр</button>' + (!user.chatId ? '<div class="small muted">Клиент заведён вручную: в боте его нет, писать ему из панели нельзя.</div>' : '') + '</div></section>' +
+      '<div class="grid cols-2 client-interest-grid">' + (!hasWish ? '<section class="card"><div class="card-body"><span class="small muted">Условия поиска: клиент пока не оставлял ни сохранённого поиска, ни заявки на подбор.</span></div></section>' : '<section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section>') + '<section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : chip("warn", 'Менеджер не назначен')) + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="stack"><div class="small muted">Активных заявок нет. Можно поставить шаг — например, «позвонить в четверг»: он появится в «Следующих шагах» и в напоминаниях.</div><div class="grid cols-2"><div class="field"><label for="stepDate">День</label><input type="date" id="stepDate"></div><div class="field"><label for="stepTime">Время</label><input type="time" id="stepTime"></div></div><div class="field"><label for="stepNote">Что сделать</label><input id="stepNote" maxlength="300" placeholder="Позвонить, уточнить бюджет"></div><button class="btn secondary small" id="clientStep" type="button">Поставить шаг</button></div>') + '</div></section></div>' +
       '<section class="card"><header><h3>Объекты и интересы</h3><div class="actions"><span class="small muted">избранное · сравнение · история · подбор</span></div></header>' + clientPropertiesHtml(user) + '</section>' +
       '<section class="card"><header><h3>История заявок</h3></header>' + (inquiries.length ? '<div class="client-inquiries">' + inquiries.slice(0, 20).map(function (item) { return '<button class="client-inquiry" data-client-inquiry="' + esc(item.id) + '" type="button"><span><b>' + esc(inquiryTypeName(item)) + '</b><small>' + esc(String(item.text || "").replace(/\s+/g, " ").slice(0, 100)) + '</small></span><span class="chip ' + (awaitsReply(item) ? "bad" : item.status === "closed" ? "" : "ok") + '">' + (awaitsReply(item) ? "ждёт ответа" : item.status === "closed" ? "закрыто" : "в работе") + '</span><time>' + dateTime(item.updatedAt || item.createdAt) + '</time><i>→</i></button>'; }).join("") + '</div>' : '<div class="empty"><b>Заявок ещё нет</b></div>') + '</section>' +
       // Удаление — в самом конце карточки, отдельным блоком: раньше красная кнопка
@@ -1873,7 +1873,7 @@ function openClient(id) {
       var stepButton = dialog.querySelector("#clientStep");
       if (stepButton) stepButton.onclick = async function () {
         var day = dialog.querySelector("#stepDate").value;
-        if (!day) return toast("Выберите день следующего шага", true);
+        if (!day) return fieldError(dialog.querySelector("#stepDate"), "Выберите день следующего шага");
         try {
           await send("/api/users/" + encodeURIComponent(user.id) + "/step", "POST", { date: day, time: dialog.querySelector("#stepTime").value, note: dialog.querySelector("#stepNote").value });
           dialog.closeClean();

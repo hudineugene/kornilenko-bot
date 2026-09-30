@@ -19,12 +19,12 @@ function campaignPropertySignalLabel(signal) {
 }
 // Пауза из-за обрыва связи — не ошибка: рассылка продолжится сама.
 function campaignStatusChip(entry) {
-  if (entry.status === "failed") return '<span class="chip bad">Ошибка</span>';
+  if (entry.status === "failed") return chip("bad", 'Ошибка');
   if (entry.status === "queued" && entry.pausedAt) {
     return '<span class="chip warn" title="' + esc(entry.error || "") + '">пауза, продолжится сама</span>';
   }
-  if (entry.status === "queued" || entry.status === "running") return '<span class="chip warn">Идёт</span>';
-  return '<span class="chip ok">Отправлена</span>';
+  if (entry.status === "queued" || entry.status === "running") return chip("warn", 'Идёт');
+  return chip("ok", 'Отправлена');
 }
 
 function campaignAudienceLabel(entry) {
@@ -591,7 +591,7 @@ function groupPostQueue(group) {
     posts.map(function (post) {
       var failed = post.status === "failed";
       return '<div class="list-item"><span class="grow"><b>' + esc(String(post.text || "Публикация с фото").slice(0, 80)) + "</b>" +
-        '<br><span class="muted small">' + esc(dateTime(post.sendAt)) + (post.threadId > 1 ? " · тема «" + esc(topicLabel(group, post.threadId)) + "»" : "") + (failed && post.error ? " · " + esc(String(post.error).slice(0, 120)) : "") + "</span></span>" +
+        '<br><span class="small muted">' + esc(dateTime(post.sendAt)) + (post.threadId > 1 ? " · тема «" + esc(topicLabel(group, post.threadId)) + "»" : "") + (failed && post.error ? " · " + esc(String(post.error).slice(0, 120)) : "") + "</span></span>" +
         '<span class="chip ' + (failed ? "bad" : "brand") + '">' + (failed ? "не ушла" : "ждёт отправки") + "</span>" +
         '<button class="btn ghost small" data-cancel-post="' + esc(post.id) + '" type="button">' + (failed ? "Убрать" : "Отменить") + "</button></div>";
     }).join("") + "</div></div>";
@@ -622,7 +622,7 @@ function topicsCard(group) {
     (topics.length ? '<div class="list">' + topics.map(function (topic) {
       var seen = (group.messages || []).filter(function (message) { return (message.threadId || 0) === topic.id; }).length;
       return '<div class="list-item"><span class="grow"><b>' + esc(topicLabel(group, topic.id)) + "</b>" +
-        (topic.closed ? ' <span class="chip warn">Закрыта</span>' : "") +
+        (topic.closed ? ' ' + chip("warn", 'Закрыта') : "") +
         '<br><span class="small muted">№ ' + topic.id + (seen ? " · сообщений в ленте: " + seen : "") + (topic.lastMessageAt ? " · " + esc(dateShort(topic.lastMessageAt)) : "") + "</span></span>" +
         (topic.id === 1 ? "" : '<button class="btn ghost small" data-forget-topic="' + topic.id + '" type="button">Убрать</button>') + "</div>";
     }).join("") + "</div>" : "") +
@@ -673,10 +673,10 @@ function renderGroupCard(host, group, mode) {
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small muted">историю Telegram не отдаёт</span></div></header>' +
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
           return '<div class="list-item"><span class="avatar">' + esc(initials(message.name)) + "</span>" +
-            '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' <span class="chip brand">От бота</span>' : "") +
+            '<span class="grow"><b>' + esc(message.name) + "</b>" + (message.fromBot ? ' ' + chip("brand", 'От бота') : "") +
             (message.kind !== "text" ? ' <span class="chip">' + esc(GROUP_MESSAGE_KINDS[message.kind] || message.kind) + "</span>" : "") +
             (group.isForum && message.threadId ? ' <span class="chip">' + esc(topicLabel(group, message.threadId)) + "</span>" : "") +
-            '<br><span class="muted small">' + esc(String(message.text || "").slice(0, 120)) + "</span></span>" +
+            '<br><span class="small muted">' + esc(String(message.text || "").slice(0, 120)) + "</span></span>" +
             '<span class="small muted nowrap">' + dateShort(message.date) + "</span>" +
             (groupCan(group, "can_pin_messages") ? '<button class="btn ghost small" data-pin="' + message.messageId + '" title="Закрепить">📌</button>' : "") +
             (groupCan(group, "can_delete_messages") ? '<button class="btn ghost small" data-del="' + message.messageId + '" title="Удалить">✕</button>' : "") + "</div>";
@@ -698,10 +698,10 @@ function renderGroupCard(host, group, mode) {
       topicsCard(group) +
       (group.username ? '<div class="card"><header><h3>Публичная ссылка</h3></header><div class="card-body"><a href="https://t.me/' + esc(group.username) + '" target="_blank" rel="noreferrer">t.me/' + esc(group.username) + "</a></div></div>" : "") +
       '<div class="card"><header><h3>Ссылка-приглашение</h3></header><div class="card-body stack">' +
-        (group.inviteLink ? '<div class="row"><input value="' + esc(group.inviteLink) + '" readonly id="inviteLink"><button class="btn ghost small" id="copyInvite" type="button">Копировать</button></div>' : '<span class="muted small">Ссылки нет</span>') +
+        (group.inviteLink ? '<div class="row"><input value="' + esc(group.inviteLink) + '" readonly id="inviteLink"><button class="btn ghost small" id="copyInvite" type="button">Копировать</button></div>' : '<span class="small muted">Ссылки нет</span>') +
         '<div class="row wrap"><button class="btn secondary small" id="makeInvite" type="button">Создать новую</button>' +
         (group.inviteLink ? '<button class="btn ghost small" id="revokeInvite" type="button">Отозвать</button>' : "") + "</div></div></div>" +
-      '<div class="card"><header><h3>Администраторы</h3><div class="actions"><button class="btn ghost small" id="loadAdmins" type="button">Показать</button></div></header><div class="card-body" id="adminsBox"><span class="muted small">Список ' + (group.type === "channel" ? "подписчиков" : "участников") + " Telegram не отдаёт — только администраторов.</span></div></div>" +
+      '<div class="card"><header><h3>Администраторы</h3><div class="actions"><button class="btn ghost small" id="loadAdmins" type="button">Показать</button></div></header><div class="card-body" id="adminsBox"><span class="small muted">Список ' + (group.type === "channel" ? "подписчиков" : "участников") + " Telegram не отдаёт — только администраторов.</span></div></div>" +
       '<div class="card"><header><h3>Опасная зона</h3></header><div class="card-body row wrap">' +
         '<button class="btn ghost small" id="unpinAll" type="button">Открепить всё</button>' +
         '<button class="btn danger-outline small" id="leaveGroup" type="button">' + (group.type === "channel" ? "Покинуть канал" : "Выйти из группы") + "</button></div></div>" +
@@ -956,7 +956,7 @@ function renderGroupCard(host, group, mode) {
       var result = await api(base + "/admins");
       host.querySelector("#adminsBox").innerHTML = '<div class="list">' + result.admins.map(function (admin) {
         return '<div class="list-item"><span class="avatar">' + esc(initials(admin.name)) + '</span><span class="grow"><b>' + esc(admin.name) + "</b>" +
-          (admin.username ? ' <span class="small muted">@' + esc(admin.username) + "</span>" : "") + (admin.isBot ? ' <span class="chip">Бот</span>' : "") +
+          (admin.username ? ' <span class="small muted">@' + esc(admin.username) + "</span>" : "") + (admin.isBot ? ' ' + chip("", 'Бот') : "") +
           '<br><span class="small muted">' + esc(admin.status === "creator" ? "владелец" : "администратор") + (admin.customTitle ? " · " + esc(admin.customTitle) : "") + "</span></span>" +
           (admin.status !== "creator" && !admin.isBot ? '<button class="btn ghost small" data-ban="' + esc(admin.userId) + '" type="button">Забанить</button>' : "") + "</div>";
       }).join("") + "</div>";
@@ -1088,7 +1088,7 @@ function renderPostStyle(host) {
   function draw() {
     host.innerHTML = '<div class="grid cols-2">' +
       '<div class="card"><header><h3>Постоянная подпись</h3></header><div class="card-body stack">' +
-        '<p class="muted small">Добавляется в конце каждого поста в группу или канал. Сюда обычно ставят контакты, сайт и ссылки на соцсети — ссылки Telegram сделает кликабельными сам.</p>' +
+        '<p class="small muted">Добавляется в конце каждого поста в группу или канал. Сюда обычно ставят контакты, сайт и ссылки на соцсети — ссылки Telegram сделает кликабельными сам.</p>' +
         '<label class="switch"><input type="checkbox" id="signOn"' + (draft.signatureEnabled ? " checked" : "") + '><span class="track"></span><span>Подпись включена</span></label>' +
         '<div class="field"><label for="signText">Текст подписи</label>' + markupToolbar("signText") + '<textarea id="signText" class="area-md" placeholder="Construcciones Kornilenko&#10;+34 664 17 96 37&#10;https://t.me/имя_бота">' + esc(draft.signature) + "</textarea></div>" +
         '<div class="field"><label for="signWrap">Переносы строк</label><select id="signWrap">' +
@@ -1106,20 +1106,20 @@ function renderPostStyle(host) {
         '<div class="field"><span class="field-label">Так уйдёт в Telegram</span><div class="msg small" id="signPreview"></div><div id="signCodes" class="hint warn-text"></div></div>' +
       "</div></div>" +
       '<div class="card"><header><h3>Кнопки под постом</h3><div class="actions"><button class="btn secondary small" id="addButton" type="button">＋ Кнопка</button></div></header><div class="card-body stack">' +
-        '<p class="muted small">Кнопки идут под каждым постом и ведут по ссылке. По ним удобно попадать с телефона, и в них видно, куда ведёт ссылка. Значок ставится прямо в названии: «🎵 ТикТок».</p>' +
+        '<p class="small muted">Кнопки идут под каждым постом и ведут по ссылке. По ним удобно попадать с телефона, и в них видно, куда ведёт ссылка. Значок ставится прямо в названии: «🎵 ТикТок».</p>' +
         (buttons.length ? buttons.map(function (button, index) {
           return '<div class="row wrap" data-button="' + index + '">' +
             '<input data-bfield="text" value="' + esc(button.text || "") + '" placeholder="🎵 ТикТок" class="field-md">' +
             '<input data-bfield="url" value="' + esc(button.url || "") + '" placeholder="https://..." class="grow">' +
             '<button class="btn ghost small" data-bdrop="' + index + '" type="button">✕</button></div>';
-        }).join("") : '<span class="muted small">Кнопок нет.</span>') +
+        }).join("") : '<span class="small muted">Кнопок нет.</span>') +
         '<div class="field"><label for="btnPerRow">Кнопок в ряд</label><select id="btnPerRow" class="field-xs">' +
           [1, 2, 3].map(function (value) { return '<option value="' + value + '"' + (perRow === value ? " selected" : "") + ">" + value + "</option>"; }).join("") +
         "</select></div>" +
         '<div class="field"><span class="field-label">Так будет выглядеть</span><div id="btnPreview" class="row wrap"></div></div>' +
       "</div></div>" +
       '<div class="card"><header><h3>Рубрики</h3><div class="actions"><button class="btn secondary small" id="addRubric" type="button">＋ Рубрика</button></div></header><div class="card-body stack">' +
-        '<p class="muted small">Плашка — картинка с названием рубрики. Telegram вписывает её в свой блок: если картинка вытянута шире 3:1, он дополняет пустоту размытым фоном. Кнопка «Дорисовать фон» добавляет поля нужного цвета вместо размытия.<br>' +
+        '<p class="small muted">Плашка — картинка с названием рубрики. Telegram вписывает её в свой блок: если картинка вытянута шире 3:1, он дополняет пустоту размытым фоном. Кнопка «Дорисовать фон» добавляет поля нужного цвета вместо размытия.<br>' +
           '<b>Внизу сообщения</b> — картинка внутри поста, текст над ней. Важно: у сообщения с картинкой ширина равна ширине картинки, поэтому узкая плашка сжимает текст. Делайте плашку шириной от 1280 точек.<br>' +
           '<b>Отдельным сообщением</b> — текст уходит обычным сообщением во всю ширину, плашка приходит сразу следом.<br>' +
           '<b>Над текстом</b> — плашка становится картинкой поста, текст под ней.</p>' +
@@ -1135,7 +1135,7 @@ function renderPostStyle(host) {
             "</select>" +
             '<input type="file" accept="image/jpeg,image/png" data-file="' + index + '" class="field-md">' +
             '<button class="btn ghost small" data-drop="' + index + '" type="button">✕</button></div>';
-        }).join("") : '<span class="muted small">Рубрик пока нет.</span>') +
+        }).join("") : '<span class="small muted">Рубрик пока нет.</span>') +
       "</div></div></div>";
 
     var preview = function () {
@@ -1174,8 +1174,8 @@ function renderPostStyle(host) {
       box.innerHTML = (visible.map(function (button) {
         var long = [...button.text].length > limit;
         return '<span class="chip ' + (long ? "warn" : "brand") + ' pad-sm">' + esc(button.text) + "</span>";
-      }).join("") || '<span class="muted small">кнопок нет</span>') +
-        (tooLong.length ? '<div class="hint warn-line">При ' + perRow + ' кнопках в ряд на телефоне помещается около ' + limit + ' знаков — подписи длиннее обрежутся многоточием. Уменьшите число кнопок в ряд или сократите названия.</div>' : "");
+      }).join("") || '<span class="small muted">кнопок нет</span>') +
+        (tooLong.length ? '<div class="banner warn">При ' + perRow + ' кнопках в ряд на телефоне помещается около ' + limit + ' знаков — подписи длиннее обрежутся многоточием. Уменьшите число кнопок в ряд или сократите названия.</div>' : "");
     };
     drawButtonPreview();
     host.querySelectorAll("[data-button]").forEach(function (row) {

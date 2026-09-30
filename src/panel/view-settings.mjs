@@ -52,7 +52,7 @@ function renderConnection(host) {
     '<div class="card"><header><h3>Админ-чат в Telegram</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="setAdminChat">Telegram-чат администратора</label><input id="setAdminChat" value="' + esc(config.adminChatId || "") + '" placeholder="узнать: напишите боту /myid"></div>' +
       '<div class="row wrap"><button class="btn secondary small" id="testAdmin" type="button">Отправить тест</button>' +
-        (config.adminNotificationVerifiedAt ? '<span class="chip ok">Проверен ' + dateShort(config.adminNotificationVerifiedAt) + "</span>" : '<span class="chip warn">Не проверен</span>') + "</div>" +
+        (config.adminNotificationVerifiedAt ? '<span class="chip ok">Проверен ' + dateShort(config.adminNotificationVerifiedAt) + "</span>" : chip("warn", 'Не проверен')) + "</div>" +
       '<div class="field"><label for="setNotify">Что присылать в Telegram</label><select id="setNotify">' +
         '<option value="inquiries"' + (config.notifyMode !== "all" ? " selected" : "") + ">Только заявки клиентов</option>" +
         '<option value="all"' + (config.notifyMode === "all" ? " selected" : "") + ">Все действия клиентов</option></select></div>" +
@@ -112,9 +112,9 @@ function renderConnection(host) {
     list.innerHTML = managers.length ? managers.map(function (manager, index) {
       return '<div class="row" data-manager="' + index + '"><input class="grow" data-field="name" value="' + esc(manager.name || "") + '" placeholder="Имя">' +
         '<input class="field-sm" data-field="chatId" value="' + esc(manager.chatId || "") + '" placeholder="Telegram-чат">' +
-        (manager.verifiedAt ? '<span class="chip ok">Ок</span>' : manager.id ? '<button class="btn ghost small" data-test="' + esc(manager.id) + '" type="button">Тест</button>' : "") +
+        (manager.verifiedAt ? chip("ok", 'Ок') : manager.id ? '<button class="btn ghost small" data-test="' + esc(manager.id) + '" type="button">Тест</button>' : "") +
         '<button class="btn ghost small" data-drop="' + index + '" type="button">✕</button></div>';
-    }).join("") : '<span class="muted small">Менеджеров нет — заявки приходят только администратору.</span>';
+    }).join("") : '<span class="small muted">Менеджеров нет — заявки приходят только администратору.</span>';
     list.querySelectorAll("[data-drop]").forEach(function (button) {
       button.onclick = function () { managers.splice(Number(button.dataset.drop), 1); drawManagers(); watcher.check(); };
     });
@@ -371,7 +371,7 @@ function renderData(host) {
   var backup = state.config.telegramBackup || {};
   host.innerHTML = '<div class="grid cols-2">' +
     '<div class="card"><header><h3>Резервная копия</h3></header><div class="card-body stack">' +
-      '<p class="muted small">Копия содержит объекты, тексты, клиентов, заявки и фотографии. Храните её в надёжном месте.</p>' +
+      '<p class="small muted">Копия содержит объекты, тексты, клиентов, заявки и фотографии. Храните её в надёжном месте.</p>' +
       '<div class="row wrap"><button class="btn secondary" id="downloadBackup" type="button">⬇ Скачать копию</button>' +
       '<label class="btn ghost clickable-area">⬆ Восстановить<input type="file" id="restoreFile" accept=".kbz,.json,.gz,.kbk,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
       '<div class="hint">Подходит любая копия, сделанная ботом: скачанная этой кнопкой, из папки <b>backups</b> рядом с ботом или присланная в Telegram (для неё понадобится пароль копии). Ежедневная копия создаётся сама. Перед восстановлением прежние данные бот складывает в ту же папку — вернуться будет куда.</div>' +
@@ -385,14 +385,14 @@ function renderData(host) {
       '<div class="hint">Файл .kbk можно восстановить здесь же — понадобится этот пароль.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Самопроверка</h3><div class="actions"><button class="btn secondary small" id="runSelfCheck" type="button">Проверить сейчас</button></div></header>' +
-      '<div class="card-body stack" id="selfCheckBody"><p class="muted small">Проверяет токен и связь, чат администратора, видимость каталога у клиентов, файлы картинок и версию данных. Ничего не меняет.</p></div>' +
+      '<div class="card-body stack" id="selfCheckBody"><p class="small muted">Проверяет токен и связь, чат администратора, видимость каталога у клиентов, файлы картинок и версию данных. Ничего не меняет.</p></div>' +
     "</div>" +
     '<div class="card"><header><h3>Файлы картинок</h3><div class="actions"><button class="btn secondary small" id="checkMedia" type="button">Проверить файлы</button></div></header>' +
-      '<div class="card-body stack" id="mediaCheckBody"><p class="muted small">Сверяет картинки в данных с файлами в папке bot-media. Потерянные можно вернуть из ежедневной копии.</p></div>' +
+      '<div class="card-body stack" id="mediaCheckBody"><p class="small muted">Сверяет картинки в данных с файлами в папке bot-media. Потерянные можно вернуть из ежедневной копии.</p></div>' +
     "</div>" +
     '<div class="card"><header><h3>Журнал ошибок</h3><div class="actions"><button class="btn ghost small" id="clearErrors" type="button">Очистить</button></div></header>' +
       ((state.errors || []).length ? '<div class="list">' + groupErrors(state.errors).slice(0, 20).map(function (error) {
-        return '<div class="list-item"><span class="grow"><b>' + esc(error.area || error.context || "Ошибка") + '</b>' + (error.count > 1 ? ' <span class="chip warn">×' + error.count + "</span>" : "") + '<br><span class="muted small">' + esc(error.message) + "</span></span>" +
+        return '<div class="list-item"><span class="grow"><b>' + esc(error.area || error.context || "Ошибка") + '</b>' + (error.count > 1 ? ' <span class="chip warn">×' + error.count + "</span>" : "") + '<br><span class="small muted">' + esc(error.message) + "</span></span>" +
           '<span class="small muted nowrap">' + (error.count > 1 ? "последняя " : "") + dateTime(error.createdAt || error.at) + "</span></div>";
       }).join("") + "</div>" : '<div class="empty"><b>Ошибок нет</b></div>') +
     "</div>" +
@@ -460,7 +460,7 @@ function renderData(host) {
   }
   host.querySelector("#runSelfCheck").onclick = async function () {
     var body = host.querySelector("#selfCheckBody");
-    body.innerHTML = '<p class="muted small">Проверяю…</p>';
+    body.innerHTML = '<p class="small muted">Проверяю…</p>';
     try {
       var report = await api("/api/self-check");
       var summary = report.bad ? "Есть проблемы: " + report.bad : report.warn ? "Стоит посмотреть: " + report.warn : "Всё в порядке";
@@ -471,7 +471,7 @@ function renderData(host) {
   };
   host.querySelector("#checkMedia").onclick = async function () {
     var body = host.querySelector("#mediaCheckBody");
-    body.innerHTML = '<p class="muted small">Сверяю файлы…</p>';
+    body.innerHTML = '<p class="small muted">Сверяю файлы…</p>';
     try {
       var report = await send("/api/media-check", "POST", {});
       body.innerHTML = mediaCheckHtml(report);

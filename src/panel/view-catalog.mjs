@@ -540,7 +540,7 @@ function openRecordEditor(kind, id) {
             (live ? '<button class="btn ghost small" data-set-status="sold" type="button">Отметить проданным</button>' : "") +
             (status === "sold" ? '<button class="btn ghost small" data-set-status="active" type="button"' + (russianReady ? "" : " disabled") + '>Вернуть в продажу</button>' : "") +
           "</div>" : "") +
-          (liveAndIncomplete ? '<div class="publication-warning">Сохранить карточку можно и так, но клиенты видят её только на тех языках, где заполнено всё. Пока не хватает данных, объект в каталоге не показывается.</div>' : "");
+          (liveAndIncomplete ? '<div class="banner warn">Сохранить карточку можно и так, но клиенты видят её только на тех языках, где заполнено всё. Пока не хватает данных, объект в каталоге не показывается.</div>' : "");
         // Кнопка стоит в блоке готовности (не в подвале), поэтому привязывается здесь.
         var copyButton = dialog.querySelector("#copyFromRu");
         if (copyButton) copyButton.onclick = function () {

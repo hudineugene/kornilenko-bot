@@ -329,6 +329,35 @@ function loadInterfaceText(force) {
 
 // action — необязательная кнопка в самом уведомлении: {label, run}. Так после
 // «Скрыть» остаётся возможность вернуть дело, пока уведомление на экране.
+// Ошибка у поля: красный текст под ним, поле помечено aria-invalid и получает фокус; пропадает, как только начали
+// исправлять. Без подходящего поля (или если браузер не даёт вставить подпись) — обычная подсказка.
+function fieldError(input, text) {
+  try {
+    var box = input && input.closest ? input.closest(".field") : null;
+    if (!box) return toast(text, true);
+    var note = box.querySelector(".field-error");
+    if (!note) {
+      note = document.createElement("div");
+      note.className = "field-error";
+      note.setAttribute("role", "alert");
+      box.appendChild(note);
+    }
+    note.textContent = text;
+    input.setAttribute("aria-invalid", "true");
+    if (input.focus) input.focus();
+    var clear = function () {
+      if (note.remove) note.remove();
+      input.removeAttribute("aria-invalid");
+      input.removeEventListener("input", clear);
+      input.removeEventListener("change", clear);
+    };
+    input.addEventListener("input", clear);
+    input.addEventListener("change", clear);
+  } catch (error) {
+    toast(text, true);
+  }
+}
+
 function toast(text, bad, action, sticky) {
   var box = el("toast");
   box.textContent = text;
@@ -422,7 +451,7 @@ function askPassword(title, text, label) {
   return new Promise(function (resolve) {
     var dialog = openDialog({
       title: title,
-      body: '<p class="muted small">' + esc(text) + '</p>' +
+      body: '<p class="small muted">' + esc(text) + '</p>' +
         '<div class="field"><label for="gatePassword">' + esc(label || "Текущий пароль панели") + '</label>' +
         '<input id="gatePassword" type="password" autocomplete="current-password"></div>',
       footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="gateConfirm" type="button">Продолжить</button>',
@@ -431,7 +460,7 @@ function askPassword(title, text, label) {
         var done = false;
         node.querySelector("#gateConfirm").onclick = function () {
           var value = input.value;
-          if (!value) return toast("Введите текущий пароль панели", true);
+          if (!value) return fieldError(input, "Введите текущий пароль панели");
           done = true;
           node.closeClean();
           resolve(value);
@@ -1100,6 +1129,13 @@ Object.assign(BUTTON_ICONS, {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
 });
 var GLYPH_ICONS = { "✕": "close", "⋯": "more", "←": "arrow-left", "🌐": "globe", "📅": "calendar", "📹": "video", "⏱": "clock", "👥": "users", "⌂": "home", "💬": "chat", "📞": "phone", "📍": "place", "＋": "plus", "⇩": "download", "⬇": "download", "⬆": "upload", "✉": "mail", "➤": "send", "✎": "edit", "⧉": "copy", "✓": "check", "↩": "reply", "🔁": "transfer", "🧹": "clean", "📎": "clip", "📌": "pin", "↑": "up", "↓": "down", "🏠": "home" };
+
+// Чип: цвет отвечает на вопрос «что делать» — ok зелёный (готово), warn янтарный (ждёт решения), bad красный (вмешаться),
+// brand синий (идёт своим чередом), без вида — серый факт. Других видов нет: неизвестный превращается в серый.
+var CHIP_KINDS = { ok: 1, warn: 1, bad: 1, brand: 1, overdue: 1 };
+function chip(kind, html, attrs) {
+  return '<span class="chip' + (CHIP_KINDS[kind] ? " " + kind : "") + '"' + (attrs || "") + ">" + html + "</span>";
+}
 
 // Значок внутри строки текста (в чипе, в заголовке карточки): тот же набор, что и в кнопках.
 function iconSpan(name) { return '<span class="ico-inline">' + icon(name) + "</span>"; }

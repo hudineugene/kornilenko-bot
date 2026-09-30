@@ -1609,7 +1609,7 @@ test('на четырёх экранах цифры — одной строко�
     // «Отчёты» начинаются с недели одной страницей; строка цифр за 30 дней — в «Подробнее».
     if (view === 'reports') {
       assert.match(html, /^<div id="weeklyReport">/, 'сверху — итоги недели');
-      assert.match(html, /<summary>Подробнее: 30 дней/, 'остальное сложено под «Подробнее»');
+      assert.match(html, /<summary><b>Подробнее: 30 дней/, 'остальное сложено под «Подробнее»');
       assert.match(html, /<div class="today-numbers">/, view + '/' + tab + ': строка цифр внутри');
     } else {
       assert.match(html, /^<div class="today-numbers">/, view + '/' + tab + ': сверху строка цифр');
@@ -2394,7 +2394,7 @@ test('«Отчёт» — отдельный пункт меню: открыва�
   // «Конверсия» объяснена: от чего считается.
   assert.match(html, /Конверсия в заявку[\s\S]*?\d+ из \d+ клиентов в базе/);
   // «Показы» и «Просмотры» — разные слова: одно про каталог, другое про запись на встречу.
-  assert.ok(!/>Показы</.test(html) && !/>Подробнее</.test(html.replace(/<summary>[^<]*<\/summary>/, '')), 'двусмысленных «Показы»/«Подробнее» в таблице нет');
+  assert.ok(!/>Показы</.test(html) && !/>Подробнее</.test(html.replace(/<summary>[\s\S]*?<\/summary>/, '')), 'двусмысленных «Показы»/«Подробнее» в таблице нет');
   assert.match(html, /Видели в каталоге/);
   assert.match(html, /Открыли карточку/);
 
@@ -2644,6 +2644,7 @@ test('передача клиента: «Передать…» появляет�
 
   const toasts = [];
   sandbox.toast = (message) => toasts.push(String(message));
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   const baseFetch = sandbox.fetch;
   let answer = { ok: true, moved: 1, notified: true };
   sandbox.fetch = async (url, options) => {
@@ -3019,6 +3020,7 @@ test('быстрый ответ со «Сегодня»: окно с после�
   sandbox.openDialog = (options) => { const dialog = original(options); dialogs.push({ options, dialog }); return dialog; };
   const toasts = [];
   sandbox.toast = (message) => toasts.push(String(message));
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
 
   const today = fakeElement('main');
   sandbox.VIEWS.today.render(today);
@@ -3074,6 +3076,7 @@ test('быстрый ответ: очередь «по очереди» начи
   const dialogs = [];
   sandbox.openDialog = (options) => { const dialog = original(options); dialogs.push({ options, dialog }); return dialog; };
   sandbox.toast = () => {};
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
 
   // Николай ждёт 9 минут, Ольга — 4: первым — Николай.
   await sandbox.openNextQuickReply([]);
@@ -3129,6 +3132,7 @@ test('«Вернуть»: смена этапа, закрытие заявки, 
   const { sandbox, requests } = await panelSandbox();
   const toasts = [];
   sandbox.toast = (message, bad, action) => toasts.push({ message: String(message), action });
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   const last = () => toasts[toasts.length - 1];
   const bodyOf = (method, urlPart) => requests.filter((request) => request.method === method && request.url.includes(urlPart)).pop();
 
@@ -3719,6 +3723,7 @@ test('«Акции»: удаление под «⋯», как у объекто�
   sandbox.openDialog = (options) => { const dialog = fakeElement('dialog'); dialog.closeClean = () => {}; dialogs.push({ options, dialog }); if (options.ready) options.ready(dialog); return dialog; };
   sandbox.confirmDialog = async () => true;
   sandbox.toast = () => {};
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   host.querySelector('tr[data-id]').querySelector('[data-more]').onclick();
   assert.match(dialogs[0].options.body, /Удалить акцию/);
   assert.match(dialogs[0].options.body, /15 минут/);
@@ -3745,6 +3750,7 @@ test('очередь публикаций: клик по отложенному 
   sandbox.go = async (view, tab) => { routes.push([view, tab]); return true; };
   sandbox.confirmDialog = async () => true;
   sandbox.toast = () => {};
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   row.querySelector('[data-open]').onclick();
   assert.equal(routes.length, 0, 'на пустую форму «Пост в канал» не уводит');
   assert.equal(dialogs.length, 1);
@@ -4069,6 +4075,7 @@ test('«＋ Клиент» и «＋ Просмотр»: кнопки в шапк
   const toasts = [];
   sandbox.openDialog = (options) => { const dialog = fakeElement('dialog'); dialog.closeClean = () => {}; dialogs.push({ options, dialog }); if (options.ready) options.ready(dialog); return dialog; };
   sandbox.toast = (message, bad) => toasts.push({ message: String(message), bad: Boolean(bad) });
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   sandbox.openClient = () => {};
   sandbox.state.users = [{ id: 'u1', firstName: 'Анна', phone: '+34 600' }];
   sandbox.state.inquiries = [];
@@ -4122,6 +4129,7 @@ test('карточка клиента без заявок: можно поста
   sandbox.state.inquiries = [];
   const toasts = [];
   sandbox.toast = (message, bad) => toasts.push({ message: String(message), bad: Boolean(bad) });
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   let options = null;
   let dialog = null;
   sandbox.openDialog = (opts) => { options = opts; dialog = fakeElement('dialog'); dialog.closeClean = () => {}; if (opts.ready) opts.ready(dialog); return dialog; };
@@ -4151,6 +4159,7 @@ test('карточка клиента: тот же телефон у друго�
   sandbox.state.inquiries = [];
   const toasts = [];
   sandbox.toast = (message, bad, action) => toasts.push({ message: String(message), bad: Boolean(bad), action });
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   sandbox.confirmDialog = async () => true;
   let options = null;
   let dialog = null;
@@ -4190,6 +4199,7 @@ test('шаблоны ответов: на языке клиента, {имя} и
   // Вставка предупреждает о подмене языка.
   const toasts = [];
   sandbox.toast = (message, bad) => toasts.push({ message: String(message), bad });
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   const field = { value: '' };
   assert.equal(sandbox.insertTemplate(template, { language: 'es', propertyId: 'villa-1' }, { firstName: 'Ana', preferredLanguage: 'es' }, field), true);
   assert.match(toasts.pop().message, /Шаблона на языке клиента \(ES\) нет/);
@@ -4218,6 +4228,7 @@ test('выгрузка заявок: окно с выбором «как на э
   sandbox.state.inquiries = [];
   const toasts = [];
   sandbox.toast = (message, bad) => toasts.push({ message: String(message), bad: Boolean(bad) });
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   const sent = [];
   sandbox.fetch = async (url, options) => { sent.push({ url, body: JSON.parse(options.body) }); return { ok: false }; };
   let dialog = null;
@@ -4253,6 +4264,7 @@ test('«Диалоги»: режим «Выбрать» — отметки у с
   sandbox.inquiryFilter.status = '';
   const toasts = [];
   sandbox.toast = (message, bad, action) => toasts.push({ message: String(message), bad: Boolean(bad), action });
+  sandbox.fieldError = (input, message) => sandbox.toast(message, true);
   sandbox.confirmDialog = async () => true;
   const host = fakeElement('main');
   sandbox.renderInquiryList(host);

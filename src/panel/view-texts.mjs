@@ -34,7 +34,7 @@ var EXAMPLE_QUERY = { ru: "Альтеа, 3 спальни, до 350 000 €", en
 async function renderWelcome(host) {
   // Подписи кнопок приезжают отдельным запросом: рисуем экран, когда они уже
   // есть, иначе поля окажутся пустыми и сохранение сотрёт подписи.
-  host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загрузка…</p></div></div>';
+  host.innerHTML = '<div class="card"><div class="card-body"><p class="small muted">Загрузка…</p></div></div>';
   try {
     await loadInterfaceText();
   } catch (error) {
@@ -76,7 +76,7 @@ async function renderWelcome(host) {
       '<div class="field"><span class="field-label">Картинка приветствия</span>' + LANGUAGES.map(function (language) {
         var image = images[language[0]] || {};
         return '<div data-langpane="' + language[0] + '" class="' + (language[0] === "ru" ? "" : "hidden") + '">' +
-          (image.exists ? '<img class="thumb thumb-md" src="/api/images/' + language[0] + '/welcome?rev=' + encodeURIComponent(image.updatedAt || "") + '" alt="">' : '<span class="muted small">Картинки нет</span>') +
+          (image.exists ? '<img class="thumb thumb-md" src="/api/images/' + language[0] + '/welcome?rev=' + encodeURIComponent(image.updatedAt || "") + '" alt="">' : '<span class="small muted">Картинки нет</span>') +
           '<div class="row"><input type="file" accept="image/jpeg,image/png" data-welcome="' + language[0] + '">' +
           (image.exists ? '<button class="btn ghost small" type="button" data-drop="' + language[0] + '">Удалить</button>' : "") + "</div></div>";
       }).join("") + "</div>" +
@@ -244,7 +244,7 @@ function renderContacts(host) {
   if (contacts.email) previewLines.push("✉️ " + contacts.email);
   host.innerHTML = '<div class="split"><div class="card"><header><h3>Менеджер и каналы связи</h3></header><div class="card-body stack" id="contactsForm">' +
       '<div class="field"><label>Фото менеджера</label><div class="row wrap" id="contactPhotoRow">' +
-        '<span id="contactPhotoThumb">' + (photo ? '<img class="thumb thumb-md" src="/api/images/contacts/photo?rev=' + encodeURIComponent(photo.updatedAt || "") + '" alt="">' : '<span class="muted small">Фото не загружено</span>') + "</span>" +
+        '<span id="contactPhotoThumb">' + (photo ? '<img class="thumb thumb-md" src="/api/images/contacts/photo?rev=' + encodeURIComponent(photo.updatedAt || "") + '" alt="">' : '<span class="small muted">Фото не загружено</span>') + "</span>" +
         '<input type="file" id="contactPhoto" accept="image/jpeg,image/png">' +
         '<button class="btn ghost small' + (photo ? "" : " hidden") + '" id="contactPhotoDrop" type="button">Убрать фото</button></div>' +
         '<div class="hint">Клиент увидит фото с именем над экраном «Связаться». Покупателю из другой страны важно понять, с кем он говорит. Квадратное фото лица работает лучше всего.</div></div>' +
@@ -310,7 +310,7 @@ function renderContacts(host) {
   var photoDrop = host.querySelector("#contactPhotoDrop");
   if (photoDrop) photoDrop.onclick = function () {
     pendingPhoto = { remove: true };
-    host.querySelector("#contactPhotoThumb").innerHTML = '<span class="muted small">Фото будет убрано</span>';
+    host.querySelector("#contactPhotoThumb").innerHTML = '<span class="small muted">Фото будет убрано</span>';
     photoDrop.classList.add("hidden");
     if (contactsWatcher) contactsWatcher.mark();
   };
@@ -375,7 +375,7 @@ function renderRules(host) {
     (rules.length ? rules.map(function (rule) {
       return '<tr data-id="' + esc(rule.id) + '"><td class="clickable" data-edit="1"><b>' + esc(rule.trigger) + '</b><br><span class="small muted">' + esc((RULE_TYPES.find(function (type) { return type[0] === rule.type; }) || ["", ""])[1]) + "</span></td>" +
         "<td>" + esc(String(rule.answer).slice(0, 80)) + "</td><td>" + esc(rule.language === "all" ? "все" : rule.language.toUpperCase()) + "</td>" +
-        '<td class="right nowrap">' + (rule.enabled === false ? '<span class="chip">Выключен</span>' : "") +
+        '<td class="right nowrap">' + (rule.enabled === false ? chip("", 'Выключен') : "") +
         '<button class="btn ghost small" data-move="up" title="Проверять раньше">↑</button>' +
         '<button class="btn ghost small" data-move="down" title="Проверять позже">↓</button>' +
         '<button class="btn ghost small" data-delete="1">✕</button></td></tr>';
@@ -548,7 +548,7 @@ function interfaceGroupBody(texts, groupId, active) {
   return keys.map(function (key) {
     var value = (texts[groupId].ru || {})[key];
     if (Array.isArray(value)) {
-      return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(groupId, key, value)) + ' <span class="muted small">список</span></label>' + LANGUAGES.map(function (language) {
+      return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(groupId, key, value)) + ' <span class="small muted">список</span></label>' + LANGUAGES.map(function (language) {
         return '<textarea data-group="' + groupId + '" data-key="' + esc(key) + '" data-list="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === active ? "" : " hidden") + '">' + esc(((texts[groupId][language[0]] || {})[key] || []).join("\n")) + "</textarea>";
       }).join("") + "</div>";
     }
@@ -563,7 +563,7 @@ function interfaceGroupBody(texts, groupId, active) {
 }
 
 async function renderInterface(host) {
-  host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загрузка…</p></div></div>';
+  host.innerHTML = '<div class="card"><div class="card-body"><p class="small muted">Загрузка…</p></div></div>';
   var texts;
   try {
     texts = await loadInterfaceText();
@@ -578,9 +578,9 @@ async function renderInterface(host) {
       var keys = Object.keys(texts[group[0]].ru || {});
       var opened = interfaceGroupOpen === group[0];
       // Поля группы рисуются, когда её раскрыли: 1430 полей разом тормозили экран и почти никому не нужны сразу.
-      return '<details class="card flat-divided"' + (opened ? " open" : "") + ' data-group="' + group[0] + '">' +
-        '<summary class="pad-md"><b>' + esc(group[1]) + '</b> <span class="small muted">' + counted(keys.length, "текст", "текста", "текстов") + "</span></summary>" +
-        '<div class="card-body grid cols-2" data-body="' + group[0] + '">' + (opened ? interfaceGroupBody(texts, group[0], "ru") : "") + "</div></details>";
+      return '<details class="editor-section"' + (opened ? " open" : "") + ' data-group="' + group[0] + '">' +
+        '<summary><b>' + esc(group[1]) + '</b><span>' + counted(keys.length, "текст", "текста", "текстов") + "</span></summary>" +
+        '<div class="editor-section-body grid cols-2" data-body="' + group[0] + '">' + (opened ? interfaceGroupBody(texts, group[0], "ru") : "") + "</div></details>";
     }).join("") + "</div>";
 
   bindLanguageTabs(host);
@@ -647,7 +647,7 @@ async function renderInterface(host) {
 function renderBuyPlan(host) {
   var steps = state.buyPlan || [];
   host.innerHTML = '<div class="card"><header><h3>План покупки</h3></header><div class="card-body stack" id="planForm">' +
-    '<p class="muted small">Клиент открывает его в «Моё → Мой план покупки» и отмечает шаги «Готово» или «Нужна помощь» — помощь приходит вам заявкой. Ниже — готовые нейтральные формулировки: поправьте их под свои сроки, услуги и условия. Пишите «обычно» и «как правило», не давайте юридических обещаний — на экране у клиента стоит оговорка, что это ориентир, а не консультация. Напоминания тем, кто начал и замолчал, включаются в «Настройки → Компания».</p>' +
+    '<p class="small muted">Клиент открывает его в «Моё → Мой план покупки» и отмечает шаги «Готово» или «Нужна помощь» — помощь приходит вам заявкой. Ниже — готовые нейтральные формулировки: поправьте их под свои сроки, услуги и условия. Пишите «обычно» и «как правило», не давайте юридических обещаний — на экране у клиента стоит оговорка, что это ориентир, а не консультация. Напоминания тем, кто начал и замолчал, включаются в «Настройки → Компания».</p>' +
     languageTabs() +
     steps.map(function (step, index) {
       return '<details class="editor-section" data-plan-step="' + esc(step.id) + '"' + (index === 0 ? " open" : "") + '><summary><b>' + (index + 1) + ". " + esc(step.title.ru) + "</b></summary>" +
@@ -691,7 +691,7 @@ function trustReviewRow(review, index) {
     '<div class="field"><label for="rvText' + index + '">Отзыв</label><textarea id="rvText' + index + '" data-rv-text="' + index + '" rows="3">' + esc(review.text || "") + '</textarea></div>' +
     '<div class="row wrap"><label class="check"><input type="checkbox" id="rvAllow' + index + '" data-rv-allow="' + index + '"' + (review.allowed ? " checked" : "") + '><span>Автор разрешил опубликовать отзыв</span></label>' +
     '<span class="grow"></span><button class="btn ghost small" type="button" data-rv-remove="' + index + '">Убрать отзыв</button></div>' +
-    (!review.allowed && (review.name || review.text) ? '<div class="small warn-text">Без отметки о разрешении отзыв клиентам не показывается.</div>' : "") +
+    (!review.allowed && (review.name || review.text) ? '<div class="banner warn">Без отметки о разрешении отзыв клиентам не показывается.</div>' : "") +
     "</div></div>";
 }
 
@@ -702,7 +702,7 @@ function renderTrust(host) {
   var contacts = state.contacts || {};
   host.innerHTML = '<div class="split"><div class="card"><header><h3>Почему мы</h3><div class="actions"><span class="chip ' + (shown ? "ok" : "warn") + '" id="trustStatus">' + (shown ? "Экран виден клиентам" : "Скрыт: пока ничего не заполнено") + "</span></div></header>" +
     '<div class="card-body stack" id="trustForm">' +
-      '<p class="muted small">Экран доверия для покупателя из-за границы: он решает, доверить ли деньги незнакомой фирме. Кнопка «Почему мы» появится у клиентов в «Моё», в гиде «Как купить», в «Подробнее» у объекта и на экране «Связаться», как только вы заполните хотя бы один пункт. Пишите только то, что правда и что можно публиковать: бот ничего не сочиняет и не подставляет.</p>' +
+      '<p class="small muted">Экран доверия для покупателя из-за границы: он решает, доверить ли деньги незнакомой фирме. Кнопка «Почему мы» появится у клиентов в «Моё», в гиде «Как купить», в «Подробнее» у объекта и на экране «Связаться», как только вы заполните хотя бы один пункт. Пишите только то, что правда и что можно публиковать: бот ничего не сочиняет и не подставляет.</p>' +
       '<div class="row wrap"><div class="field"><label for="tYears">Лет на рынке</label><input id="tYears" type="number" min="0" max="200" value="' + esc(trust.yearsOnMarket || "") + '"></div>' +
       '<div class="field"><label for="tDeals">Завершённых сделок</label><input id="tDeals" type="number" min="0" value="' + esc(trust.dealsCount || "") + '"></div></div>' +
       '<div class="field"><label for="tReg">Регистрационные данные</label><textarea id="tReg" rows="2" placeholder="Например: номер записи в реестре агентов, название юридического лица">' + esc(trust.registration || "") + "</textarea></div>" +

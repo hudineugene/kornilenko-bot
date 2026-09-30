@@ -85,7 +85,7 @@ function sparkline(days, field, color) {
   var values = days.map(function (key) { return dailyValue(key, field); });
   var top = Math.max.apply(null, values.concat([1]));
   // Пустой график выглядит как поломка, поэтому вместо него — строка текста.
-  if (!values.some(Boolean)) return '<div class="muted small">За этот период сообщений не было.</div>';
+  if (!values.some(Boolean)) return '<div class="small muted">За этот период сообщений не было.</div>';
   var labelled = days.length <= 14;
   var ticks = labelled
     ? days.map(function (key) { return chartDay(key); })
@@ -253,7 +253,7 @@ function readinessCard(items) {
   return '<div class="card gap-bottom readiness"><header><h3>Готовность к запуску</h3><div class="actions"><span class="chip ' + (done === items.length - 1 ? "warn" : "brand") + '">Готово ' + done + " из " + items.length + "</span></div></header>" +
     '<div class="list">' + items.map(function (item) {
       return '<div class="list-item"><span class="chip ' + (item.ok ? "ok" : "warn") + '">' + iconSpan(item.ok ? "check" : "warning") + "</span>" +
-        '<span class="grow"><b>' + esc(item.title) + "</b>" + (item.ok || !item.detail ? "" : '<br><span class="muted small">' + esc(item.detail) + "</span>") + "</span>" +
+        '<span class="grow"><b>' + esc(item.title) + "</b>" + (item.ok || !item.detail ? "" : '<br><span class="small muted">' + esc(item.detail) + "</span>") + "</span>" +
         (item.ok ? "" : '<button class="btn secondary small" type="button" data-ready-go="' + esc(item.route.join("/")) + '">Настроить</button>') + "</div>";
     }).join("") + "</div></div>";
 }
@@ -345,7 +345,7 @@ VIEWS.today = {
             (feedFilter === "done" ? "" : deeds.length ? '<div class="deeds">' + deeds.map(function (item) {
               return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '">' +
                 '<span class="deed-icon">' + deedIcon(item) + '</span>' +
-                '<span class="deed-body"><b>' + esc(item.title) + '</b>' + (people.length > 1 && deedAssignee(item) === "" ? ' <span class="chip warn">Без менеджера</span>' : "") + '<span>' + esc(item.text) + '</span></span>' +
+                '<span class="deed-body"><b>' + esc(item.title) + '</b>' + (people.length > 1 && deedAssignee(item) === "" ? ' ' + chip("warn", 'Без менеджера') : "") + '<span>' + esc(item.text) + '</span></span>' +
                 '<span class="deed-actions"><button class="btn secondary small" type="button" data-deed=""' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
                 '<button class="btn ghost small" type="button" data-deed-hide="' + esc(item.id) + '" title="Убрать из списка дел">Скрыть</button></span>' +
               '</div>';
@@ -465,7 +465,7 @@ function sourceTableCard() {
       '<tr class="source-total"><td>Всего</td><td class="right">' + num(total.users) + '</td><td class="right">' + num(total.inquiries) + '</td><td class="right">' + num(total.viewings) + '</td><td class="right">' + num(total.deals) + "</td><td></td></tr>" +
     "</tbody></table></div>" : '<div class="empty"><b>Пока нет данных</b>Разместите ссылку с меткой ниже — здесь появится, сколько клиентов она привела</div>') +
     '<div class="card-body stack"><div class="week-subtitle">Ссылка с меткой источника</div>' +
-    '<p class="muted small">Разместите такую ссылку в рекламе или соцсетях — в карточке клиента, уведомлениях и этой таблице будет видно, откуда он пришёл и что дал.</p>' +
+    '<p class="small muted">Разместите такую ссылку в рекламе или соцсетях — в карточке клиента, уведомлениях и этой таблице будет видно, откуда он пришёл и что дал.</p>' +
     '<div class="row"><input id="sourceLabel" placeholder="instagram" class="field-md"><button class="btn secondary small" id="makeSourceLink" type="button">Собрать ссылку</button></div>' +
     '<div class="row"><input id="sourceLink" readonly value="' + (username ? esc("https://t.me/" + username + "?start=src_метка") : "Сначала подключите бота") + '"><button class="btn ghost small" id="copySourceLink" type="button">Копировать</button></div>' +
   "</div></div>";
@@ -506,12 +506,12 @@ function recentReactions() {
 var reportWeek = "current";
 
 function weekTrend(current, previous) {
-  if (current === previous) return '<span class="week-trend">как раньше</span>';
-  return '<span class="week-trend ' + (current > previous ? "up" : "down") + '">' + (current > previous ? "↑ +" : "↓ −") + Math.abs(current - previous) + " · было " + previous + "</span>";
+  if (current === previous) return '<span class="delta">как раньше</span>';
+  return '<span class="delta ' + (current > previous ? "up" : "down") + '">' + (current > previous ? "↑ +" : "↓ −") + Math.abs(current - previous) + " · было " + previous + "</span>";
 }
 
 function weekTile(label, value, note) {
-  return '<div class="week-tile"><span class="week-label">' + esc(label) + '</span><b class="week-value">' + num(value) + "</b>" + (note || "") + "</div>";
+  return '<div class="card kpi"><span class="label">' + esc(label) + '</span><span class="value">' + num(value) + "</span>" + (note || "") + "</div>";
 }
 
 // Воронка бота: из новых клиентов недели — сколько дошли до каждого шага. Каталог
@@ -562,9 +562,9 @@ function weeklyCard(payload) {
       '<div class="week-grid">' +
         weekTile("Новых клиентов", report.users.count, weekTrend(report.users.count, report.users.previous)) +
         weekTile("Заявок", report.inquiries.count, weekTrend(report.inquiries.count, report.inquiries.previous)) +
-        weekTile("Записались на просмотр", report.viewings.booked, '<span class="week-trend">прошло ' + num(report.viewings.held) + "</span>") +
+        weekTile("Записались на просмотр", report.viewings.booked, '<span class="delta">прошло ' + num(report.viewings.held) + "</span>") +
         weekTile("Сделок", report.deals.count, weekTrend(report.deals.count, report.deals.previous)) +
-        weekTile("Без ответа сейчас", report.waiting, report.waiting ? '<span class="week-trend down">ждут ответа</span>' : '<span class="week-trend up">все отвечены</span>') +
+        weekTile("Без ответа сейчас", report.waiting, report.waiting ? '<span class="delta down">ждут ответа</span>' : '<span class="delta up">все отвечены</span>') +
       "</div>" +
       '<div class="small muted">Сравнение — ' + comparedWith + '.</div>' +
       (report.inquiries.byType.length ? '<div class="row wrap">' + report.inquiries.byType.map(function (row) { return '<span class="chip">' + esc(row[0]) + " — " + num(row[1]) + "</span>"; }).join("") + "</div>" : "") +
@@ -646,7 +646,7 @@ VIEWS.reports = {
     host.innerHTML =
       '<div id="weeklyReport"><div class="card gap-bottom"><div class="empty"><b>Загрузка…</b></div></div></div>' +
       sourceTableCard() +
-      '<details class="card gap-bottom report-more"><summary>Подробнее: 30 дней, источники, языки, рассылки, объекты</summary><div class="card-body">' +
+      '<details class="editor-section gap-bottom"><summary><b>Подробнее: 30 дней, источники, языки, рассылки, объекты</b></summary><div class="editor-section-body">' +
       numberStrip([
         ["Всего клиентов", num(state.userCount), "", "+" + usersInRange(week) + " за 7 дней"],
         ["Сообщений за 30 дней", num(sumDays(days, "received"))],

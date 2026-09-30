@@ -122,3 +122,17 @@ test('телефоны на экране «Связаться»: испанск�
     assert.equal(call.text.slice(phone.offset, phone.offset + phone.length), shown, 'подсветка номера совпадает с текстом');
   }
 });
+
+test('экран фильтра — не больше шести рядов, спальни одним рядом, «Показать» и «Ещё» рядом', async () => {
+  for (const language of ['ru', 'en', 'es']) {
+    const chat = createChat({ language });
+    await chat.say(MENU[language].objects);
+    const step = await chat.press('cfilter:open');
+    const rows = step.last.markup.inline_keyboard;
+    assert.ok(rows.length <= 6, language + ': ' + rows.length + ' рядов');
+    const bedrooms = rows.find((row) => row.some((button) => button.callback_data === 'cfilter:bed:0'));
+    assert.ok(bedrooms.every((button) => [...button.text].length <= 12), language + ': ' + bedrooms.map((button) => button.text).join(' | '));
+    const last = rows[rows.length - 1];
+    assert.deepEqual(last.map((button) => button.callback_data), ['cfilter:show', 'cfilter:more']);
+  }
+});
