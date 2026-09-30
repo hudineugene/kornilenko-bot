@@ -1454,7 +1454,7 @@ function selectionWizardPanel(user, step) {
   const dead = !found && current !== 'deal';
   if (dead) current = 'done';
   const rows = [];
-  const skip = (next) => ({ text: copy.wizardSkip, callback_data: 'sel:skip:' + next });
+  const skip = (next, label = copy.wizardSkip) => ({ text: label, callback_data: 'sel:skip:' + next });
   const summary = catalogFilterSummary(filter, language);
   const heading = [
     copy.wizardTitle,
@@ -1491,7 +1491,7 @@ function selectionWizardPanel(user, step) {
         callback_data: 'sel:price:' + price,
       })));
     }
-    rows.push([skip('bedrooms')]);
+    rows.push([skip('bedrooms', copy.wizardSkipBudget || copy.wizardSkip)]);
   } else if (current === 'bedrooms') {
     rows.push(CATALOG_FILTER_BEDROOMS.map((count) => ({ text: count + '+', callback_data: 'sel:bed:' + count })));
     rows.push([skip('done')]);
