@@ -713,7 +713,7 @@ test.describe('catalog filter', () => {
     const panel = await chat.press('cfilter:open');
     assert.ok(panel.last.text.startsWith(FILTER.button + String.fromCharCode(10)), 'заголовок — состояние: «Фильтр», сколько подходит и условия');
     assert.ok(panel.last.buttons.some((label) => withoutCount(label) === '✓ ' + FILTER.anyDeal));
-    assert.ok(panel.last.buttons.includes(FILTER.show + ': 7'));
+    assert.ok(panel.last.buttons.includes(FILTER.show + ' 7'));
     assert.ok(panel.last.buttons.some((label) => withoutCount(label) === 'Вилла')
       && panel.last.buttons.some((label) => withoutCount(label) === 'Дом')
       && !panel.last.buttons.some((label) => withoutCount(label) === 'Участок'), 'only types present in the catalog are offered');
@@ -721,7 +721,7 @@ test.describe('catalog filter', () => {
     const rent = await chat.press('cfilter:deal:rent');
     const edited = rent.calls.find((call) => call.method === 'editMessageText');
     assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => withoutCount(button.text) === '✓ Аренда'));
-    assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === FILTER.show + ': 3'));
+    assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === FILTER.show + ' 3'));
     assert.ok(!edited.body.reply_markup.inline_keyboard.flat().some((button) => withoutCount(button.text) === 'Вилла'), 'an impossible type is not offered');
     assert.ok(edited.body.reply_markup.inline_keyboard.flat().some((button) => button.text === 'Квартира'), 'available choices — без счётчика на кнопке: число подходящих — на «Показать» и в заголовке');
     await chat.press('cfilter:bed:2');

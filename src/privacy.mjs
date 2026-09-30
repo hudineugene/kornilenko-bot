@@ -19,6 +19,14 @@ function copyFor(user) {
   return PRIVACY_TEXT[language] || PRIVACY_TEXT.ru;
 }
 
+// Дата по обычаю языка: 30.09.2026 / 30/09/2026 — как «Обновлено» на карточке.
+function firstContactDate(value, language) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return String(value).slice(0, 10);
+  const locale = language === 'en' ? 'en-GB' : language === 'es' ? 'es-ES' : 'ru-RU';
+  return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+}
+
 // Список «что хранится» собирается из того, что действительно есть: пустых
 // строк вида «телефон: нет» клиенту не нужно.
 function storedSummary(user) {
@@ -45,7 +53,7 @@ function storedSummary(user) {
   if (user.savedSearch) rows.push('• ' + words.saved);
   const recent = Array.isArray(user.recentlyViewed) ? user.recentlyViewed.length : 0;
   if (recent) rows.push('• ' + words.recent + ': ' + recent);
-  if (user.firstSeenAt) rows.push('• ' + words.since + ': ' + String(user.firstSeenAt).slice(0, 10).split('-').reverse().join('.'));
+  if (user.firstSeenAt) rows.push('• ' + words.since + ': ' + firstContactDate(user.firstSeenAt, language));
   return rows;
 }
 

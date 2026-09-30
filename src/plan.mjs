@@ -187,9 +187,8 @@ function overviewText(user, language) {
 
 function overviewMarkup(user, language) {
   const copy = planCopy(language);
-  const plan = planOf(user);
   const list = steps();
-  const buttons = list.map((step, index) => ({ text: String(index + 1) + ' ' + stepMark(plan, step), callback_data: 'plan:step:' + index }));
+  const buttons = list.map((step, index) => ({ text: String(index + 1), callback_data: 'plan:step:' + index }));
   const rows = [];
   for (let start = 0; start < buttons.length; start += 5) rows.push(buttons.slice(start, start + 5));
   rows.push([{ text: copy.menu, callback_data: 'nav:menu' }]);

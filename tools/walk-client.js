@@ -1,7 +1,9 @@
 // Прогон бота глазами клиента на песочнице: каталог, карточка, похожие,
-// сравнение, «Моё», данные и политика, анкеты. Пишет протокол «что нажал —
-// что получил» и список замечаний.
-// Запуск: node tools/sandbox.js && node tools/walk-client.js
+// сравнение, «Моё», данные и политика, анкеты — на русском, английском и
+// испанском. Пишет протокол «что нажал — что получил», у каждого ответа —
+// «строк на телефоне», и список замечаний.
+// Запуск (каждый раз на свежей песочнице — повторный прогон на той же тихо молчит из-за защиты от дублей):
+//   node tools/sandbox.js && node tools/walk-client.js [папка] [ru,en,es]
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -39,6 +41,7 @@ const TOKEN = data.config.botToken;
 const ADMIN = String(data.config.adminChatId);
 const out = [];
 const problems = [];
+const notes = [];
 let update = 1;
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -46,6 +49,19 @@ function buttons(markup) {
   if (!markup) return '';
   const rows = markup.keyboard || markup.inline_keyboard;
   return rows ? '\n   ' + (markup.keyboard ? '⌨ ' : '▦ ') + rows.map((row) => row.map((b) => '[' + (b.text || b) + ']').join(' ')).join(' / ') : '';
+}
+
+// Сколько строк займёт текст на экране телефона: в пузыре Telegram помещается около 38 знаков.
+function phoneLines(text) {
+  return String(text).split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil([...line].length / 38)), 0);
+}
+
+// Подпись длиннее ряда: в ряд из двух кнопок помещается ~22 знака, из трёх — ~14, одна — ~44.
+function checkButtons(title, markup) {
+  for (const row of (markup && markup.inline_keyboard) || []) {
+    const limit = row.length >= 3 ? 14 : row.length === 2 ? 22 : 44;
+    for (const button of row) if ([...String(button.text)].length > limit) notes.push(title + ' — кнопка «' + button.text + '» длиннее ряда из ' + row.length);
+  }
 }
 
 function report(title, from, chatId) {
@@ -59,7 +75,11 @@ function report(title, from, chatId) {
     if (call.method === 'answerCallbackQuery') { if (b.text) { out.push('  💬 ' + b.text); toClient += 1; } continue; }
     toClient += 1;
     const kind = call.method === 'sendPhoto' ? '🖼' : call.method === 'sendMediaGroup' ? '🖼🖼 альбом' : call.method.startsWith('edit') ? '✏️' : '🤖';
-    out.push('  ' + kind + ' ' + String(b.text || b.caption || (b.media && b.media.caption) || '').replace(/\n/g, '\n     ').slice(0, 520) + buttons(b.reply_markup));
+    const shown = String(b.text || b.caption || (b.media && b.media.caption) || '');
+    const rows = phoneLines(shown);
+    out.push('  ' + kind + ' ' + shown.replace(/\n/g, '\n     ').slice(0, 520) + buttons(b.reply_markup) + '\n   ↳ строк на телефоне: ' + rows);
+    if (rows > 30) notes.push(title + ' — ответ в ' + rows + ' строк (больше экрана)');
+    checkButtons(title, b.reply_markup);
   }
   if (!toClient) {
     out.push('  ⚠️ клиент не получил ничего');
@@ -83,9 +103,21 @@ function client(id, name, lang) {
       const before = calls.length;
       const user = bot.userById(String(id));
       if (user) user.lastCallback = null;
-      await bot.processUpdates([{ update_id: update++, callback_query: { id: 'cb' + update, from, data: value, message: { message_id: api.lastMessageId(), date: now(), chat, text: '', caption: 'карточка' } } }], TOKEN);
+      await bot.processUpdates([{ update_id: update++, callback_query: { id: 'cb' + update, from, data: value, message: api.lastMessage() } }], TOKEN);
       await new Promise((r) => setTimeout(r, 45));
       report('👆 ' + name + ' → ' + (label || value), before, id);
+    },
+    // Сообщение, под которым «нажата» кнопка, — как его прислал бы Telegram: у карточки есть фото и подпись, у экрана — текст.
+    lastMessage() {
+      for (let index = calls.length - 1; index >= 0; index -= 1) {
+        const call = calls[index];
+        if (String(call.body.chat_id) !== String(id) || !['sendMessage', 'sendPhoto', 'editMessageText', 'editMessageMedia', 'editMessageCaption'].includes(call.method)) continue;
+        const withPhoto = call.method === 'sendPhoto' || call.method === 'editMessageMedia' || call.method === 'editMessageCaption';
+        const caption = call.body.caption || (call.body.media && call.body.media.caption) || '';
+        const base = { message_id: api.lastMessageId(), date: now(), chat };
+        return withPhoto ? { ...base, photo: [{ file_id: 'walk-photo', file_unique_id: 'walk', width: 800, height: 600 }], caption } : { ...base, text: call.body.text || '' };
+      }
+      return { message_id: 1, date: now(), chat, text: '' };
     },
     lastMessageId() {
       for (let index = calls.length - 1; index >= 0; index -= 1) {
@@ -108,15 +140,25 @@ function client(id, name, lang) {
   return api;
 }
 
-(async () => {
-  const anna = client(94000001, 'Анна', 'ru');
-  const objects = data.objects;
-  const [flat, villa, rent, reserved] = objects;
+const SAYINGS = {
+  ru: { name: 'Анна', callTime: 'Сегодня после 18:00', ask: 'Куплю квартиру в Бенидорме до 400 000 €', follow: 'А когда можно посмотреть?' },
+  en: { name: 'John', callTime: 'Today after 6 pm', ask: 'I want to buy a flat in Benidorm up to 400,000 €', follow: 'When can I see it?' },
+  es: { name: 'Carlos', callTime: 'Hoy después de las 18:00', ask: 'Quiero comprar un piso en Benidorm hasta 400.000 €', follow: '¿Cuándo puedo verlo?' },
+};
+const CLIENT_IDS = { ru: 94000001, en: 94000002, es: 94000004 };
 
-  out.push('# Прогон глазами клиента');
-  out.push('\n## Каталог и карточка');
+// Один и тот же путь клиента на любом языке: всё, что зависит от языка, берётся из меню бота и таблицы SAYINGS.
+async function walk(lang) {
+  const MENU = bot.text.menu[lang];
+  const words = SAYINGS[lang];
+  const anna = client(CLIENT_IDS[lang], words.name, lang);
+  const [flat, villa, rent, reserved] = data.objects;
+  const head = lang === 'ru' ? '' : ' [' + lang.toUpperCase() + ']';
+
+  out.push('\n# Клиент на языке: ' + lang);
+  out.push('\n## Каталог и карточка' + head);
   await anna.say('/start');
-  await anna.say('🏘 Объекты', 'открыть каталог');
+  await anna.say(MENU.objects, 'открыть каталог');
   await anna.press('catalog:all:1', 'следующая карточка');
   await anna.press('cfilter:open', 'открыть фильтр');
   await anna.press('cfilter:deal:rent', 'только аренда');
@@ -126,60 +168,66 @@ function client(id, name, lang) {
   await anna.press('calc:' + flat.id, 'калькулятор покупки');
   await anna.press('property:similar:' + flat.id, 'похожие объекты');
 
-  out.push('\n## Избранное, сравнение, сохранённый поиск');
+  out.push('\n## Избранное, сравнение, сохранённый поиск' + head);
   await anna.press('property:favorite:' + flat.id, 'в избранное');
   await anna.press('property:compare:' + flat.id, 'в сравнение');
   await anna.press('property:compare:' + villa.id, 'второй в сравнение');
   await anna.press('compare:view', 'показать сравнение');
-  await anna.say('👤 Моё', 'личный раздел');
+  await anna.say(MENU.more, 'личный раздел');
   await anna.press('cfilter:open', 'настроить фильтр');
   await anna.press('cfilter:deal:sale', 'только покупка');
   await anna.press('saved:save', 'сохранить поиск');
   await anna.press('saved:results', 'результаты сохранённого поиска');
   await anna.press('nav:my', 'вернуться в «Моё»');
+  await anna.press('plan:open', 'план покупки');
 
-  out.push('\n## Мои данные и политика');
+  out.push('\n## Мои данные и политика' + head);
   await anna.press('privacy:open', 'раздел «Мои данные»');
   await anna.press('privacy:policy', 'как мы обращаемся с данными');
   await anna.press('privacy:erase', 'удалить мои данные');
   await anna.press('privacy:open', 'передумала удалять');
 
-  out.push('\n## Анкеты');
-  await anna.say('📞 Позвоните мне', 'заявка на звонок');
+  out.push('\n## Связаться и анкеты' + head);
+  await anna.say(MENU.contacts, 'контакты');
+  await anna.say(MENU.request, 'заявка на звонок');
   await anna.press('lead:call', 'выбрать звонок');
   await anna.say('+34 600 111 222', 'номер телефона');
-  await anna.say('Сегодня после 18:00', 'удобное время');
+  await anna.say(words.callTime, 'удобное время');
 
   await anna.press('property:viewing:' + rent.id, 'записаться на просмотр');
   const days = anna.keyboard();
-  await anna.say(days[0] || 'Завтра', 'выбор дня');
+  await anna.say(days[0] || 'Tomorrow', 'выбор дня');
   const times = anna.keyboard();
   await anna.say(times[0] || '10:00', 'выбор времени');
-  await anna.say('✅ Отправить менеджеру');
+  const confirm = anna.keyboard().find((label) => String(label).startsWith('✅'));
+  if (confirm) await anna.say(confirm, 'подтвердить');
 
-  out.push('\n## Запрос своими словами и бронь');
-  const igor = client(94000003, 'Игорь', 'ru');
-  await igor.say('/start');
-  await igor.say('Куплю квартиру в Бенидорме до 400 000 €', 'запрос параметрами');
-  await igor.say('А когда можно посмотреть?', 'живой вопрос после запроса');
+  out.push('\n## Запрос своими словами и бронь' + head);
+  const second = client(CLIENT_IDS[lang] + 100, words.name + '2', lang);
+  await second.say('/start');
+  await second.say(words.ask, 'запрос параметрами');
+  await second.say(words.follow, 'живой вопрос после запроса');
   await anna.press('property:details:' + reserved.id, 'карточка забронированного');
   await anna.press('property:availability:' + reserved.id, 'уточнить доступность');
 
-  out.push('\n## Мои заявки и уведомления');
+  out.push('\n## Мои заявки и уведомления' + head);
   await anna.press('myreq:list', 'мои заявки');
   await anna.press('subs:menu', 'настройки уведомлений');
+}
 
-  out.push('\n## Английский клиент');
-  const john = client(94000002, 'John', 'en');
-  await john.say('/start');
-  await john.say('🏘 Properties', 'английский каталог');
-  await john.press('property:details:' + flat.id, 'details');
+(async () => {
+  out.push('# Прогон глазами клиента');
+  const only = process.argv[3] ? process.argv[3].split(',') : ['ru', 'en', 'es'];
+  for (const lang of only) await walk(lang);
 
   const file = path.join(box, 'walk-client.md');
+  out.push('\n# Замечания по оформлению (строк на телефоне, кнопки длиннее ряда)');
+  [...new Set(notes)].forEach((line) => out.push('- ' + line));
   fs.writeFileSync(file, out.join('\n'));
   console.log('протокол:', file);
-  console.log('замечаний:', problems.length);
+  console.log('замечаний: ' + problems.length + ' (клиент без ответа); по оформлению: ' + new Set(notes).size);
   problems.forEach((line) => console.log('  ⚠️ ' + line));
+  [...new Set(notes)].slice(0, 30).forEach((line) => console.log('  · ' + line));
   bot.server.close();
   process.exit(problems.length ? 1 : 0);
 })().catch((error) => { console.error('СБОЙ:', error.message, error.stack.split('\n')[1]); process.exit(1); });

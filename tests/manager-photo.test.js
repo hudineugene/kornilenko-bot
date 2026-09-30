@@ -116,7 +116,7 @@ test.describe('у клиента', () => {
     const order = telegram.calls.map((call) => call.method).filter((method) => ['sendPhoto', 'sendMessage'].includes(method));
     assert.deepEqual(order, ['sendPhoto', 'sendMessage'], 'фото — раньше текста');
     assert.ok(!screen.last.text.includes('Ольга Корниленко'), 'имя стоит под фото, в тексте его нет');
-    assert.match(screen.last.text, /\+34 600 111 222/, 'телефон на месте');
+    assert.match(screen.last.text, /\+34 600 11 12 22/, 'телефон на месте, в едином виде');
     assert.ok(callbacksOf(screen.last.markup).includes('contact:lead'), 'кнопки экрана те же');
     assert.equal(chat.user.uiMessageIds.length, 2, 'бот помнит оба сообщения, чтобы убрать вместе');
   });

@@ -119,16 +119,25 @@ function catalogSummaryLine(user, language) {
     .replace('{cities}', () => (cities.join(', ')));
 }
 
+// «… Или выберите раздел в меню ниже 👇» → «…»; если подсказка состоит из одного этого призыва, остаётся как есть.
+function withoutMenuCall(hint) {
+  const shorter = String(hint).replace(/\s*[^.!?]*👇\s*$/u, '').trim();
+  return shorter || hint;
+}
+
 async function sendWelcome(chatId, user, token, options = {}) {
   const language = user.preferredLanguage || 'ru';
   await clearUiMessages(chatId, user, token);
   await clearGalleryMessages(chatId, user, token);
   await clearCatalogMessages(chatId, user, token);
+  // Сразу за приветствием бот спросит о цели своим вопросом — второй призыв «выберите раздел» в приветствии лишний.
+  const goalFollows = Boolean(options.goalFollows) && !user.goal && !user.goalAskedAt;
+  const hint = MENU_HINTS[language].replace('{example}', () => (searchExampleText(user, language) ? ': ' + (language === 'en' ? '“' : '«') + searchExampleText(user, language) + (language === 'en' ? '”' : '»') : ''));
   const greeting = [
     fillTemplate(languageMessages(language).greeting, user),
     catalogSummaryLine(user, language),
     // Пример запроса — из настоящего каталога; в текст владельца без {example} ничего не подставляется.
-    MENU_HINTS[language].replace('{example}', () => (searchExampleText(user, language) ? ': «' + searchExampleText(user, language) + '»' : '')),
+    goalFollows ? withoutMenuCall(hint) : hint,
   ].filter(Boolean).join('\n\n');
   const menu = menuKeyboard(language);
   // Язык выбран за клиента — значит первым делом даём его сменить.

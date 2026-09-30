@@ -1698,7 +1698,7 @@ function catalogFilterPanel(user) {
     : [];
 
   const tail = [
-    [{ text: copy.show + ': ' + found, callback_data: 'cfilter:show' }],
+    [{ text: copy.show + ' ' + found, callback_data: 'cfilter:show' }],
     [{ text: '⋯ ' + copy.moreOptions, callback_data: 'cfilter:more' }],
   ];
   // Если в каталоге много типов или цен, лишние ряды убираем — сначала у цен,

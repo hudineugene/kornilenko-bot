@@ -60,6 +60,14 @@ async function sendPromotions(chatId, user, token) {
   return sendPromotionPage(chatId, user, token, 0);
 }
 
+// Испанские номера — одним видом «+34 664 17 96 37» как бы их ни записали; чужие остаются как ввёл владелец.
+function displayPhone(phone) {
+  const raw = cleanText(phone, 80);
+  const digits = raw.replace(/\D/g, '');
+  const spanish = /^\+\s*34/.test(raw) || /^0034/.test(digits) ? digits.replace(/^(00)?34/, '') : '';
+  return /^\d{9}$/.test(spanish) ? '+34 ' + spanish.slice(0, 3) + ' ' + spanish.slice(3, 5) + ' ' + spanish.slice(5, 7) + ' ' + spanish.slice(7) : raw;
+}
+
 async function sendContacts(chatId, user, token) {
   const language = user.preferredLanguage || 'ru';
   const copy = MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru;
@@ -74,7 +82,7 @@ async function sendContacts(chatId, user, token) {
   const photoMessageId = await sendManagerPhoto(chatId, user, contact, managerName, token);
   if (managerName && !photoMessageId) lines.push('👨‍💼 ' + managerName);
   if (phones.length) lines.push(copy.tapPhone);
-  for (const phone of phones) lines.push('☎️ ' + cleanText(phone, 80));
+  for (const phone of phones) lines.push('☎️ ' + displayPhone(phone));
   if (email) lines.push('✉️ ' + email);
   // Сколько ждать ответа — видно сразу, а не только после отправки заявки.
   const promise = replyPromise(language);
@@ -82,7 +90,7 @@ async function sendContacts(chatId, user, token) {
   const text = lines.filter(Boolean).join('\n\n');
   const entities = [];
   for (const phone of phones) {
-    const display = cleanText(phone, 80);
+    const display = displayPhone(phone);
     const offset = text.lastIndexOf(display);
     if (offset >= 0) entities.push({ type: 'phone_number', offset, length: display.length });
   }
@@ -210,9 +218,10 @@ async function sendGuidePage(chatId, user, token, index = 0, query = null) {
   const text = ['<b>' + escapeTelegramHtml(page.title[language] || page.title.ru) + '</b>', escapeTelegramHtml(page.text[language] || page.text.ru)].join('\n\n');
   const rows = [];
   const pager = [];
-  if (safeIndex > 0) pager.push({ text: '◀️', callback_data: 'guide:page:' + (safeIndex - 1) });
+  // Как в каталоге: листание по кругу, ряд всегда из трёх кнопок и не «прыгает» между страницами.
+  if (pages.length > 1) pager.push({ text: '◀️', callback_data: 'guide:page:' + ((safeIndex - 1 + pages.length) % pages.length) });
   pager.push({ text: String(safeIndex + 1) + ' / ' + String(pages.length), callback_data: 'guide:none' });
-  if (safeIndex < pages.length - 1) pager.push({ text: '▶️', callback_data: 'guide:page:' + (safeIndex + 1) });
+  if (pages.length > 1) pager.push({ text: '▶️', callback_data: 'guide:page:' + ((safeIndex + 1) % pages.length) });
   rows.push(pager);
   rows.push([{ text: navigation.guideConsult, callback_data: 'contact:lead' }]);
   rows.push(planGuideRow(language));
@@ -366,7 +375,7 @@ async function handleLanguageCallback(query, token) {
       // A callback can still continue when the original picker is no longer editable.
     }
   }
-  await sendWelcome(chatId, user, token);
+  await sendWelcome(chatId, user, token, { goalFollows: true });
   if (!(await openPendingStartPayload(user, token))) await askGoal(chatId, user, token);
 }
 

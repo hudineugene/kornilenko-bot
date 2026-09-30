@@ -70,3 +70,55 @@ test('чужие адреса и разметка не трогаются', () =
   assert.equal(labelledLinks({ text: 'Карта: https://maps.app.goo.gl/x', parse_mode: 'HTML' }), null);
   assert.equal(labelledLinks({ text: 'Просто текст без адреса' }), null);
 });
+
+test('«first contact»: дата по обычаю языка — 30.09.2026 / 30/09/2026', async () => {
+  const cases = { ru: '30.09.2026', en: '30/09/2026', es: '30/09/2026' };
+  for (const [language, expected] of Object.entries(cases)) {
+    const chat = createChat({ language });
+    chat.user.firstSeenAt = '2026-09-30T10:00:00.000Z';
+    const step = await chat.press('privacy:open');
+    assert.ok(step.text.includes(expected), language + ': ' + step.text);
+  }
+});
+
+test('пример запроса в приветствии: в английском “…”, в русском и испанском «…»', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.objects.push(property('villa-a', 'Вилла', 'active', { currency: 'EUR', priceValue: 650000, bedrooms: 3, city: { ru: 'Марбелья', en: 'Marbella', es: 'Marbella' } }));
+  });
+  const quotes = { ru: /: «[^»]+»/, en: /: “[^”]+”/, es: /: «[^»]+»/ };
+  for (const [language, pattern] of Object.entries(quotes)) {
+    const chat = createChat({ language });
+    chat.user.preferredLanguage = '';
+    const step = await chat.say('/start');
+    const text = step.replies[0].text || step.replies[0].caption || '';
+    assert.match(text, pattern, language + ': ' + text);
+  }
+});
+
+test('приветствие перед вопросом о цели не зовёт второй раз «выберите раздел»; без вопроса — зовёт', async () => {
+  for (const language of ['ru', 'en', 'es']) {
+    const first = createChat({ language });
+    first.user.preferredLanguage = '';
+    const welcome = (await first.say('/start')).replies[0].text;
+    assert.ok(!welcome.includes('👇'), language + ': ' + welcome);
+    assert.match(welcome, /\S/);
+
+    const asked = createChat({ language });
+    asked.user.goalAskedAt = new Date().toISOString();
+    asked.user.preferredLanguage = '';
+    const again = (await asked.say('/start')).replies[0].text;
+    assert.ok(again.includes('👇'), 'цель уже спрашивали — приветствие как раньше: ' + again);
+  }
+});
+
+test('телефоны на экране «Связаться»: испанские — «+34 664 17 96 37», чужие как записал владелец', async () => {
+  for (const [entered, shown] of [['+34664179637', '+34 664 17 96 37'], ['+34 664-17-96-37', '+34 664 17 96 37'], ['0034 664 179 637', '+34 664 17 96 37'], ['+44 20 7946 0958', '+44 20 7946 0958']]) {
+    resetData((data) => { data.contacts.phone = entered; });
+    const step = await createChat().say(MENU.ru.contacts);
+    const call = lastCall(step).body;
+    assert.ok(call.text.includes('☎️ ' + shown), entered + ' → ' + call.text);
+    const phone = call.entities.find((entity) => entity.type === 'phone_number');
+    assert.equal(call.text.slice(phone.offset, phone.offset + phone.length), shown, 'подсветка номера совпадает с текстом');
+  }
+});
