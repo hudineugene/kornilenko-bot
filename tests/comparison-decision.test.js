@@ -23,80 +23,79 @@ async function compare(chat, ids) {
   return chat.press('compare:view');
 }
 
-// Строки под заголовком критерия: «1️⃣ …», «2️⃣ …».
-function rowValues(text, label) {
+// Блок одного объекта: строки от «1️⃣ Название» до пустой строки. Сравнение — по блоку на объект, а не по столбику
+// на критерий: три объекта по десять критериев были шестьюдесятью строками.
+function blockOf(text, title) {
   const lines = text.split('\n');
-  const start = lines.findIndex((line) => line === label);
-  assert.ok(start >= 0, 'нет критерия: ' + label);
-  return lines.slice(start + 1, start + 3);
+  const start = lines.findIndex((line) => /^[123]️⃣ /.test(line) && line.includes(title));
+  assert.ok(start >= 0, 'нет блока: ' + title);
+  const end = lines.findIndex((line, index) => index > start && line === '');
+  return lines.slice(start, end < 0 ? lines.length : end);
 }
 
-test('«цена за м²» и «расходы при покупке» — новые строки; лучшее значение помечено ✅', async () => {
+test('«цена за м²» и «расходы при покупке» — в блоке объекта; лучшее значение помечено ★', async () => {
   const step = await compare(createChat(), [VILLA, FLAT]);
   const text = step.last.text;
+  const villa = blockOf(text, 'Вилла у моря');
+  const flat = blockOf(text, 'Квартира в центре');
 
-  const perM2 = rowValues(text, '💶 Цена за м²');
-  assert.match(perM2[0], /^1️⃣ 3\s611/, 'вилла: 650 000 / 180 ≈ 3 611');
-  assert.match(perM2[1], /^2️⃣ ✅ 3\s478/, 'квартира дешевле за метр — она лучшая: 320 000 / 92 ≈ 3 478');
+  assert.match(villa.join('\n'), /650\s000 € · 3\s611 €\/м²/, 'вилла: 650 000 / 180 ≈ 3 611');
+  assert.match(flat.join('\n'), /320\s000 € ★ · 3\s478 €\/м² ★/, 'квартира дешевле и за всё, и за метр: 320 000 / 92 ≈ 3 478');
+  assert.ok(!/650\s000 € ★/.test(villa.join('\n')), 'у виллы цена не лучшая');
+  assert.ok(villa.some((line) => line.includes('📐') && line.includes('★')), 'больше площадь — у виллы');
+  assert.ok(!flat.some((line) => line.includes('📐') && line.includes('★')));
+  assert.ok(villa.some((line) => /^🧾 ≈ /.test(line) && !line.includes('★')));
+  assert.ok(flat.some((line) => /^🧾 ≈ /.test(line) && line.includes('★')), 'расходы ниже у более дешёвого объекта');
 
-  const price = rowValues(text, '💰 Цена');
-  assert.ok(!price[0].includes('✅') && price[1].includes('✅'), 'дешевле — квартира');
-
-  const area = rowValues(text, '📐 Площадь');
-  assert.ok(area[0].includes('✅') && !area[1].includes('✅'), 'больше площадь — у виллы');
-
-  const costs = rowValues(text, '🧾 Расходы при покупке');
-  assert.match(costs[0], /^1️⃣ ≈ /);
-  assert.ok(costs[1].includes('✅'), 'расходы ниже у более дешёвого объекта');
-
-  assert.match(text, /✅ — лучшее значение/, 'внизу — что означает галочка');
+  assert.match(text, /★ — лучшее значение/, 'внизу — что означает звёздочка');
+  assert.ok(text.split('\n').length <= 30, 'сравнение помещается в 30 строк: ' + text.split('\n').length);
 });
 
-test('одно значение сравнивать не с чем: галочки нет (расстояние до моря указано только у виллы)', async () => {
+test('одно значение сравнивать не с чем: звёздочки нет (расстояние до моря указано только у виллы)', async () => {
   const step = await compare(createChat(), [VILLA, FLAT]);
-  const sea = rowValues(step.last.text, '🌊 До моря');
-  assert.ok(sea.every((line) => !line.includes('✅')), sea.join(' | '));
+  const sea = blockOf(step.last.text, 'Вилла у моря').filter((line) => line.includes('🌊'));
+  assert.ok(sea.length === 1 && !sea[0].includes('★'), sea.join(' | '));
 });
 
-test('один объект — без галочек и без легенды', async () => {
+test('один объект — без звёздочек и без легенды', async () => {
   const step = await compare(createChat(), [VILLA]);
-  assert.ok(!step.last.text.includes('✅'), 'выбирать не из чего');
+  assert.ok(!step.last.text.includes('★'), 'выбирать не из чего');
 });
 
 test('поровну — тоже не «лучше»', async () => {
   bot.getData().objects.find((item) => item.id === FLAT).area = 180;
   bot.getData().objects.find((item) => item.id === FLAT).priceValue = 650000;
   const step = await compare(createChat(), [VILLA, FLAT]);
-  assert.ok(!step.last.text.includes('✅'), 'все значения равны');
+  assert.ok(!step.last.text.includes('★'), 'все значения равны');
 });
 
-test('цены в разных валютах и аренда рядом с продажей не сравниваются: без галочек на деньгах', async () => {
+test('цены в разных валютах и аренда рядом с продажей не сравниваются: без звёздочек на деньгах', async () => {
   bot.getData().objects.find((item) => item.id === FLAT).currency = 'USD';
   let step = await compare(createChat(), [VILLA, FLAT]);
-  const price = rowValues(step.last.text, '💰 Цена');
-  assert.ok(price.every((line) => !line.includes('✅')), 'валюты разные');
-  assert.ok(!step.last.text.includes('💶 Цена за м²'), 'и цена за метр не считается');
+  const priceLines = ['Вилла у моря', 'Квартира в центре'].map((title) => blockOf(step.last.text, title)[1]);
+  assert.ok(priceLines.every((line) => !line.includes('★')), 'валюты разные: ' + priceLines.join(' | '));
+  assert.ok(!/€\/м².*\n[\s\S]*\$\/м²/.test(step.last.text) && !/3\s478/.test(step.last.text), 'и цена за метр не считается');
 
   bot.getData().objects.find((item) => item.id === FLAT).currency = 'EUR';
   bot.getData().objects.find((item) => item.id === FLAT).dealType = 'rent';
   step = await compare(createChat(), [VILLA, FLAT]);
-  assert.ok(!step.last.text.includes('💶 Цена за м²'), 'аренда и продажа — разные вещи');
+  assert.ok(!/3\s478/.test(step.last.text), 'аренда и продажа — разные вещи');
 });
 
 test('калькулятор выключен — строки «расходов» нет', async () => {
   bot.getData().config.calculator.enabled = false;
   const step = await compare(createChat(), [VILLA, FLAT]);
-  assert.ok(!step.last.text.includes('Расходы при покупке'));
+  assert.ok(!step.last.text.includes('🧾'));
 });
 
-test('на английском и испанском строки называются по-своему', async () => {
+test('на английском и испанском — своя легенда и свои единицы', async () => {
   const en = await compare(createChat({ language: 'en' }), [VILLA, FLAT]);
-  assert.match(en.last.text, /💶 Price per m²/);
-  assert.match(en.last.text, /🧾 Purchase costs/);
-  assert.match(en.last.text, /✅ — best value/);
+  assert.match(en.last.text, /€3,478\/m²/);
+  assert.match(en.last.text, /★ — best value/);
+  assert.match(en.last.text, /Villa · For sale/);
   const es = await compare(createChat({ language: 'es' }), [VILLA, FLAT]);
-  assert.match(es.last.text, /💶 Precio por m²/);
-  assert.match(es.last.text, /🧾 Gastos de compra/);
+  assert.match(es.last.text, /3\.478 €\/m²/);
+  assert.match(es.last.text, /★ — mejor valor/);
 });
 
 test('«Обсудить эти объекты» передаёт менеджеру, что сравнивалось, и подтверждает клиенту', async () => {

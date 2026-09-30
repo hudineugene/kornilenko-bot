@@ -68,9 +68,11 @@ test('properties are added from the card and compared by consistent criteria', a
   assert.match(step.last.text, /^⚖️ Сравнение объектов\nВыбрано: 2 из 3/);
   assert.ok(step.last.text.includes('1️⃣ Вилла у моря'));
   assert.ok(step.last.text.includes('2️⃣ Квартира в центре'));
-  assert.match(step.last.text, /💰 Цена\n1️⃣ 650\s000 €\n2️⃣ ✅ 320\s000 €/, 'лучшая (меньшая) цена помечена ✅');
-  assert.match(step.last.text, /📐 Площадь\n1️⃣ ✅ 180 м²\n2️⃣ 92 м²/);
-  assert.match(step.last.text, /🔑 Состояние\n1️⃣ После ремонта\n2️⃣ Новое/);
+  assert.match(step.last.text, /1️⃣ Вилла у моря\n650\s000 €/, 'у блока объекта первой строкой цена');
+  assert.match(step.last.text, /2️⃣ Квартира в центре\n320\s000 € ★/, 'лучшая (меньшая) цена помечена ★');
+  assert.match(step.last.text, /📐 180 м² ★/, 'у виллы больше площадь');
+  assert.match(step.last.text, /Вилла · Продажа · После ремонта/);
+  assert.match(step.last.text, /Квартира · Продажа · Новое/);
 
   const opened = await chat.press('catalog:comparison:1');
   const openedCard = opened.calls.find((call) => ['editMessageMedia', 'sendPhoto'].includes(call.method));
@@ -115,7 +117,6 @@ test('My space shows the comparison count and the result follows the client lang
   assert.ok(step.last.buttons.includes(COMPARE.en.menuButton + ' · 2'));
   step = await chat.press('compare:view');
   assert.match(step.last.text, /^⚖️ Property comparison\nSelected: 2 of 3/);
-  assert.ok(step.last.text.includes('🏠 Type and deal'));
   assert.ok(step.last.text.includes('Villa · For sale'));
 });
 

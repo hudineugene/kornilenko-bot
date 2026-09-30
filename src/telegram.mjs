@@ -114,7 +114,25 @@ async function telegramCall(token, method, init, { signal, timeoutMs }) {
   }
 }
 
+// Экран бота с кнопками: первая строка — «значок Название» — выделяется жирным. Разметку (parse_mode) не включаем: тексты
+// экранов приходят простыми, и любой знак «<» в них сломал бы отправку; жирность даёт entity, текст не меняется.
+// Заголовок — короткая первая строка со значка, без точки на конце (иначе это уже инструкция), за ней ещё текст.
+function screenTitleEntities(payload) {
+  const text = payload && typeof payload.text === 'string' ? payload.text : '';
+  if (!text || payload.parse_mode || payload.entities || !payload.reply_markup || !Array.isArray(payload.reply_markup.inline_keyboard)) return null;
+  if (data.config && String(payload.chat_id) === String(data.config.adminChatId)) return null;
+  const end = text.indexOf('\n');
+  if (end < 2 || end > 60) return null;
+  const line = text.slice(0, end);
+  if (!/^\p{Extended_Pictographic}/u.test(line) || /[.:!…»]$/.test(line.trimEnd())) return null;
+  return [{ type: 'bold', offset: 0, length: line.length }];
+}
+
 async function telegramRequest(token, method, payload, signal) {
+  if (payload && (method === 'sendMessage' || method === 'editMessageText')) {
+    const entities = screenTitleEntities(payload);
+    if (entities) payload = { ...payload, entities };
+  }
   // Long polling holds the request open for payload.timeout seconds.
   const timeoutMs = TELEGRAM_REQUEST_TIMEOUT_MS + (Number(payload && payload.timeout) || 0) * 1000;
   return telegramCall(token, method, () => ({

@@ -1311,7 +1311,7 @@ async function showPropertyPhoto(chatId, user, token, message, record, index) {
   if (record.status === 'active') actions.push({ text: mobileButtonText('📅', action.viewingShort || action.viewing), callback_data: 'property:viewing:' + record.id });
   actions.push({ text: mobileButtonText('💬', action.contact), callback_data: 'property:manager:' + record.id });
   rows.push(actions);
-  rows.push([{ text: '↩️ ' + navigation.backToCard, callback_data: 'property:card:' + record.id }]);
+  rows.push([{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:card:' + record.id }]);
 
   try {
     const fileId = knownFileId(image);
@@ -1469,7 +1469,7 @@ function catalogLocationPanel(user, facet = 'city', requestedPage = 0) {
       { text: '▶️', callback_data: 'cfilter:' + (isDistrict ? 'districts' : 'cities') + ':' + Math.min(totalPages - 1, page + 1) },
     ]);
   }
-  if (isDistrict) rows.push([{ text: '↩ ' + copy.changeCity, callback_data: 'cfilter:cities:0' }]);
+  if (isDistrict) rows.push([{ text: '⬅️ ' + copy.changeCity, callback_data: 'cfilter:cities:0' }]);
   rows.push([{ text: '⬅️ ' + copy.backToFilter, callback_data: 'cfilter:open' }]);
   return {
     text: isDistrict ? copy.districtPickerTitle.replace('{city}', () => (city)) : copy.cityPickerTitle,

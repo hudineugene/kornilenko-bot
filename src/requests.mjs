@@ -7,7 +7,7 @@ import { normalizeUser } from './users.mjs';
 import { localized, localizedExact, sendUiMessage, shortenedText } from './catalog.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 import { cancelViewing, viewingIsUpcoming, viewingWhen } from './viewings.mjs';
-import { formatDayMonth } from './util.mjs';
+import { backButtonText, formatDayMonth } from './util.mjs';
 import { parsePlanHelp } from './plan.mjs';
 
 const MY_REQUESTS_SHOWN = 5;
@@ -56,7 +56,7 @@ function myRequestsView(user) {
   const requests = userRequests(user);
   const rows = [];
   if (!requests.length) {
-    rows.push([{ text: '⬅️ ' + myArea, callback_data: 'nav:my' }]);
+    rows.push([{ text: backButtonText(myArea), callback_data: 'nav:my' }]);
     return { text: copy.none, markup: { inline_keyboard: rows } };
   }
   const blocks = requests.map((inquiry) => {
@@ -77,7 +77,7 @@ function myRequestsView(user) {
     }
     return [heading, [details, requestStatusLabel(inquiry, copy)].filter(Boolean).join(' — ')].join('\n');
   });
-  rows.push([{ text: '⬅️ ' + myArea, callback_data: 'nav:my' }]);
+  rows.push([{ text: backButtonText(myArea), callback_data: 'nav:my' }]);
   return { text: [copy.title, '', blocks.join('\n\n'), '', copy.footer].join('\n'), markup: { inline_keyboard: rows } };
 }
 
@@ -121,7 +121,7 @@ async function handleMyRequestsCallback(query, token) {
     await cancelViewing(inquiry, user);
     await sendUiMessage(chatId, user, copy.cancelDone, token, { reply_markup: { inline_keyboard: [
       [{ text: copy.menuButton, callback_data: 'myreq:list' }],
-      [{ text: '⬅️ ' + (MENU_LABELS[language] || MENU_LABELS.ru).more, callback_data: 'nav:my' }],
+      [{ text: backButtonText((MENU_LABELS[language] || MENU_LABELS.ru).more), callback_data: 'nav:my' }],
     ] } });
     return;
   }

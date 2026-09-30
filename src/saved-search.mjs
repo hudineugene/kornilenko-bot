@@ -1,7 +1,7 @@
 // One explicit saved catalog search per client. It is deliberately simple on
 // a phone: set the normal filter, save it, and manage it from “My space”.
 
-import { cleanText } from './util.mjs';
+import { backButtonText, cleanText } from './util.mjs';
 import { scheduleSave } from './store.mjs';
 import { normalizeUser } from './users.mjs';
 import { telegramRequest } from './telegram.mjs';
@@ -88,7 +88,7 @@ function savedSearchMarkup(user) {
     }
     rows.push([{ text: copy.remove, callback_data: 'saved:delete' }]);
   }
-  rows.push([{ text: '⬅️ ' + labels.more, callback_data: 'nav:my' }]);
+  rows.push([{ text: backButtonText(labels.more), callback_data: 'nav:my' }]);
   return { inline_keyboard: rows };
 }
 

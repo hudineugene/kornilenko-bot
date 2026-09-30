@@ -135,8 +135,6 @@ function comparisonText(user) {
   const lines = [
     copy.title,
     template(copy.selectedCount, { count: records.length, max: COMPARISON_LIMIT }),
-    '',
-    ...records.map((record, index) => INDEX_MARKS[index] + ' ' + (localizedExact(record.title, language, 160) || record.reference || record.id)),
   ];
   if (records.length === 1) lines.push('', copy.needMore);
   const values = records.map((record) => recordValues(record, language));
@@ -147,33 +145,29 @@ function comparisonText(user) {
     if (numbers.pricePerM2[index]) value.pricePerM2 = formatMoney(Math.round(numbers.pricePerM2[index]), symbol, language, 0) + '/' + unit;
     if (numbers.purchaseCosts[index]) value.purchaseCosts = '≈ ' + formatMoney(Math.round(numbers.purchaseCosts[index]), symbol, language, 0);
   });
+  // Один блок на объект (шесть-семь строк), а не столбик по критериям: три объекта по десять критериев были
+  // шестьюдесятью строками и тремя экранами прокрутки. Пустые значения не показываем («—» не нужен), лучшее
+  // помечено ★ и только там, где сравнимо (одна сделка и валюта, известно хотя бы два значения).
   let anyBest = false;
-  const criteria = [
-    ['price', copy.price],
-    ['pricePerM2', copy.pricePerM2],
-    ['purchaseCosts', copy.purchaseCosts],
-    ['location', copy.location],
-    ['type', copy.type],
-    ['area', copy.area],
-    ['plotArea', copy.plotArea],
-    ['bedrooms', copy.bedrooms],
-    ['bathrooms', copy.bathrooms],
-    ['condition', copy.condition],
-    ['floor', copy.floor],
-    ['distanceSea', copy.distanceSea],
-    ['status', copy.status],
-  ];
-  // Строка, где у всех объектов одно и то же, ничего не решает: «Доступность: 🟢 Свободен» у каждого. Номер
-  // объекта в сравнении не нужен вовсе — названия стоят вверху.
-  const differs = (key) => new Set(values.map((value) => String(value[key] || ''))).size > 1;
-  for (const [key, label] of criteria) {
-    if (!values.some((value) => value[key])) continue;
-    if (key === 'status' && !differs(key)) continue;
-    lines.push('', label);
-    const best = BEST_LOWEST[key] === undefined ? -1 : bestIndex(key, numbers);
-    if (best >= 0) anyBest = true;
-    values.forEach((value, index) => lines.push(INDEX_MARKS[index] + ' ' + (index === best ? '✅ ' : '') + (value[key] || copy.notSpecified)));
-  }
+  const mark = (key, index) => {
+    if (BEST_LOWEST[key] === undefined || bestIndex(key, numbers) !== index) return '';
+    anyBest = true;
+    return ' ★';
+  };
+  // Состояние «Забронирован» видно, только если объекты в нём различаются.
+  const statusDiffers = new Set(values.map((value) => String(value.status || ''))).size > 1;
+  const blocks = values.map((value, index) => {
+    const record = records[index];
+    const title = localizedExact(record.title, language, 160) || record.reference || record.id;
+    const price = [value.price ? value.price + mark('price', index) : '', value.pricePerM2 ? value.pricePerM2 + mark('pricePerM2', index) : ''].filter(Boolean).join(' · ');
+    const main = [value.bedrooms ? '🛏 ' + value.bedrooms : '', value.bathrooms ? '🚿 ' + value.bathrooms : '', value.area ? '📐 ' + value.area + mark('area', index) : ''].filter(Boolean).join(' · ');
+    const extra = [value.plotArea ? '🌿 ' + value.plotArea : '', value.floor ? '🏢 ' + value.floor : '', value.distanceSea ? '🌊 ' + value.distanceSea + mark('distanceSea', index) : ''].filter(Boolean).join(' · ');
+    const kind = [value.type, value.condition, statusDiffers ? value.status : ''].filter(Boolean).join(' · ');
+    const place = value.location ? '📍 ' + value.location : '';
+    const costs = value.purchaseCosts ? '🧾 ' + value.purchaseCosts + mark('purchaseCosts', index) : '';
+    return [INDEX_MARKS[index] + ' ' + title, price, main, extra, kind, place, costs].filter(Boolean).join('\n');
+  });
+  lines.push('', blocks.join('\n\n'));
   if (anyBest) lines.push('', copy.bestValue);
   return lines.join('\n').slice(0, 4000);
 }

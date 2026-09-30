@@ -146,7 +146,13 @@ function formatMoney(value, symbol, language = 'ru', maximumFractionDigits = 0) 
   return amount + ' ' + sign;
 }
 
+// «⬅️ Куда»: кнопка «назад» — всегда стрелка и слово, куда ведёт. Значок самого раздела («👤 Моё») в подписи не повторяется.
+function backButtonText(label) {
+  return '⬅️ ' + String(label || '').replace(/^\p{Extended_Pictographic}️?\s*/u, '');
+}
+
 export {
+  backButtonText,
   formatMoney,
   formatNumber,
   largestMoneyAmount,

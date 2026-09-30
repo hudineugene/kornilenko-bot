@@ -25,7 +25,7 @@ test('"My space" opens the settings, and each item turns on and off', async () =
   let step = await chat.press('subs:menu');
   assert.match(step.last.text, /^🔔 Какие сообщения присылать\?/);
   // Сохранённый поиск теперь здесь же: это тоже «что мне присылать».
-  assert.deepEqual(step.last.buttons, ['✅ Новости и акции', '✅ Объекты: снижение цены и новые по вашему запросу', '🔔 Сохранённый поиск', '⬅️ 👤 Моё']);
+  assert.deepEqual(step.last.buttons, ['✅ Новости и акции', '✅ Объекты: снижение цены и новые по вашему запросу', '🔔 Сохранённый поиск', '⬅️ Моё']);
   assert.deepEqual(callbacksOf(step.last.markup), ['subs:news:off', 'subs:alerts:off', 'saved:view', 'nav:my']);
 
   step = await chat.press('subs:news:off');

@@ -8,6 +8,7 @@ import { sendMessage, telegramRequest } from './telegram.mjs';
 import { notifyAdministratorAction } from './inquiries.mjs';
 import { normalizedSavedSearch, sendUiMessage } from './catalog.mjs';
 import { acknowledgeCallback } from './sections.mjs';
+import { backButtonText } from './util.mjs';
 
 function subscriptionPanel(user) {
   const language = user.preferredLanguage || 'ru';
@@ -28,7 +29,7 @@ function subscriptionPanel(user) {
       : ''),
     callback_data: 'saved:view',
   }]);
-  rows.push([{ text: '⬅️ ' + (MENU_LABELS[language] || MENU_LABELS.ru).more, callback_data: 'nav:my' }]);
+  rows.push([{ text: backButtonText((MENU_LABELS[language] || MENU_LABELS.ru).more), callback_data: 'nav:my' }]);
   return {
     text: copy.title + (newsOn ? '' : '\n\n' + copy.newsConsent),
     markup: { inline_keyboard: rows },

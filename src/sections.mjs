@@ -612,7 +612,7 @@ async function handlePropertyCallback(query, token) {
         extra,
         ...(links.length ? [links] : []),
         ...(trustButtonRow(language) ? [trustButtonRow(language)] : []),
-        [{ text: '🔼 ' + interaction.collapseDetails, callback_data: 'property:card:' + record.id }],
+        [{ text: '⬅️ ' + interaction.collapseDetails, callback_data: 'property:card:' + record.id }],
       ];
       try {
         await telegramRequest(token, 'editMessageCaption', {
