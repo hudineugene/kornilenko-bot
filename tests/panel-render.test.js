@@ -1806,7 +1806,7 @@ test('«Сегодня»: чек-лист «Готовность к запуск
   for (const id of ['admin', 'catalog', 'privacy', 'contacts', 'agent', 'backup', 'channel', 'inquiry']) assert.equal(byId[id].ok, false, id + ' не готов');
   assert.equal(JSON.stringify(byId.admin.route), JSON.stringify(['settings', 'team']));
   assert.equal(JSON.stringify(byId.catalog.route), JSON.stringify(['objects', 'list']));
-  assert.equal(JSON.stringify(byId.privacy.route), JSON.stringify(['texts', 'interface']));
+  assert.equal(JSON.stringify(byId.privacy.route), JSON.stringify(['texts', 'interface', 'policy']));
   assert.equal(JSON.stringify(byId.contacts.route), JSON.stringify(['texts', 'contacts']));
   assert.equal(JSON.stringify(byId.backup.route), JSON.stringify(['settings', 'data']));
 
@@ -1814,7 +1814,7 @@ test('«Сегодня»: чек-лист «Готовность к запуск
   const html = sandbox.readinessCard(items);
   assert.match(html, /Готово 1 из 9/);
   assert.equal((html.match(/data-ready-go=/g) || []).length, 8, 'кнопка у каждого из восьми неготовых');
-  assert.match(html, /data-ready-go="texts\/interface"/);
+  assert.match(html, /data-ready-go="texts\/interface\/policy"/);
   assert.ok(html.includes('клиенты видят 1 из 4 объектов'), 'причина — словами самопроверки');
 
   // Всё готово — блок исчезает.
@@ -3947,4 +3947,29 @@ test('«Сегодня»: дела выше чек-листа готовност
   assert.ok(!/data-go="reports"|data-go="settings" data-tab="team"/.test(html), 'кнопки, повторяющие меню, убраны');
   const labels = sandbox.el('pageActions').children.map((button) => button.dataset && button.dataset.label);
   assert.ok(['＋ Объект', '✉ Рассылка', '➤ Пост в канал'].every((label) => labels.includes(label)), 'быстрые действия — в шапке: ' + labels);
+});
+
+test('«Настроить» у политики: после отрисовки «Всех подписей» группа раскрыта и курсор стоит в поле политики', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.loadInterfaceText = async () => ({ privacy: { ru: { policy: 'Кто обрабатывает данные: [название]' }, en: { policy: '' }, es: { policy: '' } } });
+  sandbox.interfaceTexts = () => ({ privacy: { ru: { policy: 'Кто обрабатывает данные: [название]' }, en: { policy: '' }, es: { policy: '' } } });
+  const host = fakeElement('main');
+  const focused = [];
+  const details = fakeElement('details');
+  const field = fakeElement('textarea');
+  field.closest = () => details;
+  field.focus = () => focused.push('policy');
+  field.scrollIntoView = () => focused.push('scroll');
+  const wrapper = fakeElement('div');
+  wrapper.querySelector = (selector) => (selector === '[data-lang="ru"]' ? field : null);
+  host.querySelector = ((original) => (selector) => (selector === '[data-text="policy"]' ? wrapper : original(selector)))(host.querySelector.bind(host));
+  sandbox.interfaceGroupOpen = 'privacy';
+  sandbox.interfaceFocusKey = 'policy';
+  await sandbox.renderInterface(host);
+  assert.deepEqual(focused, ['scroll', 'policy'], 'курсор поставлен в поле политики');
+  assert.equal(details.open, true, 'группа раскрыта');
+  assert.equal(sandbox.interfaceFocusKey, '', 'метка снята: следующий заход курсор не двигает');
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /interfaceGroupOpen = "privacy"; interfaceFocusKey = "policy"/, 'кнопка чек-листа запоминает, что раскрыть');
 });

@@ -226,7 +226,7 @@ function readinessItems(report) {
   fromCheck("token", "Бот подключён к Telegram", ["settings", "telegram"]);
   fromCheck("admin", "Заявки приходят в ваш Telegram", ["settings", "team"]);
   fromCheck("catalog", "Клиенты видят каталог", ["objects", "list"]);
-  fromCheck("privacy", "Политика конфиденциальности заполнена", ["texts", "interface"]);
+  fromCheck("privacy", "Политика конфиденциальности заполнена", ["texts", "interface", "policy"]);
   var hasChannel = Boolean(contacts.phone || contacts.whatsapp || contacts.telegram || contacts.email);
   items.push({ id: "contacts", title: "Контакты для связи заполнены", ok: hasChannel, detail: hasChannel ? "" : "Нет ни телефона, ни WhatsApp, ни Telegram, ни почты — клиенту некуда писать", route: ["texts", "contacts"] });
   var promise = Number(((config.workingHours || {}).replyMinutes) || 0);
@@ -299,7 +299,13 @@ async function loadReadiness(host) {
     if (health) health.innerHTML = healthHtml(healthRows(readinessCache.report));
     box.innerHTML = readinessCard(readinessItems(readinessCache.report));
     box.querySelectorAll("[data-ready-go]").forEach(function (button) {
-      button.onclick = function () { var parts = button.dataset.readyGo.split("/"); go(parts[0], parts[1] || "", parts[2] || ""); };
+      button.onclick = function () {
+        var parts = button.dataset.readyGo.split("/");
+        // «Настроить» у политики: открыть группу «Данные клиента и политика» и поставить курсор в поле,
+        // а не оставить владельца перед 29 свёрнутыми группами.
+        if (parts[0] === "texts" && parts[1] === "interface" && parts[2] === "policy") { interfaceGroupOpen = "privacy"; interfaceFocusKey = "policy"; }
+        go(parts[0], parts[1] || "", parts[2] || "");
+      };
     });
   } catch (error) {
     // Чек-лист — подсказка, а не работа: не вышло — «Сегодня» остаётся как было.

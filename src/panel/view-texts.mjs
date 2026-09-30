@@ -3,6 +3,8 @@
 
 const TEXTS_JS = String.raw`
 var interfaceGroupOpen = "";
+// Поле, на которое надо поставить курсор при следующей отрисовке «Всех подписей» (после кнопки «Настроить»).
+var interfaceFocusKey = "";
 
 // --- Приветствие --------------------------------------------------------------
 // Строка о каталоге в приветствии — та же, что бот покажет клиенту: считается по
@@ -570,6 +572,17 @@ async function renderInterface(host) {
   host.querySelectorAll("details").forEach(function (details) {
     details.addEventListener("toggle", function () { if (details.open) interfaceGroupOpen = details.dataset.group; });
   });
+  if (interfaceFocusKey) {
+    var wanted = host.querySelector('[data-text="' + interfaceFocusKey + '"]');
+    var field = wanted && wanted.querySelector('[data-lang="ru"]');
+    interfaceFocusKey = "";
+    if (field) {
+      var group = field.closest && field.closest("details");
+      if (group) group.open = true;
+      if (field.scrollIntoView) field.scrollIntoView({ block: "center" });
+      if (field.focus) field.focus();
+    }
+  }
   var search = host.querySelector("#textSearch");
   search.oninput = function () {
     var query = search.value.trim().toLowerCase();
