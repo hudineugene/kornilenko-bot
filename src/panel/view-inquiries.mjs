@@ -671,7 +671,7 @@ function openInquiryExtras() {
       "</div>",
     footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
     ready: function (dialog) {
-      dialog.querySelector("#extraExport").onclick = function () { dialog.closeClean(); exportInquiries(); };
+      dialog.querySelector("#extraExport").onclick = function () { dialog.closeClean(); openExportDialog(); };
       dialog.querySelector("#extraCleanup").onclick = function () { dialog.closeClean(); openCleanup(); };
       var extraTransfer = dialog.querySelector("#extraTransfer");
       if (extraTransfer) extraTransfer.onclick = function () { dialog.closeClean(); openTransferDialog("all"); };
@@ -880,9 +880,35 @@ function openCleanup() {
   });
 }
 
-async function exportInquiries() {
+// Что выгружать: заявки, как они сейчас на экране (с фильтром и поиском), или все за период — для отчёта за месяц.
+function openExportDialog() {
+  var shown = inquiryRows().length;
+  var today = dayKeyOf(new Date(serverNow()));
+  var monthAgo = shiftDayKey(today, -30);
+  openDialog({
+    title: "Выгрузить заявки в Excel",
+    body: '<div class="stack">' +
+      '<label class="check"><input type="radio" name="exScope" value="screen" checked> Как сейчас на экране (' + num(shown) + ')</label>' +
+      '<label class="check"><input type="radio" name="exScope" value="period"> Все за период</label>' +
+      '<div class="grid cols-2"><div class="field"><label for="exFrom">С</label><input type="date" id="exFrom" value="' + monthAgo + '"></div><div class="field"><label for="exTo">По</label><input type="date" id="exTo" value="' + today + '"></div></div>' +
+      '<div class="hint">Период считается по дню создания заявки, обе даты включительно.</div></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="exGo" type="button">Выгрузить</button>',
+    ready: function (dialog) {
+      dialog.querySelector("#exGo").onclick = async function () {
+        var period = dialog.querySelector('[name="exScope"][value="period"]').checked;
+        var from = dialog.querySelector("#exFrom").value, to = dialog.querySelector("#exTo").value;
+        if (period && (!from || !to)) return toast("Укажите обе даты периода", true);
+        if (period && from > to) return toast("Начало периода позже конца", true);
+        dialog.closeClean();
+        await exportInquiries(period ? { from: from, to: to } : null);
+      };
+    },
+  });
+}
+
+async function exportInquiries(period) {
   try {
-    var response = await fetch("/api/inquiries/export", { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, body: JSON.stringify({ ids: inquiryRows().map(function (item) { return item.id; }) }) });
+    var response = await fetch("/api/inquiries/export", { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, body: JSON.stringify(period ? period : { ids: inquiryRows().map(function (item) { return item.id; }) }) });
     if (!response.ok) throw new Error("Не удалось выгрузить");
     var blob = await response.blob();
     var link = document.createElement("a");

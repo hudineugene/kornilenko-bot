@@ -380,6 +380,17 @@ test.describe('Excel export', () => {
     assert.equal(sheetCells(files['xl/worksheets/sheet1.xml']).length, 3);
   });
 
+  test('период: заявки по дню создания, обе даты включительно; неверный период — отказ', async () => {
+    const rows = async (body) => sheetCells(unzip(Buffer.from(await (await call('POST', '/api/inquiries/export', body)).arrayBuffer()))['xl/worksheets/sheet1.xml']).length - 1;
+    assert.equal(await rows({ from: '2000-01-01', to: '2999-12-31' }), 2, 'всё за большой период');
+    assert.equal(await rows({ from: '2026-09-17', to: '2026-09-17' }), 1, 'один день: заявка 16-го не попадает, 17-го — попадает');
+    assert.equal(await rows({ from: '2999-01-01' }), 0, 'начало в будущем — пусто');
+    assert.equal(await rows({ to: '2000-01-01' }), 0, 'конец в прошлом — пусто');
+    assert.equal(await rows({ ids: ['inq-lead'], from: '2000-01-01', to: '2999-12-31' }), 2, 'период важнее списка на экране');
+    assert.equal((await call('POST', '/api/inquiries/export', { from: '2026-09-20', to: '2026-09-01' })).status, 400);
+    assert.equal((await call('POST', '/api/inquiries/export', { from: 'вчера' })).status, 400);
+  });
+
   test('the export requires a logged-in session and the CSRF token', async () => {
     assert.equal((await fetch(baseUrl + '/api/inquiries/export', { method: 'POST', body: '{}' })).status, 401);
     assert.equal((await call('POST', '/api/inquiries/export', {}, { 'x-csrf-token': 'wrong' })).status, 403);

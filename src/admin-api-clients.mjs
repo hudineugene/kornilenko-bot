@@ -206,7 +206,17 @@ async function handleClientsApi(req, res, url) {
     // filters and search on screen. Without ids everything is exported.
     const ids = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 10000) : null;
     const byId = new Map(data.inquiries.map((item) => [item.id, item]));
-    const inquiries = ids ? ids.map((id) => byId.get(id)).filter(Boolean) : data.inquiries;
+    let inquiries = ids ? ids.map((id) => byId.get(id)).filter(Boolean) : data.inquiries;
+    // Период: заявки, созданные с одного дня по другой включительно (по часам бота). Даты важнее списка на экране.
+    const from = cleanText(body.from, 10);
+    const to = cleanText(body.to, 10);
+    if (from || to) {
+      if ((from && !DAY_KEY_PATTERN.test(from)) || (to && !DAY_KEY_PATTERN.test(to)) || (from && to && from > to)) return json(res, 400, { error: 'Период указан неверно: начало не может быть позже конца' });
+      inquiries = data.inquiries.filter((item) => {
+        const day = localDayKey(new Date(item.createdAt));
+        return (!from || day >= from) && (!to || day <= to);
+      });
+    }
     const file = xlsxWorkbook('Обращения', INQUIRY_EXPORT_COLUMNS, inquiryExportRows(inquiries));
     const name = 'Обращения ' + localDayKey() + '.xlsx';
     securityHeaders(res);

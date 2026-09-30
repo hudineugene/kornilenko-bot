@@ -4173,3 +4173,32 @@ test('«Звук уведомлений»: у заявок нет пункта �
   sandbox.state.config.notifyPrefs = undefined;
   assert.deepEqual(JSON.parse(JSON.stringify(sandbox.notifyPrefsNow())).quiet, { enabled: false, from: '22:00', to: '08:00' });
 });
+
+test('выгрузка заявок: окно с выбором «как на экране» или «за период»; период уходит на сервер, пустые даты — подсказка', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  sandbox.state.inquiries = [];
+  const toasts = [];
+  sandbox.toast = (message, bad) => toasts.push({ message: String(message), bad: Boolean(bad) });
+  const sent = [];
+  sandbox.fetch = async (url, options) => { sent.push({ url, body: JSON.parse(options.body) }); return { ok: false }; };
+  let dialog = null;
+  let options = null;
+  sandbox.openDialog = (opts) => { options = opts; dialog = fakeElement('dialog'); dialog.closeClean = () => {}; if (opts.ready) opts.ready(dialog); return dialog; };
+  sandbox.openExportDialog();
+  assert.match(options.body, /Как сейчас на экране \(0\)/);
+  assert.match(options.body, /id="exFrom"/);
+  // Фейковый querySelector отдаёт один узел на селектор: отметку периода ставим на него.
+  const period = dialog.querySelector('[name="exScope"][value="period"]');
+  period.checked = true;
+  dialog.querySelector('#exFrom').value = '';
+  await dialog.querySelector('#exGo').onclick();
+  assert.equal(toasts.pop().message, 'Укажите обе даты периода');
+  dialog.querySelector('#exFrom').value = '2026-09-10';
+  dialog.querySelector('#exTo').value = '2026-09-01';
+  await dialog.querySelector('#exGo').onclick();
+  assert.equal(toasts.pop().message, 'Начало периода позже конца');
+  dialog.querySelector('#exTo').value = '2026-09-30';
+  await dialog.querySelector('#exGo').onclick();
+  assert.deepEqual(sent.pop(), { url: '/api/inquiries/export', body: { from: '2026-09-10', to: '2026-09-30' } });
+});
