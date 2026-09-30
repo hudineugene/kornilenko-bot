@@ -3885,3 +3885,24 @@ test('пояснение к числу на «Сегодня» и в ворон�
   const { PANEL_CSS } = await import('../src/panel/styles.mjs');
   assert.match(PANEL_CSS, /@media\(max-width:860px\)\{\.today-numbers \.strip-hint\{display:block\}\}/);
 });
+
+test('чек-лист «Лицо агента»: если не хватает только срока ответа — кнопка ведёт в «Настройки → Компания», иначе на «Контакты»', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const agent = () => sandbox.readinessItems({ checks: [] }).find((item) => item.id === 'agent');
+  sandbox.state.contacts = { managerName: 'Ольга', photo: { exists: true } };
+  sandbox.state.config.workingHours = { replyMinutes: 0 };
+  let item = agent();
+  assert.equal(item.ok, false);
+  assert.equal(Array.from(item.route).join('/'), 'settings/company', 'нужен только срок — ведём туда, где он задаётся');
+  assert.match(item.detail, /срок ответа — в «Настройки → Компания»/);
+  sandbox.state.contacts = { managerName: '', photo: null };
+  item = agent();
+  assert.equal(Array.from(item.route).join('/'), 'texts/contacts', 'не хватает имени и фото — на «Контакты»');
+  sandbox.state.contacts = { managerName: 'Ольга', photo: { exists: true } };
+  sandbox.state.config.workingHours = { replyMinutes: 30 };
+  assert.equal(agent().ok, true);
+  // На «Контактах» подсказка про срок — кнопкой, а не текстом без ссылки.
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /id="goReplyTime"[^>]*>Задать срок ответа</);
+});

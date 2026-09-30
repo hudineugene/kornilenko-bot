@@ -239,7 +239,7 @@ function renderContacts(host) {
         '<input type="file" id="contactPhoto" accept="image/jpeg,image/png">' +
         '<button class="btn ghost small' + (photo ? "" : " hidden") + '" id="contactPhotoDrop" type="button">Убрать фото</button></div>' +
         '<div class="hint">Клиент увидит фото с именем над экраном «Связаться». Покупателю из другой страны важно понять, с кем он говорит. Квадратное фото лица работает лучше всего.</div></div>' +
-      (replyMinutes ? "" : '<div class="msg">⏱ Клиент не видит, за сколько вы отвечаете: «Обычно отвечаем за …» не задано. Укажите в «Настройки → Компания → Рабочее время».</div>') +
+      (replyMinutes ? "" : '<div class="msg">⏱ Клиент не видит, за сколько вы отвечаете: «Обычно отвечаем за …» не задано. <button class="btn secondary small" id="goReplyTime" type="button">Задать срок ответа</button></div>') +
       '<div class="grid cols-2">' +
         '<div class="field"><label for="cName">Имя менеджера или отдела</label><input id="cName" value="' + esc(contacts.managerName || "") + '"></div>' +
         '<div class="field"><label for="cPhone">Телефон</label><input id="cPhone" value="' + esc(contacts.phone || "") + '" placeholder="+34 600 000 000"></div>' +
@@ -296,6 +296,8 @@ function renderContacts(host) {
     };
     reader.readAsDataURL(file);
   };
+  var goReplyTime = host.querySelector("#goReplyTime");
+  if (goReplyTime) goReplyTime.onclick = function () { go("settings", "company"); };
   var photoDrop = host.querySelector("#contactPhotoDrop");
   if (photoDrop) photoDrop.onclick = function () {
     pendingPhoto = { remove: true };

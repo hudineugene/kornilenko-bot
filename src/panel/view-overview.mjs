@@ -234,7 +234,9 @@ function readinessItems(report) {
   if (!contacts.managerName) agentMissing.push("имя");
   if (!(contacts.photo && contacts.photo.exists)) agentMissing.push("фото");
   if (!promise) agentMissing.push("срок ответа");
-  items.push({ id: "agent", title: "Лицо агента: имя, фото, срок ответа", ok: !agentMissing.length, detail: agentMissing.length ? "Не заполнено: " + agentMissing.join(", ") : "", route: ["texts", "contacts"] });
+  // Имя и фото — на «Контактах», срок ответа — в «Настройки → Компания»: кнопка ведёт туда, чего не хватает.
+  var onlyReply = agentMissing.length === 1 && !promise;
+  items.push({ id: "agent", title: "Лицо агента: имя, фото, срок ответа", ok: !agentMissing.length, detail: agentMissing.length ? "Не заполнено: " + agentMissing.join(", ") + (onlyReply ? " — в «Настройки → Компания»" : "") : "", route: onlyReply ? ["settings", "company"] : ["texts", "contacts"] });
   var copyOk = checks.version ? checks.version.status === "ok" : true;
   var offsite = Boolean((config.telegramBackup || {}).enabled);
   items.push({ id: "backup", title: "Копия данных сделана и лежит не только на этом компьютере", ok: copyOk && offsite, detail: !copyOk ? (checks.version.detail || "") : offsite ? "" : "Копия в Telegram не включена: все копии лежат на одном диске", route: ["settings", "data"] });
