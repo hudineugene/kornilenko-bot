@@ -4464,3 +4464,20 @@ test('пустые поля: на каждом экране и в каждом �
     fieldDefaults.track = null;
   }
 });
+
+test('«Пост в канал»: один канал — сразу редактор и строка «Публикуем: Канал: …»; несколько — выбор «Куда публикуем»', async () => {
+  resetData((data) => {
+    data.config.active = true;
+    data.groups.push({ id: '-100111', title: 'Новости', type: 'channel', status: 'administrator', memberCount: 10, isForum: false, topics: [], messages: [], joinRequests: [] });
+  });
+  const { sandbox } = await panelSandbox();
+  const one = fakeElement('main');
+  sandbox.renderGroups(one, 'post');
+  assert.ok(!/id="groupSelect"/.test(String(one.innerHTML)), 'выбирать не из чего');
+  assert.match(String(one.innerHTML), /Публикуем: <b>Канал: Новости<\/b>/);
+  sandbox.state.groups.push({ id: '-100222', title: 'Клиенты', type: 'supergroup', status: 'member', memberCount: 5, isForum: false, topics: [], messageCount: 0, joinRequestCount: 0 });
+  const two = fakeElement('main');
+  sandbox.renderGroups(two, 'post');
+  assert.match(String(two.innerHTML), /id="groupSelect"/, 'каналов несколько — выбор есть');
+  assert.ok(!/Публикуем:/.test(String(two.innerHTML)));
+});

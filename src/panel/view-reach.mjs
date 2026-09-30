@@ -530,7 +530,10 @@ function renderGroups(host, mode) {
       try { await send("/api/groups/refresh", "POST", {}); await reload(); toast("Данные каналов и прав обновлены"); } catch (error) { fail(error); }
     }, "secondary");
   }
-  var picker = mode === "post"
+  var picker = mode === "post" && pool.length === 1
+    // Выбирать не из чего: сразу редактор, а куда уйдёт пост — одной строкой.
+    ? '<div class="small muted gap-bottom">Публикуем: <b>' + esc((current.type === "channel" ? "Канал: " : "Группа: ") + (current.title || current.id)) + "</b></div>"
+    : mode === "post"
     ? '<div class="card gap-bottom"><div class="card-body row"><div class="field grow"><label for="groupSelect">Куда публикуем</label><select id="groupSelect">' + pool.map(function (item) {
         return '<option value="' + esc(item.id) + '"' + (item.id === selectedGroup ? " selected" : "") + ">" + esc((item.type === "channel" ? "Канал: " : "Группа: ") + (item.title || item.id)) + "</option>";
       }).join("") + "</select></div></div></div>"
