@@ -4505,3 +4505,22 @@ test('на каждом экране не больше одной залитой
   }
   console.log('\n' + out.join('\n'));
 });
+
+test('«Все подписи бота»: поля групп рисуются при раскрытии, а не все сразу; поиск и переход к подписи дорисовывают нужное', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const host = fakeElement('main');
+  await sandbox.renderInterface(host);
+  const html = String(host.innerHTML);
+  const groups = (html.match(/data-body="/g) || []).length;
+  const fields = (html.match(/data-key="/g) || []).length;
+  assert.ok(groups >= 5, 'групп несколько: ' + groups);
+  assert.ok(fields < 300, 'при открытии нарисованы поля только раскрытой группы, а не тысяча: ' + fields);
+  // Тело группы наполняется функцией, которой пользуются и раскрытие, и поиск.
+  const texts = await sandbox.loadInterfaceText();
+  const firstGroup = Object.keys(texts)[0];
+  const body = sandbox.interfaceGroupBody(texts, firstGroup, 'ru');
+  assert.match(body, /data-key="/);
+  assert.match(body, /class="lang-input"/, 'активный язык виден');
+  assert.match(body, /class="lang-input hidden"/, 'остальные языки скрыты');
+});

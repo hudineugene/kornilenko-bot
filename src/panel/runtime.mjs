@@ -265,6 +265,10 @@ function waitingForAnswer() {
   return Boolean(document.querySelector("dialog[open]"));
 }
 
+// Пока запрос идёт, главная кнопка говорит, что происходит («Сохраняем…»), а не просто серая: без слов человек не
+// понимает, нажалось ли. Подписи — только у кнопок, чьё действие известно.
+var BUSY_LABELS = { saveInq: "Сохраняем…", sendReply: "Отправляем…", savebarSave: "Сохраняем…", qrSend: "Отправляем…", qrSendNext: "Отправляем…", mcCreate: "Сохраняем…", mvCreate: "Сохраняем…", exGo: "Готовим файл…", batchDo: "Передаём…", doTransfer: "Передаём…", clientStep: "Сохраняем…" };
+
 function guardDoubleClicks() {
   document.addEventListener("click", function (event) {
     var node = event.target;
@@ -273,10 +277,14 @@ function guardDoubleClicks() {
     setTimeout(function () {
       if ((!pendingChanges && !waitingForAnswer()) || button.disabled) return;
       button.disabled = true;
+      var busyLabel = pendingChanges && BUSY_LABELS[button.id];
+      var idleHtml = button.innerHTML;
+      if (busyLabel) button.textContent = busyLabel;
       var timer = setInterval(function () {
         if (pendingChanges || waitingForAnswer()) return;
         clearInterval(timer);
         button.disabled = false;
+        if (busyLabel && button.isConnected !== false) button.innerHTML = idleHtml;
       }, 60);
     }, 0);
   }, true);

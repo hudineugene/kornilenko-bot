@@ -542,6 +542,26 @@ function interfacePlaceholderHint(value) {
   return names.length ? '<div class="hint">' + esc(names.join(" · ")) + "</div>" : "";
 }
 
+// Поля одной группы «Всех подписей бота»: по три языка на подпись, показан один (active).
+function interfaceGroupBody(texts, groupId, active) {
+  var keys = Object.keys(texts[groupId].ru || {});
+  return keys.map(function (key) {
+    var value = (texts[groupId].ru || {})[key];
+    if (Array.isArray(value)) {
+      return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(groupId, key, value)) + ' <span class="muted small">список</span></label>' + LANGUAGES.map(function (language) {
+        return '<textarea data-group="' + groupId + '" data-key="' + esc(key) + '" data-list="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === active ? "" : " hidden") + '">' + esc(((texts[groupId][language[0]] || {})[key] || []).join("\n")) + "</textarea>";
+      }).join("") + "</div>";
+    }
+    var long = String(value || "").length > 80;
+    return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(groupId, key, value)) + "</label>" + LANGUAGES.map(function (language) {
+      var text = (texts[groupId][language[0]] || {})[key] || "";
+      return long
+        ? '<textarea data-group="' + groupId + '" data-key="' + esc(key) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === active ? "" : " hidden") + '">' + esc(text) + "</textarea>"
+        : '<input data-group="' + groupId + '" data-key="' + esc(key) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === active ? "" : " hidden") + '" value="' + esc(text) + '">';
+    }).join("") + interfacePlaceholderHint(value) + "</div>";
+  }).join("");
+}
+
 async function renderInterface(host) {
   host.innerHTML = '<div class="card"><div class="card-body"><p class="muted small">Загрузка…</p></div></div>';
   var texts;
@@ -556,30 +576,29 @@ async function renderInterface(host) {
     '<div class="card" id="interfaceForm"><div class="card-body stack">' + languageTabs() + "</div>" +
     INTERFACE_GROUPS.filter(function (group) { return texts[group[0]]; }).map(function (group) {
       var keys = Object.keys(texts[group[0]].ru || {});
-      return '<details class="card flat-divided"' + (interfaceGroupOpen === group[0] ? " open" : "") + ' data-group="' + group[0] + '">' +
+      var opened = interfaceGroupOpen === group[0];
+      // Поля группы рисуются, когда её раскрыли: 1430 полей разом тормозили экран и почти никому не нужны сразу.
+      return '<details class="card flat-divided"' + (opened ? " open" : "") + ' data-group="' + group[0] + '">' +
         '<summary class="pad-md"><b>' + esc(group[1]) + '</b> <span class="small muted">' + counted(keys.length, "текст", "текста", "текстов") + "</span></summary>" +
-        '<div class="card-body grid cols-2">' + keys.map(function (key) {
-          var value = (texts[group[0]].ru || {})[key];
-          if (Array.isArray(value)) {
-            return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(group[0], key, value)) + ' <span class="muted small">список</span></label>' + LANGUAGES.map(function (language) {
-              return '<textarea data-group="' + group[0] + '" data-key="' + esc(key) + '" data-list="1" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc(((texts[group[0]][language[0]] || {})[key] || []).join("\n")) + "</textarea>";
-            }).join("") + "</div>";
-          }
-          var long = String(value || "").length > 80;
-          return '<div class="field" data-text="' + esc(key) + '" title="' + esc(key) + '"><label>' + esc(interfaceFieldLabel(group[0], key, value)) + "</label>" + LANGUAGES.map(function (language) {
-            var text = (texts[group[0]][language[0]] || {})[key] || "";
-            return long
-              ? '<textarea data-group="' + group[0] + '" data-key="' + esc(key) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc(text) + "</textarea>"
-              : '<input data-group="' + group[0] + '" data-key="' + esc(key) + '" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '" value="' + esc(text) + '">';
-          }).join("") + interfacePlaceholderHint(value) + "</div>";
-        }).join("") + "</div></details>";
+        '<div class="card-body grid cols-2" data-body="' + group[0] + '">' + (opened ? interfaceGroupBody(texts, group[0], "ru") : "") + "</div></details>";
     }).join("") + "</div>";
 
   bindLanguageTabs(host);
+  // Наполняем группу при раскрытии (и по требованию — при поиске и переходе к подписи).
+  function fillGroup(details) {
+    var body = details.querySelector("[data-body]");
+    if (body && !body.firstChild && body.innerHTML === "") body.innerHTML = interfaceGroupBody(texts, details.dataset.group, host.dataset.activeLanguage || "ru");
+  }
   host.querySelectorAll("details").forEach(function (details) {
-    details.addEventListener("toggle", function () { if (details.open) interfaceGroupOpen = details.dataset.group; });
+    details.addEventListener("toggle", function () {
+      if (details.open) { interfaceGroupOpen = details.dataset.group; fillGroup(details); }
+    });
   });
   if (interfaceFocusKey) {
+    // Подпись может лежать в ещё не раскрытой группе: раскрываем и рисуем ту, где она есть.
+    host.querySelectorAll("details").forEach(function (details) {
+      if (Object.keys((texts[details.dataset.group] || {}).ru || {}).indexOf(interfaceFocusKey) >= 0) fillGroup(details);
+    });
     var wanted = host.querySelector('[data-text="' + interfaceFocusKey + '"]');
     var field = wanted && wanted.querySelector('[data-lang="ru"]');
     interfaceFocusKey = "";
@@ -593,6 +612,8 @@ async function renderInterface(host) {
   var search = host.querySelector("#textSearch");
   search.oninput = function () {
     var query = search.value.trim().toLowerCase();
+    // Искать нужно по всем подписям: при первом запросе дорисовываем остальные группы.
+    if (query) host.querySelectorAll("details").forEach(fillGroup);
     host.querySelectorAll("details").forEach(function (details) {
       var hits = 0;
       details.querySelectorAll("[data-text]").forEach(function (field) {

@@ -193,8 +193,14 @@ tbody tr.selected{background:var(--brand-soft)}
 .hint{font-size:var(--fs-sm);color:var(--muted);max-width:80ch}
 @media(min-width:861px){.field select{max-width:420px}.funnel-table,.source-table{max-width:1000px}}
 input,textarea,select{width:100%;padding:var(--sp-2) var(--sp-3);border:1px solid var(--field-line);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit;font-size:var(--fs-sm)}
-input:focus,textarea:focus,select:focus{outline:0;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
-button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+/* Одно кольцо фокуса — и у кнопок, и у полей: контур 2 px цвета бренда. У поля ещё и рамка становится цвета бренда. */
+input:focus,textarea:focus,select:focus{outline:0;border-color:var(--brand)}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+/* Состояния «выключено» и «нажато» — у всех элементов, а не только у .btn. */
+input:disabled,textarea:disabled,select:disabled{opacity:.55;background:var(--surface-soft);cursor:not-allowed}
+.tabs button:disabled,.check input:disabled{opacity:.55;cursor:not-allowed}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.tabs button:active:not(:disabled),.tab:active,.nav-item:active{transform:translateY(1px)}
 [tabindex]:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
 textarea{min-height:76px;resize:vertical;line-height:1.45}
 /* Флажки не мельче 18 px: на телефоне и при работе мышью 13-пиксельный флажок — мишень для промаха. */
@@ -260,7 +266,8 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .attention:hover{background:var(--surface-soft)}
 .attention .what{font-weight:600}
 .attention .why{font-size:var(--fs-sm);color:var(--muted)}
-.thumb{width:40px;height:30px;border-radius:var(--radius-sm);object-fit:cover;background:var(--surface-soft);flex:none}
+/* Пока миниатюра не загрузилась (или фото нет) — значок дома вместо пустого серого квадрата. */
+.thumb{width:40px;height:30px;border-radius:var(--radius-sm);object-fit:cover;flex:none;background:var(--surface-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23525d70' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z'/%3E%3C/svg%3E") center/55% no-repeat}
 .avatar{width:26px;height:26px;border-radius:50%;background:var(--brand-soft);color:var(--brand-dark);display:inline-flex;align-items:center;justify-content:center;font-size:var(--fs-sm);font-weight:700;flex:none}
 .bar-row{display:grid;grid-template-columns:minmax(90px,1fr) 46px;align-items:center;gap:var(--sp-2);padding:var(--sp-1) 0;font-size:var(--fs-sm)}
 .bar{height:7px;border-radius:var(--radius-sm);background:var(--brand-soft);overflow:hidden}

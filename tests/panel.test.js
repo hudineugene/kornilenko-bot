@@ -83,7 +83,8 @@ test('подписи бота названы по-человечески, а н�
   assert.match(PANEL_HTML, /Заявка на звонок → вопрос о телефоне/);
   assert.match(PANEL_HTML, /Кнопка меню «Каталог»/);
   // Для неназванных полей подписью служит сам текст клиента, ключ — подсказкой.
-  assert.match(PANEL_HTML, /esc\(interfaceFieldLabel\(group\[0\], key, value\)\)/);
+  assert.match(PANEL_HTML, /esc\(interfaceFieldLabel\(groupId, key, value\)\)/);
+  assert.match(PANEL_HTML, /function interfaceGroupBody\(/, 'поля группы рисуются при раскрытии, а не все 1430 сразу');
   assert.match(PANEL_HTML, /title="' \+ esc\(key\) \+ '"/);
   assert.ok(!/<label>' \+ esc\(key\) \+ "<\/label>"/.test(PANEL_HTML), 'ключ больше не подпись поля');
 
@@ -864,4 +865,15 @@ test('одинаковые вещи выглядят одинаково: пус�
   assert.match(PANEL_HTML, /<button class="btn danger-outline small" id="leaveGroup"/, '«Покинуть канал» в теле страницы — контуром');
   // Подписи групп полей связаны с группой.
   assert.match(PANEL_HTML, /field\.setAttribute\("aria-labelledby", label\.id\)/);
+});
+
+test('состояния элементов: одно кольцо фокуса у кнопок и полей, «выключено» и «нажато» не только у .btn, миниатюра с заглушкой', async () => {
+  const { PANEL_CSS } = await import('../src/panel/styles.mjs');
+  assert.match(PANEL_CSS, /input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible[^{]*\{outline:2px solid var\(--brand\);outline-offset:2px\}/, 'один контур фокуса для полей и кнопок');
+  assert.ok(!/input:focus,textarea:focus,select:focus\{[^}]*box-shadow/.test(PANEL_CSS), 'у поля нет второго вида фокуса (тень)');
+  assert.match(PANEL_CSS, /input:disabled,textarea:disabled,select:disabled\{/, 'выключенные поля видны выключенными');
+  assert.match(PANEL_CSS, /\.btn:active:not\(:disabled\)\{/, 'у кнопки есть нажатое состояние');
+  assert.match(PANEL_CSS, /\.thumb\{[^}]*data:image\/svg\+xml/, 'у миниатюры до загрузки — значок дома');
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /var BUSY_LABELS = \{[^}]*saveInq: "Сохраняем…"/, 'пока идёт запрос, главная кнопка говорит «Сохраняем…»');
 });
