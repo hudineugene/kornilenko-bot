@@ -2,7 +2,7 @@
 // вопрос «как прошёл просмотр» и список просмотров на день для администратора.
 
 import crypto from 'node:crypto';
-import { cleanText, dateFromDayKey, delay, localDayKey, managerNameFor } from './util.mjs';
+import { cleanText, dateFromDayKey, delay, displayPhone, localDayKey, managerNameFor } from './util.mjs';
 import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, PIPELINE_STAGES, normalizeViewing } from './data-format.mjs';
 import { INTERACTION_TEXT, MY_REQUESTS_TEXT, PROPERTY_ACTION_TEXT, VIEWING_FORM_TEXT, VIEWING_NOTICE_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
@@ -175,7 +175,7 @@ function meetingLines(language, copy) {
   const phone = (String(contacts.phone || '').match(/\+?\d[\d\s().-]{5,}\d/g) || [])[0];
   return [
     name ? copy.meets + name : '',
-    phone ? copy.phone + cleanText(phone, 80) : '',
+    phone ? copy.phone + displayPhone(phone) : '',
     copy.bringId,
     copy.runningLate,
   ].filter(Boolean);

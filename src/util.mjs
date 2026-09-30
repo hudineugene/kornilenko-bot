@@ -15,6 +15,14 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Испанские номера — одним видом «+34 664 17 96 37» как бы их ни записали; чужие остаются как ввёл владелец.
+function displayPhone(phone) {
+  const raw = cleanText(phone, 80);
+  const digits = raw.replace(/\D/g, '');
+  const spanish = /^\+\s*34/.test(raw) || /^0034/.test(digits) ? digits.replace(/^(00)?34/, '') : '';
+  return /^\d{9}$/.test(spanish) ? '+34 ' + spanish.slice(0, 3) + ' ' + spanish.slice(3, 5) + ' ' + spanish.slice(5, 7) + ' ' + spanish.slice(7) : raw;
+}
+
 function cleanText(value, maxLength) {
   return String(value == null ? '' : value).trim().slice(0, maxLength);
 }
@@ -153,6 +161,7 @@ function backButtonText(label) {
 
 export {
   backButtonText,
+  displayPhone,
   formatMoney,
   formatNumber,
   largestMoneyAmount,

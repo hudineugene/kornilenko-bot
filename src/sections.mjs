@@ -1,6 +1,6 @@
 // Акции, контакты, «О компании», помощь и обработка их кнопок.
 
-import { cleanText, fillTemplate, managerNameFor } from './util.mjs';
+import { cleanText, displayPhone, fillTemplate, managerNameFor } from './util.mjs';
 import { defaultData, normalizeGuidePages } from './data-format.mjs';
 import { imageExists } from './media.mjs';
 import { COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LEAD_FORM_TEXT, LANGUAGE_SELECTED, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
@@ -60,14 +60,6 @@ async function sendPromotions(chatId, user, token) {
   return sendPromotionPage(chatId, user, token, 0);
 }
 
-// Испанские номера — одним видом «+34 664 17 96 37» как бы их ни записали; чужие остаются как ввёл владелец.
-function displayPhone(phone) {
-  const raw = cleanText(phone, 80);
-  const digits = raw.replace(/\D/g, '');
-  const spanish = /^\+\s*34/.test(raw) || /^0034/.test(digits) ? digits.replace(/^(00)?34/, '') : '';
-  return /^\d{9}$/.test(spanish) ? '+34 ' + spanish.slice(0, 3) + ' ' + spanish.slice(3, 5) + ' ' + spanish.slice(5, 7) + ' ' + spanish.slice(7) : raw;
-}
-
 async function sendContacts(chatId, user, token) {
   const language = user.preferredLanguage || 'ru';
   const copy = MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru;
@@ -82,7 +74,8 @@ async function sendContacts(chatId, user, token) {
   const photoMessageId = await sendManagerPhoto(chatId, user, contact, managerName, token);
   if (managerName && !photoMessageId) lines.push('👨‍💼 ' + managerName);
   if (phones.length) lines.push(copy.tapPhone);
-  for (const phone of phones) lines.push('☎️ ' + displayPhone(phone));
+  // Номера — одним плотным блоком, а не абзацем на каждый.
+  if (phones.length) lines.push(phones.map((phone) => '☎️ ' + displayPhone(phone)).join('\n'));
   if (email) lines.push('✉️ ' + email);
   // Сколько ждать ответа — видно сразу, а не только после отправки заявки.
   const promise = replyPromise(language);

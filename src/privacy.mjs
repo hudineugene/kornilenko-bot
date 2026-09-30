@@ -35,7 +35,7 @@ function storedSummary(user) {
   // в трёх языках.
   const words = {
     ru: { name: 'имя в Telegram', username: 'имя пользователя', phone: 'телефон', contactName: 'имя для связи', requests: 'заявки и сообщения', favorites: 'избранное', comparison: 'сравнение', saved: 'сохранённый поиск', recent: 'просмотренные объекты', since: 'первое обращение' },
-    en: { name: 'Telegram name', username: 'username', phone: 'phone', contactName: 'contact name', requests: 'requests and messages', favorites: 'favorites', comparison: 'comparison', saved: 'saved search', recent: 'viewed properties', since: 'first contact' },
+    en: { name: 'Telegram name', username: 'username', phone: 'phone', contactName: 'contact name', requests: 'requests and messages', favorites: 'favourites', comparison: 'comparison', saved: 'saved search', recent: 'viewed properties', since: 'first contact' },
     es: { name: 'nombre en Telegram', username: 'usuario', phone: 'teléfono', contactName: 'nombre de contacto', requests: 'solicitudes y mensajes', favorites: 'favoritos', comparison: 'comparación', saved: 'búsqueda guardada', recent: 'inmuebles vistos', since: 'primer contacto' },
   }[language] || {};
   const rows = [];

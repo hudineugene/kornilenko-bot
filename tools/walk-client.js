@@ -80,6 +80,9 @@ function report(title, from, chatId) {
     out.push('  ' + kind + ' ' + shown.replace(/\n/g, '\n     ').slice(0, 520) + buttons(b.reply_markup) + '\n   ↳ строк на телефоне: ' + rows);
     if (rows > 30) notes.push(title + ' — ответ в ' + rows + ' строк (больше экрана)');
     checkButtons(title, b.reply_markup);
+    // Брак в тексте: неподставленные поля {count}, undefined, null, [object Object], NaN.
+    const defect = /\{[a-zA-Z]+\}|undefined|\bnull\b|\[object|\bNaN\b/.exec(shown + ' ' + JSON.stringify(b.reply_markup || ''));
+    if (defect) problems.push(title + ' — в ответе брак «' + defect[0] + '»');
   }
   if (!toClient) {
     out.push('  ⚠️ клиент не получил ничего');
@@ -127,6 +130,14 @@ function client(id, name, lang) {
       }
       return 1;
     },
+    inlineButtons() {
+      for (let index = calls.length - 1; index >= 0; index -= 1) {
+        const markup = calls[index].body.reply_markup;
+        if (String(calls[index].body.chat_id) !== String(id) || !markup || !markup.inline_keyboard) continue;
+        return [...new Set(markup.inline_keyboard.flat().map((item) => item.callback_data).filter(Boolean))];
+      }
+      return [];
+    },
     keyboard() {
       for (let index = calls.length - 1; index >= 0; index -= 1) {
         const markup = calls[index].body.reply_markup;
@@ -148,6 +159,26 @@ const SAYINGS = {
 const CLIENT_IDS = { ru: 94000001, en: 94000002, es: 94000004 };
 
 // Один и тот же путь клиента на любом языке: всё, что зависит от языка, берётся из меню бота и таблицы SAYINGS.
+// Обход: с каждого экрана нажимаем каждую кнопку-callback (кроме разрушающих и уводящих из бота) и смотрим, что ответил бот.
+const SKIP_BUTTONS = /:none|erase|erased|clear|delete|remove|cancel|unpin|forget|reset|stop|revoke|pause|off|unsubscribe|language:|lang:|nav:menu|policy|^url/i;
+async function crawl(person, label, entry, depth = 1) {
+  const screens = [];
+  await entry();
+  const first = person.inlineButtons();
+  for (const callback of first) {
+    if (SKIP_BUTTONS.test(callback)) continue;
+    await person.press(callback, label + ' → ' + callback);
+    if (depth > 1) {
+      for (const inner of person.inlineButtons()) {
+        if (SKIP_BUTTONS.test(inner) || inner === callback || first.includes(inner)) continue;
+        await person.press(inner, label + ' → ' + callback + ' → ' + inner);
+      }
+    }
+    await entry();
+  }
+  return screens;
+}
+
 async function walk(lang) {
   const MENU = bot.text.menu[lang];
   const words = SAYINGS[lang];
@@ -213,6 +244,21 @@ async function walk(lang) {
   out.push('\n## Мои заявки и уведомления' + head);
   await anna.press('myreq:list', 'мои заявки');
   await anna.press('subs:menu', 'настройки уведомлений');
+
+  out.push('\n## Обход экранов: подбор, гид, акции, избранное, цели, помощь, план, «Моё»' + head);
+  const visitor = client(CLIENT_IDS[lang] + 200, words.name + '3', lang);
+  await visitor.say('/start');
+  for (const [name, entryText] of [['Подбор', MENU.selection], ['Гид', MENU.guide], ['Акции', MENU.promotions], ['Избранное', MENU.favorites], ['Моё', MENU.more], ['Связаться', MENU.contacts]]) {
+    if (!entryText) continue;
+    await crawl(visitor, name, () => visitor.say(entryText, 'вход: ' + name), 2);
+  }
+  await crawl(visitor, 'Цель', () => visitor.press('goal:menu', 'вход: цель'), 1);
+  await crawl(visitor, 'План', () => visitor.press('plan:open', 'вход: план'), 2);
+  await crawl(visitor, 'Фильтр', () => visitor.press('cfilter:open', 'вход: фильтр'), 2);
+  await visitor.say('/help', 'команда /help');
+  await visitor.say('/privacy', 'команда /privacy');
+  await visitor.say('какая-то невнятная фраза', 'непонятная фраза');
+  await visitor.say('🙂', 'эмодзи');
 }
 
 (async () => {

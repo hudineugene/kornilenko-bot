@@ -96,7 +96,7 @@ test('цель можно сменить в «Моё → Моя цель»; те
   const personal = await chat.say(MENU.ru.more);
   assert.ok(callbacksOf(personal.last.markup).includes('goal:menu'));
   const menu = await chat.press('goal:menu');
-  assert.deepEqual(menu.last.buttons, ['🏡 Купить для жизни', '📈 Инвестиция и аренда', '✅ 👀 Пока смотрю'], 'текущая отмечена галочкой');
+  assert.deepEqual(menu.last.buttons, ['🏡 Купить для жизни', '📈 Инвестиция и аренда', '✓ 👀 Пока смотрю'], 'текущая отмечена галочкой');
   await chat.press('goal:invest');
   assert.equal(chat.user.goal, 'invest');
 });

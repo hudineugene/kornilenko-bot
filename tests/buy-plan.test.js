@@ -104,7 +104,7 @@ test.describe('у клиента', () => {
   test('шаг: заголовок, текст, кнопки; на первом нет «Назад», на последнем — «Дальше»', async () => {
     const chat = createChat();
     const first = await chat.press('plan:step:0');
-    assert.match(view(first).text, /^Шаг 1 из 10: NIE — номер иностранца/);
+    assert.match(view(first).text, /^📋 Шаг 1 из 10: NIE — номер иностранца/);
     assert.match(view(first).text, /Обычно оформляется в полиции или консульстве/);
     assert.deepEqual(callbacksOf(view(first).markup), ['plan:done:0', 'plan:help:0', 'plan:step:1', 'plan:open']);
     const last = await chat.press('plan:step:9');
@@ -117,7 +117,7 @@ test.describe('у клиента', () => {
     const done = await chat.press('plan:done:0');
     assert.ok(chat.user.plan.done.nie);
     const edit = done.calls.find((call) => call.method === 'editMessageText');
-    assert.match(edit.body.text, /^Шаг 2 из 10: Банковский счёт/, 'дальше — второй шаг');
+    assert.match(edit.body.text, /^📋 Шаг 2 из 10: Банковский счёт/, 'дальше — второй шаг');
     const overview = await chat.press('plan:open');
     assert.match(view(overview).text, /Вы на шаге 2 из 10/);
     assert.match(view(overview).text, /✅ 1\. NIE/);
@@ -200,13 +200,13 @@ test.describe('у клиента', () => {
     assert.match(view(en).text, /You are on step 1 of 10/);
     assert.match(view(en).text, /not legal advice/);
     const es = await createChat({ language: 'es' }).press('plan:step:0');
-    assert.match(view(es).text, /^Paso 1 de 10: NIE — número de extranjero/);
+    assert.match(view(es).text, /^📋 Paso 1 de 10: NIE — número de extranjero/);
   });
 
   test('владелец поправил текст шага — клиент видит его', async () => {
     bot.getData().buyPlan = bot.normalizeLoadedData({ buyPlan: [{ id: 'nie', title: { ru: 'Получите NIE' }, text: { ru: 'Наш юрист поможет оформить.' } }] }).buyPlan;
     const step = await createChat().press('plan:step:0');
-    assert.match(view(step).text, /^Шаг 1 из 10: Получите NIE/);
+    assert.match(view(step).text, /^📋 Шаг 1 из 10: Получите NIE/);
     assert.match(view(step).text, /Наш юрист поможет оформить\./);
   });
 });

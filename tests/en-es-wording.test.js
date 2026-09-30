@@ -51,7 +51,7 @@ test('приветствие и помощь по умолчанию — нов�
   assert.match(fresh.config.messages.en.help, /✨ Help me choose/);
   assert.match(fresh.config.messages.en.help, /👤 My account/);
   assert.match(fresh.config.messages.es.help, /✨ Buscar por mí/);
-  assert.equal(bot.text.propertyActions.en.distanceSeaLabel, 'Sea');
+  assert.equal(bot.text.propertyActions.en.distanceSeaLabel, 'To the sea');
   assert.equal(bot.text.comparison.en.distanceSea, '🌊 Sea');
 });
 

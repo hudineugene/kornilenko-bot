@@ -200,7 +200,7 @@ function stepText(user, language, index) {
   const plan = planOf(user);
   const list = steps();
   const step = list[index];
-  const lines = [fill(copy.step, { n: index + 1, total: list.length }) + ': ' + (step.title[language] || step.title.ru), '', step.text[language] || step.text.ru];
+  const lines = ['📋 ' + fill(copy.step, { n: index + 1, total: list.length }) + ': ' + (step.title[language] || step.title.ru), '', step.text[language] || step.text.ru];
   if (plan.done[step.id]) lines.push('', copy.statusDone);
   else if (plan.help[step.id]) lines.push('', copy.statusHelp);
   return lines.join('\n');

@@ -60,7 +60,7 @@ test('подтверждение просмотра — карточка: имя
   const lines = text.split('\n');
   assert.equal(lines[0], '✅ Просмотр подтверждён');
   assert.ok(lines.includes('👨‍💼 Вас встретит: Ольга Корниленко'), text);
-  assert.ok(lines.includes('☎️ Телефон: +34 600 111 222'), text);
+  assert.ok(lines.includes('☎️ Телефон: +34 600 11 12 22'), text);
   assert.ok(lines.includes('🪪 Возьмите с собой документ, удостоверяющий личность.'), text);
   assert.ok(lines.some((line) => /^⏳ Задерживаетесь\?/.test(line)), 'что делать при опоздании');
   // Порядок: сначала где и когда, потом встреча, в конце — «если планы изменятся».
@@ -93,12 +93,12 @@ test('на английском и испанском — те же строки
   withAgent();
   const en = (await confirmedCard('en')).text;
   assert.match(en, /👨‍💼 Meeting you: Olga Kornilenko/);
-  assert.match(en, /☎️ Phone: \+34 600 111 222/);
+  assert.match(en, /☎️ Phone: \+34 600 11 12 22/);
   assert.match(en, /🪪 Bring a photo ID with you\./);
   assert.match(en, /⏳ Running late\?/);
   const es = (await confirmedCard('es')).text;
   assert.match(es, /👨‍💼 Te recibe: Olga Kornilenko/);
-  assert.match(es, /☎️ Teléfono: \+34 600 111 222/);
+  assert.match(es, /☎️ Teléfono: \+34 600 11 12 22/);
   assert.match(es, /🪪 Lleva un documento de identidad\./);
   assert.match(es, /⏳ ¿Llegas tarde\?/);
 });

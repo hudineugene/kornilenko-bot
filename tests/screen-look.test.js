@@ -136,3 +136,37 @@ test('экран фильтра — не больше шести рядов, с�
     assert.deepEqual(last.map((button) => button.callback_data), ['cfilter:show', 'cfilter:more']);
   }
 });
+
+test('испанские кнопки способа связи — на «ты», как весь остальной бот; подписи уведомлений не путаются', async () => {
+  const chat = createChat({ language: 'es' });
+  await chat.say(MENU.es.request);
+  const buttons = (await chat.say(MENU.es.request)).last.buttons.join(' | ');
+  assert.doesNotMatch(buttons, /Llamadme|Escribidme/, buttons);
+  assert.match(buttons, /Llámame/);
+  for (const language of ['ru', 'en', 'es']) {
+    const toggles = (await createChat({ language }).press('subs:menu')).last.buttons.filter((label) => /^[✅⬜]/.test(label)).map((label) => label.replace(/^[✅⬜] /, ''));
+    assert.equal(new Set(toggles).size, toggles.length);
+    assert.ok(toggles.every((label) => [...label].length <= 32), language + ': ' + toggles.join(' | '));
+  }
+});
+
+test('телефон на экране «Связаться» и в подтверждении просмотра — в одном виде, номера — одним блоком', async () => {
+  resetData((data) => { data.contacts.phone = '+34 (664) 17-96-37, +34 607 02 93 87'; });
+  const call = lastCall(await createChat().say(MENU.ru.contacts)).body;
+  assert.ok(call.text.includes('☎️ +34 664 17 96 37\n☎️ +34 607 02 93 87'), call.text);
+});
+
+test('у экранов плана, цены и «Ещё» в фильтре есть свой заголовок (жирный), выбор цели отмечен «✓»', async () => {
+  for (const language of ['ru', 'en', 'es']) {
+    const chat = createChat({ language });
+    await chat.say(MENU[language].objects);
+    for (const [callback, start] of [['plan:step:0', /^📋 /], ['cfilter:prices:0', /^💶 /], ['cfilter:more', /^⋯ /]]) {
+      const body = lastCall(await chat.press(callback)).body;
+      assert.match(body.text, start, language + ' ' + callback + ': ' + body.text);
+    }
+    const goal = lastCall(await chat.press('goal:browse')).body;
+    const menu = (await chat.press('goal:menu')).last.buttons;
+    assert.ok(menu.some((label) => label.startsWith('✓ ')) && !menu.some((label) => label.startsWith('✅ ')), language + ': ' + menu.join(' | '));
+    assert.ok(goal);
+  }
+});

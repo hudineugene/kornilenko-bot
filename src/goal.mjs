@@ -92,7 +92,7 @@ function goalLabelRu(goal) {
 
 function questionMarkup(language, current = '') {
   const copy = goalCopy(language);
-  return { inline_keyboard: GOALS.map((goal) => [{ text: (goal === current ? '✅ ' : '') + copy[goal], callback_data: 'goal:' + goal }]) };
+  return { inline_keyboard: GOALS.map((goal) => [{ text: (goal === current ? '✓ ' : '') + copy[goal], callback_data: 'goal:' + goal }]) };
 }
 
 function answerMarkup(goal, language) {

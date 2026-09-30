@@ -1757,7 +1757,7 @@ function catalogPricePanel(user) {
     { text: '✎ ' + copy.customPrice, callback_data: 'cfilter:price:custom' },
   ]);
   rows.push([{ text: '⬅️ ' + copy.backToFilter, callback_data: 'cfilter:open' }]);
-  return { text: copy.title, markup: { inline_keyboard: rows } };
+  return { text: copy.priceTitle, markup: { inline_keyboard: rows } };
 }
 
 // «Ещё»: то, чем пользуются редко — сортировка, своя цена, сохранённый поиск и
@@ -1780,7 +1780,7 @@ function catalogFilterExtraScreen(user, language) {
   }
   if (catalogFilterActive(filter)) rows.push([{ text: copy.reset, callback_data: 'cfilter:reset' }]);
   rows.push([{ text: '⬅️ ' + copy.backToFilter, callback_data: 'cfilter:open' }]);
-  return { text: copy.title, markup: { inline_keyboard: rows } };
+  return { text: copy.moreTitle, markup: { inline_keyboard: rows } };
 }
 
 async function handleCatalogFilterCallback(query, token) {
