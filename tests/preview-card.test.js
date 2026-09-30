@@ -69,7 +69,7 @@ test('рассылка карточкой: предпросмотр = вступ
   const record = bot.getData().objects[0];
   const answer = await (await realFetch(base + '/api/preview/broadcast', { method: 'POST', headers, body: JSON.stringify({ propertyId: record.id, language: 'ru', message: 'Новинка недели!' }) })).json();
   assert.ok(answer.caption.startsWith('Новинка недели!\n\n<b>Вилла у моря</b>'), 'вступление, затем карточка: ' + answer.caption.slice(0, 60));
-  assert.deepEqual(answer.rows.slice(0, 2), [['📅 Записаться на просмотр'], ['📋 Подробнее']]);
+  assert.deepEqual(answer.rows.slice(0, 2), [['📅 Записаться на просмотр'], ['ℹ️ Подробнее']]);
   assert.match(answer.rows[2][0], /Отписаться/);
   assert.equal((await realFetch(base + '/api/preview/broadcast', { method: 'POST', headers, body: JSON.stringify({ propertyId: 'нет' }) })).status, 404);
 });

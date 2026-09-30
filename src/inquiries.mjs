@@ -540,7 +540,7 @@ function markAdminChatVerified(chat, verified) {
 async function notifyAdministrator(inquiry, user, options = {}) {
   const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
   const propertyLine = property
-    ? '🏠 ' + (localized(property.title, inquiry.language) || property.reference || property.id)
+    ? '🔖 ' + (localized(property.title, inquiry.language) || property.reference || property.id)
     : '';
   let text = options.text || inquiry.text;
   // Property requests start with "Question about: <title>", already shown above.

@@ -163,7 +163,7 @@ function viewingPlaceLines(property, language, copy) {
   if (!property) return [];
   const title = localizedExact(property.title, language) || localized(property.title, language) || property.reference || '';
   const address = [localizedExact(property.city, language, 160), localizedExact(property.district, language, 160), localizedExact(property.address, language, 500)].filter(Boolean).join(', ');
-  return [title ? '🏠 ' + title : '', address ? '📍 ' + copy.address + ': ' + address : ''].filter(Boolean);
+  return [title ? '🔖 ' + title : '', address ? '📍 ' + copy.address + ': ' + address : ''].filter(Boolean);
 }
 
 // Карточка встречи: кто встретит, по какому телефону связаться, что взять с собой
@@ -383,7 +383,7 @@ async function cancelViewing(inquiry, user) {
   const property = viewingProperty(inquiry);
   const when = viewingWhen(inquiry, 'ru');
   await notifyAdministratorAction(user, 'Клиент отменил просмотр', [
-    property ? '🏠 ' + (localized(property.title, 'ru') || property.reference || property.id) : '',
+    property ? '🔖 ' + (localized(property.title, 'ru') || property.reference || property.id) : '',
     [when.date, when.time].filter(Boolean).join(', '),
   ].filter(Boolean).join('\n'), inquiry.id, null, { important: true });
 }
@@ -433,7 +433,7 @@ async function sendViewingFeedbackRequest(inquiry, user, token) {
   const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
   const property = viewingProperty(inquiry);
   const title = property ? localizedExact(property.title, language) || localized(property.title, language) || property.reference || '' : '';
-  await sendMessage(user.chatId, [title ? '🏠 ' + title : '', copy.feedbackQuestion].filter(Boolean).join('\n\n'), token, {
+  await sendMessage(user.chatId, [title ? '🔖 ' + title : '', copy.feedbackQuestion].filter(Boolean).join('\n\n'), token, {
     reply_markup: { inline_keyboard: [
       [{ text: copy.liked, callback_data: 'vfb:liked:' + inquiry.id }],
       [{ text: copy.questions, callback_data: 'vfb:questions:' + inquiry.id }],
@@ -619,7 +619,7 @@ async function handleViewingFeedbackCallback(query, token) {
     return;
   }
   saveDataNow();
-  void notifyAdministratorAction(user, 'Отзыв после просмотра: не подошло', title ? '🏠 ' + title : '', inquiry.id, null, { important: true });
+  void notifyAdministratorAction(user, 'Отзыв после просмотра: не подошло', title ? '🔖 ' + title : '', inquiry.id, null, { important: true });
   if (record) await sendSimilarProperty(chatId, user, record, token, { intro: copy.dislikedReply, noSimilarText: copy.dislikedNoSimilar });
   else await sendMessage(chatId, copy.dislikedNoSimilar, token, { reply_markup: menuKeyboard(language) });
 }

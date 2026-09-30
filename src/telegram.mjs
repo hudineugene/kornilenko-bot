@@ -128,8 +128,38 @@ function screenTitleEntities(payload) {
   return [{ type: 'bold', offset: 0, length: line.length }];
 }
 
+// Строка «Открыть карту: https://…» и «Быстрее — в WhatsApp: https://wa.me/…» показывает клиенту голый адрес в пол-экрана.
+// Заменяем её словами-ссылкой: текст остаётся подписью, адрес уходит в entity text_link. Только известные адреса карт и
+// WhatsApp; смещения уже стоящих entities сдвигаем. Разметку (parse_mode) не трогаем.
+const LABELLED_LINK = /^(.{2,60}?):[ \t]+(https:\/\/(?:wa\.me|api\.whatsapp\.com|www\.google\.com\/maps|maps\.google\.com|maps\.app\.goo\.gl|goo\.gl\/maps|www\.openstreetmap\.org)[^\s]*)$/;
+function labelledLinks(payload) {
+  const text = payload && typeof payload.text === 'string' ? payload.text : '';
+  if (!text || payload.parse_mode || !/https:\/\//.test(text)) return null;
+  const links = [];
+  const cuts = [];
+  let read = 0;
+  let written = 0;
+  const out = text.split('\n').map((line) => {
+    const found = LABELLED_LINK.exec(line);
+    const kept = found ? found[1] : line;
+    if (found) {
+      links.push({ type: 'text_link', offset: written, length: kept.length, url: found[2] });
+      cuts.push({ end: read + line.length, cut: line.length - kept.length });
+    }
+    read += line.length + 1;
+    written += kept.length + 1;
+    return kept;
+  });
+  if (!links.length) return null;
+  const shift = (position) => cuts.reduce((sum, item) => (item.end <= position ? sum + item.cut : sum), 0);
+  const moved = (payload.entities || []).map((entity) => ({ ...entity, offset: entity.offset - shift(entity.offset) }));
+  return { text: out.join('\n'), entities: [...moved, ...links] };
+}
+
 async function telegramRequest(token, method, payload, signal) {
   if (payload && (method === 'sendMessage' || method === 'editMessageText')) {
+    const linked = labelledLinks(payload);
+    if (linked) payload = { ...payload, ...linked };
     const entities = screenTitleEntities(payload);
     if (entities) payload = { ...payload, entities };
   }
@@ -324,6 +354,8 @@ function markTelegramFailure(error, status = 'reconnecting') {
 }
 
 export {
+  labelledLinks,
+  screenTitleEntities,
   staleFileIdError,
   TELEGRAM_MAX_RETRY_AFTER_SECONDS,
   TELEGRAM_RATE_LIMIT_RETRIES,

@@ -107,7 +107,7 @@ async function handleMyRequestsCallback(query, token) {
     await acknowledgeCallback(query, token);
     const title = requestTitle(inquiry, language);
     const when = viewingWhen(inquiry, language);
-    const details = [title ? '🏠 ' + title : '', [when.date, when.time].filter(Boolean).join(', ')].filter(Boolean).join('\n');
+    const details = [title ? '🔖 ' + title : '', [when.date, when.time].filter(Boolean).join(', ')].filter(Boolean).join('\n');
     await sendUiMessage(chatId, user, [copy.cancelAsk, details].filter(Boolean).join('\n\n'), token, {
       reply_markup: { inline_keyboard: [
         [{ text: copy.cancelYes, callback_data: 'myreq:yes:' + inquiry.id }],

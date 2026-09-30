@@ -179,7 +179,7 @@ function overviewText(user, language) {
   const lines = [copy.title, ''];
   lines.push(current >= list.length ? copy.finished : fill(copy.progress, { n: current + 1, total: list.length }), '');
   list.forEach((step, index) => {
-    lines.push((index === current ? '👉 ' : '') + stepMark(plan, step) + ' ' + (index + 1) + '. ' + (step.title[language] || step.title.ru));
+    lines.push((index === current ? '👉' : stepMark(plan, step)) + ' ' + (index + 1) + '. ' + (step.title[language] || step.title.ru));
   });
   lines.push('', copy.hint, '', copy.disclaimer);
   return lines.join('\n');

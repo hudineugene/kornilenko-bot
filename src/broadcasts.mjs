@@ -116,7 +116,7 @@ function broadcastCardContent(record, language, intro) {
   const unsubscribe = { text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).unsubscribe, callback_data: 'subs:news:off:bc' };
   const rows = [];
   if (record.status === 'active') rows.push([{ text: '📅 ' + copy.viewing, callback_data: 'property:viewing:' + record.id }]);
-  rows.push([{ text: '📋 ' + copy.details, callback_data: 'property:card:' + record.id }]);
+  rows.push([{ text: 'ℹ️ ' + copy.details, callback_data: 'property:card:' + record.id }]);
   rows.push([unsubscribe]);
   return { caption, markup: { inline_keyboard: rows } };
 }

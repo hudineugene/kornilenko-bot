@@ -102,7 +102,7 @@ function channelPostForProperty(record, language, body = {}) {
   };
 }
 
-const CHANNEL_BUTTON_TEXT = { ru: '🏠 Смотреть в боте', en: '🏠 View in the bot', es: '🏠 Ver en el bot' };
+const CHANNEL_BUTTON_TEXT = { ru: '🤖 Смотреть в боте', en: '🤖 View in the bot', es: '🤖 Ver en el bot' };
 
 // Every route here is /api/groups/... and needs an authenticated session.
 async function handleGroupApi(req, res, url) {

@@ -149,7 +149,7 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     // Цену спросили в первом ряду — запись на просмотр не теряется, а стоит тут.
     if (askPrice && canVisit) second.push({ text: mobileButtonText('📅', action.viewingShort || action.viewing), callback_data: 'property:viewing:' + record.id });
     if (photos.length > 1) second.push({ text: '📷 ' + action.photos + ' · ' + photos.length, callback_data: 'property:gallery:' + record.id });
-    second.push({ text: mobileButtonText('📋', action.details), callback_data: 'property:details:' + record.id });
+    second.push({ text: mobileButtonText('ℹ️', action.details), callback_data: 'property:details:' + record.id });
     rows.push(second);
 
     // Ряд значков: избранное, сравнение и переход между объектами. Подписи тут
@@ -1988,7 +1988,7 @@ async function openPendingStartPayload(user, token) {
     await sendMessage(user.chatId, action.propertyUnavailable, token, { reply_markup: menuKeyboard(language) });
     return true;
   }
-  const heading = '🏠 ' + action.propertyHeading;
+  const heading = '🔖 ' + action.propertyHeading;
   const records = catalogRecords(user, 'all');
   rememberCatalogPosition(user, 'all', Math.max(0, records.findIndex((item) => item.id === record.id)), record);
   await sendPropertyCard(user.chatId, user, token, record, { heading, page: 0, totalPages: 1, mode: 'all' });

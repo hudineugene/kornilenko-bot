@@ -88,7 +88,7 @@ function estimateText(record, language, estimate = purchaseEstimate(record)) {
   const { settings } = estimate;
   const lines = [
     copy.title,
-    title ? '🏠 ' + title : '',
+    title || '',
     '',
     '💰 ' + copy.price + ': ' + money(estimate.price, currency, language),
     '🧾 ' + copy.costs + ': ≈ ' + money(estimate.costsTotal, currency, language),
@@ -96,17 +96,32 @@ function estimateText(record, language, estimate = purchaseEstimate(record)) {
     '📌 ' + copy.total + ': ≈ ' + money(estimate.total, currency, language),
   ];
   if (settings.downPaymentPercent < 100) {
+    // Ипотека — блоком из четырёх коротких строк, а не одной в девяносто знаков.
+    const capital = (word) => String(word || '').charAt(0).toUpperCase() + String(word || '').slice(1);
     lines.push(
       '',
-      '🏦 ' + copy.mortgage + ': ' + copy.downPayment + ' ' + percent(settings.downPaymentPercent, language) + ' — ' + money(estimate.downPayment, currency, language)
-        + ', ' + copy.loan + ' ' + money(estimate.loan, currency, language) + ', ' + settings.years + ' ' + copy.years + ', ' + percent(settings.interestPercent, language)
-        + ': ≈ ' + money(estimate.monthly, currency, language) + ' ' + copy.monthly,
+      '🏦 ' + copy.mortgage,
+      '   ' + capital(copy.downPayment) + ' ' + percent(settings.downPaymentPercent, language) + ' — ' + money(estimate.downPayment, currency, language),
+      '   ' + capital(copy.loan) + ' ' + money(estimate.loan, currency, language) + ' · ' + settings.years + ' ' + copy.years + ' · ' + percent(settings.interestPercent, language),
+      '   ≈ ' + money(estimate.monthly, currency, language) + ' ' + copy.monthly,
     );
   }
   lines.push('💼 ' + copy.upfront + ': ≈ ' + money(estimate.upfront, currency, language), '');
   if (estimate.business) lines.push(copy.businessNote);
   lines.push(copy.disclaimer);
   return lines.filter((line, index) => line !== '' || index > 0).join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+// Жирным — заголовок, «Итого», ежемесячный платёж и «Нужно на старте»: глаз находит итоги без чтения. Смещения —
+// в знаках UTF-16, как их считает Telegram.
+function estimateEntities(text) {
+  const entities = [];
+  let offset = 0;
+  text.split('\n').forEach((line, index) => {
+    if (line && (index === 0 || /^(📌|💼) /u.test(line) || /^ {3}≈ /.test(line))) entities.push({ type: 'bold', offset, length: line.length });
+    offset += line.length + 1;
+  });
+  return entities;
 }
 
 // short — для ряда из двух кнопок под карточкой: полная подпись обрезалась («🧮 Расчёт покупки и ип…»).
@@ -131,7 +146,8 @@ async function handleCalculatorCallback(query, token) {
   const copy = CALCULATOR_TEXT[language] || CALCULATOR_TEXT.ru;
   // Тот, кто досчитал до конца, почти готов писать: WhatsApp рядом с «Обсудить».
   const whatsapp = whatsappRow(whatsappPropertyMessage(record, language));
-  await sendUiMessage(chatId, user, estimateText(record, language), token, { reply_markup: { inline_keyboard: [
+  const estimate = estimateText(record, language);
+  await sendUiMessage(chatId, user, estimate, token, { entities: estimateEntities(estimate), reply_markup: { inline_keyboard: [
     [{ text: copy.discuss, callback_data: 'property:manager:' + record.id }],
     ...(whatsapp ? [whatsapp] : []),
     [{ text: '✕ ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).close, callback_data: 'nav:close' }],

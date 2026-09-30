@@ -26,7 +26,7 @@ const GOAL_TEXT = {
     guide: '📖 Как купить',
     catalog: '🏘 Смотреть объекты',
     costs: '🧾 Расходы и налоги',
-    rent: '🏠 Про аренду',
+    rent: '🔑 Про аренду',
     alerts: '🔔 Сообщать о новых',
     reply: {
       live: 'Отлично — подберём вариант для жизни. С чего начнём?',
@@ -46,7 +46,7 @@ const GOAL_TEXT = {
     guide: '📖 How to buy',
     catalog: '🏘 Browse properties',
     costs: '🧾 Costs and taxes',
-    rent: '🏠 About renting out',
+    rent: '🔑 About renting out',
     alerts: '🔔 Tell me about new ones',
     reply: {
       live: 'Great — let’s find a place to live. Where shall we start?',
@@ -66,7 +66,7 @@ const GOAL_TEXT = {
     guide: '📖 Cómo comprar',
     catalog: '🏘 Ver inmuebles',
     costs: '🧾 Gastos e impuestos',
-    rent: '🏠 Sobre el alquiler',
+    rent: '🔑 Sobre el alquiler',
     alerts: '🔔 Avisarme de novedades',
     reply: {
       live: 'Genial: busquemos un lugar para vivir. ¿Por dónde empezamos?',

@@ -185,7 +185,7 @@ async function showPendingActionStep(user, token) {
     }
     const prompt = step === 'time' ? copy.askTime : step === 'custom_time' ? copy.askCustomTime : step === 'custom' ? copy.askCustom : copy.askDate;
     const title = step === 'date' ? localizedExact(property.title, language) || property.reference || '' : '';
-    await sendMessage(user.chatId, [title ? '🏠 ' + title : '', prompt].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, step, pending) });
+    await sendMessage(user.chatId, [title ? '🔖 ' + title : '', prompt].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, step, pending) });
     return true;
   }
   if (pending.type === 'manager_question') {
@@ -199,7 +199,7 @@ async function showPendingActionStep(user, token) {
     const property = data.objects.find((item) => item.id === pending.propertyId && ['active', 'reserved'].includes(item.status));
     if (property) {
       const title = localizedExact(property.title, language) || property.reference || '';
-      await sendMessage(user.chatId, [title ? '🏠 ' + title : '', copy.askQuestion].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
+      await sendMessage(user.chatId, [title ? '🔖 ' + title : '', copy.askQuestion].filter(Boolean).join('\n\n'), token, { reply_markup: menuKeyboard(language) });
       return true;
     }
   }
@@ -306,7 +306,7 @@ async function submitLead(user, pending, token, language, message, extraRows = [
       : pending.instant
         ? copy.instantSuccess.replace('{phone}', () => (lead.phone))
         : copy.success;
-  await sendMessage(user.chatId, withOffHoursNote([success, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), language, { user }), token, {
+  await sendMessage(user.chatId, withOffHoursNote([success, propertyTitle ? '🔖 ' + propertyTitle : ''].filter(Boolean).join('\n\n'), language, { user }), token, {
     reply_markup: extraRows.length ? { inline_keyboard: extraRows } : menuKeyboard(language),
   });
 }
@@ -610,7 +610,7 @@ async function startViewingForm(user, record, token) {
   const title = localizedExact(record.title, language) || record.reference || '';
   // Первый вопрос — кнопками под сообщением, а не сменой всей клавиатуры чата:
   // день, время и итог потом меняют это же сообщение.
-  const sent = await sendMessage(user.chatId, [title ? '🏠 ' + title : '', copy.askDate].filter(Boolean).join('\n\n'), token, { reply_markup: { inline_keyboard: viewingInlineRows(language, 'date', pending) } });
+  const sent = await sendMessage(user.chatId, [title ? '🔖 ' + title : '', copy.askDate].filter(Boolean).join('\n\n'), token, { reply_markup: { inline_keyboard: viewingInlineRows(language, 'date', pending) } });
   if (sent && sent.message_id) {
     pending.inlineMessageId = Number(sent.message_id);
     scheduleSave();
@@ -952,10 +952,10 @@ async function handleViewingFormMessage(message, user, token, context = null) {
       return true;
     }
     if (inline) {
-      await finish(withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || ''), '📅 ' + cleanText(pending.data.date, 160) + ' · ' + cleanText(pending.data.time, 160)].filter(Boolean).join('\n\n'), language, { user }));
+      await finish(withOffHoursNote([copy.success, '🔖 ' + (localizedExact(property.title, language) || property.reference || ''), '📅 ' + cleanText(pending.data.date, 160) + ' · ' + cleanText(pending.data.time, 160)].filter(Boolean).join('\n\n'), language, { user }));
       return true;
     }
-    await sendMessage(user.chatId, withOffHoursNote([copy.success, '🏠 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(user.chatId, withOffHoursNote([copy.success, '🔖 ' + (localizedExact(property.title, language) || property.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
     return true;
   }
   return false;

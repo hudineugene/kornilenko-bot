@@ -71,7 +71,7 @@ test.describe('client', () => {
   test('"ask for the price" creates a request about the property', async () => {
     const chat = createChat();
     const answered = await chat.press('property:price:villa-no-price');
-    assert.equal(answered.last.text, PROPERTY.ru.received + '\n\n🏠 Вилла без цены');
+    assert.equal(answered.last.text, PROPERTY.ru.received + '\n\n🔖 Вилла без цены');
     const [inquiry] = chat.inquiries;
     assert.equal(inquiry.propertyId, 'villa-no-price');
     assert.match(inquiry.text, new RegExp(PROPERTY.ru.askPrice));
@@ -80,7 +80,7 @@ test.describe('client', () => {
       '📩 Новое обращение: вопрос по объекту',
       '👤 Анна · RU',
       '',
-      '🏠 Вилла без цены',
+      '🔖 Вилла без цены',
       PROPERTY.ru.askPrice,
       '',
       '↩️ Ответьте на это сообщение — ответ получит клиент.',

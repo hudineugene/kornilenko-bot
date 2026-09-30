@@ -483,7 +483,7 @@ async function handleUpdate(update, token) {
       recordPropertyEvent(property.id, type === 'viewing' ? 'viewings' : 'questions');
       const received = (PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received;
       const propertyTitle = localizedExact(property.title, user.preferredLanguage) || property.reference || '';
-      answer = [received, propertyTitle ? '🏠 ' + propertyTitle : ''].filter(Boolean).join('\n\n');
+      answer = [received, propertyTitle ? '🔖 ' + propertyTitle : ''].filter(Boolean).join('\n\n');
       inquiryAnswer = true;
     } else {
       answer = user.preferredLanguage === 'en' ? 'This property is no longer available.' : user.preferredLanguage === 'es' ? 'Este inmueble ya no está disponible.' : 'Этот объект уже недоступен.';
@@ -600,7 +600,7 @@ async function handleUpdate(update, token) {
           scheduleSave();
           void notifyAdministratorAction(user, 'Открыл объект по номеру', found.record.reference || found.record.id);
           await clearUiMessages(message.chat.id, user, token);
-          await sendPropertyCard(message.chat.id, user, token, found.record, { heading: '🏠 ' + (PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).propertyHeading, page: 0, totalPages: 1, mode: 'all' });
+          await sendPropertyCard(message.chat.id, user, token, found.record, { heading: '🔖 ' + (PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).propertyHeading, page: 0, totalPages: 1, mode: 'all' });
           return;
         }
         if (adminOwnChat) {
@@ -612,7 +612,7 @@ async function handleUpdate(update, token) {
           const inquiry = createInquiry(user, propertyRequestText(found.record, user.preferredLanguage, 'question') + '\n\n' + text, { type: 'question', propertyId: found.record.id, sourceMessage: message });
           recordPropertyEvent(found.record.id, 'questions');
           const title = localizedExact(found.record.title, user.preferredLanguage) || found.record.reference || '';
-          answer = mergedAnswer(inquiry) ? '' : [(PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received, title ? '🏠 ' + title : ''].filter(Boolean).join('\n\n');
+          answer = mergedAnswer(inquiry) ? '' : [(PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received, title ? '🔖 ' + title : ''].filter(Boolean).join('\n\n');
           inquiryAnswer = true;
         } else {
           const inquiry = createInquiry(user, text, { type: 'general', sourceMessage: message });

@@ -413,7 +413,7 @@ test.describe('search in client messages', () => {
     const chat = createChat();
     telegram.calls = [];
     await chat.say('ref 1024');
-    assert.match(shownCard(), /^<i>🏠 Объект<\/i>\n\n<b>Квартира у пляжа<\/b>/);
+    assert.match(shownCard(), /^<i>🔖 Объект<\/i>\n\n<b>Квартира у пляжа<\/b>/);
     assert.equal(chat.inquiries.length, 0);
     telegram.calls = [];
     await chat.say('REF-4096');
@@ -428,7 +428,7 @@ test.describe('search in client messages', () => {
     assert.equal(inquiry.type, 'question');
     assert.equal(inquiry.propertyId, 'villa-malaga-02');
     assert.match(step.last.text, /Вилла в Малаге$/);
-    assert.ok(adminMessages().some((message) => message.text.includes('вопрос по объекту') && message.text.includes('🏠 Вилла в Малаге')));
+    assert.ok(adminMessages().some((message) => message.text.includes('вопрос по объекту') && message.text.includes('🔖 Вилла в Малаге')));
   });
 
   test('a city name shows the catalog in that city, in any language and spelling', async () => {

@@ -451,7 +451,7 @@ function propertyManagerMarkup(record, language, returnToCatalog = false) {
   // похожие объекты — в «Подробнее». Раньше здесь было шесть кнопок, и среди
   // них терялось главное — как связаться.
   if (record.status === 'reserved') {
-    rows.push([{ text: '🔔 ' + text.availability, callback_data: 'property:availability:' + record.id }]);
+    rows.push([{ text: '🙋 ' + text.availability, callback_data: 'property:availability:' + record.id }]);
   } else {
     rows.push([{ text: '📞 ' + text.interest, callback_data: 'property:interest:' + record.id }]);
   }
@@ -557,7 +557,7 @@ async function handlePropertyCallback(query, token) {
       user.catalogContext = { mode: 'all', page: 0, propertyId: record.id };
       scheduleSave();
       await sendPropertyCard(chatId, user, token, record, {
-        heading: '🏠 ' + text.propertyHeading,
+        heading: '🔖 ' + text.propertyHeading,
         page: 0,
         totalPages: 1,
         mode: 'all',
@@ -672,7 +672,7 @@ async function handlePropertyCallback(query, token) {
     recordPropertyEvent(record.id, 'questions');
     await acknowledgeCallback(query, token);
     createInquiry(user, propertyRequestText(record, language, 'question') + '\n\n' + text.askPrice, { type: 'question', propertyId: record.id });
-    await sendMessage(chatId, withOffHoursNote([text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(chatId, withOffHoursNote([text.received, '🔖 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
     return;
   }
   if (actionName === 'availability') {
@@ -680,7 +680,7 @@ async function handlePropertyCallback(query, token) {
     await acknowledgeCallback(query, token);
     const inquiry = propertyRequestText(record, language, 'question') + '\n\n' + text.availability;
     createInquiry(user, inquiry, { type: 'question', propertyId: record.id, sourceMessage: query.message });
-    await sendMessage(chatId, withOffHoursNote([text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
+    await sendMessage(chatId, withOffHoursNote([text.received, '🔖 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
     return;
   }
   if (actionName === 'similar') {
@@ -817,7 +817,7 @@ async function handlePropertyCallback(query, token) {
       if (record.status === 'reserved') {
         const inquiry = propertyRequestText(record, language, 'question') + '\n\n' + text.availability;
         createInquiry(user, inquiry, { type: 'question', propertyId: record.id, sourceMessage: query.message });
-        await sendMessage(chatId, withOffHoursNote([text.received, '🏠 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
+        await sendMessage(chatId, withOffHoursNote([text.received, '🔖 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
       } else {
         await startViewingForm(user, record, token);
       }

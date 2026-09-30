@@ -234,7 +234,7 @@ test.describe('viewing form', () => {
   test('the full path books a viewing for the property', async () => {
     const chat = createChat();
     let step = await chat.press('property:viewing:villa-marbella-01');
-    assert.equal(step.last.text, '🏠 Вилла в Марбелье\n\n' + ru.askDate);
+    assert.equal(step.last.text, '🔖 Вилла в Марбелье\n\n' + ru.askDate);
     assert.deepEqual(step.last.buttons, [...ru.dateOptions, ru.online, ru.cancel], 'среди вариантов есть онлайн-показ');
 
     step = await chat.say(ru.dateOptions[1]);
@@ -246,7 +246,7 @@ test.describe('viewing form', () => {
     assert.deepEqual(step.last.buttons, [ru.confirm, ru.editDate, ru.editTime, ru.cancel]);
 
     step = await chat.say(ru.confirm);
-    assert.equal(step.last.text, ru.success + '\n\n🏠 Вилла в Марбелье');
+    assert.equal(step.last.text, ru.success + '\n\n🔖 Вилла в Марбелье');
     const [inquiry] = chat.inquiries;
     assert.equal(inquiry.type, 'viewing');
     assert.equal(inquiry.propertyId, 'villa-marbella-01');
@@ -310,7 +310,7 @@ test.describe('viewing form', () => {
   test('a reserved property sends an availability question instead of a booking', async () => {
     const chat = createChat();
     const step = await chat.press('property:viewing:flat-reserved-02');
-    assert.equal(step.last.text, PROPERTY.ru.received + '\n\n🏠 Квартира у моря');
+    assert.equal(step.last.text, PROPERTY.ru.received + '\n\n🔖 Квартира у моря');
     assert.equal(chat.user.pendingAction, null);
     assert.equal(chat.inquiries[0].type, 'question');
   });

@@ -117,7 +117,7 @@ async function sendInquiryToAdministrator(inquiry, heading, extraLines = [], opt
     heading,
     '👤 ' + name + username + (inquiry.language ? ' · ' + inquiry.language.toUpperCase() : '') + (user && user.phone ? ' · ' + user.phone : ''),
     '',
-    ...(property ? ['🏠 ' + (localized(property.title, inquiry.language) || property.reference || property.id)] : []),
+    ...(property ? ['🔖 ' + (localized(property.title, inquiry.language) || property.reference || property.id)] : []),
     shortenedText(inquiry.text, 500),
     ...extraLines,
     ...(user ? ['', '↩️ Ответьте на это сообщение — ответ получит клиент.'] : []),
@@ -403,7 +403,7 @@ function weeklyReportText(report) {
     // «Сделок: 0» каждую неделю только мозолит глаза.
     ...(report.deals.count || report.deals.previous ? ['🤝 Сделок: ' + report.deals.count + comparison(report.deals.count, report.deals.previous)] : []),
     '⏳ Сейчас без ответа: ' + report.waiting,
-    ...(report.topProperties.length ? ['🏠 Больше всего обращений: ' + report.topProperties.map((item) => item.name + ' — ' + item.count).join(', ')] : []),
+    ...(report.topProperties.length ? ['🔖 Больше всего обращений: ' + report.topProperties.map((item) => item.name + ' — ' + item.count).join(', ')] : []),
     ...(report.sources.length ? ['📣 Откуда пришли: ' + report.sources.map(([name, count]) => name + ' — ' + count).join(', ')] : []),
     ...funnelTextLines(report.funnel),
     ...(report.broadcasts.count ? ['✉️ Рассылок: ' + report.broadcasts.count + ', получили ' + report.broadcasts.sent + ', откликнулись ' + report.broadcasts.responded] : []),

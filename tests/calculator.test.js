@@ -59,7 +59,10 @@ test('the client sees the estimate from "Details" of a property for sale with a 
   assert.ok(lines.includes('🧾 Налоги и расходы: ≈ 23 000 €'));
   assert.ok(lines.includes('   • Налог на передачу собственности (ITP) 10%: 20 000 €'));
   assert.ok(lines.includes('📌 Итого с расходами: ≈ 223 000 €'));
-  assert.ok(lines.some((line) => line.startsWith('🏦 Ипотека: первый взнос 30% — 60 000 €, кредит 140 000 €, 25 лет, 4%: ≈ 739 € в месяц')));
+  // Ипотека — блоком из коротких строк (было одной в девяносто знаков), итоги — жирным.
+  const at = lines.findIndex((line) => line === '🏦 Ипотека');
+  assert.ok(at >= 0, 'заголовок ипотеки');
+  assert.deepEqual(lines.slice(at + 1, at + 4).map((line) => line.replace(/[   ]/g, ' ')), ['   Первый взнос 30% — 60 000 €', '   Кредит 140 000 € · 25 лет · 4%', '   ≈ 739 € в месяц']);
   assert.ok(lines.includes('💼 Нужно на старте (взнос и расходы): ≈ 83 000 €'));
   assert.match(lines[lines.length - 1], /^Расчёт примерный/);
   assert.deepEqual(callbacksOf(step.last.markup), ['property:manager:resale-01', 'nav:close']);

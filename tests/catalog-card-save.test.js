@@ -152,7 +152,7 @@ test('объект публикуется в канал одним запрос�
   assert.equal(String(sent.body.chat_id), '-1001');
   assert.equal(sent.method, 'sendPhoto', 'с фотографией объекта');
   const button = sent.body.reply_markup.inline_keyboard.flat()[0];
-  assert.equal(button.text, '🏠 Смотреть в боте');
+  assert.equal(button.text, '🤖 Смотреть в боте');
   assert.equal(button.url, 'https://t.me/kornilenko_bot?start=property_from-feed__src_channel', 'ссылка ведёт на карточку и помнит канал');
 
   // Такая ссылка открывает ту же карточку и записывает источник клиенту.

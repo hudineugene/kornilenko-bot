@@ -133,7 +133,7 @@ test.describe('confirmation', () => {
     const [message] = sentTo(chat);
     const lines = message.body.text.split('\n');
     assert.equal(lines[0], '✅ Просмотр подтверждён');
-    assert.ok(lines.includes('🏠 Вилла в Марбелье'));
+    assert.ok(lines.includes('🔖 Вилла в Марбелье'));
     assert.ok(lines.some((line) => line.startsWith('📅 Дата: ') && line.includes(String(daysFromNow(1).getDate()).padStart(2, '0'))));
     assert.ok(lines.includes('🕒 Время: ' + ru.timeOptions[1]));
     assert.ok(lines.includes('📍 Адрес: Марбелья, Calle del Mar, 5'));
@@ -431,10 +431,10 @@ test.describe('my requests', () => {
 
     const step = await chat.say('/requests');
     const lines = step.last.text.split('\n');
-    assert.equal(lines[0], '📋 Ваши последние заявки и обращения:');
+    assert.equal(lines[0], '📨 Ваши последние заявки и обращения:');
     assert.ok(lines.includes('❓ Вопрос'));
     assert.ok(lines.includes('📅 Просмотр · Вилла в Марбелье'));
-    assert.ok(lines.some((line) => line.endsWith('— ✅ просмотр подтверждён')));
+    assert.ok(lines.some((line) => line.endsWith('— ✅ подтверждён')));
     assert.ok(lines.some((line) => /^отправлена \d\d\.\d\d — 🆕 получена/.test(line)));
     assert.deepEqual(callbacksOf(step.last.markup), ['myreq:cancel:' + inquiry.id, 'nav:my']);
   });
@@ -542,7 +542,7 @@ test.describe('reminder, feedback and the day\'s list', () => {
     telegram.calls = [];
     assert.deepEqual((await bot.runViewingNotices(at(date, 1, 10, 30))).feedback, [inquiry.id]);
     const [question] = sentTo(chat);
-    assert.equal(question.body.text, '🏠 Вилла в Марбелье\n\nКак прошёл просмотр? Нам важно ваше мнение.');
+    assert.equal(question.body.text, '🔖 Вилла в Марбелье\n\nКак прошёл просмотр? Нам важно ваше мнение.');
     assert.deepEqual(callbacksOf(question.body.reply_markup), ['vfb:liked:' + inquiry.id, 'vfb:questions:' + inquiry.id, 'vfb:disliked:' + inquiry.id]);
     assert.deepEqual((await bot.runViewingNotices(at(date, 1, 12))).feedback, [], 'asked once');
   });

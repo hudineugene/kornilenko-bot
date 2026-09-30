@@ -91,8 +91,8 @@ test.describe('у клиента', () => {
     const text = view(step).text;
     assert.match(text, /^📋 Мой план покупки/);
     assert.match(text, /Вы на шаге 1 из 10/);
-    assert.match(text, /👉 ⬜ 1\. NIE — номер иностранца/, 'текущий шаг отмечен');
-    assert.equal((text.match(/⬜/g) || []).length, 10);
+    assert.match(text, /👉 1\. NIE — номер иностранца/, 'текущий шаг отмечен');
+    assert.equal((text.match(/⬜/g) || []).length, 9, 'девять шагов впереди и один текущий — без двух знаков подряд');
     assert.match(text, /не юридическая консультация/, 'оговорка на экране');
     const rows = view(step).markup.inline_keyboard;
     assert.deepEqual(rows.slice(0, 2).map((row) => row.length), [5, 5], 'номера шагов — два ряда по пять');
@@ -121,7 +121,7 @@ test.describe('у клиента', () => {
     const overview = await chat.press('plan:open');
     assert.match(view(overview).text, /Вы на шаге 2 из 10/);
     assert.match(view(overview).text, /✅ 1\. NIE/);
-    assert.match(view(overview).text, /👉 ⬜ 2\./);
+    assert.match(view(overview).text, /👉 2\./);
 
     const step = await chat.press('plan:step:0');
     assert.match(view(step).text, /✅ Отмечено как готовое/);
