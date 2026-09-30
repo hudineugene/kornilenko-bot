@@ -258,7 +258,7 @@ function renderContacts(host) {
         '<div class="field"><label for="cSite">Сайт</label><input id="cSite" value="' + esc(contacts.website || "") + '"></div>' +
         '<div class="field"><label for="cMap">Ссылка на карту</label><input id="cMap" value="' + esc(contacts.mapUrl || "") + '"></div>' +
       "</div>" +
-      '<label class="check"><input type="checkbox" id="cWhatsappOn"' + (contacts.whatsappEnabled !== false ? " checked" : "") + "> показывать кнопку WhatsApp</label>" +
+      '<label class="check"><input type="checkbox" id="cWhatsappOn"' + (contacts.whatsappEnabled !== false ? " checked" : "") + "> Показывать кнопку WhatsApp</label>" +
       languageTabs() +
       '<div class="field"><label>Поясняющий текст</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-tr="text" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((contacts.text || {})[language[0]] || "") + "</textarea>";
@@ -428,7 +428,7 @@ function openRuleEditor(id) {
       }).join("") + "</select></div>" +
       '<div class="field"><label for="rLang">Язык</label><select id="rLang"><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option><option value="all">Любой</option></select></div></div>' +
       '<div class="field"><label for="rAnswer">Ответ бота</label><textarea id="rAnswer" class="area-sm">' + esc(rule && rule.answer || "") + "</textarea></div>" +
-      '<label class="check"><input type="checkbox" id="rEnabled"' + (!rule || rule.enabled !== false ? " checked" : "") + "> автоответ включён</label></div>",
+      '<label class="check"><input type="checkbox" id="rEnabled"' + (!rule || rule.enabled !== false ? " checked" : "") + "> Автоответ включён</label></div>",
     footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveRule" type="button">Сохранить</button>',
     ready: function (dialog) {
       if (rule) dialog.querySelector("#rLang").value = rule.language;

@@ -30,7 +30,7 @@ function notifyPrefsHtml(prefs) {
         '<option value="silent"' + (value === "silent" ? " selected" : "") + ">Без звука</option>" +
         (row[2] ? '<option value="off"' + (value === "off" ? " selected" : "") + ">Не присылать</option>" : "") + "</select></div>";
     }).join("") +
-    '<label class="check"><input type="checkbox" id="npQuiet"' + (quiet.enabled ? " checked" : "") + "> тихие часы: в это время всё приходит без звука</label>" +
+    '<label class="check"><input type="checkbox" id="npQuiet"' + (quiet.enabled ? " checked" : "") + "> Тихие часы: в это время всё приходит без звука</label>" +
     '<div class="grid cols-2"><div class="field"><label for="npFrom">С</label><input type="time" id="npFrom" value="' + esc(quiet.from || "22:00") + '"></div><div class="field"><label for="npTo">До</label><input type="time" id="npTo" value="' + esc(quiet.to || "08:00") + '"></div></div>' +
     '<div class="hint">Сообщения не пропадают: в тихие часы они приходят в чат, но телефон молчит.</div>' +
   "</div></div>";
@@ -56,7 +56,7 @@ function renderConnection(host) {
       '<div class="field"><label for="setNotify">Что присылать в Telegram</label><select id="setNotify">' +
         '<option value="inquiries"' + (config.notifyMode !== "all" ? " selected" : "") + ">Только заявки клиентов</option>" +
         '<option value="all"' + (config.notifyMode === "all" ? " selected" : "") + ">Все действия клиентов</option></select></div>" +
-      '<label class="check"><input type="checkbox" id="setStatusNotices"' + (config.statusNotices !== false ? " checked" : "") + "> сообщать о запуске и остановке бота</label>" +
+      '<label class="check"><input type="checkbox" id="setStatusNotices"' + (config.statusNotices !== false ? " checked" : "") + "> Сообщать о запуске и остановке бота</label>" +
     "</div></div>" + notifyPrefsHtml(config.notifyPrefs || {}) +
   "</div>" +
   '<div class="stack"><div class="card"><header><h3>Менеджеры</h3><div class="actions"><button class="btn secondary small" id="addManager" type="button">＋ Менеджер</button></div></header>' +
@@ -232,7 +232,7 @@ function renderWork(host) {
   var engagement = state.engagement || {};
   host.innerHTML = '<div class="grid cols-2">' +
     '<div class="card"><header><h3>Рабочее время</h3></header><div class="card-body stack" id="hoursCard">' +
-      '<label class="check"><input type="checkbox" id="hoursOn"' + (hours.enabled ? " checked" : "") + "> предупреждать клиентов о нерабочем времени</label>" +
+      '<label class="check"><input type="checkbox" id="hoursOn"' + (hours.enabled ? " checked" : "") + "> Предупреждать клиентов о нерабочем времени</label>" +
       '<div class="field"><label for="businessTimeZone">Часовой пояс компании</label><select id="businessTimeZone">' + TIME_ZONE_OPTIONS.map(function (option) {
         return '<option value="' + option[0] + '"' + ((state.config.timeZone || "Europe/Madrid") === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
       }).join("") + '</select><div class="hint">По этому времени работают расписания, напоминания и отложенные публикации.</div></div>' +
@@ -248,7 +248,7 @@ function renderWork(host) {
       '<div class="hint">Сообщение, которое клиент видит в нерабочее время, — во вкладке «Тексты бота» → «Контакты и о компании».</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Свободное время для просмотров</h3></header><div class="card-body stack">' +
-      '<label class="check"><input type="checkbox" id="slotsOn"' + (slots.enabled ? " checked" : "") + "> предлагать клиенту свободные слоты</label>" +
+      '<label class="check"><input type="checkbox" id="slotsOn"' + (slots.enabled ? " checked" : "") + "> Предлагать клиенту свободные слоты</label>" +
       '<div class="field"><span class="field-label">Дни</span><div class="row wrap">' + WEEKDAYS.map(function (day) {
         return '<label class="check"><input type="checkbox" data-slotday="' + day[0] + '"' + ((slots.days || []).indexOf(day[0]) >= 0 ? " checked" : "") + "> " + day[1] + "</label>";
       }).join("") + "</div></div>" +
@@ -257,7 +257,7 @@ function renderWork(host) {
       '<div class="field"><label for="slotPer">Записей на одно время</label><input id="slotPer" type="number" min="1" max="10" value="' + esc(slots.perSlot || 1) + '"></div></div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Калькулятор покупки</h3></header><div class="card-body stack">' +
-      '<label class="check"><input type="checkbox" id="calcOn"' + (calculator.enabled ? " checked" : "") + "> показывать расчёт расходов в карточке</label>" +
+      '<label class="check"><input type="checkbox" id="calcOn"' + (calculator.enabled ? " checked" : "") + "> Показывать расчёт расходов в карточке</label>" +
       // Ставки задаёт бухгалтер, меняются редко: под спойлером, чтобы не занимать экран.
       '<details class="editor-section rates-details"><summary><b>Ставки налогов и сборов</b><span>ITP, IVA, гербовый сбор</span></summary><div class="editor-section-body stack">' +
       '<div class="grid cols-2">' +
@@ -283,9 +283,9 @@ function renderWork(host) {
     "</div></div>" +
     // Автоматические сообщения: выключены, пока сами не включите.
     '<div class="card"><header><h3>Сообщения клиентам сами</h3></header><div class="card-body stack">' +
-      '<label class="check"><input type="checkbox" id="digestOn"' + (engagement.digest ? " checked" : "") + '> раз в неделю присылать «Что нового»: новые объекты и снижения цен</label>' +
-      '<label class="check"><input type="checkbox" id="comebackOn"' + (engagement.comeback ? " checked" : "") + '> напоминать тем, кто смотрел объекты и замолчал на 5–10 дней, если появилось подходящее</label>' +
-      '<label class="check"><input type="checkbox" id="planReminderOn"' + (engagement.planReminder ? " checked" : "") + '> напоминать о «Плане покупки» тем, кто его начал и замолчал на неделю (не чаще раза в две недели)</label>' +
+      '<label class="check"><input type="checkbox" id="digestOn"' + (engagement.digest ? " checked" : "") + '> Раз в неделю присылать «Что нового»: новые объекты и снижения цен</label>' +
+      '<label class="check"><input type="checkbox" id="comebackOn"' + (engagement.comeback ? " checked" : "") + '> Напоминать тем, кто смотрел объекты и замолчал на 5–10 дней, если появилось подходящее</label>' +
+      '<label class="check"><input type="checkbox" id="planReminderOn"' + (engagement.planReminder ? " checked" : "") + '> Напоминать о «Плане покупки» тем, кто его начал и замолчал на неделю (не чаще раза в две недели)</label>' +
       hintMore("Получат: " + num(engagement.audience || 0) + " — те, кто согласился на «Новости и акции». Объектов в продаже сейчас " + num(engagement.activeObjects || 0) + ". Включайте на живом каталоге.", "Пустое сообщение не отправляется, чаще раза в неделю дайджест не приходит, возврат — не чаще раза в три недели; каждое выключается одной кнопкой. На демо-объектах слать нечего.") +
     "</div></div></div>";
 
@@ -377,7 +377,7 @@ function renderData(host) {
       '<div class="hint">Подходит любая копия, сделанная ботом: скачанная этой кнопкой, из папки <b>backups</b> рядом с ботом или присланная в Telegram (для неё понадобится пароль копии). Ежедневная копия создаётся сама. Перед восстановлением прежние данные бот складывает в ту же папку — вернуться будет куда.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack"><div class="stack" id="tgBackupForm">' +
-      '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> присылать зашифрованную копию раз в неделю</label>" +
+      '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> Присылать зашифрованную копию раз в неделю</label>" +
       '<div class="field"><label for="tgBackupPass">Пароль шифрования</label><input id="tgBackupPass" type="password" placeholder="' + (backup.passwordSet ? "пароль сохранён" : "минимум 10 символов") + '"></div>' +
       '</div><div class="row wrap"><button class="btn ghost small" id="sendTgBackup" type="button">Отправить сейчас</button></div>' +
       (backup.lastSentAt ? '<div class="small muted">Последняя копия: ' + dateTime(backup.lastSentAt) + "</div>" : "") +
@@ -512,7 +512,7 @@ function renderAccess(host) {
       '<div class="hint">После смены пароля остальные сеансы завершатся.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Доступ из интернета</h3></header><div class="card-body stack">' +
-      '<label class="check"><input type="checkbox" id="remoteOn"' + (config.remoteAccess ? " checked" : "") + "> разрешить вход в панель из интернета</label>" +
+      '<label class="check"><input type="checkbox" id="remoteOn"' + (config.remoteAccess ? " checked" : "") + "> Разрешить вход в панель из интернета</label>" +
       '<div class="field"><label for="tunnelHost">Адрес панели в интернете</label><input id="tunnelHost" value="' + esc(config.tunnelHostname || "") + '" placeholder="panel.example.com"></div>' +
       '<div class="field"><label for="tunnelToken">Ключ доступа от Cloudflare</label><input id="tunnelToken" type="password" placeholder="' + (config.tunnelTokenSet ? "токен сохранён" : "из панели Cloudflare") + '"></div>' +
       '<button class="btn secondary small" id="saveRemote" type="button">Сохранить</button>' +

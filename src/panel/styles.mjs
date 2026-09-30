@@ -125,7 +125,7 @@ a:hover{text-decoration:underline}
 .card-body{padding:var(--sp-4)}
 .card-body.tight{padding:var(--sp-3) var(--sp-4)}
 .kpi{display:flex;flex-direction:column;gap:2px;padding:var(--sp-3) var(--sp-4)}
-.kpi .label{color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.kpi .label{color:var(--muted)}
 .kpi .value{font-size:var(--fs-xl);font-weight:700;letter-spacing:-.02em}
 .kpi .delta{color:var(--muted)}
 .kpi .delta.up{color:var(--ok)}.kpi .delta.down{color:var(--bad)}
@@ -257,6 +257,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
   .objects-table td:nth-child(6){grid-column:2;grid-row:3}
   .objects-table td:nth-child(7){grid-column:3;grid-row:3;text-align:right}
   .objects-table .object-performance{display:flex;flex-direction:column;align-items:flex-end;gap:0;font-size:var(--fs-xs)}
+  .objects-table td:nth-child(6) .chip{max-width:100%;white-space:normal}
   .clients-table tr{grid-template-columns:minmax(0,1fr) auto}
   .clients-table td:nth-child(1){grid-column:1/-1;grid-row:1}
   .clients-table td:nth-child(3){grid-column:1;grid-row:2}
@@ -901,9 +902,11 @@ dialog::backdrop{background:var(--overlay)}
   .viewing-calendar-shell{overflow:visible}
   .viewing-day{min-height:0}
   .viewing-day:not(.today):has(.viewing-day-empty){display:none}
-  /* Кнопки под палец: не ниже 44 px. Мелкие кнопки редактора текста не трогаем. */
+  /* Кнопки под палец: не ниже 44 px; у плотных (панель форматирования поста, закрытие подсказки, «Ответить» у сообщения) — не ниже 34. */
   .btn,.btn.small{min-height:44px}
-  .markup-bar .btn,.toast-action,.reply-delivery .btn.small{min-height:0}
+  .markup-bar .btn,.reply-delivery .btn.small{min-height:34px}
+  .toast-action{min-height:36px;padding-left:var(--sp-4);padding-right:var(--sp-4)}
+  .message-reply-button{padding:var(--sp-2) var(--sp-3)}
 }
 /* Ноутбук (1181–1960 px): восемь пунктов, поле поиска и значки справа не помещаются вместе с названием
    компании, и последний пункт («Настройки») уходил под поиск. Остаётся логотип, пункты без значков и с

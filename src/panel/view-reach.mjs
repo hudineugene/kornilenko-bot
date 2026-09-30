@@ -221,7 +221,7 @@ function openCampaignEditor(id) {
         '<div class="hint">Условия из разных полей применяются одновременно. Например: Spanish + «Подбор» + интерес к выбранной вилле.</div>' +
         // Карточкой — то есть с фотографией объекта и кнопками «Записаться» и
         // «Подробнее». Без выбранного объекта отправлять нечего.
-        '<label class="check"><input type="checkbox" id="campAsCard"' + (entry && entry.sendAsCard ? " checked" : "") + (selectedProperty ? "" : " disabled") + '> отправить карточкой этого объекта: фото, цена и кнопки «Записаться» и «Подробнее»</label>' +
+        '<label class="check"><input type="checkbox" id="campAsCard"' + (entry && entry.sendAsCard ? " checked" : "") + (selectedProperty ? "" : " disabled") + '> Отправить карточкой этого объекта: фото, цена и кнопки «Записаться» и «Подробнее»</label>' +
         '<div class="recipient-summary"><span>' + iconSpan("users") + '</span><div><b id="campEstimate">Считаем получателей…</b><small id="campEstimateDetails">Проверяем выбранный сегмент</small></div></div>' +
       "</div></details>" +
       '<details class="editor-section" open><summary><b>Время отправки</b><span>сейчас или по расписанию</span></summary><div class="editor-section-body">' +
@@ -486,7 +486,7 @@ function signatureNote() {
     : lines.join(current.signatureWrap === "dot" ? " · " : " ");
   return '<div class="field"><span class="field-label">Подпись под постом</span>' +
     '<div class="msg small">' + linkedPreview(shown) + "</div>" +
-    '<label class="check"><input type="checkbox" id="groupNoSignature"> этот пост без подписи</label></div>';
+    '<label class="check"><input type="checkbox" id="groupNoSignature"> Этот пост без подписи</label></div>';
 }
 
 function groupKindName(group) {
@@ -662,7 +662,7 @@ function renderGroupCard(host, group, mode) {
         buttonsNote() +
         '<div class="row"><button class="btn ghost small" id="openPostStyle" type="button">✎ Оформление постов</button>' +
         '<span class="small muted">Постоянная подпись, кнопки под постом и плашки рубрик.</span></div>' +
-        '<div class="row wrap">' + (groupCan(group, "can_pin_messages") ? '<label class="check"><input type="checkbox" id="groupPin"> закрепить</label>' : "") +
+        '<div class="row wrap">' + (groupCan(group, "can_pin_messages") ? '<label class="check"><input type="checkbox" id="groupPin"> Закрепить</label>' : "") +
         '<label class="check"><input type="checkbox" id="groupNotify" checked> со звуком</label>' +
         '<div class="grow"></div><button class="btn secondary" id="groupPreview" type="button">Себе для проверки</button>' +
         '<button class="btn" id="groupSend" type="button">Отправить</button></div>' +
@@ -949,7 +949,7 @@ function renderGroupCard(host, group, mode) {
   };
   var copy = host.querySelector("#copyInvite");
   if (copy) copy.onclick = function () {
-    navigator.clipboard.writeText(host.querySelector("#inviteLink").value).then(function () { toast("Скопировано"); });
+    copyText(host.querySelector("#inviteLink").value);
   };
   if (host.querySelector("#loadAdmins")) host.querySelector("#loadAdmins").onclick = async function () {
     try {
@@ -1022,7 +1022,7 @@ function checkPlateWidth(row, index, onPad) {
     var small = picture.naturalWidth < 1280;
     note.innerHTML = picture.naturalWidth + "×" + picture.naturalHeight + " (" + ratio.toFixed(1) + ":1)" +
       (narrow ? " — узкая: текст под ней будет сжат." : small ? " — для чёткости лучше 1280 точек по ширине." : "") +
-      (flat ? ' — слишком вытянутая: Telegram добавит размытый фон сверху и снизу. <select data-padratio="' + index + '" class="chip-inline"><option value="3">до 3:1</option><option value="2.5">до 2,5:1</option><option value="2">до 2:1</option><option value="1.78">до 16:9</option></select> <input type="color" data-padcolor="' + index + '" value="#ffffff" class="switch-inline"> <label class="check inline-flex"><input type="checkbox" data-padtransparent="' + index + '"> прозрачный</label> <button class="btn ghost small" data-pad="' + index + '" type="button">Дорисовать фон</button>' : "");
+      (flat ? ' — слишком вытянутая: Telegram добавит размытый фон сверху и снизу. <select data-padratio="' + index + '" class="chip-inline"><option value="3">до 3:1</option><option value="2.5">до 2,5:1</option><option value="2">до 2:1</option><option value="1.78">до 16:9</option></select> <input type="color" data-padcolor="' + index + '" value="#ffffff" class="switch-inline"> <label class="check inline-flex"><input type="checkbox" data-padtransparent="' + index + '"> Прозрачный</label> <button class="btn ghost small" data-pad="' + index + '" type="button">Дорисовать фон</button>' : "");
     note.style.color = narrow || flat ? "var(--warn)" : "var(--muted)";
     var padButton = note.querySelector("[data-pad]");
     if (padButton) {
@@ -1097,7 +1097,7 @@ function renderPostStyle(host) {
           '<option value="dot"' + (draft.signatureWrap === "dot" ? " selected" : "") + '>одной строкой через «·»</option>' +
         "</select></div>" +
         '<div class="hint">Ссылка надписью: <code>[ТикТок](https://tiktok.com/@ваш_аккаунт)</code>. Жирный: <code>**Название**</code>, курсив: <code>__текст__</code>. Значок тоже может быть ссылкой: <code>[🎵](https://…)</code>.</div>' +
-        '<label class="check"><input type="checkbox" id="signQuote"' + (draft.signatureQuote ? " checked" : "") + '> подпись отдельным блоком (цитатой с полоской слева)</label>' +
+        '<label class="check"><input type="checkbox" id="signQuote"' + (draft.signatureQuote ? " checked" : "") + '> Подпись отдельным блоком (цитатой с полоской слева)</label>' +
         '<div class="field"><label for="signDivider">Линия над подписью</label><select id="signDivider">' +
           [["none", "без линии"], ["thin", "тонкая ─────"], ["bold", "жирная ━━━━━"], ["dash", "пунктир - - - -"], ["dots", "точки · · · ·"]].map(function (option) {
             return '<option value="' + option[0] + '"' + (draft.signatureDivider === option[0] ? " selected" : "") + ">" + option[1] + "</option>";

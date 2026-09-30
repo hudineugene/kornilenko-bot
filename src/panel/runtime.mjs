@@ -329,6 +329,30 @@ function loadInterfaceText(force) {
 
 // action — необязательная кнопка в самом уведомлении: {label, run}. Так после
 // «Скрыть» остаётся возможность вернуть дело, пока уведомление на экране.
+// Копирование: браузер может отказать (страница не в фокусе, адрес без https). Тогда пробуем старый способ и, если и он
+// не сработал, говорим об этом — а не молчим и не роняем скрипт необработанной ошибкой.
+function copyText(text, done) {
+  function fallback() {
+    try {
+      var area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(area);
+      if (ok) return toast(done || "Скопировано");
+    } catch (error) { /* ниже — подсказка */ }
+    toast("Не удалось скопировать — выделите текст и скопируйте вручную", true);
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(function () { toast(done || "Скопировано"); }, fallback);
+  } catch (error) { /* запасной путь */ }
+  fallback();
+}
+
 // Ошибка у поля: красный текст под ним, поле помечено aria-invalid и получает фокус; пропадает, как только начали
 // исправлять. Без подходящего поля (или если браузер не даёт вставить подпись) — обычная подсказка.
 function fieldError(input, text) {

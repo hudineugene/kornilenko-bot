@@ -101,3 +101,28 @@ test('font-size:var(--fs-sm) без нужды не повторяется: их
   const count = (styles.match(/font-size:var\(--fs-sm\)/g) || []).length;
   assert.ok(count < 50, 'объявлений: ' + count);
 });
+
+test('копирование: если браузер отказал — запасной способ, а если и он не вышел — понятная подсказка, а не необработанная ошибка', async () => {
+  const runtime = sources.find((item) => item.name === 'runtime.mjs').text;
+  const start = runtime.indexOf('function copyText(');
+  const end = runtime.indexOf('// Ошибка у поля:', start);
+  assert.ok(start > 0 && end > start);
+  const make = new Function('document', 'navigator', 'toast', runtime.slice(start, end) + '\nreturn copyText;');
+  const run = async (clipboard, execCommand) => {
+    const toasts = [];
+    const document = {
+      body: { appendChild() {}, removeChild() {} },
+      createElement: () => ({ style: {}, setAttribute() {}, select() {} }),
+      execCommand: () => execCommand,
+    };
+    await make(document, { clipboard }, (text, bad) => toasts.push([text, Boolean(bad)]))('https://x', 'Ссылка скопирована');
+    return toasts;
+  };
+  assert.deepEqual(await run({ writeText: async () => {} }, false), [['Ссылка скопирована', false]]);
+  assert.deepEqual(await run({ writeText: async () => { throw new Error('Document is not focused'); } }, true), [['Ссылка скопирована', false]], 'отказ → запасной способ');
+  const failed = await run({ writeText: async () => { throw new Error('denied'); } }, false);
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0][1], true);
+  assert.match(failed[0][0], /Не удалось скопировать/);
+  assert.deepEqual(await run(undefined, true), [['Ссылка скопирована', false]], 'без clipboard API — запасной способ');
+});

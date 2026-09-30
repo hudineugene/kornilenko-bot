@@ -480,11 +480,11 @@ function bindSourceLink(host) {
     host.querySelector("#sourceLink").value = sourceLink(label) || "Укажите метку латиницей";
   };
   host.querySelector("#copySourceLink").onclick = function () {
-    navigator.clipboard.writeText(host.querySelector("#sourceLink").value).then(function () { toast("Скопировано"); });
+    copyText(host.querySelector("#sourceLink").value);
   };
   host.querySelectorAll("[data-copy-source]").forEach(function (button) {
     button.onclick = function () {
-      navigator.clipboard.writeText(sourceLink(button.dataset.copySource)).then(function () { toast("Ссылка скопирована"); });
+      copyText(sourceLink(button.dataset.copySource), "Ссылка скопирована");
     };
   });
 }
@@ -590,7 +590,7 @@ async function loadWeekly(host) {
     });
     var copy = box.querySelector("#weekCopy");
     if (copy) copy.onclick = function () {
-      navigator.clipboard.writeText(payload.text).then(function () { toast("Скопировано"); });
+      copyText(payload.text);
     };
   } catch (error) {
     box.innerHTML = '<div class="card gap-bottom"><div class="empty"><b>Не удалось загрузить неделю</b>' + esc(error && error.message || "") + "</div></div>";
