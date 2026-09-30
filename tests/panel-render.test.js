@@ -3973,3 +3973,12 @@ test('«Настроить» у политики: после отрисовки 
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   assert.match(PANEL_HTML, /interfaceGroupOpen = "privacy"; interfaceFocusKey = "policy"/, 'кнопка чек-листа запоминает, что раскрыть');
 });
+
+test('заметка и теги клиента — одинаково названы в диалоге и в карточке и шлются, только если их правили здесь', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.ok(!/Общая заметка|Теги через запятую/.test(PANEL_HTML), 'одно название: «Заметка о клиенте» и «Теги клиента»');
+  assert.equal((PANEL_HTML.match(/Заметка о клиенте<\/label>/g) || []).length, 2, 'в двух местах — одно название');
+  assert.match(PANEL_HTML, /if \(noteNow !== initialNote\) patch\.note = noteNow;/, 'диалог шлёт заметку только изменённой');
+  assert.match(PANEL_HTML, /if \(noteNow !== \(user\.note \|\| ""\)\) payload\.note = noteNow;/, 'карточка тоже');
+  assert.ok(!/patch = \{\s*note: /.test(PANEL_HTML), 'заметка не уходит с каждым сохранением диалога');
+});

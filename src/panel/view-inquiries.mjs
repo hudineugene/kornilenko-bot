@@ -1234,16 +1234,22 @@ function renderInquiryCard(host) {
   // сохраняются совсем. Форма под наблюдением — несохранённая правка не теряется
   // при уходе со страницы, а кнопка в панели и кнопка полосы сохранения делают одно
   // и то же.
+  var initialNote = host.querySelector("#inqNote").value;
+  var initialTags = host.querySelector("#clientTagsInq").value;
   async function saveInquiryPanel() {
     // Статус и этап шлём, только если человек их изменил: неизменный этап
     // «Выиграно» вместе со статусом «Открыта» затирал бы одно другим.
+    // Заметка и теги клиента живут и в карточке клиента: шлём их, только если правили здесь, — иначе
+    // сохранение из диалога затирало бы то, что успели записать в карточке (и наоборот).
     var patch = {
-      note: host.querySelector("#inqNote").value,
-      tags: host.querySelector("#clientTagsInq").value.split(",").map(function (tag) { return tag.trim(); }).filter(Boolean),
       followUpDate: host.querySelector("#followDate").value,
       followUpTime: host.querySelector("#followTime").value,
       assignee: host.querySelector("#inqAssignee").value,
     };
+    var noteNow = host.querySelector("#inqNote").value;
+    if (noteNow !== initialNote) patch.note = noteNow;
+    var tagsNow = host.querySelector("#clientTagsInq").value;
+    if (tagsNow !== initialTags) patch.tags = tagsNow.split(",").map(function (tag) { return tag.trim(); }).filter(Boolean);
     var wantClosed = host.querySelector("#inqStatusValue").value === "closed";
     if (wantClosed !== (item.status === "closed")) patch.status = wantClosed ? "closed" : "in_progress";
     var wantStage = host.querySelector("#inqPipeline").value;
@@ -1558,7 +1564,7 @@ function openClient(id) {
     protectChanges: true,
     body: '<div class="client-profile"><aside class="client-profile-side"><div class="client-profile-identity"><span class="conversation-avatar client-avatar">' + esc(initials(user.firstName)) + '</span><div><h2>' + esc(userName(user)) + '</h2><span class="small muted">ID ' + esc(user.id) + (user.username ? " · @" + esc(user.username) : "") + '</span></div></div>' +
       '<div class="client-facts"><div><span>Источник</span><b>' + esc(user.source || "без метки") + '</b></div>' + (user.plan && user.plan.startedAt ? '<div><span>План покупки</span><b>' + Object.keys(user.plan.done || {}).length + ' из 10 шагов' + (Object.keys(user.plan.help || {}).length ? ', просит помощи' : '') + '</b></div>' : "") + (user.goal ? '<div><span>Цель</span><b>' + esc({ live: "купить для жизни", invest: "инвестиция и аренда", browse: "пока смотрит" }[user.goal] || "") + '</b></div>' : "") + '<div><span>Первый контакт</span><b>' + dateTime(user.firstSeenAt) + '</b></div><div><span>Последняя активность</span><b>' + dateTime(user.lastSeenAt) + '</b></div>' + (latest ? '<div><span>Этап</span><b>' + esc(clientStageLabel(latest)) + '</b></div>' : "") + '</div>' +
-      '<div class="client-edit stack"><div class="grid cols-2"><div class="field"><label for="clientContactName">Имя для связи</label><input id="clientContactName" data-client-edit value="' + esc(user.contactName || userName(user)) + '"></div><div class="field"><label for="clientLanguage">Язык</label><select id="clientLanguage" data-client-edit><option value="">Не выбран</option>' + [["ru", "Русский"], ["en", "English"], ["es", "Español"]].map(function (language) { return '<option value="' + language[0] + '"' + (user.preferredLanguage === language[0] ? " selected" : "") + '>' + language[1] + "</option>"; }).join("") + '</select></div></div><div class="field"><label for="clientPhone">Телефон</label><input id="clientPhone" data-client-edit value="' + esc(user.phone || "") + '" placeholder="+34 …"></div><div class="field"><label for="clientContactTime">Когда удобно связаться</label><input id="clientContactTime" data-client-edit value="' + esc(user.preferredContactTime || "") + '"></div><div class="field"><label for="clientTags">Теги через запятую</label><input id="clientTags" data-client-edit value="' + esc((user.tags || []).join(", ")) + '"></div><div class="field"><label for="clientNote">Общая заметка</label><textarea id="clientNote" data-client-edit>' + esc(user.note || "") + '</textarea></div><label class="check"><input type="checkbox" id="clientBlocked" data-client-edit' + (user.blocked ? " checked" : "") + '> не писать этому клиенту</label></div></aside>' +
+      '<div class="client-edit stack"><div class="grid cols-2"><div class="field"><label for="clientContactName">Имя для связи</label><input id="clientContactName" data-client-edit value="' + esc(user.contactName || userName(user)) + '"></div><div class="field"><label for="clientLanguage">Язык</label><select id="clientLanguage" data-client-edit><option value="">Не выбран</option>' + [["ru", "Русский"], ["en", "English"], ["es", "Español"]].map(function (language) { return '<option value="' + language[0] + '"' + (user.preferredLanguage === language[0] ? " selected" : "") + '>' + language[1] + "</option>"; }).join("") + '</select></div></div><div class="field"><label for="clientPhone">Телефон</label><input id="clientPhone" data-client-edit value="' + esc(user.phone || "") + '" placeholder="+34 …"></div><div class="field"><label for="clientContactTime">Когда удобно связаться</label><input id="clientContactTime" data-client-edit value="' + esc(user.preferredContactTime || "") + '"></div><div class="field"><label for="clientTags">Теги клиента</label><input id="clientTags" data-client-edit value="' + esc((user.tags || []).join(", ")) + '"></div><div class="field"><label for="clientNote">Заметка о клиенте</label><textarea id="clientNote" data-client-edit>' + esc(user.note || "") + '</textarea></div><label class="check"><input type="checkbox" id="clientBlocked" data-client-edit' + (user.blocked ? " checked" : "") + '> не писать этому клиенту</label></div></aside>' +
       '<main class="client-profile-main"><div class="grid cols-4">' + kpiCard("Сообщений", num(clientMessageTotal(user, inquiries))) + kpiCard("Заявок", num(inquiries.length)) + kpiCard("Избранное", num((user.favorites || []).length)) + kpiCard("Просмотрено", num((user.recentlyViewed || []).length)) + '</div>' +
       '<section class="card client-message-box"><header><div><h3>Написать клиенту</h3><span class="small muted">Сообщение уходит клиенту в Telegram</span></div>' + (user.blocked || !user.chatId ? '<span class="chip bad">отправка недоступна</span>' : '<span class="chip ok">Telegram доступен</span>') + '</header><div class="card-body stack"><div class="small muted">Шаблоны, файлы, цитата и кнопка-ссылка — всё в одной форме на экране переписки.</div><button class="btn" id="clientWrite" type="button"' + (user.blocked || !user.chatId ? " disabled" : "") + '>Открыть диалог →</button></div></section>' +
       '<div class="grid cols-2 client-interest-grid"><section class="card"><header><h3>Запрос клиента</h3></header><div class="card-body stack"><div><span class="field-label">Сохранённый поиск</span><div>' + esc(savedSearchSummary(user)) + '</div></div><div><span class="field-label">Последняя заявка на подбор</span><div>' + esc(clientSelectionText(inquiries)) + '</div></div></div></section><section class="card"><header><h3>Следующее действие</h3></header><div class="card-body">' + (active ? '<div class="stack"><div class="row wrap"><span class="chip brand">' + esc(clientStageLabel(active)) + '</span>' + (active.assignee ? '<span class="chip">' + esc(active.assignee) + '</span>' : '<span class="chip warn">менеджер не назначен</span>') + '</div><div>' + (active.followUpDate ? "Связаться: " + pipelineDate(active.followUpDate) + (active.followUpTime ? " в " + esc(active.followUpTime) : "") : "Следующий шаг не назначен") + '</div><button class="btn secondary small" id="clientOpenTask" type="button">Открыть заявку</button></div>' : '<div class="empty"><b>Активных заявок нет</b></div>') + '</div></section></div>' +
@@ -1576,7 +1582,13 @@ function openClient(id) {
         return confirmDialog(title, "Изменения в карточке клиента будут потеряны.", action, true);
       }
       function profilePayload() {
-        return { contactName: dialog.querySelector("#clientContactName").value, phone: dialog.querySelector("#clientPhone").value, preferredContactTime: dialog.querySelector("#clientContactTime").value, preferredLanguage: dialog.querySelector("#clientLanguage").value, note: dialog.querySelector("#clientNote").value, tags: dialog.querySelector("#clientTags").value.split(",").map(function (tag) { return tag.trim(); }).filter(Boolean), blocked: dialog.querySelector("#clientBlocked").checked };
+        var payload = { contactName: dialog.querySelector("#clientContactName").value, phone: dialog.querySelector("#clientPhone").value, preferredContactTime: dialog.querySelector("#clientContactTime").value, preferredLanguage: dialog.querySelector("#clientLanguage").value, blocked: dialog.querySelector("#clientBlocked").checked };
+        // Заметка и теги — те же, что в боковой панели диалога: шлём, только если правили здесь.
+        var noteNow = dialog.querySelector("#clientNote").value;
+        if (noteNow !== (user.note || "")) payload.note = noteNow;
+        var tagsNow = dialog.querySelector("#clientTags").value;
+        if (tagsNow !== (user.tags || []).join(", ")) payload.tags = tagsNow.split(",").map(function (tag) { return tag.trim(); }).filter(Boolean);
+        return payload;
       }
       async function saveProfile() {
         await send("/api/users/" + encodeURIComponent(user.id), "PATCH", profilePayload());
