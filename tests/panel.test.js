@@ -788,3 +788,16 @@ test('объект можно опубликовать по-русски: «Ск
   assert.match(PANEL_HTML, /Text in Russian/, 'клиент увидит пометку — об этом сказано в вопросе');
   assert.ok(!/publishNow" type="button"' \+ \(ready \?/.test(PANEL_HTML), 'прежней привязки к трём языкам нет');
 });
+
+test('вкладки каналов и групп различаются префиксом «Канал:» / «Группа:», даже если названия одинаковые', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  assert.match(PANEL_HTML, /esc\(\(item\.type === "channel" \? "Канал: " : "Группа: "\) \+ \(item\.title \|\| item\.id\)\) \+ "<\/button>"/);
+});
+
+test('подсказки в разметке не длиннее 200 знаков: подробности — под «Подробнее» (hintMore)', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const long = [];
+  for (const match of PANEL_HTML.matchAll(/class="hint">([^<]{201,})</g)) long.push(match[1].slice(0, 60) + '… (' + match[1].length + ')');
+  assert.deepEqual(long, [], 'длинные подсказки: ' + long.join(' | '));
+  assert.match(PANEL_HTML, /function hintMore\(short, more\)/);
+});

@@ -535,7 +535,7 @@ function renderGroups(host, mode) {
         return '<option value="' + esc(item.id) + '"' + (item.id === selectedGroup ? " selected" : "") + ">" + esc((item.type === "channel" ? "Канал: " : "Группа: ") + (item.title || item.id)) + "</option>";
       }).join("") + "</select></div></div></div>"
     : (groups.length > 1 ? '<div class="toolbar"><div class="tabs" id="groupPicker">' + groups.map(function (item) {
-        return '<button type="button" data-group="' + esc(item.id) + '" class="' + (item.id === selectedGroup ? "active" : "") + '">' + esc(item.title || item.id) + "</button>";
+        return '<button type="button" data-group="' + esc(item.id) + '" class="' + (item.id === selectedGroup ? "active" : "") + '">' + esc((item.type === "channel" ? "Канал: " : "Группа: ") + (item.title || item.id)) + "</button>";
       }).join("") + "</div></div>" : "");
   host.innerHTML = picker + '<div id="groupBody"></div>' +
     (mode === "manage" ? '<div class="gap-top-lg">' + connectGroupCard(false) + "</div>" : "");

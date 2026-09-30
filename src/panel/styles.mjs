@@ -139,6 +139,8 @@ tbody tr.selected{background:var(--brand-soft)}
 .btn.small{padding:var(--sp-1) var(--sp-2);font-size:var(--fs-sm);border-radius:var(--radius-sm)}
 .btn.icon{padding:var(--sp-1) var(--sp-2)}
 .btn-ico{display:inline-flex;flex:none;width:16px;height:16px}
+.hint-more{margin-top:var(--sp-1)}
+.hint-more>summary{cursor:pointer;color:var(--brand)}
 /* Пояснение к числу: на компьютере — подсказка при наведении (title), на телефоне наведения нет — подпись под числом. */
 .strip-hint{display:none;color:var(--muted);font-size:var(--fs-xs)}
 @media(max-width:860px){.today-numbers .strip-hint{display:block}}

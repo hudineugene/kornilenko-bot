@@ -61,7 +61,7 @@ async function renderWelcome(host) {
       }).join("") + '<div class="hint">{first_name} подставит имя клиента, {last_name} — фамилию, {username} — ник в Telegram.</div></div>' +
       '<div class="field"><label>Подсказка под приветствием</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-hint="text" data-lang="' + language[0] + '" class="lang-input' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((hints[language[0]] || {}).text || "") + "</textarea>";
-      }).join("") + '<div class="hint">Строку о том, сколько объектов в каталоге, бот добавляет сам. {example} подставит пример запроса из вашего каталога — «: Альтеа, 3 спальни, до 350 000 €»; если {example} не писать, бот ничего не подставит.</div></div>' +
+      }).join("") + hintMore("Строку о том, сколько объектов в каталоге, бот добавляет сам.", "{example} подставит пример запроса из вашего каталога — «: Альтеа, 3 спальни, до 350 000 €»; если {example} не писать, бот ничего не подставит.") + '</div>' +
       '<div class="field"><label>Помощь (/help)</label>' + LANGUAGES.map(function (language) {
         return '<textarea data-tr="help" data-lang="' + language[0] + '" class="lang-input area-lg' + (language[0] === "ru" ? "" : " hidden") + '">' + esc((messages[language[0]] || {}).help || "") + "</textarea>";
       }).join("") + "</div>" +

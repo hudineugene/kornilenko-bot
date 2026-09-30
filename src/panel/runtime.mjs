@@ -506,6 +506,12 @@ function formSignature(root) {
 // пароля, восстановление копии): у них своя проверка, они не «правка полей».
 // Кнопки «Сохранить» посреди страницы у отдельной карточки не заводим: правка в одной
 // карточке терялась, если нажать соседнюю.
+// Подсказка: главное — сразу, подробности — под «Подробнее». Длинная плашка из трёх-четырёх
+// предложений заслоняла поля, под которыми стоит.
+function hintMore(short, more) {
+  return '<div class="hint">' + esc(short) + (more ? '<details class="hint-more"><summary>Подробнее</summary>' + esc(more) + "</details>" : "") + "</div>";
+}
+
 function watchForm(root, save, label) {
   var initial = null;
   var forced = false;
