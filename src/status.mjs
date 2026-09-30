@@ -6,6 +6,7 @@
 import { cleanText, delay, localDayKey } from './util.mjs';
 import { data, runtime, scheduleSave } from './store.mjs';
 import { sendMessage } from './telegram.mjs';
+import { adminSendPlan } from './notify-plan.mjs';
 
 // A shorter break in the connection is not worth a message.
 const OUTAGE_NOTICE_MS = 3 * 60 * 1000;
@@ -46,7 +47,7 @@ async function sendStatusNotice(text, retries = 0) {
   if (!statusNoticesOn()) return false;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      await sendMessage(cleanText(data.config.adminChatId, 40), text, data.config.botToken, { track: false });
+      await sendMessage(cleanText(data.config.adminChatId, 40), text, data.config.botToken, { track: false, ...adminSendPlan('system').options });
       return true;
     } catch {
       if (attempt < retries) await delay(START_NOTICE_RETRY_MS);

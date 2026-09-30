@@ -3,7 +3,7 @@
 
 import crypto from 'node:crypto';
 import { cleanText, delay, hashPassword } from './util.mjs';
-import { CLOCK_TIME_PATTERN, REMINDER_HOUR_OPTIONS, REPLY_MINUTES_CHOICES, RETENTION_MONTH_OPTIONS, MAX_MANAGERS, TIME_ZONES, normalizeCalculator, normalizeManagers, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
+import { CLOCK_TIME_PATTERN, REMINDER_HOUR_OPTIONS, REPLY_MINUTES_CHOICES, RETENTION_MONTH_OPTIONS, MAX_MANAGERS, TIME_ZONES, normalizeCalculator, normalizeManagers, normalizeNotifyPrefs, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { applyConfiguredTimeZone, data, saveDataNow, verifyPassword } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { forgetTelegramFileIds, sendMessage, telegramRequest } from './telegram.mjs';
@@ -178,6 +178,10 @@ function refreshStaffCommands(previousChatIds = []) {
     const adminChatId = body.adminChatId == null ? previousAdminChatId : cleanText(body.adminChatId, 40);
     if (adminChatId && !/^-?\d{4,20}$/.test(adminChatId)) return json(res, 400, { error: 'Chat ID должен состоять из цифр' });
     if (body.notifyMode != null && !['all', 'inquiries'].includes(body.notifyMode)) return json(res, 400, { error: 'Некорректный режим уведомлений' });
+    if (body.notifyPrefs != null) {
+      const quiet = body.notifyPrefs && body.notifyPrefs.quiet;
+      if (quiet && quiet.enabled && (!CLOCK_TIME_PATTERN.test(String(quiet.from || '')) || !CLOCK_TIME_PATTERN.test(String(quiet.to || '')) || quiet.from === quiet.to)) return json(res, 400, { error: 'Тихие часы: укажите начало и конец в формате ЧЧ:ММ, они не должны совпадать' });
+    }
     if (body.reminderHours != null && !REMINDER_HOUR_OPTIONS.includes(Number(body.reminderHours))) return json(res, 400, { error: 'Некорректный срок напоминания' });
     if (body.retentionMonths != null && !RETENTION_MONTH_OPTIONS.includes(Number(body.retentionMonths))) return json(res, 400, { error: 'Некорректный срок хранения данных' });
     if (body.timeZone != null && !TIME_ZONES.includes(String(body.timeZone))) return json(res, 400, { error: 'Некорректный часовой пояс' });
@@ -194,6 +198,7 @@ function refreshStaffCommands(previousChatIds = []) {
     }
     data.config.adminChatId = adminChatId;
     if (body.notifyMode != null) data.config.notifyMode = body.notifyMode;
+    if (body.notifyPrefs != null) data.config.notifyPrefs = normalizeNotifyPrefs(body.notifyPrefs);
     if (body.reminderHours != null) data.config.reminderHours = Number(body.reminderHours);
     if (body.retentionMonths != null) data.config.retentionMonths = Number(body.retentionMonths);
     if (body.timeZone != null) data.config.timeZone = normalizeTimeZone(body.timeZone);

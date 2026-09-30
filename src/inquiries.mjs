@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { cleanText, localDayKey } from './util.mjs';
 import { normalizePipelineStage, normalizeSelectionMatching, normalizeViewing } from './data-format.mjs';
 import { nextOpening } from './hours.mjs';
+import { adminSendPlan } from './notify-plan.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError } from './analytics.mjs';
@@ -507,6 +508,7 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
       await sendMessage(chat.chatId, text, data.config.botToken, {
         track: false,
         messageIds,
+        ...adminSendPlan('inquiry').options,
         ...(markup ? { reply_markup: markup } : {}),
         ...(replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {}),
       });

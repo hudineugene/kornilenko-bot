@@ -15,6 +15,7 @@ import { server } from './server.mjs';
 import { announceError, announceStart, rememberShutdown, sendStatusNotice, statusNoticesOn, stopNoticeText } from './status.mjs';
 import { diskSpaceNotice, runSelfCheck, selfCheckLines, selfCheckNotice } from './selfcheck.mjs';
 import { startLogFile } from './logfile.mjs';
+import { adminSendPlan } from './notify-plan.mjs';
 
 const RUN_MARKER_FILE = path.join(path.dirname(DATA_FILE), 'bot-running.json');
 const RUN_HEARTBEAT_MS = 60 * 1000;
@@ -119,7 +120,7 @@ async function reportAbruptStop(previous, token = data.config.botToken) {
   // The connection may still be coming up right after the start.
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
-      await sendMessage(adminChatId, text, token, { track: false });
+      await sendMessage(adminChatId, text, token, { track: false, ...adminSendPlan('system').options });
       return text;
     } catch {
       await delay(15000);

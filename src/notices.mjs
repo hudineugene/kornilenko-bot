@@ -12,6 +12,7 @@ import { runViewingNotices } from './viewings.mjs';
 import { waitingConversationCount } from './admin-notifications.mjs';
 import { temporaryDeliveryError } from './broadcasts.mjs';
 import { adminMessagesAllowed, adminMorningHour } from './hours.mjs';
+import { adminSendPlan } from './notify-plan.mjs';
 import { runFormReminders } from './forms.mjs';
 import { runTelegramBackup } from './offsite.mjs';
 import { runDailyFeedImport } from './feed-import.mjs';
@@ -63,7 +64,9 @@ async function runDailyDigest(now = new Date()) {
   scheduleSave();
   if (text) {
     try {
-      await sendMessage(adminChatId, text, data.config.botToken, { track: false });
+      const plan = adminSendPlan('digest');
+      if (!plan.send) return '';
+      await sendMessage(adminChatId, text, data.config.botToken, { track: false, ...plan.options });
     } catch (error) {
       // Обрыв связи не должен стоить владельцу сводки: пробуем ещё раз.
       if (temporaryDeliveryError(error)) {
@@ -122,12 +125,15 @@ async function sendInquiryToAdministrator(inquiry, heading, extraLines = [], opt
   // The main admin and every manager: whoever is free can answer. A planned
   // follow-up goes to the one who took the inquiry.
   // Returns how many chats got it: a reminder nobody received is tried again.
+  // Владелец мог отключить напоминания или сделать их беззвучными; /inbox — его собственная просьба, она всегда со звуком.
+  const plan = options.chats ? { send: true, options: {} } : adminSendPlan(options.kind || 'reminder');
+  if (!plan.send) return 1;
   const sendTo = async (chats) => {
     let delivered = 0;
     for (const chat of chats) {
       const messageIds = [];
       try {
-        await sendMessage(chat.chatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry) });
+        await sendMessage(chat.chatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry), ...plan.options });
       } catch (error) {
         recordError(chat.main ? 'Напоминание администратору' : 'Напоминание менеджеру ' + chat.name, error);
         continue;
@@ -205,7 +211,8 @@ async function runInquiryReminders(now = new Date()) {
   }
   const rest = due.length - sent.length;
   if (rest > 0) {
-    await sendMessage(adminChatId, '⏰ И ещё ' + rest + ' без ответа — они в панели, раздел «Обращения».', data.config.botToken, { track: false });
+    const restPlan = adminSendPlan('reminder');
+    if (restPlan.send) await sendMessage(adminChatId, '⏰ И ещё ' + rest + ' без ответа — они в панели, раздел «Обращения».', data.config.botToken, { track: false, ...restPlan.options });
     for (const inquiry of due.slice(REMINDERS_PER_RUN)) inquiry.remindedAt = now.toISOString();
   }
   saveDataNow();
@@ -417,7 +424,9 @@ async function runWeeklyReport(now = new Date()) {
   scheduleSave();
   const text = weeklyReport(now);
   try {
-    await sendMessage(adminChatId, text, data.config.botToken, { track: false });
+    const plan = adminSendPlan('digest');
+    if (!plan.send) return '';
+    await sendMessage(adminChatId, text, data.config.botToken, { track: false, ...plan.options });
   } catch (error) {
     if (temporaryDeliveryError(error)) {
       data.lastWeeklyReportFor = markedBefore;

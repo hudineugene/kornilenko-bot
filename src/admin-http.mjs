@@ -7,7 +7,7 @@ import net from 'node:net';
 import zlib from 'node:zlib';
 import { ADMIN_ALLOWED_HOSTS, DATA_FILE, MAX_BACKUP_BODY_BYTES, MAX_BACKUP_OUTPUT_BYTES, MAX_BODY_BYTES, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, SESSION_TTL_MS } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
+import { normalizeNotifyPrefs, normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { decryptBackup, isEncryptedBackup } from './offsite.mjs';
 import { imageBytes, imageExists, storedImageFile, writeMediaFile } from './media.mjs';
 import { data, runtime, verifyPassword, verifyPasswordAsync } from './store.mjs';
@@ -820,6 +820,7 @@ function safeState(session) {
       adminChatId: data.config.adminChatId || '',
       adminNotificationVerifiedAt: data.config.adminNotificationVerifiedAt || '',
       notifyMode: data.config.notifyMode || 'inquiries',
+      notifyPrefs: normalizeNotifyPrefs(data.config.notifyPrefs),
       remoteAccess: Boolean(data.config.remoteAccess),
       // The tunnel token is a secret: the panel only learns whether it is set.
       tunnelTokenSet: Boolean(data.config.tunnelToken),

@@ -4158,3 +4158,18 @@ test('шаблоны ответов: на языке клиента, {имя} и
   assert.equal(sandbox.languageChip({ preferredLanguage: 'en' }, {}).includes('>EN<'), true);
   assert.equal(sandbox.languageChip({}, { language: 'ru' }), '');
 });
+
+test('«Звук уведомлений»: у заявок нет пункта «Не присылать», у сводки есть; тихие часы и выбранные значения видны', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const html = sandbox.notifyPrefsHtml({ kinds: { digest: 'off', reminder: 'silent' }, quiet: { enabled: true, from: '21:00', to: '07:00' } });
+  const block = (kind) => html.slice(html.indexOf('id="np_' + kind + '"'), html.indexOf('</select>', html.indexOf('id="np_' + kind + '"')));
+  assert.ok(!/value="off"/.test(block('inquiry')), 'заявки клиентов отключить нельзя');
+  assert.match(block('digest'), /<option value="off" selected>Не присылать/);
+  assert.match(block('reminder'), /<option value="silent" selected>Без звука/);
+  assert.match(html, /id="npQuiet" checked/);
+  assert.match(html, /id="npFrom" value="21:00"/);
+  assert.match(html, /id="npTo" value="07:00"/);
+  sandbox.state.config.notifyPrefs = undefined;
+  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.notifyPrefsNow())).quiet, { enabled: false, from: '22:00', to: '08:00' });
+});

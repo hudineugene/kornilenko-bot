@@ -16,6 +16,7 @@ import { localized, localizedExact, validHttpUrl } from './catalog.mjs';
 import { acknowledgeCallback, propertyRequestText, sendSimilarProperty } from './sections.mjs';
 import { temporaryDeliveryError, userUnavailableError } from './broadcasts.mjs';
 import { adminMorningHour } from './hours.mjs';
+import { adminSendPlan } from './notify-plan.mjs';
 
 const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
 const VIEWING_REMINDER_HOUR = 18;
@@ -557,8 +558,9 @@ async function runViewingNotices(now = new Date(), token = data.config.botToken)
     const agenda = viewingAgenda(now);
     if (agenda) {
       try {
-        await sendMessage(adminChatId, agenda, token, { track: false });
-        result.agenda = agenda;
+        const plan = adminSendPlan('viewing');
+        if (plan.send) await sendMessage(adminChatId, agenda, token, { track: false, ...plan.options });
+        result.agenda = plan.send ? agenda : '';
       } catch (error) {
         // Список дел на день нужен утром: при обрыве связи отметка снимается,
         // и список уйдёт со следующей проверкой.

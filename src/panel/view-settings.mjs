@@ -12,6 +12,40 @@ function settingsPayload() {
   return {};
 }
 
+// Виды сообщений администратору в Telegram; «не присылать» есть не у всех — заявки клиентов отключить нельзя.
+var NOTIFY_KIND_ROWS = [
+  ["inquiry", "Новые заявки и сообщения клиентов", false],
+  ["reminder", "Напоминания: клиент без ответа, пора связаться", true],
+  ["viewing", "Просмотры на сегодня", true],
+  ["digest", "Сводка дня и недельный отчёт", true],
+  ["system", "Запуск, остановка и сбои бота", false],
+];
+function notifyPrefsHtml(prefs) {
+  var quiet = prefs.quiet || {};
+  return '<div class="card"><header><h3>Звук уведомлений</h3></header><div class="card-body stack">' +
+    NOTIFY_KIND_ROWS.map(function (row) {
+      var value = (prefs.kinds || {})[row[0]] || "sound";
+      return '<div class="field"><label for="np_' + row[0] + '">' + esc(row[1]) + '</label><select id="np_' + row[0] + '" data-np-kind="' + row[0] + '">' +
+        '<option value="sound"' + (value === "sound" ? " selected" : "") + ">Со звуком</option>" +
+        '<option value="silent"' + (value === "silent" ? " selected" : "") + ">Без звука</option>" +
+        (row[2] ? '<option value="off"' + (value === "off" ? " selected" : "") + ">Не присылать</option>" : "") + "</select></div>";
+    }).join("") +
+    '<label class="check"><input type="checkbox" id="npQuiet"' + (quiet.enabled ? " checked" : "") + "> тихие часы: в это время всё приходит без звука</label>" +
+    '<div class="grid cols-2"><div class="field"><label for="npFrom">С</label><input type="time" id="npFrom" value="' + esc(quiet.from || "22:00") + '"></div><div class="field"><label for="npTo">До</label><input type="time" id="npTo" value="' + esc(quiet.to || "08:00") + '"></div></div>' +
+    '<div class="hint">Сообщения не пропадают: в тихие часы они приходят в чат, но телефон молчит.</div>' +
+  "</div></div>";
+}
+function notifyPrefsNow() {
+  var prefs = state.config.notifyPrefs || {}, quiet = prefs.quiet || {}, kinds = {};
+  NOTIFY_KIND_ROWS.forEach(function (row) { kinds[row[0]] = (prefs.kinds || {})[row[0]] || "sound"; });
+  return { kinds: kinds, quiet: { enabled: Boolean(quiet.enabled), from: quiet.from || "22:00", to: quiet.to || "08:00" } };
+}
+function notifyPrefsFrom(host) {
+  var kinds = {};
+  host.querySelectorAll("[data-np-kind]").forEach(function (select) { kinds[select.dataset.npKind] = select.value; });
+  return { kinds: kinds, quiet: { enabled: host.querySelector("#npQuiet").checked, from: host.querySelector("#npFrom").value, to: host.querySelector("#npTo").value } };
+}
+
 function renderConnection(host) {
   var config = state.config, bot = state.bot || {};
   host.innerHTML = '<div class="grid cols-2"><div class="stack">' +
@@ -23,7 +57,7 @@ function renderConnection(host) {
         '<option value="inquiries"' + (config.notifyMode !== "all" ? " selected" : "") + ">Только заявки клиентов</option>" +
         '<option value="all"' + (config.notifyMode === "all" ? " selected" : "") + ">Все действия клиентов</option></select></div>" +
       '<label class="check"><input type="checkbox" id="setStatusNotices"' + (config.statusNotices !== false ? " checked" : "") + "> сообщать о запуске и остановке бота</label>" +
-    "</div></div>" +
+    "</div></div>" + notifyPrefsHtml(config.notifyPrefs || {}) +
   "</div>" +
   '<div class="stack"><div class="card"><header><h3>Менеджеры</h3><div class="actions"><button class="btn secondary small" id="addManager" type="button">＋ Менеджер</button></div></header>' +
     '<div class="card-body stack"><div class="field"><label for="adminName">Как зовут главного администратора</label><input id="adminName" value="' + esc(config.adminName || "") + '" placeholder="Администратор"></div>' +
@@ -40,9 +74,11 @@ function renderConnection(host) {
     var adminChatId = host.querySelector("#setAdminChat").value.trim();
     var notifyMode = host.querySelector("#setNotify").value;
     var statusNotices = host.querySelector("#setStatusNotices").checked;
+    var notifyPrefs = notifyPrefsFrom(host);
+    var prefsChanged = JSON.stringify(notifyPrefs) !== JSON.stringify(notifyPrefsNow());
     var next = managers.filter(function (manager) { return manager.name || manager.chatId; });
     var adminName = host.querySelector("#adminName").value;
-    var settingsChanged = adminChatId !== String(state.config.adminChatId || "") || notifyMode !== (state.config.notifyMode === "all" ? "all" : "inquiries") || statusNotices !== (state.config.statusNotices !== false);
+    var settingsChanged = adminChatId !== String(state.config.adminChatId || "") || notifyMode !== (state.config.notifyMode === "all" ? "all" : "inquiries") || statusNotices !== (state.config.statusNotices !== false) || prefsChanged;
     var chatChanged = adminChatId !== String(state.config.adminChatId || "");
     var before = JSON.stringify((state.config.managers || []).map(function (manager) { return [manager.name, manager.chatId]; }));
     var after = JSON.stringify(next.map(function (manager) { return [manager.name, manager.chatId]; }));
@@ -60,7 +96,7 @@ function renderConnection(host) {
       if (!password) throw new Error("Сохранение отменено");
     }
     if (settingsChanged) {
-      var payload = Object.assign(settingsPayload(), { adminChatId: adminChatId, notifyMode: notifyMode, statusNotices: statusNotices });
+      var payload = Object.assign(settingsPayload(), { adminChatId: adminChatId, notifyMode: notifyMode, statusNotices: statusNotices, notifyPrefs: notifyPrefs });
       if (chatChanged) payload.currentPassword = password;
       await send("/api/settings", "PUT", payload);
     }

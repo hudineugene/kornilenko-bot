@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 48;
+const DATA_VERSION = 49;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -982,6 +982,26 @@ function normalizeWorkingHours(value) {
   };
 }
 
+// Уведомления администратору в Telegram: что приходит со звуком, что без звука, что не приходит совсем, и
+// тихие часы (в них всё со звуком приходит без звука — ничего не теряется). Заявки и сообщения клиентов
+// отключить нельзя: их пропуск стоил бы клиента.
+const NOTIFY_KINDS = ['inquiry', 'reminder', 'viewing', 'digest', 'system'];
+const NOTIFY_KINDS_WITHOUT_OFF = ['inquiry', 'system'];
+function normalizeNotifyPrefs(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const kinds = source.kinds && typeof source.kinds === 'object' ? source.kinds : {};
+  const quiet = source.quiet && typeof source.quiet === 'object' ? source.quiet : {};
+  const from = CLOCK_TIME_PATTERN.test(String(quiet.from || '')) ? String(quiet.from) : '22:00';
+  const to = CLOCK_TIME_PATTERN.test(String(quiet.to || '')) ? String(quiet.to) : '08:00';
+  return {
+    kinds: Object.fromEntries(NOTIFY_KINDS.map((kind) => {
+      const allowed = NOTIFY_KINDS_WITHOUT_OFF.includes(kind) ? ['sound', 'silent'] : ['sound', 'silent', 'off'];
+      return [kind, allowed.includes(kinds[kind]) ? kinds[kind] : 'sound'];
+    })),
+    quiet: { enabled: quiet.enabled === true && from !== to, from, to },
+  };
+}
+
 // Автоматические сообщения клиентам: недельный дайджест и мягкий возврат. Оба
 // выключены, пока владелец сам не включит: на демо-каталоге слать нечего, а
 // сообщение «ни о чём» отпугивает.
@@ -1473,6 +1493,7 @@ function normalizeLoadedData(parsed) {
     normalized.lastRetentionRunFor = cleanText(parsed.lastRetentionRunFor, 10);
     normalized.config.timeZone = normalizeTimeZone(normalized.config.timeZone);
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
+    normalized.config.notifyPrefs = normalizeNotifyPrefs(normalized.config.notifyPrefs);
     normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
     normalized.config.engagement = normalizeEngagement(normalized.config.engagement);
     normalized.config.viewingSlots = normalizeViewingSlots(normalized.config.viewingSlots);
@@ -1495,6 +1516,8 @@ export {
   DEFAULT_BUY_PLAN,
   normalizeBuyPlan,
   normalizeEngagement,
+  NOTIFY_KINDS,
+  normalizeNotifyPrefs,
   MAX_TRUST_REVIEWS,
   normalizeTrust,
   DATA_VERSION,
