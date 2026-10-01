@@ -46,7 +46,7 @@ test('an inquiry left unanswered past the threshold is reminded about once', asy
     '',
     '🆕 Ждёт ответа',
   ].join('\n'));
-  assert.deepEqual(callbacksOf(reminder.markup), ['inq:in_progress:' + inquiry.id, 'inq:closed:' + inquiry.id, 'inq:follow:' + inquiry.id]);
+  assert.deepEqual(callbacksOf(reminder.markup), ['inq:closed:' + inquiry.id, 'inq:follow:' + inquiry.id]);
 
   assert.deepEqual(await bot.runInquiryReminders(new Date(MORNING.getTime() + 3 * HOUR)), [], 'not reminded twice');
 });
@@ -230,12 +230,12 @@ test('on Monday morning the admin gets last week\'s figures, once', async () => 
   const report = await bot.runWeeklyReport(monday);
   assert.equal(report, [
     '📈 Итоги недели 14.09–20.09',
+    '⏳ Сейчас без ответа: 1',
     '',
     '👥 Новых клиентов: 2 (↑ было 1)',
     '📩 Заявок: 2 (↑ было 0)',
     '   вопрос по объекту — 1, запись на просмотр — 1',
     '📅 Просмотров: записались 1, прошло 1',
-    '⏳ Сейчас без ответа: 1',
     '🔖 Больше всего заявок: Вилла — 2',
     '📣 Откуда пришли: instagram — 1, без метки — 1',
     '🔻 Воронка новых клиентов: зашли 2 → заявка 2 → запись 1 → подтверждено 1',

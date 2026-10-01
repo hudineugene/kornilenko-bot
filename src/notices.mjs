@@ -9,7 +9,7 @@ import { userByChatId, userById } from './users.mjs';
 import { sendMessage } from './telegram.mjs';
 import { awaitingReply, buildInquiryCard, inquiryBody, inquiryChats, inquiryPropertyLine, inquiryStateLine, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
 import { localized, shortenedText } from './catalog.mjs';
-import { runViewingNotices } from './viewings.mjs';
+import { runViewingNotices, viewingAgenda, viewingDateLabel } from './viewings.mjs';
 import { waitingConversationCount } from './admin-notifications.mjs';
 import { temporaryDeliveryError } from './broadcasts.mjs';
 import { adminMessagesAllowed, adminMorningHour } from './hours.mjs';
@@ -52,6 +52,73 @@ function activityDigest(dayKeyValue) {
   ].join('\n');
 }
 
+const BRIEF_WAITING_SHOWN = 5;
+
+// Текст утреннего сообщения; пустая строка — сообщать нечего.
+function morningBriefText(now = new Date()) {
+  const rows = waitingRows();
+  const sections = [];
+  if (rows.length) {
+    sections.push([
+      '⏳ Ждут ответа: ' + rows.length,
+      ...rows.slice(0, BRIEF_WAITING_SHOWN).map((row) => '• ' + clientNameOf(row.inquiry) + ' — ' + inquiryTypeLabel(row.inquiry) + ', ' + hoursAgoText(now.getTime() - row.since)),
+      ...(rows.length > BRIEF_WAITING_SHOWN ? ['• и ещё ' + (rows.length - BRIEF_WAITING_SHOWN) + ' — /inbox'] : []),
+    ].join('\n'));
+  }
+  const agenda = viewingAgenda(now);
+  if (agenda) sections.push(agenda);
+  const follow = data.inquiries.filter((inquiry) => !inquiry.followUpTime && followUpDue(inquiry, now));
+  if (follow.length) {
+    sections.push(['📌 Пора связаться:', ...follow.slice(0, BRIEF_WAITING_SHOWN).map((inquiry) => '• ' + clientNameOf(inquiry) + ' — ' + inquiryTypeLabel(inquiry) + (reminderNote(inquiry) ? ' (' + shortenedText(reminderNote(inquiry), 60) + ')' : ''))].join('\n'));
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const key = localDayKey(yesterday);
+  const daily = data.analytics.daily[key] || {};
+  const newcomers = Object.values(data.users).filter((user) => String(user.firstSeenAt || '').slice(0, 10) === key).length;
+  const figures = [newcomers ? 'новых клиентов ' + newcomers : '', Number(daily.inquiries) ? 'заявок ' + Number(daily.inquiries) : '', Number(daily.received) ? 'сообщений ' + Number(daily.received) : ''].filter(Boolean);
+  if (figures.length) sections.push('📊 Вчера: ' + figures.join(' · '));
+  if (!sections.length) return '';
+  return ['☀️ Утро, ' + viewingDateLabel(localDayKey(now), 'ru'), '', sections.join('\n\n')].join('\n');
+}
+
+async function runMorningBrief(now = new Date()) {
+  const adminChatId = cleanText(data.config.adminChatId, 40);
+  if (!adminChatId || !data.config.botToken || now.getHours() < adminMorningHour(DIGEST_HOUR)) return '';
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const key = localDayKey(yesterday);
+  if (data.lastDigestFor === key) return '';
+  const today = localDayKey(now);
+  const text = morningBriefText(now);
+  const markedBefore = { digest: data.lastDigestFor, agenda: data.lastViewingAgendaFor };
+  data.lastDigestFor = key;
+  scheduleSave();
+  if (!text) return '';
+  const plan = adminSendPlan('digest');
+  if (!plan.send) return '';
+  // Всё, о чём сказано в сообщении, отдельно уже не напоминаем: и список просмотров, и «пора связаться», и «ждёт ответа».
+  const rows = waitingRows().slice(0, BRIEF_WAITING_SHOWN);
+  const follow = data.inquiries.filter((inquiry) => !inquiry.followUpTime && followUpDue(inquiry, now)).slice(0, BRIEF_WAITING_SHOWN);
+  data.lastViewingAgendaFor = today;
+  for (const row of rows) row.inquiry.remindedSince = new Date(row.since).toISOString();
+  for (const inquiry of follow) inquiry.followUpNotifiedAt = now.toISOString();
+  try {
+    await sendMessage(adminChatId, text, data.config.botToken, { track: false, ...plan.options });
+  } catch (error) {
+    if (temporaryDeliveryError(error)) {
+      data.lastDigestFor = markedBefore.digest;
+      data.lastViewingAgendaFor = markedBefore.agenda;
+      for (const row of rows) row.inquiry.remindedSince = '';
+      for (const inquiry of follow) inquiry.followUpNotifiedAt = '';
+    }
+    saveDataNow();
+    throw error;
+  }
+  saveDataNow();
+  return text;
+}
+
 async function runDailyDigest(now = new Date()) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
   if (data.config.notifyMode !== 'inquiries' || !adminChatId || !data.config.botToken || now.getHours() < adminMorningHour(DIGEST_HOUR)) return '';
@@ -84,8 +151,28 @@ function runDailyDigestSafely() {
   runDailyDigest().catch((error) => recordError('Сводка активности', error));
 }
 
+// --- Одно утреннее сообщение -------------------------------------------------------------------------------------------------
+// Раньше утром приходила пачка: сводка вчерашнего дня, список просмотров, «пора связаться» по каждому, напоминания по каждому
+// ждущему. Теперь — одно сообщение: кто ждёт ответа, просмотры сегодня, с кем связаться, вчерашние цифры. Итоги недели — отдельно.
 const REMINDER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const REMINDERS_PER_RUN = 5;
+
+// Один клиент — одна строка: из его заявок берём ту, что ждёт дольше всех (как в панели и в /inbox).
+function waitingRows() {
+  const byClient = new Map();
+  for (const inquiry of data.inquiries) {
+    if (!awaitingReply(inquiry)) continue;
+    const since = Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0;
+    const known = byClient.get(String(inquiry.userId));
+    if (!known || since < known.since) byClient.set(String(inquiry.userId), { inquiry, since });
+  }
+  return Array.from(byClient.values()).sort((a, b) => a.since - b.since);
+}
+
+function clientNameOf(inquiry) {
+  const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
+  return user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Клиент удалён';
+}
 
 function hoursAgoText(milliseconds) {
   const hours = Math.floor(milliseconds / (60 * 60 * 1000));
@@ -414,20 +501,27 @@ function funnelTextLines(funnel) {
   ];
 }
 
+// Итоги недели для телефона: «без ответа» — первой строкой (единственное, что требует действия), метки источников короткие,
+// служебные оговорки про цели и сбор данных остаются в панели.
+function shortSource(name) {
+  const text = String(name || '');
+  return text.length > 22 ? text.slice(0, 21) + '…' : text;
+}
+
 function weeklyReportText(report) {
   return [
     (report.which === 'current' ? '📈 Эта неделя, ' : '📈 Итоги недели ') + report.label,
+    '⏳ Сейчас без ответа: ' + report.waiting,
     '',
     '👥 Новых клиентов: ' + report.users.count + comparison(report.users.count, report.users.previous),
     '📩 Заявок: ' + report.inquiries.count + comparison(report.inquiries.count, report.inquiries.previous),
-    ...(report.inquiries.byType.length ? ['   ' + report.inquiries.byType.map(([name, count]) => name + ' — ' + count).join(', ')] : []),
+    ...(report.inquiries.byType.length ? ['   ' + report.inquiries.byType.slice(0, 4).map(([name, count]) => name + ' — ' + count).join(', ')] : []),
     '📅 Просмотров: записались ' + report.viewings.booked + ', прошло ' + report.viewings.held,
     // Строка про сделки появляется, когда они были на этой или прошлой неделе:
     // «Сделок: 0» каждую неделю только мозолит глаза.
     ...(report.deals.count || report.deals.previous ? ['🤝 Сделок: ' + report.deals.count + comparison(report.deals.count, report.deals.previous)] : []),
-    '⏳ Сейчас без ответа: ' + report.waiting,
-    ...(report.topProperties.length ? ['🔖 Больше всего заявок: ' + report.topProperties.map((item) => item.name + ' — ' + item.count).join(', ')] : []),
-    ...(report.sources.length ? ['📣 Откуда пришли: ' + report.sources.map(([name, count]) => name + ' — ' + count).join(', ')] : []),
+    ...(report.topProperties.length ? ['🔖 Больше всего заявок: ' + report.topProperties.slice(0, 2).map((item) => item.name + ' — ' + item.count).join(', ')] : []),
+    ...(report.sources.length ? ['📣 Откуда пришли: ' + report.sources.slice(0, 3).map(([name, count]) => shortSource(name) + ' — ' + count).join(', ')] : []),
     ...funnelTextLines(report.funnel),
     ...(report.sharedLists && (report.sharedLists.shared || report.sharedLists.opened) ? ['📤 Подборки: поделились ' + report.sharedLists.shared + ', открыли по ссылке ' + report.sharedLists.opened + comparison(report.sharedLists.opened, report.sharedLists.previousOpened)] : []),
     ...(report.broadcasts.count ? ['✉️ Рассылок: ' + report.broadcasts.count + ', получили ' + report.broadcasts.sent + ', откликнулись ' + report.broadcasts.responded] : []),
@@ -462,10 +556,14 @@ async function runWeeklyReport(now = new Date()) {
 }
 
 function runScheduledNotices() {
-  runDailyDigest().catch((error) => recordError('Сводка активности', error));
-  runInquiryReminders().catch((error) => recordError('Напоминание о заявках', error));
-  runViewingNotices().catch((error) => recordError('Уведомления о просмотрах', error));
-  runFollowUpReminders().catch((error) => recordError('Напоминание связаться с клиентом', error));
+  // Сначала утреннее сообщение: всё, что вошло в него, остальные проверки уже не пришлют отдельно.
+  runMorningBrief()
+    .catch((error) => recordError('Утреннее сообщение', error))
+    .then(() => {
+      runInquiryReminders().catch((error) => recordError('Напоминание о заявках', error));
+      runViewingNotices().catch((error) => recordError('Уведомления о просмотрах', error));
+      runFollowUpReminders().catch((error) => recordError('Напоминание связаться с клиентом', error));
+    });
   runFormReminders().catch((error) => recordError('Напоминание о незаконченной форме', error));
   runWeeklyReport().catch((error) => recordError('Итоги недели', error));
   runTelegramBackup().catch((error) => recordError('Копия данных в Telegram', error));
@@ -485,6 +583,9 @@ export {
   followUpDue,
   hoursAgoText,
   inquiryNeedsReminder,
+  morningBriefText,
+  runMorningBrief,
+  waitingRows,
   runDailyDigest,
   runDailyDigestSafely,
   runFollowUpReminders,

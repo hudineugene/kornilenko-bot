@@ -408,7 +408,8 @@ function inquiryStatusMarkup(inquiry) {
     rows.push([{ text: '✅ Подтвердить просмотр', callback_data: 'inq:confirm:' + inquiry.id }]);
   }
   const row = [];
-  if (inquiry.status !== 'in_progress') row.push({ text: '⏳ В работу', callback_data: 'inq:in_progress:' + inquiry.id });
+  // «В работу» нужна, чтобы коллеги видели, кто ведёт заявку; у одиночки она только глушит напоминание — кнопки нет.
+  if (inquiry.status !== 'in_progress' && inquiryChats().length >= 2) row.push({ text: '⏳ В работу', callback_data: 'inq:in_progress:' + inquiry.id });
   row.push({ text: '✔️ Закрыть', callback_data: 'inq:closed:' + inquiry.id });
   rows.push(row);
   const planned = inquiry.followUpDate && !inquiry.followUpNotifiedAt ? ' (' + inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + ')' : '';

@@ -170,7 +170,7 @@ test.describe('admin', () => {
       '🆕 Ждёт ответа',
     ].join('\n'));
     const id = chat.inquiries[0].id;
-    assert.deepEqual(callbacksOf(notification.markup), ['inq:in_progress:' + id, 'inq:closed:' + id, 'inq:follow:' + id]);
+    assert.deepEqual(callbacksOf(notification.markup), ['inq:closed:' + id, 'inq:follow:' + id], 'у одиночки «В работу» нет: она только глушит напоминание');
   });
 
   test('status buttons change the inquiry and the buttons', async () => {

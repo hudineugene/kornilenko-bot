@@ -125,7 +125,7 @@ test.describe('confirmation', () => {
     const chat = createChat();
     const inquiry = await requestViewing(chat);
     const notification = adminMessages().find((message) => message.text.includes('запись на просмотр'));
-    assert.deepEqual(callbacksOf(notification.markup), ['inq:confirm:' + inquiry.id, 'inq:in_progress:' + inquiry.id, 'inq:closed:' + inquiry.id, 'inq:follow:' + inquiry.id]);
+    assert.deepEqual(callbacksOf(notification.markup), ['inq:confirm:' + inquiry.id, 'inq:closed:' + inquiry.id, 'inq:follow:' + inquiry.id]);
 
     telegram.calls = [];
     const pressed = await adminPress('inq:confirm:' + inquiry.id, 321);
