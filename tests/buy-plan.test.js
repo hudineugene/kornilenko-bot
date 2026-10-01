@@ -147,7 +147,8 @@ test.describe('у клиента', () => {
     assert.ok(inquiry, 'заявка создана');
     assert.equal(inquiry.type, 'question');
     assert.match(inquiry.text, /шаг 3: Независимый юрист/);
-    assert.match(helped.text, /Просьба о помощи передана менеджеру/);
+    assert.ok(helped.popups.some((popup) => /Просьба о помощи передана менеджеру/.test(popup)), 'подтверждение — всплывающим окном, без отдельного сообщения');
+    assert.equal(helped.replies.length, 0, 'лишнего сообщения нет');
     const edit = helped.calls.find((call) => call.method === 'editMessageText');
     assert.match(edit.body.text, /💬 Помощь запрошена/);
     const overview = await chat.press('plan:open');

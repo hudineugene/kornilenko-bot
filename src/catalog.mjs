@@ -2263,6 +2263,8 @@ function promotionButtons(record, language, page, totalPages) {
       { text: '▶️', callback_data: 'promotions:' + nextPage },
     ]);
   }
+  // У акции есть выход в меню, как у любого экрана.
+  rows.push([{ text: '🏠 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).mainMenu, callback_data: 'nav:menu' }]);
   return rows.length ? { inline_keyboard: rows } : null;
 }
 

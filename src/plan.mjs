@@ -5,7 +5,7 @@
 // (когда владелец включил напоминания) один раз в две недели напоминает о
 // следующем шаге. Формулировки шагов правит владелец в панели.
 
-import { delay } from './util.mjs';
+import { backButtonText, delay } from './util.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { markUnavailable, normalizeUser } from './users.mjs';
@@ -15,7 +15,7 @@ import { sendUiMessage } from './catalog.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { temporaryDeliveryError, userUnavailableError } from './broadcasts.mjs';
-import { INTERACTION_TEXT } from './texts.mjs';
+import { INTERACTION_TEXT, MENU_LABELS } from './texts.mjs';
 import { DEFAULT_BUY_PLAN, normalizeBuyPlan } from './data-format.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -208,6 +208,8 @@ function overviewMarkup(user, language) {
   const buttons = list.map((step, index) => ({ text: String(index + 1), callback_data: 'plan:step:' + index }));
   const rows = [];
   for (let start = 0; start < buttons.length; start += 5) rows.push(buttons.slice(start, start + 5));
+  // План открывают из «Моё»: назад — туда, а в главное меню — отдельной кнопкой.
+  rows.push([{ text: backButtonText((MENU_LABELS[language] || MENU_LABELS.ru).more), callback_data: 'nav:my' }]);
   rows.push([{ text: copy.menu, callback_data: 'nav:menu' }]);
   return { inline_keyboard: rows };
 }
@@ -330,10 +332,12 @@ async function handlePlanCallback(query, token) {
     plan.help[step.id] = now;
     plan.updatedAt = now;
     savePlan(user, plan);
-    await acknowledgeCallback(query, token);
+    // Подтверждение — всплывающим окном и строкой статуса на самом экране шага; отдельное сообщение — только если надо сказать про нерабочее время.
+    await acknowledgeCallback(query, token, copy.helpSent);
     createInquiry(user, fill(copy.helpRequest, { n: index + 1, title: step.title[language] || step.title.ru }), { type: 'question' });
     await showScreen(chatId, user, token, query, stepText(user, language, index), stepMarkup(user, language, index));
-    await sendMessage(chatId, withOffHoursNote(copy.helpSent, language, { user }), token);
+    const helpNote = withOffHoursNote(copy.helpSent, language, { user });
+    if (helpNote !== copy.helpSent) await sendMessage(chatId, helpNote, token);
     return;
   }
   await acknowledgeCallback(query, token);

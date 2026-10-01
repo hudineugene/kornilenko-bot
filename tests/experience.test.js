@@ -28,7 +28,7 @@ test.describe('client', () => {
     const chat = createChat();
     const shown = await chat.say(MENU.ru.promotions);
     assert.equal(shown.last.text, '🔥 Летняя скидка\n\nУсловия акции');
-    assert.deepEqual(callbacksOf(shown.last.markup), ['promotions:ask:promo-summer']);
+    assert.deepEqual(callbacksOf(shown.last.markup), ['promotions:ask:promo-summer', 'nav:menu'], 'ответ одним нажатием и выход в меню');
 
     const answered = await chat.press('promotions:ask:promo-summer');
     assert.equal(answered.last.text, PROPERTY.ru.received + '\n\n🔥 Летняя скидка');
