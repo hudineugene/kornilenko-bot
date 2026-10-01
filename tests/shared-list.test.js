@@ -183,3 +183,22 @@ test('«Мои данные» называют подборки, которым�
   const text = callsOf(step).map((call) => call.body.text).join('\n');
   assert.match(text, /подборки, которыми вы поделились: 1/);
 });
+
+test('недельный отчёт считает, сколько раз поделились и сколько раз открыли подборку; без этого строки нет', async () => {
+  const { weeklyReportData, weeklyReportText } = await import('../src/notices.mjs');
+  const quiet = weeklyReportData(new Date(), 'current');
+  assert.deepEqual(quiet.sharedLists, { shared: 0, opened: 0, previousOpened: 0 });
+  assert.ok(!weeklyReportText(quiet).includes('Подборки'), 'тихая неделя — строки нет');
+
+  const owner = createChat();
+  await favourite(owner, 'one', 'two');
+  const { code } = await share(owner);
+  await share(owner);
+  await createChat().say('/start list_' + code);
+  await createChat({ language: 'en' }).say('/start list_' + code);
+  await createChat().say('/start list_nosuchcode123');
+
+  const report = weeklyReportData(new Date(), 'current');
+  assert.deepEqual({ shared: report.sharedLists.shared, opened: report.sharedLists.opened }, { shared: 2, opened: 2 }, 'открытие мёртвой ссылки не считается');
+  assert.match(weeklyReportText(report), /📤 Подборки: поделились 2, открыли по ссылке 2/);
+});

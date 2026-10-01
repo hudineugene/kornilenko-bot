@@ -13,6 +13,9 @@ function recordDaily(kind, detail = '', amount = 1) {
   if (kind === 'received' || kind === 'sent') daily[kind] = Number(daily[kind] || 0) + 1;
   if (kind === 'reaction') daily.reactions = Number(daily.reactions || 0) + Math.max(1, Number(amount) || 1);
   if (kind === 'inquiry') daily.inquiries = Number(daily.inquiries || 0) + 1;
+  // Подборки по ссылке: нажали «Поделиться» / открыли чужую подборку.
+  if (kind === 'shared') daily.shared = Number(daily.shared || 0) + 1;
+  if (kind === 'shared_open') daily.sharedOpened = Number(daily.sharedOpened || 0) + 1;
   if (kind === 'menu' && detail) daily.menu[detail] = Number(daily.menu[detail] || 0) + 1;
   data.analytics.daily[key] = daily;
   const cutoff = new Date();

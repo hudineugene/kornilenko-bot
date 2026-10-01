@@ -4559,3 +4559,18 @@ test('«Сегодня»: у каждой кнопки дела в размет�
   await sandbox.runDeed(fault);
   assert.deepEqual(JSON.parse(JSON.stringify(routes)), [['settings', 'data']], '«Открыть» ведёт в «Настройки → Данные»');
 });
+
+test('«Отчёт»: плитка «Открыли подборку» с подписью «поделились N» — только когда подборки были', async () => {
+  resetData((data) => { data.config.active = true; });
+  const { sandbox } = await panelSandbox();
+  const base = {
+    which: 'last', label: '14.09–20.09',
+    users: { count: 5, previous: 2 }, inquiries: { count: 3, previous: 3, byType: [] }, viewings: { booked: 1, held: 4 },
+    deals: { count: 0, previous: 1 }, waiting: 2, topProperties: [], sources: [], broadcasts: { count: 0, sent: 0, responded: 0 },
+  };
+  const quiet = String(sandbox.weeklyCard({ report: { ...base, sharedLists: { shared: 0, opened: 0, previousOpened: 0 } }, text: '' }));
+  assert.ok(!quiet.includes('Открыли подборку'), 'ничего не было — плитки нет');
+  assert.ok(!String(sandbox.weeklyCard({ report: base, text: '' })).includes('Открыли подборку'), 'сервер без этого поля — тоже');
+  const busy = String(sandbox.weeklyCard({ report: { ...base, sharedLists: { shared: 3, opened: 7, previousOpened: 2 } }, text: '' }));
+  assert.match(busy, /Открыли подборку<\/span><span class="value">7<\/span><span class="delta">поделились 3<\/span>/);
+});

@@ -564,6 +564,8 @@ function weeklyCard(payload) {
         weekTile("Заявок", report.inquiries.count, weekTrend(report.inquiries.count, report.inquiries.previous)) +
         weekTile("Записались на просмотр", report.viewings.booked, '<span class="delta">прошло ' + num(report.viewings.held) + "</span>") +
         weekTile("Сделок", report.deals.count, weekTrend(report.deals.count, report.deals.previous)) +
+        (report.sharedLists && (report.sharedLists.shared || report.sharedLists.opened || report.sharedLists.previousOpened)
+          ? weekTile("Открыли подборку", report.sharedLists.opened, '<span class="delta">поделились ' + num(report.sharedLists.shared) + "</span>") : "") +
         weekTile("Без ответа сейчас", report.waiting, report.waiting ? '<span class="delta down">ждут ответа</span>' : '<span class="delta up">все отвечены</span>') +
       "</div>" +
       '<div class="small muted">Сравнение — ' + comparedWith + '.</div>' +

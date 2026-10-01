@@ -347,6 +347,17 @@ function weeklyReportData(now = new Date(), which = 'last') {
   const bySource = new Map();
   for (const user of week.users) bySource.set(user.source || 'без метки', (bySource.get(user.source || 'без метки') || 0) + 1);
   const broadcasts = data.broadcasts.filter((entry) => inWeek(entry.startedAt, start, end) && Number(entry.sent));
+  // Подборки по ссылке: поделились / открыли за эту и прошлую неделю (по дням статистики бота).
+  const dailySum = (field, from, to) => Object.entries((data.analytics && data.analytics.daily) || {})
+    .filter(([key]) => key >= localDayKey(from) && key <= localDayKey(to))
+    .reduce((sum, [, day]) => sum + Number(day && day[field] || 0), 0);
+  const previousLast = new Date(start.getFullYear(), start.getMonth(), start.getDate() - 1);
+  const previousLastDay = current ? new Date(previousStart.getTime() + (lastDay.getTime() - start.getTime())) : previousLast;
+  const sharedLists = {
+    shared: dailySum('shared', start, lastDay),
+    opened: dailySum('sharedOpened', start, lastDay),
+    previousOpened: dailySum('sharedOpened', previousStart, previousLastDay),
+  };
   return {
     which: current ? 'current' : 'last',
     label: label(start) + '–' + label(lastDay),
@@ -363,6 +374,7 @@ function weeklyReportData(now = new Date(), which = 'last') {
     topProperties,
     sources: Array.from(bySource).sort((a, b) => b[1] - a[1]),
     funnel: botFunnel(week.users, start),
+    sharedLists,
     broadcasts: {
       count: broadcasts.length,
       sent: broadcasts.reduce((sum, entry) => sum + Number(entry.sent || 0), 0),
@@ -406,6 +418,7 @@ function weeklyReportText(report) {
     ...(report.topProperties.length ? ['🔖 Больше всего обращений: ' + report.topProperties.map((item) => item.name + ' — ' + item.count).join(', ')] : []),
     ...(report.sources.length ? ['📣 Откуда пришли: ' + report.sources.map(([name, count]) => name + ' — ' + count).join(', ')] : []),
     ...funnelTextLines(report.funnel),
+    ...(report.sharedLists && (report.sharedLists.shared || report.sharedLists.opened) ? ['📤 Подборки: поделились ' + report.sharedLists.shared + ', открыли по ссылке ' + report.sharedLists.opened + comparison(report.sharedLists.opened, report.sharedLists.previousOpened)] : []),
     ...(report.broadcasts.count ? ['✉️ Рассылок: ' + report.broadcasts.count + ', получили ' + report.broadcasts.sent + ', откликнулись ' + report.broadcasts.responded] : []),
   ].join('\n');
 }

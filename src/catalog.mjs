@@ -5,7 +5,7 @@ import { cleanText, formatMoney, formatNumber, parseMoneyAmount } from './util.m
 import { imageBytes, imageExists } from './media.mjs';
 import { CATALOG_FILTER_TEXT, COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, MANAGER_CONTACT_TEXT, MENU_LABELS, MY_AREA_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, PROPERTY_BADGE_LABELS, PROPERTY_CONDITION_LABELS, PROPERTY_TYPE_LABELS, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
-import { markFunnel, recordPropertyEvent } from './analytics.mjs';
+import { markFunnel, recordDaily, recordPropertyEvent } from './analytics.mjs';
 import { digestHeading } from './digest-text.mjs';
 import { normalizeUser } from './users.mjs';
 import { knownFileId, rememberFileId, sendMessage, sendPhotoMessage, telegramMultipartRequest, telegramRequest } from './telegram.mjs';
@@ -2094,6 +2094,7 @@ function createSharedList(user) {
   const code = same ? same[0] : crypto.randomBytes(8).toString('base64url');
   if (!same) data.sharedLists[code] = { ids, owner: String(user.id), createdAt: new Date().toISOString(), opens: 0 };
   if (!same) pruneSharedLists();
+  recordDaily('shared');
   scheduleSave();
   return { code, count: ids.length, link: 'https://t.me/' + username + '?start=list_' + code };
 }
@@ -2136,6 +2137,7 @@ async function openPendingStartPayload(user, token) {
       return true;
     }
     list.opens = (Number(list.opens) || 0) + 1;
+    recordDaily('shared_open');
     scheduleSave();
     await sendCatalogPage(user.chatId, user, token, 0, 'shared');
     return true;
