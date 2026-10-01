@@ -64,14 +64,15 @@ test('напоминание о заявке без ответа: отключе
   await chat.say('Есть ли квартиры у моря?');
   const inquiry = chat.inquiries[chat.inquiries.length - 1];
   inquiry.createdAt = new Date(NOON.getTime() - 3 * HOUR).toISOString();
+  inquiry.clientMessageAt = inquiry.createdAt;
   inquiry.updatedAt = inquiry.createdAt;
 
   bot.getData().config.notifyPrefs = { kinds: { reminder: 'off' }, quiet: {} };
   telegram.calls = [];
-  assert.deepEqual(await bot.runInquiryReminders(NOON), [inquiry.id], 'заявка отмечена как обработанная');
+  assert.deepEqual(await bot.runInquiryReminders(NOON), [], 'ничего не ушло — заявку нельзя считать напомненной');
   assert.equal(adminCalls().length, 0, 'в Telegram ничего не ушло');
+  assert.ok(!inquiry.remindedAt && !inquiry.remindedSince, 'после включения о ней напомнят');
 
-  inquiry.remindedAt = '';
   bot.getData().config.notifyPrefs = { kinds: { reminder: 'silent' }, quiet: {} };
   telegram.calls = [];
   await bot.runInquiryReminders(NOON);

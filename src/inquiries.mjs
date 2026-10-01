@@ -9,7 +9,7 @@ import { adminSendPlan } from './notify-plan.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError } from './analytics.mjs';
-import { markUnavailable, normalizeUser, userByChatId } from './users.mjs';
+import { markUnavailable, normalizeUser, userByChatId, userById } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
 import { localized } from './catalog.mjs';
 import { PLACES } from './places.mjs';
@@ -336,6 +336,58 @@ function awaitingReply(inquiry) {
   return (Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0) > lastReply;
 }
 
+// Состояние заявки одной строкой — внизу карточки, у каждого менеджера одно и то же: кто взял, кто ответил, ждёт ли клиент.
+function stateTime(value) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
+}
+
+function inquiryStateLine(inquiry) {
+  if (!inquiry) return '';
+  if (inquiry.status === 'closed') return '✔️ Закрыта';
+  const replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
+  const last = replies[replies.length - 1];
+  const owner = inquiry.assignee ? ' · ведёт: ' + inquiry.assignee : '';
+  if (awaitingReply(inquiry)) {
+    if (last) return '🆕 Клиент написал снова, ' + stateTime(inquiry.clientMessageAt) + owner;
+    if (inquiry.assignee) return '⏳ Ведёт: ' + inquiry.assignee + (inquiry.takenAt ? ', с ' + stateTime(inquiry.takenAt) : '') + ' — клиент ждёт ответа';
+    return '🆕 Ждёт ответа';
+  }
+  if (last) return '💬 Ответ: ' + (last.by || 'менеджер') + ', ' + stateTime(last.createdAt) + (inquiry.assignee && inquiry.assignee !== last.by ? owner : '');
+  if (inquiry.assignee) return '⏳ Ведёт: ' + inquiry.assignee + (inquiry.takenAt ? ', с ' + stateTime(inquiry.takenAt) : '');
+  return '';
+}
+
+function cardWithState(base, inquiry) {
+  const state = inquiryStateLine(inquiry);
+  return state ? base + '\n\n' + state : base;
+}
+
+// Карточка заявки у всех: после «В работу», ответа или закрытия строка состояния меняется во всех чатах сразу, а не только
+// кнопки у нажавшего. Тексты карточек лежат в adminReplyTargets (поле card); более старые карточки без него остаются как были.
+async function refreshInquiryCards(inquiry, token = data.config.botToken) {
+  if (!inquiry || !token || !data.adminReplyTargets) return 0;
+  const cards = Object.entries(data.adminReplyTargets)
+    .filter(([, target]) => target.inquiryId === inquiry.id && target.card)
+    .sort((a, b) => (Date.parse(b[1].createdAt) || 0) - (Date.parse(a[1].createdAt) || 0))
+    .slice(0, 12);
+  let edited = 0;
+  for (const [key, target] of cards) {
+    const index = key.lastIndexOf(':');
+    const chatId = index >= 0 ? key.slice(0, index) : cleanText(data.config.adminChatId, 40);
+    const messageId = Number(index >= 0 ? key.slice(index + 1) : key);
+    if (!adminChatFor(chatId) || !Number.isFinite(messageId)) continue;
+    try {
+      const markup = inquiryStatusMarkup(inquiry);
+      await telegramRequest(token, 'editMessageText', { chat_id: chatId, message_id: messageId, text: cardWithState(target.card, inquiry), ...(markup ? { reply_markup: markup } : {}) });
+      edited += 1;
+    } catch {
+      // Сообщение удалено или слишком старое — остальные всё равно обновляем.
+    }
+  }
+  return edited;
+}
+
 function inquiryTypeLabel(inquiry) {
   if (inquiry.searchLead) return 'искал объекты сам';
   if (inquiry.type === 'question' && !inquiry.propertyId) return 'вопрос менеджеру';
@@ -408,8 +460,41 @@ async function handleInquiryStatusCallback(query, token) {
   const pressedBy = adminChatFor(chatId);
   const [, status, ...rest] = String(query.data || '').split(':');
   const inquiry = data.inquiries.find((item) => item.id === rest.join(':'));
-  if (!inquiry || (!Object.hasOwn(INQUIRY_STATUS_LABELS, status) && status !== 'follow')) {
+  if (!inquiry || (!Object.hasOwn(INQUIRY_STATUS_LABELS, status) && !['follow', 'take', 'keep'].includes(status))) {
     await acknowledgeCallback(query, token, 'Обращение не найдено — возможно, оно удалено.');
+    return;
+  }
+  // «Оставить»: менеджер передумал забирать заявку — вопрос убираем.
+  if (status === 'keep') {
+    await acknowledgeCallback(query, token);
+    await telegramRequest(token, 'deleteMessage', { chat_id: chatId, message_id: query.message.message_id }).catch(() => {});
+    return;
+  }
+  // Заявку уже ведёт другой менеджер: молча забирать нельзя — сначала спросим, а прежнему сообщим, если заберут.
+  if (status === 'in_progress' && inquiry.status === 'in_progress' && inquiry.assignee && inquiry.assignee !== pressedBy.name) {
+    await acknowledgeCallback(query, token, 'Заявку ведёт ' + inquiry.assignee);
+    await sendMessage(chatId, '👤 Заявку ведёт ' + inquiry.assignee + '. Забрать себе?', token, {
+      track: false,
+      reply_markup: { inline_keyboard: [[{ text: 'Забрать себе', callback_data: 'inq:take:' + inquiry.id }, { text: 'Оставить', callback_data: 'inq:keep:' + inquiry.id }]] },
+    }).catch(() => {});
+    return;
+  }
+  if (status === 'take') {
+    const previous = inquiry.assignee;
+    inquiry.assignee = pressedBy.name;
+    if (inquiry.status !== 'closed') inquiry.status = 'in_progress';
+    inquiry.takenAt = new Date().toISOString();
+    inquiry.updatedAt = inquiry.takenAt;
+    saveDataNow();
+    await acknowledgeCallback(query, token, 'Заявка ваша');
+    await telegramRequest(token, 'deleteMessage', { chat_id: chatId, message_id: query.message.message_id }).catch(() => {});
+    const former = previous && previous !== pressedBy.name ? inquiryChats().find((chat) => chat.name === previous) : null;
+    if (former) {
+      const owner = userById(inquiry.userId) || userByChatId(inquiry.chatId);
+      const who = owner ? [owner.firstName, owner.lastName].filter(Boolean).join(' ') || 'клиент' : 'клиент';
+      await sendMessage(former.chatId, '👤 ' + pressedBy.name + ' забрал(а) заявку: ' + inquiryTypeLabel(inquiry) + ' — ' + who + '.', token, { track: false }).catch(() => {});
+    }
+    await refreshInquiryCards(inquiry, token);
     return;
   }
   if (status === 'follow') {
@@ -421,7 +506,10 @@ async function handleInquiryStatusCallback(query, token) {
   } else {
     inquiry.status = status;
     // "In progress" means "I take it".
-    if (status === 'in_progress') inquiry.assignee = pressedBy.name;
+    if (status === 'in_progress') {
+      inquiry.assignee = pressedBy.name;
+      inquiry.takenAt = new Date().toISOString();
+    }
     // «Открыть снова» на выигранном или проигранном деле снимает этот итог,
     // иначе заявка открыта, а этап всё ещё «Выиграно».
     if (status !== 'closed' && ['won', 'lost'].includes(inquiry.pipelineStage)) {
@@ -444,6 +532,7 @@ async function handleInquiryStatusCallback(query, token) {
   } catch {
     // The status is saved even if Telegram no longer allows editing the buttons.
   }
+  await refreshInquiryCards(inquiry, token);
 }
 
 // Navigation notices repeat what is already in the title ("Opened «Offers»"
@@ -499,20 +588,21 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   const inquiry = options.important && inquiryId ? data.inquiries.find((item) => item.id === inquiryId) : null;
   // Inquiries go to every manager; navigation only to the main admin.
   const chats = options.important ? inquiryChats() : inquiryChats().filter((chat) => chat.main);
+  const shownText = inquiry ? cardWithState(text, inquiry) : text;
   let delivered = false;
   for (const chat of chats) {
     try {
       const messageIds = [];
       const markup = inquiryStatusMarkup(inquiry);
       const replyTo = options.replyTo instanceof Map ? options.replyTo.get(String(chat.chatId)) : null;
-      await sendMessage(chat.chatId, text, data.config.botToken, {
+      await sendMessage(chat.chatId, shownText, data.config.botToken, {
         track: false,
         messageIds,
         ...adminSendPlan('inquiry').options,
         ...(markup ? { reply_markup: markup } : {}),
         ...(replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {}),
       });
-      rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId }, chat.chatId);
+      rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId, card: inquiry ? text : '' }, chat.chatId);
       delivered = true;
       markAdminChatVerified(chat, true);
     } catch (error) {
@@ -590,14 +680,14 @@ async function copyUserMessageToAdministrator(message, token, inquiry = null) {
         const all = [message.message_id, ...album];
         let copiedAlbum = null;
         try {
-          copiedAlbum = await telegramRequest(token, 'copyMessages', { chat_id: chat.chatId, from_chat_id: message.chat.id, message_ids: all });
+          copiedAlbum = await telegramRequest(token, 'copyMessages', { chat_id: chat.chatId, from_chat_id: message.chat.id, message_ids: all, ...adminSendPlan('inquiry').options });
         } catch (error) {
           // Старый Telegram не знает копирования пачкой: копируем по одному,
           // чтобы менеджер всё-таки увидел все снимки.
           recordError('Копирование альбома', error);
           copiedAlbum = [];
           for (const id of all) {
-            const one = await telegramRequest(token, 'copyMessage', { chat_id: chat.chatId, from_chat_id: message.chat.id, message_id: id }).catch(() => null);
+            const one = await telegramRequest(token, 'copyMessage', { chat_id: chat.chatId, from_chat_id: message.chat.id, message_id: id, ...adminSendPlan('inquiry').options }).catch(() => null);
             if (one) copiedAlbum.push(one);
           }
         }
@@ -618,6 +708,7 @@ async function copyUserMessageToAdministrator(message, token, inquiry = null) {
         chat_id: chat.chatId,
         from_chat_id: message.chat.id,
         message_id: message.message_id,
+        ...adminSendPlan('inquiry').options,
       });
       // Replying directly to the copied photo or voice message works too.
       if (copied && Number.isFinite(Number(copied.message_id))) {
@@ -769,6 +860,7 @@ function rememberAdminReplyTarget(messageIds, target, adminChatId = data.config.
       inquiryId: cleanText(target.inquiryId, 100),
       sourceMessageId: Number.isFinite(Number(target.sourceMessageId)) && target.sourceMessageId != null ? Number(target.sourceMessageId) : null,
       createdAt: new Date().toISOString(),
+      ...(target.card ? { card: cleanText(target.card, 1500) } : {}),
     };
   }
   const keys = Object.keys(data.adminReplyTargets);
@@ -835,6 +927,7 @@ async function handleAdministratorReply(message, token) {
     return true;
   }
   const user = userByChatId(target.chatId);
+  let answeredInquiry = null;
   try {
     const language = user && user.preferredLanguage || 'ru';
     const header = (MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru).replyHeader;
@@ -880,11 +973,16 @@ async function handleAdministratorReply(message, token) {
         // Ответ менеджера из Telegram тоже двигает воронку «Новая» → «Связались»,
         // как ответ из панели.
         if (!inquiry.pipelineStage || inquiry.pipelineStage === 'new') inquiry.pipelineStage = 'contact';
-        if (!inquiry.assignee) inquiry.assignee = adminChat.name;
+        if (!inquiry.assignee) {
+          inquiry.assignee = adminChat.name;
+          inquiry.takenAt = new Date().toISOString();
+        }
         inquiry.updatedAt = new Date().toISOString();
+        answeredInquiry = inquiry;
       }
     }
     saveDataNow();
+    if (answeredInquiry) void refreshInquiryCards(answeredInquiry, token);
     await sendMessage(adminChatId, '✅ Сообщение отправлено пользователю' + (user ? ' ' + ([user.firstName, user.lastName].filter(Boolean).join(' ') || user.id) : '') + '.', token, { track: false });
   } catch (error) {
     if (user && userUnavailableError(error)) markUnavailable(user);
@@ -918,6 +1016,8 @@ export {
   handleAdministratorReply,
   handleInquiryStatusCallback,
   handleMessageReaction,
+  inquiryStateLine,
+  refreshInquiryCards,
   inquiryChats,
   inquiryStatusMarkup,
   inquiryTimes,

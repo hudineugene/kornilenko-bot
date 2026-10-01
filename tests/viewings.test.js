@@ -253,7 +253,10 @@ test.describe('free viewing slots', () => {
     const shared = await chat.shareContact('34600555444');
     assert.equal(shared.last.text, ru.phoneForViewingSaved);
     assert.equal(chat.user.phone, '34600555444', 'номер сохранён в карточке клиента');
-    assert.ok(chat.inquiries.some((inquiry) => inquiry.text.includes('34600555444')), 'менеджер видит номер');
+    const [booking] = chat.inquiries;
+    assert.equal(chat.inquiries.length, 1, 'номер — продолжение записи, а не новая заявка «вопрос по объекту»');
+    assert.ok(booking.messages.some((message) => message.direction === 'in' && message.text.includes('34600555444')), 'менеджер видит номер в переписке этой заявки');
+    assert.ok(!bot.awaitingReply || !booking.viewing.confirmedAt || !bot.awaitingReply(booking), 'подтверждённая запись не «ждёт ответа» из-за номера');
     assert.deepEqual(shared.last.markup.keyboard[0].map((button) => button.text), [bot.text.menuLabels.ru.objects, bot.text.menuLabels.ru.selection], 'кнопка больше не нужна');
   });
 

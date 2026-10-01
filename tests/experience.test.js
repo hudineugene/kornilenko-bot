@@ -84,6 +84,8 @@ test.describe('client', () => {
       PROPERTY.ru.askPrice,
       '',
       '↩️ Ответьте на это сообщение — ответ получит клиент.',
+      '',
+      '🆕 Ждёт ответа',
     ].join('\n'));
   });
 
@@ -164,6 +166,8 @@ test.describe('admin', () => {
       'Нужна консультация по ВНЖ',
       '',
       '↩️ Ответьте на это сообщение — ответ получит клиент.',
+      '',
+      '🆕 Ждёт ответа',
     ].join('\n'));
     const id = chat.inquiries[0].id;
     assert.deepEqual(callbacksOf(notification.markup), ['inq:in_progress:' + id, 'inq:closed:' + id, 'inq:follow:' + id]);

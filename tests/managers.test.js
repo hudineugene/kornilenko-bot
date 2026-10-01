@@ -79,8 +79,12 @@ test('"in progress" from a manager\'s chat takes the inquiry; other chats cannot
   const popup = telegram.calls.filter((call) => call.method === 'answerCallbackQuery').pop();
   assert.equal(popup.body.text, 'Статус: в работе · взял(а): Мария');
 
+  // Заявку уже ведёт Мария: «В работу» у Олега ничего не отбирает молча, а спрашивает.
   await adminPress('inq:in_progress:' + inquiry.id);
-  assert.equal(inquiry.assignee, 'Олег', 'the admin can take it over');
+  assert.equal(inquiry.assignee, 'Мария', 'не перехвачено молча');
+  assert.equal(telegram.calls.filter((call) => call.method === 'answerCallbackQuery').pop().body.text, 'Заявку ведёт Мария');
+  await adminPress('inq:take:' + inquiry.id);
+  assert.equal(inquiry.assignee, 'Олег', 'the admin can take it over — осознанно, кнопкой «Забрать себе»');
 
   await chat.press('inq:closed:' + inquiry.id);
   assert.equal(inquiry.status, 'in_progress', 'a client cannot change statuses');

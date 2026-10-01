@@ -102,6 +102,7 @@ test('admin reminders wait for office hours; the digest comes at opening time', 
   await chat.say('Вопрос в пятницу вечером');
   const inquiry = chat.inquiries[0];
   inquiry.createdAt = new Date(2026, 8, 18, 19, 0).toISOString();
+  inquiry.clientMessageAt = inquiry.createdAt;
   const saturdayNoon = new Date(2026, 8, 19, 12, 0);
   assert.deepEqual(await bot.runInquiryReminders(saturdayNoon), [], 'the office is closed on Saturday');
   assert.deepEqual(await bot.runInquiryReminders(new Date(2026, 8, 21, 9, 30)), [], 'Monday before opening');

@@ -11,7 +11,7 @@ import { markUnavailable, normalizeUser, userByChatId, userById } from './users.
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { imageExists } from './media.mjs';
 import { menuKeyboard } from './menus.mjs';
-import { adminCallbackAllowed, createInquiry, inquiryStatusMarkup, notifyAdministratorAction } from './inquiries.mjs';
+import { adminCallbackAllowed, adminChatFor, createInquiry, inquiryStatusMarkup, notifyAdministratorAction, refreshInquiryCards } from './inquiries.mjs';
 import { localized, localizedExact, validHttpUrl } from './catalog.mjs';
 import { acknowledgeCallback, propertyRequestText, sendSimilarProperty } from './sections.mjs';
 import { temporaryDeliveryError, userUnavailableError } from './broadcasts.mjs';
@@ -312,6 +312,11 @@ async function confirmViewingOnce(inquiry, options, token) {
   });
   inquiry.replies = inquiry.replies.slice(-50);
   if (inquiry.status !== 'in_progress') inquiry.status = 'in_progress';
+  // Кто подтвердил просмотр — тот и ведёт заявку, если она ничья.
+  if (options.by && !inquiry.assignee) {
+    inquiry.assignee = options.by;
+    inquiry.takenAt = new Date().toISOString();
+  }
   // Подтверждённый просмотр сам двигает воронку: менеджеру не надо помнить
   // про отдельный выпадающий список. Но только вперёд: если менеджер уже
   // поставил «Переговоры», подтверждение или перенос просмотра этап не
@@ -347,12 +352,14 @@ async function handleViewingConfirmCallback(query, token) {
     return;
   }
   try {
-    await confirmViewing(inquiry, { source: 'telegram' }, token);
+    const pressed = adminChatFor(query.message.chat.id);
+    await confirmViewing(inquiry, { source: 'telegram', by: pressed ? pressed.name : '' }, token);
   } catch (error) {
     await acknowledgeCallback(query, token, 'Не удалось подтвердить: ' + error.message);
     return;
   }
   await acknowledgeCallback(query, token, 'Просмотр подтверждён — клиент получил сообщение');
+  await refreshInquiryCards(inquiry, token);
   try {
     await telegramRequest(token, 'editMessageReplyMarkup', {
       chat_id: query.message.chat.id,

@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 51;
+const DATA_VERSION = 52;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -869,6 +869,8 @@ function normalizeAdminReplyTargets(value) {
       inquiryId: cleanText(target.inquiryId, 100),
       sourceMessageId: Number.isFinite(Number(target.sourceMessageId)) && target.sourceMessageId != null ? Number(target.sourceMessageId) : null,
       createdAt: cleanText(target.createdAt, 40),
+      // Текст карточки заявки без строки состояния — чтобы обновлять её у всех менеджеров.
+      ...(target.card ? { card: cleanText(target.card, 1500) } : {}),
     };
   }
   return result;
@@ -1378,6 +1380,10 @@ function normalizeLoadedData(parsed) {
       messages: normalizeInquiryMessages(item),
       readAt: cleanText(item.readAt, 40) || (storedVersion < 26 ? (cleanText(item.clientMessageAt, 40) || item.updatedAt || item.createdAt || new Date().toISOString()) : ''),
       remindedAt: cleanText(item.remindedAt, 40),
+      // С какого момента клиент ждал, когда о нём напомнили: напоминание — на каждое «жду», а не одно на заявку.
+      remindedSince: cleanText(item.remindedSince, 40),
+      // Когда менеджер взял заявку «В работу» (для строки состояния в карточке).
+      takenAt: cleanText(item.takenAt, 40),
       // When the client was last told that the message is with the manager:
       // messages in a row are acknowledged once, a later one again.
       acknowledgedAt: cleanText(item.acknowledgedAt, 40),

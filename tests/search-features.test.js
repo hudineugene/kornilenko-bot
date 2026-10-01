@@ -122,9 +122,9 @@ test('«Ещё»: переключатели только тех признак�
   assert.match(panelOf(off).text, /Подходит: 3/);
 });
 
-test('сохранённый поиск помнит признак; формат данных 51 читает и старый сохранённый поиск без признаков', async () => {
+test('сохранённый поиск помнит признак; формат данных 52 читает и старый сохранённый поиск без признаков', async () => {
   const { DATA_VERSION, normalizeLoadedData } = await import('../src/data-format.mjs');
-  assert.equal(DATA_VERSION, 51);
+  assert.equal(DATA_VERSION, 52);
   const withFeatures = normalizeLoadedData({ users: { 1: { id: '1', chatId: 1, savedSearch: { filter: { deal: 'sale', features: ['pool', 'sea', 'nonsense'] }, enabled: true } } } });
   assert.deepEqual(withFeatures.users['1'].savedSearch.filter.features, ['sea', 'pool'], 'известные — в каноническом порядке, лишнее выброшено');
   const onlyFeature = normalizeLoadedData({ users: { 2: { id: '2', chatId: 2, savedSearch: { filter: { features: ['pool'] } } } } });

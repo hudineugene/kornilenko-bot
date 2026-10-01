@@ -10,7 +10,7 @@ import { recordError } from './analytics.mjs';
 import { eraseUserData, markUnavailable, normalizeUser, userByChatId, userById, userDataExport } from './users.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
-import { appendInquiryMessage, awaitingReply, inquiryChats, inquiryTimelineMessage, trimInquiries } from './inquiries.mjs';
+import { appendInquiryMessage, awaitingReply, inquiryChats, inquiryTimelineMessage, refreshInquiryCards, trimInquiries } from './inquiries.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
 import { json, panelUserView, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
@@ -134,6 +134,7 @@ async function handleClientsApi(req, res, url) {
       inquiry.readAt = now;
       inquiry.updatedAt = now;
       saveDataNow();
+      void refreshInquiryCards(inquiry);
       return json(res, 200, { ok: true, inquiryId: inquiry.id });
     } catch (error) {
       if (userUnavailableError(error)) markUnavailable(user);
@@ -718,6 +719,7 @@ async function handleClientsApi(req, res, url) {
     if (inquiry.pipelineStage === 'won' && !wasWon) inquiry.wonAt = keptWonAt || inquiry.updatedAt;
     else if (inquiry.pipelineStage !== 'won') inquiry.wonAt = '';
     saveDataNow();
+    void refreshInquiryCards(inquiry);
     return json(res, 200, { ok: true });
   }
 
@@ -859,6 +861,7 @@ async function handleClientsApi(req, res, url) {
       inquiry.readAt = createdAt;
       inquiry.updatedAt = createdAt;
       saveDataNow();
+      void refreshInquiryCards(inquiry);
       return json(res, 200, { ok: true, deliveredAt: createdAt, messageId: sentMessage && sentMessage.message_id ? Number(sentMessage.message_id) : null });
     } catch (error) {
       if (userUnavailableError(error)) markUnavailable(user);

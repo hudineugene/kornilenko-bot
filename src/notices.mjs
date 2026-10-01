@@ -6,7 +6,7 @@ import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { userByChatId, userById } from './users.mjs';
 import { sendMessage } from './telegram.mjs';
-import { awaitingReply, inquiryChats, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
+import { awaitingReply, inquiryChats, inquiryStateLine, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
 import { localized, shortenedText } from './catalog.mjs';
 import { runViewingNotices } from './viewings.mjs';
 import { waitingConversationCount } from './admin-notifications.mjs';
@@ -96,13 +96,26 @@ function hoursAgoText(milliseconds) {
   return hours + ' ч';
 }
 
-// An inquiry nobody has taken yet: still "new", no reply from the panel or
-// Telegram. Once reminded, it is not reminded again.
+// Клиент ждёт ответа — по тому же правилу, что в панели («ждёт ответа»): заявка, которую никто не взял; взятая «В работу» без
+// ответа; и та, где клиент написал после ответа менеджера. Напоминание — одно на каждое «жду»: написал снова — ждёт заново.
+function waitingSince(inquiry) {
+  return Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0;
+}
+
 function inquiryNeedsReminder(inquiry, now, thresholdMs) {
-  if (inquiry.status !== 'new' || inquiry.remindedAt || inquiry.searchLead) return false;
-  if (Array.isArray(inquiry.replies) && inquiry.replies.length) return false;
-  const age = now - Date.parse(inquiry.createdAt);
-  return Number.isFinite(age) && age >= thresholdMs && age <= REMINDER_MAX_AGE_MS;
+  if (!awaitingReply(inquiry)) return false;
+  const since = waitingSince(inquiry);
+  if (!since) return false;
+  const reminded = inquiry.remindedSince ? Date.parse(inquiry.remindedSince) >= since : (inquiry.remindedAt ? Date.parse(inquiry.remindedAt) >= since : false);
+  if (reminded) return false;
+  const age = now - since;
+  return age >= thresholdMs && age <= REMINDER_MAX_AGE_MS;
+}
+
+// Что клиент написал последним — менеджеру важнее первого сообщения заявки.
+function lastClientText(inquiry) {
+  const incoming = (Array.isArray(inquiry.messages) ? inquiry.messages : []).filter((message) => message.direction === 'in' && message.text);
+  return incoming.length ? incoming[incoming.length - 1].text : inquiry.text;
 }
 
 // An inquiry brought back to the admin chat (a reminder, a planned follow-up):
@@ -118,28 +131,30 @@ async function sendInquiryToAdministrator(inquiry, heading, extraLines = [], opt
     '👤 ' + name + username + (inquiry.language ? ' · ' + inquiry.language.toUpperCase() : '') + (user && user.phone ? ' · ' + user.phone : ''),
     '',
     ...(property ? ['🔖 ' + (localized(property.title, inquiry.language) || property.reference || property.id)] : []),
-    shortenedText(inquiry.text, 500),
+    shortenedText(lastClientText(inquiry), 500),
     ...extraLines,
     ...(user ? ['', '↩️ Ответьте на это сообщение — ответ получит клиент.'] : []),
   ].join('\n');
+  const shownText = inquiryStateLine(inquiry) ? text + '\n\n' + inquiryStateLine(inquiry) : text;
   // The main admin and every manager: whoever is free can answer. A planned
   // follow-up goes to the one who took the inquiry.
   // Returns how many chats got it: a reminder nobody received is tried again.
   // Владелец мог отключить напоминания или сделать их беззвучными; /inbox — его собственная просьба, она всегда со звуком.
   const plan = options.chats ? { send: true, options: {} } : adminSendPlan(options.kind || 'reminder');
-  if (!plan.send) return 1;
+  // Отключено владельцем — ничего не ушло, и заявку нельзя считать «напомненной»: включат — напомним.
+  if (!plan.send) return 0;
   const sendTo = async (chats) => {
     let delivered = 0;
     for (const chat of chats) {
       const messageIds = [];
       try {
-        await sendMessage(chat.chatId, text, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry), ...plan.options });
+        await sendMessage(chat.chatId, shownText, data.config.botToken, { track: false, messageIds, reply_markup: inquiryStatusMarkup(inquiry), ...plan.options });
       } catch (error) {
         recordError(chat.main ? 'Напоминание администратору' : 'Напоминание менеджеру ' + chat.name, error);
         continue;
       }
       delivered += 1;
-      if (user) rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId: inquiry.id, sourceMessageId: inquiry.sourceMessageId }, chat.chatId);
+      if (user) rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId: inquiry.id, sourceMessageId: inquiry.sourceMessageId, card: text }, chat.chatId);
     }
     return delivered;
   };
@@ -200,20 +215,25 @@ async function runInquiryReminders(now = new Date()) {
   if (!adminMessagesAllowed(now)) return [];
   const due = data.inquiries
     .filter((inquiry) => inquiryNeedsReminder(inquiry, now.getTime(), hours * 60 * 60 * 1000))
-    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+    .sort((a, b) => waitingSince(a) - waitingSince(b));
   if (!due.length) return [];
   const sent = [];
   for (const inquiry of due.slice(0, REMINDERS_PER_RUN)) {
-    const delivered = await sendInquiryToAdministrator(inquiry, '⏰ Нет ответа ' + hoursAgoText(now.getTime() - Date.parse(inquiry.createdAt)) + ': ' + inquiryTypeLabel(inquiry));
+    const since = waitingSince(inquiry);
+    const delivered = await sendInquiryToAdministrator(inquiry, '⏰ Ждёт ответа ' + hoursAgoText(now.getTime() - since) + ': ' + inquiryTypeLabel(inquiry), [], { onlyAssignee: true });
     if (!delivered) continue;
     inquiry.remindedAt = now.toISOString();
+    inquiry.remindedSince = new Date(since).toISOString();
     sent.push(inquiry.id);
   }
   const rest = due.length - sent.length;
   if (rest > 0) {
     const restPlan = adminSendPlan('reminder');
     if (restPlan.send) await sendMessage(adminChatId, '⏰ И ещё ' + rest + ' без ответа — они в панели: «Клиенты → Диалоги».', data.config.botToken, { track: false, ...restPlan.options });
-    for (const inquiry of due.slice(REMINDERS_PER_RUN)) inquiry.remindedAt = now.toISOString();
+    for (const inquiry of due.slice(REMINDERS_PER_RUN)) {
+      inquiry.remindedAt = now.toISOString();
+      inquiry.remindedSince = new Date(waitingSince(inquiry)).toISOString();
+    }
   }
   saveDataNow();
   return sent;

@@ -5,6 +5,7 @@ import { localDayKey } from './util.mjs';
 import { data } from './store.mjs';
 import { sendMessage } from './telegram.mjs';
 import { adminChatFor, awaitingReply, inquiryTypeLabel } from './inquiries.mjs';
+import { waitingConversationCount } from './admin-notifications.mjs';
 import { activityDigest, hoursAgoText, sendInquiryToAdministrator, weekFigures } from './notices.mjs';
 import { viewingsOverview } from './viewings.mjs';
 import { BOT_COMMAND_DESCRIPTIONS } from './texts.mjs';
@@ -54,17 +55,32 @@ function meantForAnotherBot(text) {
 }
 
 // The main admin sees everything; a manager sees what is free or theirs.
+function waitingFrom(inquiry) {
+  return Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || 0;
+}
+
+// Один клиент — одна строка (как в панели): из его заявок берём ту, что ждёт дольше всех.
+function oneRowPerClient(inquiries) {
+  const byClient = new Map();
+  for (const inquiry of inquiries) {
+    const key = String(inquiry.userId);
+    const known = byClient.get(key);
+    if (!known || waitingFrom(inquiry) < waitingFrom(known)) byClient.set(key, inquiry);
+  }
+  return Array.from(byClient.values()).sort((a, b) => waitingFrom(a) - waitingFrom(b));
+}
+
 function inboxFor(chat) {
-  return data.inquiries
-    .filter((inquiry) => awaitingReply(inquiry) && (chat.main || !inquiry.assignee || inquiry.assignee === chat.name))
-    .sort((a, b) => (Date.parse(a.clientMessageAt || a.createdAt) || 0) - (Date.parse(b.clientMessageAt || b.createdAt) || 0));
+  return oneRowPerClient(data.inquiries.filter((inquiry) => awaitingReply(inquiry) && (chat.main || !inquiry.assignee || inquiry.assignee === chat.name)));
 }
 
 // Each inquiry comes again with its buttons, so the admin can reply to it.
 async function sendInbox(chat, token, now = new Date()) {
   const waiting = inboxFor(chat);
   if (!waiting.length) {
-    await sendMessage(chat.chatId, '✅ Все обращения отвечены.', token, { track: false });
+    // Менеджер без своих заявок не должен думать, что всё отвечено, если у коллег клиент ждёт.
+    const colleagues = chat.main ? 0 : oneRowPerClient(data.inquiries.filter(awaitingReply)).length;
+    await sendMessage(chat.chatId, colleagues ? '📥 У вас нет заявок без ответа; у коллег ждут: ' + colleagues + '.' : '✅ Все обращения отвечены.', token, { track: false });
     return 0;
   }
   const shown = waiting.slice(0, INBOX_LIMIT);
@@ -82,7 +98,7 @@ function statsText(now = new Date()) {
   const week = weekFigures(monday, now);
   const pad = (value) => String(value).padStart(2, '0');
   const label = (date) => pad(date.getDate()) + '.' + pad(date.getMonth() + 1);
-  const waiting = data.inquiries.filter(awaitingReply).length;
+  const waiting = waitingConversationCount();
   return [
     '📊 Сегодня, ' + label(now),
     ...(today.length ? today : ['Новых пользователей: 0', 'Сообщений от клиентов: 0', 'Новых обращений: 0']),

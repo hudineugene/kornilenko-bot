@@ -21,6 +21,7 @@ async function inquiryFrom(chat, text, hoursAgo) {
   await chat.say(text);
   const inquiry = chat.inquiries[chat.inquiries.length - 1];
   inquiry.createdAt = ago(hoursAgo);
+  inquiry.clientMessageAt = inquiry.createdAt;
   inquiry.updatedAt = inquiry.createdAt;
   return inquiry;
 }
@@ -38,19 +39,21 @@ test('an inquiry left unanswered past the threshold is reminded about once', asy
   assert.deepEqual(await bot.runInquiryReminders(MORNING), [inquiry.id]);
   const [reminder] = adminMessages();
   assert.equal(reminder.text, [
-    '⏰ Нет ответа 3 ч: сообщение',
+    '⏰ Ждёт ответа 3 ч: сообщение',
     '👤 Анна · RU',
     '',
     'Есть ли квартиры у моря?',
     '',
     '↩️ Ответьте на это сообщение — ответ получит клиент.',
+    '',
+    '🆕 Ждёт ответа',
   ].join('\n'));
   assert.deepEqual(callbacksOf(reminder.markup), ['inq:in_progress:' + inquiry.id, 'inq:closed:' + inquiry.id, 'inq:follow:' + inquiry.id]);
 
   assert.deepEqual(await bot.runInquiryReminders(new Date(MORNING.getTime() + 3 * HOUR)), [], 'not reminded twice');
 });
 
-test('fresh, taken, answered and closed inquiries are not reminded about', async () => {
+test('fresh, answered, closed and ancient inquiries are not reminded about; taken "in progress" without an answer is', async () => {
   const fresh = await inquiryFrom(createChat(), 'Только что написал', 1);
   const taken = await inquiryFrom(createChat(), 'Взяли в работу', 5);
   taken.status = 'in_progress';
@@ -59,17 +62,40 @@ test('fresh, taken, answered and closed inquiries are not reminded about', async
   const closed = await inquiryFrom(createChat(), 'Закрыто', 5);
   closed.status = 'closed';
   const ancient = await inquiryFrom(createChat(), 'Очень старое', 24 * 8);
-  assert.deepEqual(await bot.runInquiryReminders(MORNING), []);
+  // «В работу» значит «я взял», а не «я ответил»: клиент всё ещё ждёт, и о нём напоминаем, как в панели.
+  assert.deepEqual(await bot.runInquiryReminders(MORNING), [taken.id]);
   assert.ok(fresh && ancient);
+});
+
+test('a client who wrote AFTER the manager answered is reminded about (once per wait); a new message starts a new wait', async () => {
+  const chat = createChat();
+  const inquiry = await inquiryFrom(chat, 'Первый вопрос', 8);
+  inquiry.replies = [{ id: 'r1', text: 'Ответ', source: 'telegram', by: 'Олег', createdAt: ago(7) }];
+  inquiry.status = 'in_progress';
+  // клиент написал ещё раз после ответа, четыре часа назад
+  inquiry.clientMessageAt = ago(4);
+  inquiry.messages = [...(inquiry.messages || []), { id: 'm2', direction: 'in', text: 'А можно в субботу?', createdAt: ago(4) }];
+  telegram.calls = [];
+  assert.deepEqual(await bot.runInquiryReminders(MORNING), [inquiry.id]);
+  const [reminder] = adminMessages();
+  assert.match(reminder.text, /^⏰ Ждёт ответа 4 ч/);
+  assert.match(reminder.text, /А можно в субботу?/, 'в напоминании — последнее сообщение клиента');
+  assert.match(reminder.text, /🆕 Клиент написал снова/, 'состояние — внизу карточки');
+  assert.deepEqual(await bot.runInquiryReminders(new Date(MORNING.getTime() + HOUR)), [], 'то же ожидание — второй раз не напоминаем');
+  // ответили и клиент снова написал — новое ожидание, новое напоминание
+  inquiry.replies.push({ id: 'r2', text: 'Да', source: 'telegram', by: 'Олег', createdAt: new Date(MORNING.getTime() + 2 * HOUR).toISOString() });
+  inquiry.clientMessageAt = new Date(MORNING.getTime() + 3 * HOUR).toISOString();
+  assert.deepEqual(await bot.runInquiryReminders(new Date(MORNING.getTime() + 6 * HOUR)), [inquiry.id]);
 });
 
 test('no reminders at night; the morning check picks them up', async () => {
   const chat = createChat();
   const inquiry = await inquiryFrom(chat, 'Написал вечером', 0);
   inquiry.createdAt = new Date(2026, 8, 17, 22, 30).toISOString();
+  inquiry.clientMessageAt = inquiry.createdAt;
   assert.deepEqual(await bot.runInquiryReminders(new Date(2026, 8, 18, 3, 0)), []);
   assert.deepEqual(await bot.runInquiryReminders(new Date(2026, 8, 18, 9, 0)), [inquiry.id]);
-  assert.match(adminMessages().pop().text, /^⏰ Нет ответа 10 ч/);
+  assert.match(adminMessages().pop().text, /^⏰ Ждёт ответа 10 ч/);
 });
 
 test('reminders can be turned off', async () => {
@@ -169,6 +195,8 @@ test.describe('follow-ups', () => {
       '📝 Обещал прислать расчёт',
       '',
       '↩️ Ответьте на это сообщение — ответ получит клиент.',
+      '',
+      '🆕 Ждёт ответа',
     ].join('\n'));
     assert.deepEqual(await bot.runFollowUpReminders(new Date(MORNING.getTime() + HOUR)), [], 'once');
 

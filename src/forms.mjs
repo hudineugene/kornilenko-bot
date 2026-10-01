@@ -8,7 +8,7 @@ import { recordPropertyEvent } from './analytics.mjs';
 import { markUnavailable, normalizeUser } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard, sendMainMenu } from './menus.mjs';
-import { createInquiry } from './inquiries.mjs';
+import { appendInquiryMessage, createInquiry, inquiryTimelineMessage, notifyAdministratorAction } from './inquiries.mjs';
 import { localizedExact, publishedCatalog, sendCatalogPage, sendUiMessage, showCatalogPricePrompt, startCatalogPriceInput } from './catalog.mjs';
 import { currentSelectionRanking } from './alerts.mjs';
 import { temporaryDeliveryError } from './broadcasts.mjs';
@@ -1010,11 +1010,15 @@ async function saveViewingPhone(message, user, token) {
   user.phone = phone;
   scheduleSave();
   const viewing = data.inquiries.filter((item) => item.type === 'viewing' && item.userId === user.id).pop();
-  createInquiry(user, 'Телефон для связи в день показа: ' + phone, {
-    type: 'question',
-    propertyId: viewing ? viewing.propertyId : '',
-    sourceMessage: message,
-  });
+  const phoneText = 'Телефон для связи в день показа: ' + phone;
+  if (viewing) {
+    // Номер — продолжение записи на просмотр, а не новый «вопрос по объекту», который попадал в «ждут ответа».
+    appendInquiryMessage(viewing, inquiryTimelineMessage(message, 'in', { text: phoneText }));
+    viewing.updatedAt = new Date().toISOString();
+    void notifyAdministratorAction(user, 'Телефон для связи в день показа', phone, viewing.id, message.message_id, { important: true });
+  } else {
+    createInquiry(user, phoneText, { type: 'question', propertyId: '', sourceMessage: message });
+  }
   saveDataNow();
   await sendMessage(user.chatId, copy.phoneForViewingSaved, token, { reply_markup: menuKeyboard(language) });
   return true;
