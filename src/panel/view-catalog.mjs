@@ -533,6 +533,72 @@ function openChannelPost(id) {
   });
 }
 
+// Автопубликация: два правила, оба по умолчанию выключены. 1) Новый объект — в выбранные группы и разделы ставится ОТЛОЖЕННЫЙ
+// пост (по умолчанию через 30 минут: можно поправить или отменить в «Очереди и истории»). 2) Свежие посты — при смене цены, статуса
+// или описания уже опубликованные посты правятся на месте.
+function openAutoPublish() {
+  var config = (state.config && state.config.autoPublish) || { newObjects: { enabled: false, targets: [], layout: "single", delayMinutes: 30 }, keepFresh: false };
+  var news = config.newObjects || {};
+  var groups = (state.groups || []).filter(function (group) { return LISTING_ADMIN.indexOf(group.status) >= 0 && !listingBlocker(group); });
+  function chosen(groupId, threadId) {
+    return (news.targets || []).find(function (item) { return item.groupId === groupId && Number(item.threadId || 0) === Number(threadId || 0); });
+  }
+  var rows = groups.map(function (group) {
+    var places = [{ id: 0, name: group.isForum ? "Общий раздел" : "" }].concat(group.isForum ? (group.topics || []).filter(function (topic) { return topic.id > 1; }).map(function (topic) { return { id: topic.id, name: topic.name || "Раздел №" + topic.id }; }) : []);
+    return '<div class="listing-target" data-group="' + esc(group.id) + '"><div class="listing-pick"><span><b>' + esc(group.title || group.id) + '</b><span class="small muted">' + listingKind(group) + "</span></span></div>" +
+      '<div class="listing-topics">' + places.map(function (place) {
+        var current = chosen(group.id, place.id);
+        return '<label class="listing-topic"><input type="checkbox" data-auto-pick data-thread="' + place.id + '"' + (current ? " checked" : "") + "><span>" + (place.name ? esc(place.name) : "В группу") + "</span>" +
+          '<select data-auto-lang aria-label="Язык поста">' + LANGUAGES.map(function (item) {
+            var wanted = current ? current.language : group.listingLanguage || "ru";
+            return '<option value="' + item[0] + '"' + (item[0] === wanted ? " selected" : "") + ">" + item[1] + "</option>";
+          }).join("") + "</select></label>";
+      }).join("") + "</div></div>";
+  }).join("");
+  openDialog({
+    title: "Автопубликация",
+    drawer: true,
+    protectChanges: true,
+    body: '<div class="stack">' +
+      '<div class="msg">Включено — бот сам публикует в группы. Оба правила по умолчанию выключены; всё, что уходит в группы, берётся из карточки объекта, как при ручной публикации.</div>' +
+      '<label class="check"><input type="checkbox" id="apNew"' + (news.enabled ? " checked" : "") + '> <span><b>Новые объекты</b> — когда объект появился в каталоге у клиентов, поставить пост в очередь</span></label>' +
+      '<div class="stack" id="apNewBody">' +
+        (groups.length ? '<div class="listing-targets">' + rows + "</div>" : '<div class="small muted">Нет групп, куда бот может публиковать: сделайте его администратором.</div>') +
+        '<div class="grid cols-2"><div class="field"><label for="apDelay">Через сколько минут отправить</label><input id="apDelay" type="number" min="0" max="1440" value="' + esc(String(news.delayMinutes == null ? 30 : news.delayMinutes)) + '"><div class="hint">Пост ждёт в «Публикации → Очередь и история»: за это время его можно поправить или отменить. 0 — сразу.</div></div>' +
+        '<div class="field"><label>Вид поста</label><label class="check"><input type="radio" name="apLayout" value="single"' + (news.layout === "split" ? "" : " checked") + '> Один пост</label><label class="check"><input type="radio" name="apLayout" value="split"' + (news.layout === "split" ? " checked" : "") + "> Фото и отдельное сообщение</label></div></div>" +
+      "</div>" +
+      '<label class="check"><input type="checkbox" id="apFresh"' + (config.keepFresh ? " checked" : "") + '> <span><b>Свежие посты</b> — когда меняются цена, статус или описание объекта, исправить уже опубликованные посты на месте</span></label>' +
+      '<div class="hint">Проданный объект получит в посте пометку «🔴 Продан», ссылка и кнопка на бота исчезнут. Про каждое автоматическое действие бот напишет вам в Telegram.</div>' +
+      "</div>",
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="apSave" type="button">Сохранить</button>',
+    ready: function (dialog) {
+      function targets() {
+        var out = [];
+        dialog.querySelectorAll(".listing-target").forEach(function (row) {
+          row.querySelectorAll("[data-auto-pick]").forEach(function (box) {
+            if (!box.checked) return;
+            var language = box.closest("label").querySelector("[data-auto-lang]");
+            out.push({ groupId: row.dataset.group, threadId: Number(box.dataset.thread) || 0, language: language ? language.value : "ru" });
+          });
+        });
+        return out;
+      }
+      dialog.querySelector("#apSave").onclick = async function () {
+        try {
+          var layout = dialog.querySelector('input[name="apLayout"]:checked');
+          await send("/api/auto-publish", "PUT", {
+            newObjects: { enabled: dialog.querySelector("#apNew").checked, targets: targets(), layout: layout ? layout.value : "single", delayMinutes: Number(dialog.querySelector("#apDelay").value) || 0 },
+            keepFresh: dialog.querySelector("#apFresh").checked,
+          });
+          dialog.closeClean();
+          toast("Автопубликация сохранена");
+          await reload();
+        } catch (error) { fail(error); }
+      };
+    },
+  });
+}
+
 function insightSignalLabel(signal) {
   return { favorite: "❤️ в избранном", comparison: "⚖️ сравнивает", viewed: "просматривал", match: "подходит по запросу", inquiry: "есть заявка" }[signal] || signal;
 }
@@ -1044,7 +1110,7 @@ function openRecordEditor(kind, id) {
           }
           // Объект уже опубликован в группах, а в карточке поменялось то, что видно в посте, — предлагаем обновить посты.
           var posted = record ? (record.publications || []).filter(function (item) { return item.layout; }) : [];
-          var offer = posted.length && isObject && listingFieldsChanged(record, payload)
+          var offer = posted.length && isObject && !(state.config && state.config.autoPublish && state.config.autoPublish.keepFresh) && listingFieldsChanged(record, payload)
             ? { label: "Обновить посты в группах (" + posted.length + ")", run: function () { updateListingPosts(record.id); } }
             : null;
           toast(done, incomplete.length > 0, offer, Boolean(offer));

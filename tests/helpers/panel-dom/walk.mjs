@@ -118,6 +118,7 @@ async function walk(kind, state) {
     await dialog('отложенный пост', () => s.openScheduledPost(s.publicationRows().find((r) => r.kind === 'post')));
   }
   await dialog('оформление постов', () => s.openPostStyleDialog());
+  await dialog('автопубликация', () => s.openAutoPublish());
   await dialog('новый автоответ', () => s.openRuleEditor(null));
   if (state.rules.length) await dialog('автоответ r1', () => s.openRuleEditor('r1'));
   await dialog('новый клиент', () => s.openManualClient());

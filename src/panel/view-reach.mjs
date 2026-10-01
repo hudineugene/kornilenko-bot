@@ -543,6 +543,7 @@ function renderGroups(host, mode) {
     pageAction("Проверить права бота", async function () {
       try { await send("/api/groups/refresh", "POST", {}); await reload(); toast("Данные каналов и прав обновлены"); } catch (error) { fail(error); }
     }, "secondary");
+    pageAction("🚀 Автопубликация", openAutoPublish, "secondary");
   }
   var picker = mode === "post" && pool.length === 1
     // Выбирать не из чего: сразу редактор, а куда уйдёт пост — одной строкой.

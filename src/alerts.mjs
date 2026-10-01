@@ -1,5 +1,6 @@
 // Уведомления клиентам об объектах: избранное и подбор.
 
+import { autoPublishAfterSave } from './auto-publish.mjs';
 import { cleanText, delay, largestMoneyAmount, localDayKey } from './util.mjs';
 import { imageExists } from './media.mjs';
 import { PROPERTY_ALERT_TEXT, SAVED_SEARCH_TEXT, SELECTION_FORM_TEXT } from './texts.mjs';
@@ -335,6 +336,8 @@ function rememberPublication(record) {
 function queuePropertyAlerts(record, before) {
   rememberPriceChange(record, before);
   rememberPublication(record);
+  // Автопубликация в группы и автообновление постов — если владелец их включил (по умолчанию выключены).
+  autoPublishAfterSave(record, before);
   if (!configured() || !data.config.active) return 0;
   const deliveries = propertyAlertDeliveries(record, before);
   if (deliveries.length) {

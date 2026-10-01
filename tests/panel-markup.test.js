@@ -18,7 +18,7 @@ const places = (report) => Object.entries({ ...report.screens, ...report.dialogs
 test('обход охватывает все экраны и окна: если проверка сузилась, тест это заметит', async () => {
   const report = await walk();
   assert.ok(Object.keys(report.screens).length >= 77, 'экранов: ' + Object.keys(report.screens).length);
-  assert.ok(Object.keys(report.dialogs).length >= 51, 'окон: ' + Object.keys(report.dialogs).length);
+  assert.ok(Object.keys(report.dialogs).length >= 52, 'окон: ' + Object.keys(report.dialogs).length);
   const missing = places(report).filter(([, place]) => place.missing).map(([name]) => name);
   assert.deepEqual(missing, [], 'окна, которые не открылись: ' + missing.join('; '));
 });

@@ -10,6 +10,7 @@ import { telegramRequest } from './telegram.mjs';
 import { persistImage } from './media.mjs';
 import { json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
 import { objectCaption, propertyDeepLink, recordImages } from './catalog.mjs';
+import { saveAutoPublishConfig } from './auto-publish.mjs';
 import { LISTING_LANGUAGES, MAX_SCHEDULED_POSTS, futureDate, requestedThread, runListingPublish } from './listing-publish.mjs';
 import {
   GENERAL_TOPIC_ID,
@@ -178,10 +179,26 @@ async function handleGroupApi(req, res, url) {
   // Публикация объекта в канал живёт здесь же: ей нужны и канал, и отправка
   // поста, которые описаны в этом файле.
   const objectChannelPost = /^\/api\/objects\/[^/]+\/(channel-post|listing-preview|listing-publish|listing-unpublish|listing-update)$/.test(url.pathname);
-  if (!url.pathname.startsWith('/api/groups') && !url.pathname.startsWith('/api/group-posts') && url.pathname !== '/api/publishing' && !objectChannelPost) return false;
+  if (!url.pathname.startsWith('/api/groups') && !url.pathname.startsWith('/api/group-posts') && url.pathname !== '/api/publishing' && url.pathname !== '/api/auto-publish' && !objectChannelPost) return false;
   // Чтение (GET) защитного кода не требует — панель его в такие запросы не кладёт; любое изменение — требует.
   const session = requireAuth(req, res, req.method !== 'GET');
   if (!session) return true;
+
+  // Автопубликация: правила (новые объекты → отложенные посты; свежие посты — правка на месте). Выключены по умолчанию.
+  if (url.pathname === '/api/auto-publish' && req.method === 'PUT') {
+    const body = await readJson(req);
+    const wanted = body && body.newObjects && Array.isArray(body.newObjects.targets) ? body.newObjects.targets : [];
+    const usable = wanted.filter((item) => {
+      const found = groupById(cleanText(item && item.groupId, 40));
+      return found && ['administrator', 'creator'].includes(found.status) && !publishBlocker(found);
+    });
+    if (body && body.newObjects && body.newObjects.enabled === true && !usable.length) {
+      return json(res, 400, { error: 'Выберите хотя бы одну группу, где бот может публиковать, — иначе автопубликации некуда идти' }), true;
+    }
+    const config = saveAutoPublishConfig({ ...body, newObjects: { ...(body && body.newObjects), targets: usable } });
+    saveDataNow();
+    return json(res, 200, { ok: true, autoPublish: config }), true;
+  }
 
   // Постоянная подпись под постами и рубричные плашки.
   if (url.pathname === '/api/publishing' && req.method === 'PUT') {

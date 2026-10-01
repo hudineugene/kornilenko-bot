@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { sourceTitle } from './source-title.mjs';
+import { autoPublishConfig } from './auto-publish.mjs';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import zlib from 'node:zlib';
@@ -835,6 +836,7 @@ function safeState(session) {
       tunnelHostname: data.config.tunnelHostname || '',
       reminderHours: Number.isFinite(Number(data.config.reminderHours)) ? Number(data.config.reminderHours) : 2,
       retentionMonths: Number(data.config.retentionMonths) || 0,
+      autoPublish: autoPublishConfig(),
       timeZone: normalizeTimeZone(data.config.timeZone),
       workingHours: normalizeWorkingHours(data.config.workingHours),
       statusNotices: data.config.statusNotices !== false,
