@@ -819,6 +819,11 @@ function normalizePublications(value) {
     messageId: Math.max(0, Number(item && item.messageId) || 0),
     messageIds: (Array.isArray(item && item.messageIds) ? item.messageIds : []).map((value) => Math.max(0, Math.floor(Number(value)) || 0)).filter(Boolean).slice(0, 12),
     threadId: Math.max(0, Math.floor(Number(item && item.threadId)) || 0),
+    captionId: Math.max(0, Math.floor(Number(item && item.captionId)) || 0),
+    textId: Math.max(0, Math.floor(Number(item && item.textId)) || 0),
+    layout: item && item.layout === 'split' ? 'split' : item && item.layout === 'single' ? 'single' : '',
+    withoutSignature: Boolean(item && item.withoutSignature),
+    updatedAt: cleanText(item && item.updatedAt, 40),
     link: cleanText(item && item.link, 300),
   })).filter((item) => item.groupId);
 }

@@ -529,7 +529,7 @@ function messageLink(group, messageId, threadId = 0) {
 function listingMessage(record, language, options = {}) {
   const publishing = normalizePublishing(data.config.publishing);
   const signature = options.withoutSignature ? { html: '', plain: '' } : formatLinks(signatureBlock(publishing));
-  const built = buildListing(record, language, { reserve: signature.plain.length + 4, source: options.source, layout: options.layout });
+  const built = buildListing(record, language, { reserve: signature.plain.length + 4, source: options.source, layout: options.layout, noPhotos: options.noPhotos });
   const quote = signature.html && publishing.signatureQuote;
   const signed = (body) => body + (signature.html ? '\n\n' + (quote ? '<blockquote>' + signature.html + '</blockquote>' : signature.html) : '');
   const oneCaption = built.layout === 'single' && built.images.length > 0;
@@ -590,12 +590,52 @@ async function sendListing(group, post, token = data.config.botToken) {
   // Что и куда уже опубликовано — для предупреждения «это объявление здесь уже было».
   record.publications = [
     // messageIds — все сообщения поста (альбом и текст): по ним пост удаляется из группы целиком.
-    { groupId: group.id, title: cleanText(group.title, 200), language: built.language, at: group.lastPostAt, messageId: messageId || 0, messageIds: [...new Set([...albumIds, messageId].filter(Boolean))], threadId, link: messageLink(group, messageId || albumIds[0] || 0, threadId) },
+    { groupId: group.id, title: cleanText(group.title, 200), language: built.language, at: group.lastPostAt, messageId: messageId || 0, messageIds: [...new Set([...albumIds, messageId].filter(Boolean))], threadId,
+      // Из чего состоит пост — по этому он обновляется на месте: сообщение с фото (подпись) и отдельное текстовое.
+      captionId: albumIds[0] || 0, textId: html ? messageId || 0 : 0, layout: built.layout, withoutSignature: Boolean(post.withoutSignature), updatedAt: '',
+      link: messageLink(group, messageId || albumIds[0] || 0, threadId) },
     ...(Array.isArray(record.publications) ? record.publications : []),
   ].slice(0, 30);
   group.listingLanguage = built.language;
   scheduleSave();
   return messageId || 0;
+}
+
+// Обновить опубликованный пост на месте — по нынешним данным объекта (цена, статус, описание): правятся подпись фото и текст,
+// фотографии и сообщения остаются. Пост, опубликованный прежней версией бота, не знает своего устройства — его обновить нельзя.
+async function updateListingPost(group, record, entry, token = data.config.botToken) {
+  if (!entry.layout || !(entry.captionId || entry.textId)) throw new Error('Этот пост опубликован прежней версией бота — обновить его нельзя. Удалите его и опубликуйте заново.');
+  const hadPhotos = Boolean(entry.captionId);
+  const built = listingMessage(record, entry.language, { layout: entry.layout, withoutSignature: entry.withoutSignature, source: groupSourceLabel(group, entry.threadId), noPhotos: !hadPhotos });
+  if (hadPhotos && !built.images.length) throw new Error('У объекта больше нет фотографий — пост с фото обновить нельзя. Удалите его и опубликуйте заново.');
+  // Кнопка «Смотреть в боте» — у одного фото и у текста; у проданного объекта её нет: ссылка вела бы в никуда.
+  const noButtons = { inline_keyboard: [] };
+  try {
+    if (entry.captionId) {
+      await telegramRequest(token, 'editMessageCaption', {
+        chat_id: group.id,
+        message_id: entry.captionId,
+        caption: built.caption,
+        parse_mode: 'HTML',
+        ...(built.oneCaption && !built.album ? { reply_markup: built.markup || noButtons } : {}),
+      });
+    }
+    if (entry.textId && built.html) {
+      await telegramRequest(token, 'editMessageText', {
+        chat_id: group.id,
+        message_id: entry.textId,
+        text: built.html,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+        reply_markup: built.markup || noButtons,
+      });
+    }
+  } catch (error) {
+    if (/message to edit not found|MESSAGE_ID_INVALID/i.test(String(error && error.message))) throw new Error('Поста в группе уже нет — его удалили. Уберите запись из списка.');
+    throw error;
+  }
+  entry.updatedAt = new Date().toISOString();
+  scheduleSave();
 }
 
 // Повтор без ссылки mailto, если Telegram её не принял.
@@ -778,6 +818,7 @@ export {
   postText,
   postToGroup,
   groupSourceLabel,
+  updateListingPost,
   listingMessage,
   publishBlocker,
   messageLink,

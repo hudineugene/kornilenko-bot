@@ -425,3 +425,96 @@ test('панель: в группе с разделами — флажки ра�
   assert.match(source, /\/listing-unpublish/);
   assert.match(source, /Убрать из списка/, 'если Telegram не дал удалить — запись можно убрать вручную');
 });
+
+test('опубликованный пост обновляется на месте: новая цена в подписи альбома, сообщения те же, новых нет', async () => {
+  setGroups([admin('-1001000000041', 'Группа обновления', { rights: {} })]);
+  await post('/api/objects/listing-object-1/listing-publish', { targets: [{ groupId: '-1001000000041', language: 'ru' }] });
+  const entry = objectById().publications.find((item) => item.groupId === '-1001000000041');
+  assert.equal(entry.layout, 'single');
+  assert.ok(entry.captionId > 0 && entry.textId === 0, 'в режиме «один пост» — одно сообщение с подписью');
+
+  objectById().priceValue = 139000;
+  telegram.calls = [];
+  const response = await post('/api/objects/listing-object-1/listing-update', { groupId: '-1001000000041', messageId: entry.messageId });
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.equal(body.results[0].ok, true);
+  const edits = telegram.calls.filter((call) => call.method.startsWith('edit'));
+  assert.deepEqual(edits.map((call) => call.method), ['editMessageCaption']);
+  assert.equal(edits[0].body.message_id, entry.captionId);
+  assert.equal(edits[0].body.parse_mode, 'HTML');
+  assert.match(edits[0].body.caption, /139\s000\s€/);
+  assert.equal(sentCalls().length, 0, 'новых сообщений в группу не ушло');
+  assert.ok(entry.updatedAt, 'время обновления записано');
+});
+
+test('«split»: обновляются и подпись альбома, и текст; у проданного объекта пометка «Продан», ссылки на бота и кнопки нет', async () => {
+  setGroups([admin('-1001000000042', 'Группа split', { rights: {} })]);
+  objectById().priceValue = 150000;
+  await post('/api/objects/listing-object-1/listing-publish', { layout: 'split', targets: [{ groupId: '-1001000000042', language: 'ru' }] });
+  const entry = objectById().publications.find((item) => item.groupId === '-1001000000042');
+  assert.ok(entry.captionId > 0 && entry.textId > 0 && entry.captionId !== entry.textId);
+
+  objectById().status = 'sold';
+  try {
+    telegram.calls = [];
+    const body = await (await post('/api/objects/listing-object-1/listing-update', { groupId: '-1001000000042' })).json();
+    assert.equal(body.results[0].ok, true, JSON.stringify(body));
+    const caption = telegram.calls.find((call) => call.method === 'editMessageCaption');
+    const text = telegram.calls.find((call) => call.method === 'editMessageText');
+    assert.match(caption.body.caption, /🔴 Продан/);
+    assert.equal(text.body.message_id, entry.textId);
+    assert.deepEqual(text.body.reply_markup, { inline_keyboard: [] }, 'кнопка «Смотреть в боте» снята: объект продан');
+    assert.ok(!/start=property_/.test(JSON.stringify([caption.body, text.body])), 'ссылок на карточку в боте нет');
+  } finally {
+    objectById().status = 'active';
+  }
+});
+
+test('обновить нельзя — честно: пост прежней версии, пост удалён в Telegram, у объекта не осталось фото', async () => {
+  setGroups([admin('-1001000000043', 'Группа ошибок', { rights: {} })]);
+  await post('/api/objects/listing-object-1/listing-publish', { targets: [{ groupId: '-1001000000043', language: 'ru' }] });
+  const entry = objectById().publications.find((item) => item.groupId === '-1001000000043');
+
+  // 1. Пост прежней версии: устройство неизвестно.
+  const saved = { layout: entry.layout, captionId: entry.captionId };
+  entry.layout = '';
+  let body = await (await post('/api/objects/listing-object-1/listing-update', { groupId: '-1001000000043' })).json();
+  assert.match(body.results[0].error, /прежней версией/);
+  entry.layout = saved.layout;
+
+  // 2. Пост уже удалили в Telegram.
+  const refusing = global.fetch;
+  global.fetch = (url, init) => {
+    if (String(url).endsWith('/editMessageCaption')) return Promise.resolve(new Response(JSON.stringify({ ok: false, error_code: 400, description: 'Bad Request: message to edit not found' }), { status: 400, headers: { 'content-type': 'application/json' } }));
+    return refusing(url, init);
+  };
+  try {
+    body = await (await post('/api/objects/listing-object-1/listing-update', { groupId: '-1001000000043' })).json();
+    assert.match(body.results[0].error, /уже нет|удалили/);
+  } finally {
+    global.fetch = refusing;
+  }
+
+  // 3. Фотографии убрали: пост с фото не превратить в текстовый.
+  const images = objectById().imagesByLanguage;
+  objectById().imagesByLanguage = { ru: [], en: [], es: [] };
+  try {
+    body = await (await post('/api/objects/listing-object-1/listing-update', { groupId: '-1001000000043' })).json();
+    assert.match(body.results[0].error, /нет фотографий/);
+  } finally {
+    objectById().imagesByLanguage = images;
+  }
+  assert.equal((await post('/api/objects/listing-object-1/listing-update', { groupId: '-1009999999999' })).status, 404);
+});
+
+test('панель: у опубликованного поста — «Обновить», а после правки цены или статуса объекта — предложение обновить посты', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'panel', 'view-catalog.mjs'), 'utf8');
+  assert.match(source, /data-update=/);
+  assert.match(source, /\/listing-update/);
+  assert.match(source, /Обновить посты в группах \(/, 'после сохранения объекта — кнопка в уведомлении');
+  assert.match(source, /function listingFieldsChanged/);
+  assert.match(source, /нельзя обновить/, 'про пост прежней версии сказано, а не спрятано');
+});

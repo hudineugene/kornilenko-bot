@@ -24,6 +24,7 @@ import {
   newGroupPost,
   postToGroup,
   publishBlocker,
+  updateListingPost,
   refreshGroup,
   refreshGroups,
   rememberTopic,
@@ -216,11 +217,38 @@ async function unpublishListing(res, record, body) {
   return json(res, 200, { ok: true, publications: record.publications });
 }
 
+// Обновить опубликованные посты объекта на месте по его нынешним данным. Без groupId и messageId — все посты объекта; одна
+// неудача (пост удалён, пост прежней версии) остальные не останавливает: на каждый пост — строка результата.
+async function updateListings(res, record, body) {
+  const list = Array.isArray(record.publications) ? record.publications : [];
+  const groupId = cleanText(body.groupId, 40);
+  const messageId = Math.floor(Number(body.messageId)) || 0;
+  const targets = list.filter((item) => (!groupId || item.groupId === groupId) && (!messageId || item.messageId === messageId));
+  if (!targets.length) return json(res, 404, { error: 'Таких публикаций у объекта нет' });
+  const results = [];
+  for (const entry of targets) {
+    const group = groupById(entry.groupId);
+    const row = { groupId: entry.groupId, title: entry.title, threadId: entry.threadId, messageId: entry.messageId, ok: false, error: '' };
+    try {
+      if (!group) throw new Error('Группа больше не подключена');
+      await updateListingPost(group, record, entry);
+      row.ok = true;
+    } catch (error) {
+      row.error = cleanText(error && error.message, 400) || 'Не удалось обновить';
+      recordError('Обновление поста в группе «' + (entry.title || entry.groupId) + '»', error);
+    }
+    results.push(row);
+    if (targets.length > 1) await delay(500);
+  }
+  saveDataNow();
+  return json(res, 200, { ok: results.some((row) => row.ok), results, publications: record.publications || [] });
+}
+
 // Every route here is /api/groups/... and needs an authenticated session.
 async function handleGroupApi(req, res, url) {
   // Публикация объекта в канал живёт здесь же: ей нужны и канал, и отправка
   // поста, которые описаны в этом файле.
-  const objectChannelPost = /^\/api\/objects\/[^/]+\/(channel-post|listing-preview|listing-publish|listing-unpublish)$/.test(url.pathname);
+  const objectChannelPost = /^\/api\/objects\/[^/]+\/(channel-post|listing-preview|listing-publish|listing-unpublish|listing-update)$/.test(url.pathname);
   if (!url.pathname.startsWith('/api/groups') && !url.pathname.startsWith('/api/group-posts') && url.pathname !== '/api/publishing' && !objectChannelPost) return false;
   // Чтение (GET) защитного кода не требует — панель его в такие запросы не кладёт; любое изменение — требует.
   const session = requireAuth(req, res, req.method !== 'GET');
@@ -366,7 +394,7 @@ async function handleGroupApi(req, res, url) {
   }
 
   // Объявление об объекте в несколько групп сразу: предпросмотр и публикация.
-  const listingMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/listing-(preview|publish|unpublish)$/);
+  const listingMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/listing-(preview|publish|unpublish|update)$/);
   if (listingMatch) {
     const record = (data.objects || []).find((item) => item.id === decodeURIComponent(listingMatch[1]));
     if (!record) return json(res, 404, { error: 'Объект не найден' }), true;
@@ -389,6 +417,9 @@ async function handleGroupApi(req, res, url) {
     }
     if (listingMatch[2] === 'publish' && req.method === 'POST') {
       return publishListing(res, record, await readJson(req)), true;
+    }
+    if (listingMatch[2] === 'update' && req.method === 'POST') {
+      return updateListings(res, record, await readJson(req)), true;
     }
     if (listingMatch[2] === 'unpublish' && req.method === 'POST') {
       return unpublishListing(res, record, await readJson(req)), true;

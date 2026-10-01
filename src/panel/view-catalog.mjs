@@ -256,10 +256,34 @@ function listingTopicRow(group, topic, checked) {
     (topic.closed ? ' <span class="small muted">закрыт для участников</span>' : "") + "</span></label>";
 }
 
+// Обновить опубликованные посты объекта на месте: цена, статус и описание берутся из карточки. Без groupId и messageId —
+// все посты объекта. Итог — одним сообщением; причины неудач — в нём же.
+async function updateListingPosts(id, groupId, messageId) {
+  try {
+    var result = await send("/api/objects/" + encodeURIComponent(id) + "/listing-update", "POST", { groupId: groupId || "", messageId: messageId || 0 });
+    var failed = result.results.filter(function (row) { return !row.ok; });
+    var good = result.results.length - failed.length;
+    if (failed.length) toast((good ? "Обновлено: " + good + ". " : "") + "Не удалось: " + failed.map(function (row) { return (row.title || "группа") + " — " + row.error; }).join("; "), true);
+    else toast(good === 1 ? "Пост обновлён" : "Постов обновлено: " + good);
+    await reload();
+    return result;
+  } catch (error) { fail(error); return null; }
+}
+
+// Изменилось ли в карточке то, что видно в посте и о чём стоит предложить обновить посты.
+function listingFieldsChanged(record, payload) {
+  if (record.status !== payload.status) return true;
+  if (Number(record.priceValue || 0) !== Number(payload.priceValue || 0) || Boolean(record.priceFrom) !== Boolean(payload.priceFrom)) return true;
+  return ["title", "description", "city", "district", "address"].some(function (field) {
+    return JSON.stringify(record[field] || {}) !== JSON.stringify(payload[field] || {});
+  });
+}
+
 function listingPublicationRow(group, item) {
   var topic = group.isForum ? " · " + esc(listingTopicName(group, item.threadId)) : "";
   return '<div class="listing-done small" data-pub="' + esc(String(item.messageId)) + '">Опубликовано ' + dateTime(item.at) + topic + " · " + String(item.language || "ru").toUpperCase() +
     (item.link ? ' · <a href="' + esc(item.link) + '" target="_blank" rel="noopener">открыть пост</a>' : "") +
+    (item.layout ? ' · <button class="btn ghost small" type="button" data-update="' + esc(String(item.messageId)) + '" title="Поправить подпись и текст поста по нынешним данным объекта: цена, статус, описание">Обновить</button>' : ' · <span class="muted" title="Пост вышел в прежней версии бота: его устройство неизвестно">нельзя обновить</span>') +
     ' · <button class="btn ghost small" type="button" data-unpublish="' + esc(String(item.messageId)) + '">Удалить из группы</button></div>';
 }
 
@@ -413,6 +437,14 @@ function openChannelPost(id) {
             reload();
           } catch (error) { fail(error); }
         };
+      });
+
+      box.addEventListener("click", async function (event) {
+        var updateButton = event.target.closest ? event.target.closest("[data-update]") : null;
+        if (!updateButton) return;
+        updateButton.disabled = true;
+        await updateListingPosts(id, rowOf(updateButton).dataset.group, Number(updateButton.dataset.update));
+        updateButton.disabled = false;
       });
 
       // Удалить опубликованный пост из группы: все его сообщения. Не удалось — предлагаем убрать запись из списка.
@@ -994,7 +1026,12 @@ function openRecordEditor(kind, id) {
             done += ". Клиенты пока не видят карточку на " + incomplete.map(function (entry) { return entry.language.toUpperCase(); }).join(", ") +
               ": не хватает " + incomplete[0].issues.join(", ");
           }
-          toast(done, incomplete.length > 0);
+          // Объект уже опубликован в группах, а в карточке поменялось то, что видно в посте, — предлагаем обновить посты.
+          var posted = record ? (record.publications || []).filter(function (item) { return item.layout; }) : [];
+          var offer = posted.length && isObject && listingFieldsChanged(record, payload)
+            ? { label: "Обновить посты в группах (" + posted.length + ")", run: function () { updateListingPosts(record.id); } }
+            : null;
+          toast(done, incomplete.length > 0, offer, Boolean(offer));
           await reload();
         } catch (error) { fail(error); }
       }

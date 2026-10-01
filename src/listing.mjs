@@ -30,9 +30,9 @@ const CAPTION_LIMIT = 1024;
 const SAFETY = 40;
 
 const LISTING_TEXT = {
-  ru: { openBot: '🤖 Смотреть в боте', map: 'Карта', video: 'Видео', website: 'Сайт', truncated: 'Описание сокращено — полностью и с фото в боте ↓', tagDeal: { sale: 'продажа', rent: 'аренда' } },
-  en: { openBot: '🤖 View in the bot', map: 'Map', video: 'Video', website: 'Website', truncated: 'Description shortened — see the full listing with photos in the bot ↓', tagDeal: { sale: 'forsale', rent: 'forrent' } },
-  es: { openBot: '🤖 Ver en el bot', map: 'Mapa', video: 'Vídeo', website: 'Web', truncated: 'Descripción abreviada: ficha completa con fotos en el bot ↓', tagDeal: { sale: 'venta', rent: 'alquiler' } },
+  ru: { sold: 'Продан', openBot: '🤖 Смотреть в боте', map: 'Карта', video: 'Видео', website: 'Сайт', truncated: 'Описание сокращено — полностью и с фото в боте ↓', tagDeal: { sale: 'продажа', rent: 'аренда' } },
+  en: { sold: 'Sold', openBot: '🤖 View in the bot', map: 'Map', video: 'Video', website: 'Website', truncated: 'Description shortened — see the full listing with photos in the bot ↓', tagDeal: { sale: 'forsale', rent: 'forrent' } },
+  es: { sold: 'Vendido', openBot: '🤖 Ver en el bot', map: 'Mapa', video: 'Vídeo', website: 'Web', truncated: 'Descripción abreviada: ficha completa con fotos en el bot ↓', tagDeal: { sale: 'venta', rent: 'alquiler' } },
 };
 
 // Значок перед заголовком абзаца описания — по смыслу заголовка; нет подходящего — маркер «▸».
@@ -150,7 +150,8 @@ function buildListing(record, language, options = {}) {
   const type = (PROPERTY_TYPE_LABELS[lang] || PROPERTY_TYPE_LABELS.ru)[record.propertyType] || '';
   const deal = record.dealType === 'rent' ? copy.forRent : copy.forSale;
   const badges = (Array.isArray(record.badges) ? record.badges : []).map((badge) => (PROPERTY_BADGE_LABELS[lang] || PROPERTY_BADGE_LABELS.ru)[badge]).filter(Boolean);
-  const status = record.status === 'reserved' ? '🟡 ' + copy.reserved : '';
+  // Проданный объект в посте помечен — так обновлённый пост сам говорит, что вариант ушёл.
+  const status = record.status === 'sold' ? '🔴 ' + text.sold : record.status === 'reserved' ? '🟡 ' + copy.reserved : '';
   const city = localizedExact(record.city, lang, 160);
   const district = localizedExact(record.district, lang, 160);
   const address = localizedExact(record.address, lang);
@@ -158,7 +159,8 @@ function buildListing(record, language, options = {}) {
   const place = locationText([city, district], address);
   const price = priceLines(record, lang);
   // Прозрачные картинки Telegram в альбом не берёт как фото — только документом, а документ в альбом не ставится.
-  const images = recordImages(record, lang).filter((image) => !imageHasTransparency(image)).slice(0, 10);
+  // options.noPhotos — собрать текстовый вид поста (так обновляется пост, который вышел без фотографий).
+  const images = options.noPhotos ? [] : recordImages(record, lang).filter((image) => !imageHasTransparency(image)).slice(0, 10);
   const layout = options.layout === 'split' ? 'split' : 'single';
   // Всё в подписи к фото: только в режиме «single» и когда фотографии есть.
   const oneCaption = layout === 'single' && images.length > 0;
@@ -190,7 +192,8 @@ function buildListing(record, language, options = {}) {
   const tags = [hashtag(text.tagDeal[record.dealType === 'rent' ? 'rent' : 'sale']), hashtag(type.toLowerCase()), hashtag(city), hashtag(district)]
     .filter(Boolean).filter((tag, index, all) => all.indexOf(tag) === index).join(' ');
 
-  const buttonUrl = propertyDeepLink(record, cleanText(options.source, 40) || 'group');
+  // Ссылка на карточку в боте есть только у объекта, который клиенты видят: у проданного или скрытого она вела бы в никуда.
+  const buttonUrl = ['active', 'reserved'].includes(record.status) ? propertyDeepLink(record, cleanText(options.source, 40) || 'group') : '';
   // У альбома кнопок под сообщением не бывает: ссылка на бота — строкой в подписи. У одного фото и у текста — кнопка.
   const botLink = oneCaption && album && buttonUrl ? '🤖 <a href="' + escapeTelegramHtml(buttonUrl) + '">' + escapeTelegramHtml(text.openBot.replace(/^🤖\s*/, '')) + '</a>' : '';
 
