@@ -731,7 +731,7 @@ async function handleCatalogPriceInputMessage(message, user, token) {
   if (text === copy.cancelCustomPrice) {
     user.pendingAction = null;
     scheduleSave();
-    await sendMessage(user.chatId, copy.customPriceCancelled, token, { reply_markup: { remove_keyboard: true } });
+    await sendMessage(user.chatId, copy.customPriceCancelled, token, { reply_markup: menuKeyboard(language) });
     const panel = catalogFilterPanel(user);
     await sendUiMessage(user.chatId, user, panel.text, token, { reply_markup: panel.markup });
     return true;
@@ -760,7 +760,7 @@ async function handleCatalogPriceInputMessage(message, user, token) {
   const formatted = formattedPriceLimit(price, language);
   void notifyAdministratorAction(user, bound === 'min' ? 'Указал нижнюю границу цены в фильтре' : 'Указал верхнюю границу цены в фильтре', formatted);
   const confirmation = bound === 'min' ? copy.minimumPriceApplied : copy.customPriceApplied;
-  await sendMessage(user.chatId, confirmation.replace('{price}', () => (formatted)), token, { reply_markup: { remove_keyboard: true } });
+  await sendMessage(user.chatId, confirmation.replace('{price}', () => (formatted)), token, { reply_markup: menuKeyboard(language) });
   const panel = catalogFilterPanel(user);
   await sendUiMessage(user.chatId, user, panel.text, token, { reply_markup: panel.markup });
   return true;

@@ -129,7 +129,7 @@ function announceError(area, error, now = new Date()) {
   data.lastErrorNoticeAt = now.toISOString();
   scheduleSave();
   const message = cleanText(error && error.message ? error.message : error, 300) || 'неизвестная ошибка';
-  void sendStatusNotice('❗ Внутренняя ошибка бота (' + area + '): ' + message + '\nБот продолжает работать. Подробности — в панели, журнал ошибок на главной.');
+  void sendStatusNotice('❗ Внутренняя ошибка бота (' + area + '): ' + message + '\nБот продолжает работать. Подробности — в панели: «Настройки → Данные и копии».');
   return true;
 }
 

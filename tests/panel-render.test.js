@@ -4574,3 +4574,36 @@ test('«Отчёт»: плитка «Открыли подборку» с под
   const busy = String(sandbox.weeklyCard({ report: { ...base, sharedLists: { shared: 3, opened: 7, previousOpened: 2 } }, text: '' }));
   assert.match(busy, /Открыли подборку<\/span><span class="value">7<\/span><span class="delta">поделились 3<\/span>/);
 });
+
+// Разметка экранов собрана строками, и лишняя или потерянная скобка не видна, пока браузер молча не «починит» её сам.
+// Считаем открытия и закрытия парных тегов по каждому экрану и вкладке.
+function unbalancedTags(html) {
+  const counts = {};
+  for (const match of String(html).matchAll(/<(\/?)(div|section|header|table|thead|tbody|tr|td|th|details|summary|aside|nav|button|label|select|form|ul|li|p|h[1-6]|b|small)\b[^>]*?(\/?)>/g)) {
+    if (match[3]) continue;
+    const tag = match[2];
+    counts[tag] = (counts[tag] || 0) + (match[1] ? -1 : 1);
+  }
+  return Object.entries(counts).filter(([, balance]) => balance !== 0).map(([tag, balance]) => tag + (balance > 0 ? ' +' : ' ') + balance);
+}
+
+test('разметка каждого экрана панели закрыта: пар тегов открывается и закрывается поровну', async () => {
+  twoWaitingConversations();
+  const { sandbox } = await panelSandbox();
+  const screens = [['today', ''], ['clients', 'inbox'], ['clients', 'tasks'], ['clients', 'pipeline'], ['clients', 'base'], ['viewings', ''], ['objects', 'list'], ['objects', 'offers'],
+    ['posts', 'broadcast'], ['posts', 'channel'], ['posts', 'channels'], ['reports', ''], ['texts', 'welcome'], ['texts', 'contacts'], ['texts', 'trust'], ['texts', 'plan'],
+    ['texts', 'sections'], ['texts', 'rules'], ['texts', 'interface'], ['settings', 'company'], ['settings', 'team'], ['settings', 'telegram'], ['settings', 'data'], ['settings', 'access'], ['settings', 'feed']];
+  const broken = [];
+  let rendered = 0;
+  for (const [view, tab] of screens) {
+    const host = fakeElement('main');
+    try { await sandbox.VIEWS[view].render(host, tab); } catch { continue; }
+    const html = String(host.innerHTML || '');
+    if (!html) continue;
+    rendered += 1;
+    const problems = unbalancedTags(html);
+    if (problems.length) broken.push(view + '/' + tab + ': ' + problems.join(', '));
+  }
+  assert.ok(rendered >= 18, 'отрисовано экранов: ' + rendered);
+  assert.deepEqual(broken, []);
+});

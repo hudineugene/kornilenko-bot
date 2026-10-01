@@ -120,7 +120,6 @@ async function telegramCall(token, method, init, { signal, timeoutMs }) {
 function screenTitleEntities(payload) {
   const text = payload && typeof payload.text === 'string' ? payload.text : '';
   if (!text || payload.parse_mode || payload.entities || !payload.reply_markup || !Array.isArray(payload.reply_markup.inline_keyboard)) return null;
-  if (data.config && String(payload.chat_id) === String(data.config.adminChatId)) return null;
   const end = text.indexOf('\n');
   if (end < 2 || end > 60) return null;
   const line = text.slice(0, end);

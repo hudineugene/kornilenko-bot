@@ -124,7 +124,7 @@ function renderPublications(host) {
         '<td class="right">' + (row.kind === "broadcast" ? num(row.unsubscribes) : "—") + "</td>" +
         "<td>" + publicationStatusChip(row) + "</td></tr>";
     }).join("") : '<tr><td colspan="7"><div class="empty"><b>Публикаций ещё не было</b>Здесь появятся отправленные рассылки и посты</div></td></tr>') +
-    "</tbody></table></div>";
+    "</tbody></table></div></div>";
 
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     var id = row.dataset.id;

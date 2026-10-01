@@ -68,7 +68,7 @@ async function sendInbox(chat, token, now = new Date()) {
     return 0;
   }
   const shown = waiting.slice(0, INBOX_LIMIT);
-  await sendMessage(chat.chatId, '📥 Ждут ответа: ' + waiting.length + (waiting.length > shown.length ? '. Ниже ' + shown.length + ' самых давних, остальные — в панели, раздел «Обращения».' : ''), token, { track: false });
+  await sendMessage(chat.chatId, '📥 Ждут ответа: ' + waiting.length + (waiting.length > shown.length ? '. Ниже ' + shown.length + ' самых давних, остальные — в панели: «Клиенты → Диалоги».' : ''), token, { track: false });
   for (const inquiry of shown) {
     const since = Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || now.getTime();
     await sendInquiryToAdministrator(inquiry, '📥 Ждёт ответа ' + hoursAgoText(now.getTime() - since) + ': ' + inquiryTypeLabel(inquiry), [], { chats: [chat] });

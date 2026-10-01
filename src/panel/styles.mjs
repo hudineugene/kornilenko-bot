@@ -70,7 +70,8 @@ a:hover{text-decoration:underline}
 .app-brand{display:flex;align-items:center;gap:var(--sp-2);flex:none;padding-right:var(--sp-1)}
 .app-brand img{height:44px;width:auto;max-width:50px;object-fit:contain}
 .app-brand b{line-height:var(--lh-tight);white-space:nowrap}
-.app-brand span{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:400}
+.app-brand .brand-sub{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:400}
+.app-brand .brand-short{display:none}
 .head-nav{display:flex;align-items:center;gap:2px;min-width:0;flex:1 1 0;overflow-x:auto;scrollbar-width:none}
 .head-nav::-webkit-scrollbar{display:none}
 .nav-item{flex:none}
@@ -277,6 +278,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .search input{padding-left:28px}
 .search::before{content:"⌕";position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:var(--fs-lg)}
 .toolbar{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;margin-bottom:var(--sp-3)}
+.toolbar select{width:auto;min-width:200px;max-width:320px}
 .attention{display:flex;align-items:flex-start;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--line-soft);cursor:pointer}
 .attention:last-child{border-bottom:0}
 .attention:hover{background:var(--surface-soft)}
@@ -914,14 +916,16 @@ dialog::backdrop{background:var(--overlay)}
    пяти прежних (1600, 1500, 1480, 1340, 1240 px): на ширине 1481–1960 меню и раньше вылезало под поиск
    (проверено измерением ширины меню на 1181…2200; со шрифтом Inter, он шире системного, границу пришлось сдвинуть с 1880 на 1960). */
 @media(max-width:1960px) and (min-width:1181px){
-  .app-brand b{display:none}
+  .app-brand .brand-full,.app-brand .brand-sub{display:none}
+  .app-brand .brand-short{display:inline}
   .nav-item{padding-left:clamp(var(--sp-1),.4vw,var(--sp-2));padding-right:clamp(var(--sp-1),.4vw,var(--sp-2))}
   .global-search{flex-basis:clamp(120px,11vw,240px);min-width:120px;max-width:none}
 }
 /* Значки пунктов меню — только на широком экране (и в нижней панели телефона). */
 @media(max-width:1960px) and (min-width:861px){.head-nav .nav-item .ico{display:none}}
 @media(max-width:1180px) and (min-width:861px){
-  .app-brand b{display:none}
+  .app-brand .brand-full,.app-brand .brand-sub{display:none}
+  .app-brand .brand-short{display:inline}
   .app-head{gap:var(--sp-2);padding-left:var(--sp-3);padding-right:var(--sp-3)}
   .nav-item{padding-left:var(--sp-1);padding-right:var(--sp-1)}
   .nav-item .ico{display:none}
@@ -958,18 +962,17 @@ dialog::backdrop{background:var(--overlay)}
   .app-brand{flex:1 1 0;min-width:0}
   .app-brand>div,.app-brand>span{min-width:0}
   .app-brand b{display:block;overflow:hidden;text-overflow:ellipsis}
-  .app-brand span{display:none}
+  .app-brand .brand-full,.app-brand .brand-sub{display:none}
+  .app-brand .brand-short{display:inline}
   .head-tools{flex:none;gap:0}
   /* Точка состояния: при беде рядом короткая подпись, а не одна красная точка. */
   .head-tools .state-line{cursor:pointer}
   .state-line[data-state="bad"]::after,.state-line[data-state="off"]::after{content:attr(data-short);font-size:var(--fs-xs);font-weight:700;color:var(--bad)}
 }
-@media(max-width:400px){
-  .app-brand b{display:none}
-}
 /* «Сегодня» на телефоне: дела начинаются выше. Правило стоит в конце файла — раньше оно лежало выше основного и не действовало. */
 @media(max-width:600px){
   .today-numbers{display:grid;grid-template-columns:1fr;gap:var(--sp-1);margin-bottom:var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-xs);line-height:var(--lh-tight)}
+  .toolbar select{width:100%;max-width:none}
   .today-numbers>span:nth-child(n+3){display:none}
   .today-numbers b{font-size:var(--fs-sm)}
   .week-line{display:none}

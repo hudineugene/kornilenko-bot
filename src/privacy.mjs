@@ -1,7 +1,7 @@
 // Права клиента на свои данные: что бот о нём хранит, как мы с этим обращаемся
 // и кнопка «удалить всё». Клиент не должен просить об этом менеджера.
 
-import { cleanText, localDayKey } from './util.mjs';
+import { backButtonText, cleanText, localDayKey } from './util.mjs';
 import { PRIVACY_TEXT, MY_AREA_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { eraseUserData, normalizeUser } from './users.mjs';
@@ -71,6 +71,19 @@ function privacyMarkup(user) {
   };
 }
 
+// Под текстом политики — не кнопка «Как мы обращаемся с данными» (она вела бы на этот же экран), а возврат на «Ваши данные».
+function policyMarkup(user) {
+  const copy = copyFor(user);
+  const labels = MY_AREA_TEXT[(user && user.preferredLanguage) || 'ru'] || MY_AREA_TEXT.ru;
+  return {
+    inline_keyboard: [
+      [{ text: backButtonText(copy.title), callback_data: 'privacy:open' }],
+      [{ text: copy.eraseButton, callback_data: 'privacy:erase' }],
+      [{ text: copy.back || ('⬅️ ' + labels.title), callback_data: 'nav:my' }],
+    ],
+  };
+}
+
 async function sendPrivacyCentre(chatId, user, token) {
   const copy = copyFor(user);
   const rows = storedSummary(user);
@@ -86,7 +99,7 @@ async function sendPrivacyPolicy(chatId, user, token) {
   const parts = splitTelegramText([copy.policyTitle, '', copy.policy].join('\n'));
   for (let index = 0; index < parts.length; index += 1) {
     const last = index === parts.length - 1;
-    await sendMessage(chatId, parts[index], token, last ? { reply_markup: privacyMarkup(user) } : {});
+    await sendMessage(chatId, parts[index], token, last ? { reply_markup: policyMarkup(user) } : {});
   }
   return true;
 }

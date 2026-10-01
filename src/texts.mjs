@@ -161,7 +161,7 @@ const COMPARISON_TEXT = {
     title: '⚖️ Сравнение объектов',
     menuButton: '⚖️ Сравнение',
     intro: 'Сопоставьте до трёх объектов по основным характеристикам.',
-    empty: 'Вы пока не добавили объекты для сравнения. Откройте каталог и нажмите «Добавить к сравнению» в понравившихся карточках.',
+    empty: 'Вы пока не добавили объекты для сравнения. Откройте каталог и нажмите ⚖️ в понравившихся карточках.',
     needMore: 'Добавьте ещё хотя бы один объект — тогда различия будут видны сразу.',
     cardAdd: 'Добавить к сравнению',
     cardSelected: 'Открыть сравнение',
@@ -201,7 +201,7 @@ const COMPARISON_TEXT = {
     title: '⚖️ Property comparison',
     menuButton: '⚖️ Compare',
     intro: 'Compare up to three properties by their key features.',
-    empty: 'You have not added any properties to compare yet. Open the catalogue and tap “Add to comparison” on the properties you like.',
+    empty: 'You have not added any properties to compare yet. Open the catalogue and tap ⚖️ on the properties you like.',
     needMore: 'Add at least one more property to see the differences at a glance.',
     cardAdd: 'Add to comparison',
     cardSelected: 'Open comparison',
@@ -241,7 +241,7 @@ const COMPARISON_TEXT = {
     title: '⚖️ Comparación de inmuebles',
     menuButton: '⚖️ Comparar',
     intro: 'Compara hasta tres inmuebles por sus características principales.',
-    empty: 'Todavía no has añadido inmuebles para comparar. Abre el catálogo y pulsa «Añadir a la comparación» en las fichas que te interesen.',
+    empty: 'Todavía no has añadido inmuebles para comparar. Abre el catálogo y pulsa ⚖️ en las fichas que te interesen.',
     needMore: 'Añade al menos otro inmueble para ver las diferencias de un vistazo.',
     cardAdd: 'Añadir a la comparación',
     cardSelected: 'Abrir comparación',
@@ -307,9 +307,9 @@ const COMMAND_TEXT = {
   es: { cancelled: 'La acción se ha cancelado. Has vuelto al menú principal.', nothingToCancel: 'No hay ninguna acción pendiente. El menú principal está disponible.', unknown: 'No reconozco ese comando. Elige una sección del menú o usa /help.', myId: 'Tu ID de chat de Telegram:' },
 };
 const EMPTY_STATE_TEXT = {
-  ru: { catalog: 'Сейчас в каталоге нет доступных объектов. Менеджер поможет подобрать подходящий вариант.', favorites: 'В избранном пока ничего нет. Откройте каталог и нажмите ❤️ у понравившегося объекта.', promotions: 'Активных акций сейчас нет. Посмотрите наши объекты или задайте вопрос менеджеру.' },
-  en: { catalog: 'There are no available properties in the catalogue right now. An agent can help you find a suitable option.', favorites: 'Your favourites are empty. Open the catalogue and tap ❤️ on a property you like.', promotions: 'There are no active offers right now. Browse our properties or ask an agent.' },
-  es: { catalog: 'Ahora mismo no hay inmuebles disponibles en el catálogo. Un asesor puede ayudarte a encontrar una opción.', favorites: 'Todavía no tienes favoritos. Abre el catálogo y pulsa ❤️ en un inmueble.', promotions: 'No hay promociones activas ahora mismo. Consulta nuestros inmuebles o pregunta a un asesor.' },
+  ru: { catalog: 'Сейчас в каталоге нет доступных объектов. Менеджер поможет подобрать подходящий вариант.', favorites: 'В избранном пока ничего нет. Откройте каталог и нажмите 🤍 у понравившегося объекта.', promotions: 'Активных акций сейчас нет. Посмотрите наши объекты или задайте вопрос менеджеру.' },
+  en: { catalog: 'There are no available properties in the catalogue right now. An agent can help you find a suitable option.', favorites: 'Your favourites are empty. Open the catalogue and tap 🤍 on a property you like.', promotions: 'There are no active offers right now. Browse our properties or ask an agent.' },
+  es: { catalog: 'Ahora mismo no hay inmuebles disponibles en el catálogo. Un asesor puede ayudarte a encontrar una opción.', favorites: 'Todavía no tienes favoritos. Abre el catálogo y pulsa 🤍 en un inmueble que te guste.', promotions: 'No hay promociones activas ahora mismo. Consulta nuestros inmuebles o pregunta a un asesor.' },
 };
 const PROPERTY_TYPE_LABELS = {
   ru: { apartment: 'Квартира', house: 'Дом', villa: 'Вилла', townhouse: 'Таунхаус', land: 'Участок', commercial: 'Коммерческая недвижимость', newbuild: 'Новостройка', other: 'Недвижимость' },

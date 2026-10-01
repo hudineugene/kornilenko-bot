@@ -8,17 +8,20 @@ import { localized, localizedExact, sendUiMessage, shortenedText } from './catal
 import { acknowledgeCallback } from './sections.mjs';
 import { cancelViewing, viewingIsUpcoming, viewingWhen } from './viewings.mjs';
 import { backButtonText, formatDayMonth } from './util.mjs';
-import { parsePlanHelp } from './plan.mjs';
+import { planHelpSteps } from './plan.mjs';
 
 const MY_REQUESTS_SHOWN = 5;
 const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
 
 const PLAN_STEP_WORD = { ru: 'План · шаг', en: 'Plan · step', es: 'Plan · paso' };
+const PLAN_STEPS_WORD = { ru: 'План · шаги', en: 'Plan · steps', es: 'Plan · pasos' };
 
 function requestTypeLabel(inquiry, copy, language = 'ru') {
   // Помощь по шагу плана покупки — «📋 План · шаг 2: Банковский счёт», а не безликий «Вопрос».
-  const planHelp = inquiry.type === 'question' ? parsePlanHelp(inquiry.text) : null;
-  if (planHelp) return '📋 ' + (PLAN_STEP_WORD[language] || PLAN_STEP_WORD.ru) + ' ' + planHelp.n + ': ' + planHelp.title;
+  // Несколько просьб в одной заявке — «План · шаги 1, 2, 3»: название шага у каждой не поместилось бы в строку.
+  const steps = inquiry.type === 'question' ? planHelpSteps(inquiry.text) : [];
+  if (steps.length === 1) return '📋 ' + (PLAN_STEP_WORD[language] || PLAN_STEP_WORD.ru) + ' ' + steps[0].n + ': ' + steps[0].title;
+  if (steps.length > 1) return '📋 ' + (PLAN_STEPS_WORD[language] || PLAN_STEPS_WORD.ru) + ' ' + steps.map((step) => step.n).join(', ');
   return {
     viewing: copy.typeViewing,
     lead: copy.typeLead,
@@ -61,7 +64,7 @@ function myRequestsView(user) {
   }
   const blocks = requests.map((inquiry) => {
     const title = requestTitle(inquiry, language);
-    const heading = requestTypeLabel(inquiry, copy, language) + (title && !parsePlanHelp(inquiry.text) ? ' · ' + title : '');
+    const heading = requestTypeLabel(inquiry, copy, language) + (title && !(inquiry.type === 'question' && planHelpSteps(inquiry.text).length) ? ' · ' + title : '');
     let details;
     if (inquiry.type === 'viewing' && inquiry.viewing) {
       const when = viewingWhen(inquiry, language);

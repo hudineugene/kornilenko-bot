@@ -212,7 +212,7 @@ async function runInquiryReminders(now = new Date()) {
   const rest = due.length - sent.length;
   if (rest > 0) {
     const restPlan = adminSendPlan('reminder');
-    if (restPlan.send) await sendMessage(adminChatId, '⏰ И ещё ' + rest + ' без ответа — они в панели, раздел «Обращения».', data.config.botToken, { track: false, ...restPlan.options });
+    if (restPlan.send) await sendMessage(adminChatId, '⏰ И ещё ' + rest + ' без ответа — они в панели: «Клиенты → Диалоги».', data.config.botToken, { track: false, ...restPlan.options });
     for (const inquiry of due.slice(REMINDERS_PER_RUN)) inquiry.remindedAt = now.toISOString();
   }
   saveDataNow();

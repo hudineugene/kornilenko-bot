@@ -41,7 +41,7 @@ const PANEL_SHELL = String.raw`
   <header class="app-head" id="appHead">
     <div class="app-brand">
       <img src="/admin-assets/sidebar-logo.png" alt="">
-      <b>Construcciones Kornilenko<span>панель бота</span></b>
+      <b><span class="brand-full">Construcciones Kornilenko</span><span class="brand-short">Kornilenko</span><span class="brand-sub">панель бота</span></b>
     </div>
     <nav id="nav" class="head-nav" aria-label="Основная навигация"></nav>
     <div class="global-search" id="globalSearchBox" role="search">

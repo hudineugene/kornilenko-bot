@@ -153,10 +153,12 @@ function planProgress(user) {
 // Заявка «помощь по шагу плана» узнаётся по тексту, который создаёт сам бот (helpRequest на любом
 // языке): схема данных не меняется, а в «Мои заявки» она подписана «План · шаг 2: …», а не «Вопрос».
 function parsePlanHelp(text) {
+  // Повторные просьбы клиента дописываются в ту же заявку абзацами: разбираем только первый абзац, иначе название шага
+  // «съедало» все следующие и в «Мои заявки» попадал служебный текст.
+  const source = String(text || '').split(/\n\s*\n/)[0];
   for (const copy of Object.values(PLAN_TEXT)) {
     const [head, tail] = String(copy.helpRequest || '').split('{n}');
     const [middle] = String(tail || '').split('{title}');
-    const source = String(text || '');
     if (!head || !source.startsWith(head)) continue;
     const match = source.slice(head.length).match(/^(\d+)/);
     if (!match) continue;
@@ -165,6 +167,16 @@ function parsePlanHelp(text) {
     return { n: Number(match[1]), title: rest.slice(middle.length).trim() };
   }
   return null;
+}
+
+// Все шаги плана, по которым клиент просил помощи в этой заявке (каждая просьба — свой абзац), без повторов.
+function planHelpSteps(text) {
+  const steps = [];
+  for (const paragraph of String(text || '').split(/\n\s*\n/)) {
+    const step = parsePlanHelp(paragraph);
+    if (step && !steps.some((item) => item.n === step.n)) steps.push(step);
+  }
+  return steps;
 }
 
 function stepMark(plan, step) {
@@ -388,4 +400,5 @@ export {
   planReminderDue,
   runPlanReminders,
   parsePlanHelp,
+  planHelpSteps,
 };

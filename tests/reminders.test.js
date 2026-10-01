@@ -85,7 +85,7 @@ test('a burst is capped: five reminders and one summary', async () => {
   assert.equal(sent.length, 5);
   const texts = adminMessages().map((message) => message.text);
   assert.equal(texts.length, 6);
-  assert.equal(texts[5], '⏰ И ещё 3 без ответа — они в панели, раздел «Обращения».');
+  assert.equal(texts[5], '⏰ И ещё 3 без ответа — они в панели: «Клиенты → Диалоги».');
   assert.match(texts[0], /Вопрос 7/, 'the oldest first');
   assert.deepEqual(await bot.runInquiryReminders(new Date(MORNING.getTime() + HOUR)), [], 'the rest are not repeated');
 });
