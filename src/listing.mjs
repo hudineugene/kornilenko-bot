@@ -128,10 +128,14 @@ function buildListing(record, language, options = {}) {
 
   const header = '🏡 <b>' + escapeTelegramHtml(title) + '</b>' + (subtitle ? '\n<i>' + escapeTelegramHtml(subtitle) + '</i>' : '');
 
-  // Подпись под первой фотографией: название, тип и сделка, цена, город и район. Характеристик здесь нет — они в сообщении
-  // ниже: одна и та же информация в двух сообщениях не повторяется.
-  const shortPlace = [city, district].filter(Boolean).join(', ');
-  const caption = [header, price, shortPlace ? '📍 ' + escapeTelegramHtml(shortPlace) : ''].filter(Boolean).join('\n');
+  // Геолокация — одной строкой: город, район, адрес и ссылка на карту. Подпись под первой фотографией: название, тип и
+  // сделка, цена и эта строка. Характеристик здесь нет — они во втором сообщении, которое ими и начинается: одна и та же
+  // информация в двух сообщениях не повторяется.
+  const mapUrl = validHttpUrl(record.mapUrl);
+  const locationLine = place || mapUrl
+    ? '📍 ' + [escapeTelegramHtml(place), mapUrl ? '🗺 <a href="' + escapeTelegramHtml(mapUrl) + '">' + text.map + '</a>' : ''].filter(Boolean).join(' · ')
+    : '';
+  const caption = [header, price, locationLine].filter(Boolean).join('\n');
 
   // Характеристики — отдельным блоком-цитатой с заголовком.
   const facts = propertySpecRows(record, lang, { compact: false });
@@ -140,11 +144,9 @@ function buildListing(record, language, options = {}) {
   if (record.reference) facts.push('🏷 ' + copy.reference + ' ' + cleanText(record.reference, 80));
   const factsBlock = facts.length ? '🧾 <b>' + escapeTelegramHtml(copy.specificationsTitle) + '</b>\n<blockquote>' + facts.map(factRow).join('\n') + '</blockquote>' : '';
 
-  const mapUrl = validHttpUrl(record.mapUrl);
   const videoUrl = validHttpUrl(record.videoUrl);
   const siteUrl = validHttpUrl(record.url);
   const links = [
-    mapUrl ? '🗺 <a href="' + escapeTelegramHtml(mapUrl) + '">' + text.map + '</a>' : '',
     videoUrl ? '🎥 <a href="' + escapeTelegramHtml(videoUrl) + '">' + escapeTelegramHtml(copy.videoTour || text.video) + '</a>' : '',
     siteUrl ? '🌐 <a href="' + escapeTelegramHtml(siteUrl) + '">' + text.website + '</a>' : '',
   ].filter(Boolean).join('  ·  ');
@@ -152,12 +154,11 @@ function buildListing(record, language, options = {}) {
   const tags = [hashtag(text.tagDeal[record.dealType === 'rent' ? 'rent' : 'sale']), hashtag(type.toLowerCase()), hashtag(city), hashtag(district)]
     .filter(Boolean).filter((tag, index, all) => all.indexOf(tag) === index).join(' ');
 
-  // С фотографиями название, цена и город уже в подписи альбома — сообщение начинается с адреса (его в подписи нет) и
-  // характеристик. Без фотографий альбома нет, и всё это идёт одним сообщением: название, цена, место, характеристики.
-  const addressLine = address ? '📍 ' + escapeTelegramHtml(address) : '';
+  // С фотографиями название, цена и геолокация — в подписи альбома, и сообщение начинается с характеристик. Без фотографий
+  // альбома нет, и всё идёт одним сообщением: название, цена, геолокация, характеристики.
   const head = images.length
-    ? [addressLine, factsBlock].filter(Boolean)
-    : [header, [price, place ? '📍 ' + escapeTelegramHtml(place) : ''].filter(Boolean).join('\n'), factsBlock].filter(Boolean);
+    ? [factsBlock].filter(Boolean)
+    : [header, [price, locationLine].filter(Boolean).join('\n'), factsBlock].filter(Boolean);
   const tail = [links, tags].filter(Boolean);
 
   // Описание: на своём языке; нет перевода — русское, с честной пометкой, как в карточке бота.

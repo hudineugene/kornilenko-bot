@@ -95,7 +95,7 @@ function setGroups(groups) {
 test('пост устроен как карточка в боте: фото с подписью, отдельно характеристики, ниже описание с заголовками', () => {
   const built = bot.buildListing(objectById(), 'ru', { source: 'group' });
   // Подпись под альбомом: название, тип и сделка, цена, город и район — и больше ничего.
-  assert.match(built.caption, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>\n💶 <b>от\s147\s312\s€[^\n]*\n📍 Финестрат, Эль Мускарет$/, 'название жирным, знаки < и & не ломают разметку');
+  assert.match(built.caption, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>\n💶 <b>от\s147\s312\s€[^\n]*\n📍 Финестрат, Эль Мускарет · 🗺 <a href="https:\/\/maps\.google\.com\/\?q=Finestrat">Карта<\/a>$/, 'геолокация со ссылкой на карту — в подписи; название жирным, знаки < и & не ломают разметку');
   assert.ok(!/🛏|🚿|📐/.test(built.caption), 'характеристик в подписи нет: они ниже, отдельным блоком');
   assert.ok(built.caption.length <= 1024, 'подпись к фото — не длиннее 1024 знаков');
 
@@ -112,21 +112,22 @@ test('пост устроен как карточка в боте: фото с �
   assert.match(text, /▫️ 14 апартаментов на двух этажах\n▫️ Бассейн и парковка/, 'маркеры списка — одного вида');
   assert.match(text, /<b>💳 Как купить<\/b>\nРезервирование, затем договор\./, 'метка абзаца — заголовком со значком, текст под ним с большой буквы');
   assert.match(text, /<b>⏳ Сроки<\/b>\nСтройка/);
-  assert.match(text, /🗺 <a href="https:\/\/maps\.google\.com\/\?q=Finestrat">Карта<\/a>/);
+  assert.ok(!/🗺|📍/.test(text), 'геолокация и карта — в подписи альбома, во втором сообщении их нет');
   assert.match(text, /🎥 <a href="https:\/\/youtu\.be\/tour123">Видео-тур<\/a>/);
   assert.match(text, /#продажа #квартира #Финестрат #ЭльМускарет/, 'хештеги из сделки, типа, города и района');
   assert.equal(built.buttonUrl, 'https://t.me/kornilenko_bot?start=property_listing-object-1__src_group');
   assert.equal(built.images.length, 3);
   assert.equal(built.truncated, false);
 
-  // Адреса в подписи нет — он первой строкой сообщения.
+  // Адрес — в подписи альбома, вместе с городом и картой; второе сообщение начинается с характеристик.
   const withAddress = bot.buildListing(listingObject({ address: { ru: 'Calle Alcudia 1', en: '', es: '' } }), 'ru');
-  assert.match(withAddress.text, /^📍 Calle Alcudia 1\n\n🧾 /);
-  assert.ok(!/Calle Alcudia/.test(withAddress.caption));
+  assert.match(withAddress.caption, /\n📍 Финестрат, Эль Мускарет, Calle Alcudia 1 · 🗺 /);
+  assert.ok(!/Calle Alcudia/.test(withAddress.text));
+  assert.match(withAddress.text, /^🧾 /);
 
   // Без фотографий альбома нет — всё одним сообщением: название, цена, место, характеристики.
   const bare = bot.buildListing(listingObject({ imagesByLanguage: { ru: [], en: [], es: [] } }), 'ru');
-  assert.match(bare.text, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>\n\n💶 <b>от\s147\s312[^\n]*\n📍 Финестрат, Эль Мускарет\n\n🧾 /);
+  assert.match(bare.text, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>\n\n💶 <b>от\s147\s312[^\n]*\n📍 Финестрат, Эль Мускарет · 🗺 [^\n]*\n\n🧾 /);
   assert.equal(bare.images.length, 0);
 });
 
