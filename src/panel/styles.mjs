@@ -113,6 +113,10 @@ a:hover{text-decoration:underline}
 .topbar .page-tabs button.active{background:none;box-shadow:none;color:var(--brand);border-bottom-color:var(--brand)}
 .topbar h1{white-space:nowrap}
 .page{padding:var(--sp-4) var(--sp-5) var(--savebar-h);max-width:1560px;width:100%;margin:0 auto}
+/* Шапка, заголовок страницы и содержимое начинаются с одного левого края и на очень широком экране: поля растут вместе с отцентровкой страницы. */
+@media(min-width:1181px){.app-head,.topbar{padding-left:max(var(--sp-5), calc((100% - 1560px) / 2 + var(--sp-5)));padding-right:max(var(--sp-5), calc((100% - 1560px) / 2 + var(--sp-5)))}}
+/* Таблицы-списки (объекты, акции, очередь, история, база) — до 1100 px: строка шире читается плохо, текст и кнопки расходятся. */
+@media(min-width:861px){#viewBody>.card:has(>.table-wrap),#viewBody>.table-wrap,.stack>.card:has(>.table-wrap){max-width:1100px}}
 
 /* --- Карточки и таблицы ----------------------------------------------------- */
 /* Карточка — одна поверхность для всех: обычная, карточка воронки, дела. Цветная кромка слева
