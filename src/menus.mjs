@@ -173,7 +173,8 @@ async function sendMoreMenu(chatId, user, token) {
   const favorites = catalogRecords(user, 'favorites').length;
   const comparison = catalogRecords(user, 'comparison').length;
   const requests = data.inquiries.filter((inquiry) => inquiry.userId === String(user.id)).length;
-  const count = (value) => ' · ' + Math.min(999, Number(value) || 0);
+  // Счётчик без разделителя: в паре помещается 15 знаков.
+  const count = (value) => ' ' + Math.min(999, Number(value) || 0);
   await clearGalleryMessages(chatId, user, token);
   await clearCatalogMessages(chatId, user, token);
   await sendUiMessage(chatId, user, copy.title + '\n\n' + copy.intro, token, {
@@ -187,13 +188,13 @@ async function sendMoreMenu(chatId, user, token) {
           { text: (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).menuButton + count(comparison), callback_data: 'compare:view' },
         ],
         [
-          { text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton + count(requests), callback_data: 'myreq:list' },
+          { text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuShort + count(requests), callback_data: 'myreq:list' },
           { text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).menuButton, callback_data: 'subs:menu' },
         ],
         planMenuRow(user, language),
         [...goalMenuRow(language), ...(trustButtonRow(language) || [])],
         [
-          { text: (PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).menuButton, callback_data: 'privacy:open' },
+          { text: (PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).menuShort, callback_data: 'privacy:open' },
           { text: labels.help, callback_data: 'nav:help' },
           { text: '🌐 ' + ({ ru: 'Язык', en: 'Language', es: 'Idioma' }[language] || 'Язык'), callback_data: 'nav:language' },
         ],

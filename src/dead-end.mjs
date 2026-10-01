@@ -7,9 +7,9 @@ import { cleanText } from './util.mjs';
 import { localizedExact } from './catalog.mjs';
 
 const DEAD_END_TEXT = {
-  ru: { notify: '🔔 Сообщить, когда появится похожий', budget: '💶 Показать ближайшее по бюджету', budgetHeading: 'Ближайшее по бюджету' },
-  en: { notify: '🔔 Tell me when a similar one appears', budget: '💶 Show the closest by budget', budgetHeading: 'Closest by budget' },
-  es: { notify: '🔔 Avisarme cuando haya uno similar', budget: '💶 Ver lo más cercano por presupuesto', budgetHeading: 'Lo más cercano por presupuesto' },
+  ru: { notify: '🔔 Сообщить о похожих', budget: '💶 Ближайшее по бюджету', budgetHeading: 'Ближайшее по бюджету' },
+  en: { notify: '🔔 Tell me about similar', budget: '💶 Closest by budget', budgetHeading: 'Closest by budget' },
+  es: { notify: '🔔 Avisarme de similares', budget: '💶 Lo más cercano', budgetHeading: 'Lo más cercano por presupuesto' },
 };
 
 // Верхняя граница бюджета для сохранённого поиска: цена карточки плюс пятая часть,

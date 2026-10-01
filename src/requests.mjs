@@ -76,7 +76,7 @@ function myRequestsView(user) {
         : '';
     }
     if (inquiry.type === 'viewing' && viewingIsUpcoming(inquiry)) {
-      rows.push([{ text: shortenedText(copy.cancelViewing + (title ? ' · ' + title : ''), 60), callback_data: 'myreq:cancel:' + inquiry.id }]);
+      rows.push([{ text: shortenedText(copy.cancelViewing + (title ? ' · ' + title : ''), 31), callback_data: 'myreq:cancel:' + inquiry.id }]);
     }
     return [heading, [details, requestStatusLabel(inquiry, copy)].filter(Boolean).join(' — ')].join('\n');
   });

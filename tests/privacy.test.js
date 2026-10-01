@@ -126,7 +126,7 @@ test.describe('раздел «Мои данные»', () => {
     await chat.say('/start');
     const personal = await chat.say(bot.text.menuLabels.ru.more);
     assert.ok(callbacksOf(personal.last.markup).includes('privacy:open'), 'кнопка в «Моё»');
-    assert.ok(personal.last.buttons.includes(ru().menuButton));
+    assert.ok(personal.last.buttons.includes(ru().menuShort));
     assert.ok(bot.text.commandDescriptions.ru.privacy, 'команда описана для Telegram');
   });
 });

@@ -114,7 +114,7 @@ test('My space shows the comparison count and the result follows the client lang
   await chat.press('property:compare:compare-villa-a');
   await chat.press('property:compare:compare-flat-b');
   let step = await chat.say(MENU.en.more);
-  assert.ok(step.last.buttons.includes(COMPARE.en.menuButton + ' · 2'));
+  assert.ok(step.last.buttons.includes(COMPARE.en.menuButton + ' 2'));
   step = await chat.press('compare:view');
   assert.match(step.last.text, /^⚖️ Property comparison\nSelected: 2 of 3/);
   assert.ok(step.last.text.includes('Villa · For sale'));

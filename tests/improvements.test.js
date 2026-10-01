@@ -1045,9 +1045,9 @@ test.describe('catalog filter', () => {
       'catalog:favorites:0', 'compare:view', 'myreq:list', 'subs:menu',
       'plan:open', 'goal:menu', 'privacy:open', 'nav:help', 'nav:language', 'nav:menu',
     ]);
-    assert.ok(personal.last.buttons.includes(MENU.ru.favorites + ' · 1'));
-    assert.ok(personal.last.buttons.includes(bot.text.comparison.ru.menuButton + ' · 0'));
-    assert.ok(personal.last.buttons.some((label) => label.endsWith(' · 0')), 'the request counter is visible even when empty');
+    assert.ok(personal.last.buttons.includes(MENU.ru.favorites + ' 1'));
+    assert.ok(personal.last.buttons.includes(bot.text.comparison.ru.menuButton + ' 0'));
+    assert.ok(personal.last.buttons.some((label) => label.endsWith(' 0')), 'the request counter is visible even when empty');
 
     const recent = await chat.press('catalog:recent:0');
     const recentCard = recent.calls.find((call) => ['editMessageMedia', 'sendPhoto'].includes(call.method));

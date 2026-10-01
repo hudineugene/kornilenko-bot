@@ -686,6 +686,12 @@ function countedFilterLabel(text, count, selected = false) {
 
 // Кнопки главного экрана фильтра — без счётчиков: «✓ Продажа и аренда · 5» в тройном ряду обрезалось, а
 // «· 5» на коротких кнопках читалось как «1+·4». Число подходящих объектов — на «Показать» и в заголовке.
+const FILTER_TYPE_LABELS = {
+  ru: { apartment: 'Квартира', house: 'Дом', villa: 'Вилла', townhouse: 'Таунхаус', land: 'Участок', commercial: 'Коммерция', newbuild: 'Новостр.', other: 'Другое' },
+  en: { apartment: 'Apartment', house: 'House', villa: 'Villa', townhouse: 'Townhouse', land: 'Land', commercial: 'Commercial', newbuild: 'New build', other: 'Other' },
+  es: { apartment: 'Piso', house: 'Casa', villa: 'Villa', townhouse: 'Adosado', land: 'Terreno', commercial: 'Comercial', newbuild: 'Obra nueva', other: 'Otro' },
+};
+
 function markedFilterLabel(text, selected = false) {
   return (selected ? '✓ ' : '') + text;
 }
@@ -1721,7 +1727,7 @@ function catalogFilterPanel(user) {
   const language = user.preferredLanguage || 'ru';
   const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
   const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
-  const typeLabels = PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru;
+  const typeLabels = { ...(PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru), ...(FILTER_TYPE_LABELS[language] || FILTER_TYPE_LABELS.ru) };
   const filter = normalizedCatalogFilter(user.catalogFilter);
   const published = publishedCatalog(user);
   const mark = (selected, text) => (selected ? '✓ ' : '') + text;
@@ -1750,7 +1756,7 @@ function catalogFilterPanel(user) {
   for (let index = 0; index < shownTypes.length; index += 3) typeRows.push(shownTypes.slice(index, index + 3));
 
   // Спальни — один ряд: короткое «🛏 Любые» и числа «1+ … 4+» (длинная подпись первой кнопки обрезалась).
-  const bedroomRow = [facetButton('bedrooms', 0, copy.anyBedrooms, !filter.bedrooms, 'cfilter:bed:0').button]
+  const bedroomRow = [facetButton('bedrooms', 0, copy.anyBedrooms.replace(/^🛏 /u, !filter.bedrooms ? '' : '🛏 '), !filter.bedrooms, 'cfilter:bed:0').button]
     .concat(visibleButtons(CATALOG_FILTER_BEDROOMS.map((count) => facetButton('bedrooms', count, count + '+', filter.bedrooms === count, 'cfilter:bed:' + count))));
   const bedroomRows = [bedroomRow];
 

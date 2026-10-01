@@ -39,7 +39,7 @@ test('похожих нет: кнопка «Сообщить, когда поя�
   assert.ok(!callbacks.some((item) => item.startsWith('property:nearprice:')), 'сравнивать не с чем — кнопки нет');
   assert.ok(callbacks.includes('contact:question') && callbacks.includes('property:return:' + VILLA), 'прежние кнопки на месте');
   const notify = step.last.markup.inline_keyboard.flat().find((button) => button.callback_data === 'saved:similar:' + VILLA);
-  assert.equal(notify.text, '🔔 Сообщить, когда появится похожий');
+  assert.equal(notify.text, '🔔 Сообщить о похожих');
 });
 
 test('одно нажатие сохраняет поиск по параметрам карточки: сделка, тип, город, бюджет с запасом', async () => {

@@ -56,11 +56,11 @@ function phoneLines(text) {
   return String(text).split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil([...line].length / 38)), 0);
 }
 
-// Подпись длиннее ряда: в ряд из двух кнопок помещается ~22 знака, из трёх — ~14, одна — ~44.
-function checkButtons(title, markup) {
+// Подпись длиннее ряда — по правилу этапа 44: под фото по две в ряду до 13 знаков, под текстом до 15; по три до 10; полный ряд до 32.
+function checkButtons(title, markup, photo) {
   for (const row of (markup && markup.inline_keyboard) || []) {
-    const limit = row.length >= 3 ? 14 : row.length === 2 ? 22 : 44;
-    for (const button of row) if ([...String(button.text)].length > limit) notes.push(title + ' — кнопка «' + button.text + '» длиннее ряда из ' + row.length);
+    const limit = row.length >= 4 ? 8 : row.length === 3 ? 10 : row.length === 2 ? (photo ? 13 : 15) : 32;
+    for (const button of row) if ([...String(button.text)].length > limit) notes.push(title + ' — кнопка «' + button.text + '» длиннее ряда из ' + row.length + ' (' + limit + ')');
   }
 }
 
@@ -77,9 +77,9 @@ function report(title, from, chatId) {
     const kind = call.method === 'sendPhoto' ? '🖼' : call.method === 'sendMediaGroup' ? '🖼🖼 альбом' : call.method.startsWith('edit') ? '✏️' : '🤖';
     const shown = String(b.text || b.caption || (b.media && b.media.caption) || '');
     const rows = phoneLines(shown);
-    out.push('  ' + kind + ' ' + shown.replace(/\n/g, '\n     ').slice(0, 520) + buttons(b.reply_markup) + '\n   ↳ строк на телефоне: ' + rows);
+    out.push('  ' + kind + ' ' + shown.replace(/\n/g, '\n     ').slice(0, 1500) + buttons(b.reply_markup) + '\n   ↳ строк на телефоне: ' + rows);
     if (rows > 30) notes.push(title + ' — ответ в ' + rows + ' строк (больше экрана)');
-    checkButtons(title, b.reply_markup);
+    checkButtons(title, b.reply_markup, call.method === 'sendPhoto' || call.method === 'editMessageMedia' || call.method === 'editMessageCaption');
     // Брак в тексте: неподставленные поля {count}, undefined, null, [object Object], NaN.
     const defect = /\{[a-zA-Z]+\}|undefined|\bnull\b|\[object|\bNaN\b/.exec(shown + ' ' + JSON.stringify(b.reply_markup || ''));
     if (defect) problems.push(title + ' — в ответе брак «' + defect[0] + '»');
