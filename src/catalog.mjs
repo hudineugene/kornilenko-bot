@@ -828,7 +828,7 @@ function catalogFilterSummary(value, language) {
     filter.bedrooms ? filter.bedrooms + '+ ' + copy.bedrooms : '',
     filter.minPrice ? copy.from + ' ' + formattedPriceLimit(filter.minPrice, language) : '',
     filter.maxPrice ? copy.upTo + ' ' + formattedPriceLimit(filter.maxPrice, language) : '',
-    ...featuresOf(filter).map((key) => featureLabel(copy, key).replace(/^\P{L}+/u, '')),
+    ...featuresOf(filter).map((key) => featureLabel(copy, key).replace(/^\P{L}+/u, '').toLocaleLowerCase(language)),
     filter.sort === 'asc' ? copy.sortAsc : filter.sort === 'desc' ? copy.sortDesc : '',
   ].filter(Boolean).join(', ');
 }
@@ -876,7 +876,17 @@ function catalogMode(mode) {
   return CATALOG_MODES.includes(mode) ? mode : 'all';
 }
 
-function catalogHeading(mode, language) {
+// «Что понял бот»: над карточкой в каталоге с условиями — «🔎 Вилла · у моря · бассейн — подходит: 1». Без условий заголовка нет.
+function understoodLine(user, language, count) {
+  const summary = user ? catalogFilterState(user).summary : '';
+  if (!summary) return '';
+  const wizard = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
+  const found = (count === 1 && wizard.wizardFoundOne ? wizard.wizardFoundOne : wizard.wizardFound).replace('{count}', () => String(count));
+  return '🔎 ' + shortenedText(summary.replace(/, /g, ' · '), 70) + ' — ' + found;
+}
+
+function catalogHeading(mode, language, user = null, count = 0) {
+  if (mode === 'all') return understoodLine(user, language, count) || (MENU_LABELS[language] || MENU_LABELS.ru).objects;
   if (mode === 'favorites') return (MENU_LABELS[language] || MENU_LABELS.ru).favorites;
   if (mode === 'matches') return (SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru).matchesHeading;
   if (mode === 'similar') return (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).similarHeading;
@@ -1054,7 +1064,7 @@ function catalogViewContext(user, record, language) {
     mode,
     page: Math.max(0, index),
     totalPages: Math.max(1, records.length),
-    heading: catalogHeading(mode, language),
+    heading: catalogHeading(mode, language, user, records.length),
     filter: mode === 'all' ? catalogFilterState(user) : null,
   };
 }
@@ -1274,6 +1284,12 @@ function relaxedCatalogFilter(user) {
 // Пример запроса для приветствия берём из настоящего каталога: чтобы клиент,
 // написавший его слово в слово, что-то получил. Пока подходящего объекта нет,
 // примера просто нет.
+const EXAMPLE_FEATURE_PHRASES = {
+  ru: { pool: 'с бассейном', sea: 'у моря', terrace: 'с террасой', garden: 'с садом', parking: 'с парковкой' },
+  en: { pool: 'with a pool', sea: 'by the sea', terrace: 'with a terrace', garden: 'with a garden', parking: 'with parking' },
+  es: { pool: 'con piscina', sea: 'cerca del mar', terrace: 'con terraza', garden: 'con jardín', parking: 'con parking' },
+};
+
 function searchExampleText(user, language) {
   const record = publishedCatalog(user).find((item) => item.status === 'active' && item.dealType !== 'rent'
     && Number(item.bedrooms) > 0 && Number(item.priceValue) > 0 && localizedExact(item.city, language, 80));
@@ -1283,10 +1299,13 @@ function searchExampleText(user, language) {
   const step = price < 100000 ? 10000 : price < 500000 ? 50000 : 100000;
   const limit = formatMoney(Math.ceil(price / step) * step, '€', language, 0);
   const bedrooms = Number(record.bedrooms);
-  if (language === 'en') return bedrooms + (bedrooms === 1 ? ' bedroom' : ' bedrooms') + ' in ' + city + ' under ' + limit;
-  if (language === 'es') return bedrooms + (bedrooms === 1 ? ' dormitorio' : ' dormitorios') + ' en ' + city + ' hasta ' + limit;
+  // С признаком, если он у объекта есть: клиент видит, что бот понимает «с бассейном», «у моря» (проверка — по каталогу).
+  const featureKey = ['pool', 'sea', 'terrace', 'garden', 'parking'].find((key) => recordHasFeature(record, key));
+  const phrase = featureKey ? EXAMPLE_FEATURE_PHRASES[language][featureKey] || EXAMPLE_FEATURE_PHRASES.ru[featureKey] : '';
+  if (language === 'en') return bedrooms + (bedrooms === 1 ? ' bedroom' : ' bedrooms') + ' in ' + city + (phrase ? ' ' + phrase : '') + ' under ' + limit;
+  if (language === 'es') return bedrooms + (bedrooms === 1 ? ' dormitorio' : ' dormitorios') + ' en ' + city + (phrase ? ' ' + phrase : '') + ' hasta ' + limit;
   const word = bedrooms % 10 === 1 && bedrooms % 100 !== 11 ? 'спальня' : [2, 3, 4].includes(bedrooms % 10) && ![12, 13, 14].includes(bedrooms % 100) ? 'спальни' : 'спален';
-  return city + ', ' + bedrooms + ' ' + word + ', до ' + limit;
+  return city + ', ' + bedrooms + ' ' + word + (phrase ? ', ' + phrase : '') + ', до ' + limit;
 }
 
 async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
@@ -1352,7 +1371,7 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
   const record = records[safePage];
   rememberCatalogPosition(user, mode, safePage, record);
   if (mode === 'all') markFunnel(user, 'catalog');
-  const heading = catalogHeading(mode, language);
+  const heading = catalogHeading(mode, language, user, records.length);
   await sendPropertyCard(chatId, user, token, record, {
     heading,
     page: safePage,
@@ -1526,7 +1545,7 @@ async function showCatalogPageFromCallback(chatId, user, token, page, mode, mess
   if (!records.length) return sendCatalogPage(chatId, user, token, 0, mode);
   const safePage = Math.min(Math.max(0, Number(page) || 0), records.length - 1);
   const record = records[safePage];
-  const heading = catalogHeading(mode, language);
+  const heading = catalogHeading(mode, language, user, records.length);
   rememberCatalogPosition(user, mode, safePage, record);
   const edited = await editPropertyCard(chatId, user, token, message, record, {
     heading,

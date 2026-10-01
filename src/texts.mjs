@@ -458,7 +458,8 @@ const VIEWING_FORM_TEXT = {
     slotTaken: 'Это время только что заняли. Выберите, пожалуйста, другое.',
     slotGone: 'На это время уже нельзя записаться. Выберите, пожалуйста, другое.',
     slotBooked: '✅ Готово, вы записаны на просмотр!',
-    sharePhoneForViewing: '📱 Оставить номер для связи в день показа',
+    sharePhoneForViewing: '📱 Отправить мой номер',
+    phoneAsk: 'Оставьте номер: в день показа менеджер позвонит.',
     phoneForViewingSaved: 'Спасибо! Менеджер свяжется по этому номеру в день показа.',
   },
   en: {
@@ -486,7 +487,8 @@ const VIEWING_FORM_TEXT = {
     slotTaken: 'This time has just been taken. Please choose another one.',
     slotGone: 'This time can no longer be booked. Please choose another one.',
     slotBooked: '✅ Done, your viewing is booked!',
-    sharePhoneForViewing: '📱 Share a number for the day of the viewing',
+    sharePhoneForViewing: '📱 Send my number',
+    phoneAsk: 'Leave your number: the manager will call on the day of the viewing.',
     phoneForViewingSaved: 'Thank you! An agent will use this number on the day of the viewing.',
   },
   es: {
@@ -514,7 +516,8 @@ const VIEWING_FORM_TEXT = {
     slotTaken: 'Esta hora se acaba de ocupar. Por favor, elige otra.',
     slotGone: 'Esta hora ya no está disponible. Por favor, elige otra.',
     slotBooked: '✅ ¡Listo, tu visita queda confirmada!',
-    sharePhoneForViewing: '📱 Dejar un número para el día de la visita',
+    sharePhoneForViewing: '📱 Enviar mi número',
+    phoneAsk: 'Déjanos tu número: el asesor te llamará el día de la visita.',
     phoneForViewingSaved: '¡Gracias! Un asesor lo usará el día de la visita.',
   },
 };

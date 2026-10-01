@@ -657,6 +657,12 @@ function matchingOptions(list, matches) {
   return found.length === 1 ? found[0] : '';
 }
 
+// В написанном тексте есть время («17:00», «после 16», «вечером», «after 4 pm»)? Тогда отдельный вопрос о времени не нужен.
+function mentionsTime(text) {
+  // «3.11» — это дата, поэтому время с точкой («17.30») отдельно не ищем: только «17:30», «17 ч», «после 16», слова.
+  return /\d{1,2}:\d{2}|\b\d{1,2}\s?(?:h|ч|am|pm)\b|\b(?:после|до|около|after|before|at|around|despu[eé]s|antes|a las)\s+\d|\b(?:в|at|a las)\s+\d{1,2}[.:]\d{2}|утр|вечер|днём|днем|обед|утром|morning|afternoon|evening|ma[nñ]ana por|tarde|noche/iu.test(String(text));
+}
+
 function optionFromText(text, options) {
   const typed = cleanAnswer(text);
   if (!typed) return '';
@@ -791,6 +797,13 @@ async function handleViewingFormMessage(message, user, token, context = null) {
           pending.data.slotMode = false;
           pending.data.date = text;
           pending.data.day = typedDay;
+          if (!mentionsTime(text)) {
+            pending.data.time = '';
+            pending.step = 'time';
+            scheduleSave();
+            await say(copy.askTime, 'time');
+            return true;
+          }
           pending.data.time = copy.asSpecified;
           await sendViewingReview(user, pending, property, token, language, say);
           return true;
@@ -814,6 +827,13 @@ async function handleViewingFormMessage(message, user, token, context = null) {
         if (typedDay) {
           pending.data.date = text;
           pending.data.day = typedDay;
+          if (!mentionsTime(text)) {
+            pending.data.time = '';
+            pending.step = 'time';
+            scheduleSave();
+            await say(copy.askTime, 'time');
+            return true;
+          }
           pending.data.time = copy.asSpecified;
           await sendViewingReview(user, pending, property, token, language, say);
           return true;
@@ -898,6 +918,12 @@ async function handleViewingFormMessage(message, user, token, context = null) {
       return true;
     }
     if (text !== copy.confirm) {
+      // Время, набранное на шаге проверки («17:00», «после обеда»), — правка времени: раньше она молча терялась.
+      if (text.length >= 2 && text.length <= 60 && mentionsTime(text) && !parseViewingDate(text)) {
+        pending.data.slotMode = false;
+        pending.data.time = text;
+        scheduleSave();
+      }
       await say(viewingReviewText(copy, property, pending, language), 'confirm');
       return true;
     }
@@ -942,7 +968,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
         // Итог заменяет вопрос, а не идёт следом. Номер для дня показа просим
         // отдельной короткой строкой только тому, чьего номера мы не знаем.
         await sendViewingConfirmation(inquiry, user, token, { heading: copy.slotBooked, editMessageId: inline.messageId });
-        if (!knownLeadPhone(user)) await sendMessage(user.chatId, copy.sharePhoneForViewing, token, { reply_markup: viewingMenuKeyboard(language, user) });
+        if (!knownLeadPhone(user)) await sendMessage(user.chatId, copy.phoneAsk, token, { reply_markup: viewingMenuKeyboard(language, user) });
         return true;
       }
       await sendViewingConfirmation(inquiry, user, token, {

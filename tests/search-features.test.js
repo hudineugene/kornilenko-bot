@@ -80,7 +80,7 @@ test('клиент пишет «у моря» — видит только под
   assert.match(text, /Квартира на берегу/);
   assert.doesNotMatch(text, /Вилла в глубине|Обычная квартира/);
   const panel = await chat.press('cfilter:open');
-  assert.match(panelOf(panel).text, /Квартира, У моря/, panelOf(panel).text);
+  assert.match(panelOf(panel).text, /Квартира, у моря/, panelOf(panel).text);
 });
 
 test('«с бассейном» находит виллу; на английском и испанском то же', async () => {
@@ -113,12 +113,12 @@ test('«Ещё»: переключатели только тех признак�
   assert.ok(!labels.some((label) => /Терраса/.test(label)), 'в каталоге ни у кого нет террасы — кнопки нет');
 
   const on = await chat.press('cfilter:feat:pool');
-  assert.match(panelOf(on).text, /Бассейн/);
+  assert.match(panelOf(on).text, /бассейн/);
   assert.match(panelOf(on).text, /Подходит: 1/, panelOf(on).text);
   const again = await chat.press('cfilter:more');
   assert.ok(panelOf(again).buttons.some((label) => /^✓ 🏊 Бассейн/.test(label)), panelOf(again).buttons.join(' | '));
   const off = await chat.press('cfilter:feat:pool');
-  assert.doesNotMatch(panelOf(off).text, /Бассейн/);
+  assert.doesNotMatch(panelOf(off).text, /бассейн/);
   assert.match(panelOf(off).text, /Подходит: 3/);
 });
 

@@ -690,7 +690,7 @@ test.describe('запись кнопками идёт в одном сообще
     assert.match(editedText(done), /📍 Адрес: Марбелья, Calle del Mar, 5/);
     assert.equal(chat.inquiries[0].viewing.confirmedAt.length > 0, true, 'запись подтверждена сразу');
     // Телефона нет — одна короткая просьба оставить номер, а не пересказ записи.
-    const asks = done.replies.filter((reply) => reply.text === ru.sharePhoneForViewing);
+    const asks = done.replies.filter((reply) => reply.text === ru.phoneAsk);
     assert.equal(asks.length, 1);
   });
 
