@@ -95,9 +95,9 @@ function plural(value, one, few, many) { var n = Math.abs(Number(value || 0)) % 
 // Число и единица не разрываются переносом строки («7 дней», «350 000 €»): между ними неразрывный пробел (U+00A0).
 function counted(value, one, few, many) { return num(value) + "\u00a0" + plural(value, one, few, many); }
 function money(value, currency) { return num(value) + "\u00a0" + (currency === "USD" ? "$" : currency === "GBP" ? "£" : "€"); }
-// То же для готовых фраз: цифра, пробел и короткая единица (ч, мин, дн, км, м², €, %).
+// То же для готовых фраз: цифра, пробел и короткая единица, день, месяц («7 дней», «5 из 9», «28 сент», «10 ГБ»).
 function tightenText(text) {
-  return String(text).replace(/(\d) (?=(?:ч|мин|дн|сек|км|м²|м|€|\$|£|%)(?![а-яёa-z]))/g, "$1\u00a0");
+  return String(text).replace(/(\d) (?=(?:ч|мин|дн|дней|дня|день|сек|км|м²|м|€|\$|£|%|из|ГБ|МБ|КБ|янв|фев|мар|апр|май|мая|июн|июл|авг|сен|сент|окт|ноя|нояб|дек)(?![а-яёa-z]))/g, "$1\u00a0");
 }
 function tightenSpaces(root) {
   if (!root || !document.createTreeWalker) return;
