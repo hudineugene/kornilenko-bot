@@ -664,6 +664,10 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .tg-button{flex:1;text-align:center;padding:var(--sp-2) var(--sp-2);border-radius:var(--radius);background:var(--surface);color:var(--brand);box-shadow:var(--shadow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tg-note{color:var(--muted)}
 .tg-text blockquote{margin:0;padding-left:var(--sp-2);border-left:var(--edge) solid var(--brand)}
+/* Раскрывающаяся цитата Telegram: видны первые строки, остальное — по нажатию. */
+.tg-text blockquote.expandable{position:relative;max-height:5em;overflow:hidden;cursor:pointer}
+.tg-text blockquote.expandable:not(.expanded)::after{content:"Показать полностью";position:absolute;right:0;bottom:0;padding-left:var(--sp-3);background:var(--surface);color:var(--brand);font-size:var(--fs-xs)}
+.tg-text blockquote.expandable.expanded{max-height:none}
 .tg-album{display:grid;gap:2px}
 .tg-album[data-count="1"]{grid-template-columns:minmax(0,1fr)}
 .tg-album:not([data-count="1"]){grid-template-columns:repeat(2,minmax(0,1fr))}

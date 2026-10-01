@@ -239,7 +239,7 @@ function listingKind(group) {
 
 // В Telegram цитата — блок: перенос строки до и после неё не даёт пустой строки. В предпросмотре (pre-wrap) он её давал.
 function quoteBreaks(html) {
-  return String(html || "").replace(/\n(<blockquote>)/g, "$1").replace(/(<\/blockquote>)\n/g, "$1");
+  return String(html || "").replace(/<blockquote expandable>/g, '<blockquote class="expandable">').replace(/\n(<blockquote)/g, "$1").replace(/(<\/blockquote>)\n/g, "$1");
 }
 
 function openChannelPost(id) {
@@ -285,7 +285,10 @@ function openChannelPost(id) {
     wide: true,
     protectChanges: true,
     body: '<div class="listing-layout"><div class="stack">' +
-      '<div><b>' + esc(title) + '</b><div class="small muted">Пост: альбом с фотографиями и полным описанием, ценой, характеристиками и кнопкой «Смотреть в боте».</div></div>' +
+      '<div><b>' + esc(title) + '</b><div class="small muted">Все фотографии, цена, геолокация, характеристики и описание — красиво оформленным постом.</div></div>' +
+      '<div class="field"><label>Вид поста</label>' +
+      '<label class="check"><input type="radio" name="listingLayout" value="single" checked> Один пост: фото и всё остальное в подписи, описание раскрывается по нажатию (длинное сокращается до лимита Telegram)</label>' +
+      '<label class="check"><input type="radio" name="listingLayout" value="split"> Фото и отдельное сообщение с полным описанием</label></div>' +
       '<div class="listing-targets" id="listingTargets">' + rows + "</div>" +
       (hiddenCount ? '<div class="small muted">Ещё ' + counted(hiddenCount, "группа", "группы", "групп") + ', где бот не администратор, не показаны.</div>' : "") +
       '<label class="check"><input type="checkbox" id="listingSignature" checked> Добавить подпись и кнопки из «Оформления постов»</label>' +
@@ -310,6 +313,7 @@ function openChannelPost(id) {
         var when = box.querySelector("#listingWhen").value;
         send_.textContent = count ? (when ? "Запланировать · " : "Опубликовать · ") + counted(count, "группа", "группы", "групп") : "Опубликовать";
       }
+      function layoutValue() { return box.querySelector('input[name="listingLayout"]:checked').value; }
       async function drawPreview() {
         var ticket = ++previewSerial;
         box.querySelectorAll("[data-preview-lang]").forEach(function (button) {
@@ -317,7 +321,7 @@ function openChannelPost(id) {
           button.setAttribute("aria-pressed", String(button.dataset.previewLang === previewLanguage));
         });
         try {
-          var preview = await api("/api/objects/" + encodeURIComponent(id) + "/listing-preview?language=" + previewLanguage + (box.querySelector("#listingSignature").checked ? "" : "&signature=0"));
+          var preview = await api("/api/objects/" + encodeURIComponent(id) + "/listing-preview?language=" + previewLanguage + "&layout=" + layoutValue() + (box.querySelector("#listingSignature").checked ? "" : "&signature=0"));
           if (ticket !== previewSerial) return;
           var shots = propertyImages(record, previewLanguage).slice(0, 10);
           var album = shots.length ? '<div class="tg-album" data-count="' + Math.min(shots.length, 4) + '">' + shots.slice(0, 4).map(function (image, index) {
@@ -325,12 +329,17 @@ function openChannelPost(id) {
             return '<span class="tg-album-cell"><img src="' + esc(imageUrl("objects", record.id, image)) + '" alt="">' + more + "</span>";
           }).join("") + "</div>" : "";
           box.querySelector("#listingPreview").innerHTML =
-            (album || preview.caption ? '<div class="tg-bubble">' + album + (preview.caption ? '<div class="tg-text">' + preview.caption + "</div>" : "") + "</div>" : "") +
-            '<div class="tg-bubble"><div class="tg-text">' + quoteBreaks(preview.html) + "</div></div>" +
-            (preview.hasButton ? '<div class="tg-buttons"><div class="tg-button">' + esc(preview.buttonText) + "</div></div>" : '<div class="tg-note warn-text">Кнопки «Смотреть в боте» не будет: у бота нет публичного имени.</div>');
+            (album || preview.caption ? '<div class="tg-bubble">' + album + (preview.caption ? '<div class="tg-text">' + quoteBreaks(preview.caption) + "</div>" : "") + "</div>" : "") +
+            (preview.html ? '<div class="tg-bubble"><div class="tg-text">' + quoteBreaks(preview.html) + "</div></div>" : "") +
+            (preview.hasButton ? '<div class="tg-buttons"><div class="tg-button">' + esc(preview.buttonText) + "</div></div>" : "");
+          box.querySelectorAll("#listingPreview blockquote.expandable").forEach(function (quote) {
+            quote.onclick = function () { quote.classList.toggle("expanded"); };
+          });
           var notes = [];
           if (!shots.length) notes.push("У объекта нет фотографий — уйдёт только текст.");
-          if (preview.truncated) notes.push("Описание длиннее лимита Telegram (4096 знаков) и будет сокращено со ссылкой на полную карточку в боте.");
+          if (preview.truncated) notes.push(preview.layout === "single" && shots.length ? "Описание не поместилось в подпись (лимит Telegram — 1024 знака) и сокращено; полностью — в боте. Нужен полный текст — выберите «Фото и отдельное сообщение»." : "Описание длиннее лимита Telegram (4096 знаков) и сокращено; полностью — в боте.");
+          if (preview.layout === "single" && preview.album) notes.push("У альбома кнопок под постом не бывает — ссылка на бота стоит строкой в подписи.");
+          if (!preview.hasButton && !preview.album) notes.push("Кнопки «Смотреть в боте» не будет: у бота нет публичного имени.");
           box.querySelector("#listingPreviewNote").textContent = notes.join(" ");
         } catch (error) {
           if (ticket === previewSerial) box.querySelector("#listingPreview").innerHTML = '<span class="tg-note warn-text">Не удалось собрать предпросмотр: ' + esc(error.message) + "</span>";
@@ -340,6 +349,7 @@ function openChannelPost(id) {
         button.onclick = function () { previewLanguage = button.dataset.previewLang; drawPreview(); };
       });
       box.querySelector("#listingSignature").onchange = drawPreview;
+      box.querySelectorAll('input[name="listingLayout"]').forEach(function (radio) { radio.onchange = drawPreview; });
       box.querySelector("#listingWhen").oninput = refreshButton;
       box.querySelectorAll(".listing-target").forEach(function (row) {
         row.querySelector("[data-pick]").onchange = function () {
@@ -375,6 +385,7 @@ function openChannelPost(id) {
               var lang = row.querySelector("[data-lang]"), topic = row.querySelector("[data-topic]");
               return { groupId: row.dataset.group, language: lang ? lang.value : "ru", threadId: topic ? Number(topic.value) || 0 : 0 };
             }),
+            layout: box.querySelector('input[name="listingLayout"]:checked').value,
             withoutSignature: !box.querySelector("#listingSignature").checked,
             pin: box.querySelector("#listingPin").checked,
             sendAt: when ? zonedDateTimeToIso(when) : "",

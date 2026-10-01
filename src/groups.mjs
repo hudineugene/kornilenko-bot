@@ -511,54 +511,64 @@ function messageLink(group, messageId, threadId = 0) {
   return /^\d+$/.test(internal) ? 'https://t.me/c/' + internal + thread + '/' + messageId : '';
 }
 
-// Объявление об объекте: альбом с фотографиями и подписью, следом — полный текст с кнопкой. Если альбом ушёл, а текст
-// нет, повторять нельзя (в группе окажутся два альбома) — об этом говорит ошибка.
-// Всё, что уйдёт в группу: подпись альбома, полный текст вместе с подписью канала, кнопки и фотографии. Тот же сбор
+// Объявление об объекте. «single» (по умолчанию): один пост — альбом или фото, всё в подписи, описание раскрывающейся
+// цитатой. «split»: альбом с подписью, следом полный текст с кнопкой (если альбом ушёл, а текст нет, повторять нельзя —
+// в группе окажутся два альбома, об этом говорит ошибка).
+// listingMessage — всё, что уйдёт в группу: подпись, текст вместе с подписью канала, кнопки и фотографии. Тот же сбор
 // нужен предпросмотру в панели, чтобы владелец видел ровно то, что получат подписчики.
 function listingMessage(record, language, options = {}) {
   const publishing = normalizePublishing(data.config.publishing);
   const signature = options.withoutSignature ? { html: '', plain: '' } : formatLinks(signatureBlock(publishing));
-  const built = buildListing(record, language, { reserve: signature.plain.length + 4, source: options.source });
+  const built = buildListing(record, language, { reserve: signature.plain.length + 4, source: options.source, layout: options.layout });
   const quote = signature.html && publishing.signatureQuote;
-  const html = built.text + (signature.html ? '\n\n' + (quote ? '<blockquote>' + signature.html + '</blockquote>' : signature.html) : '');
-  const markup = postMarkup({ buttonText: built.buttonText, buttonUrl: built.buttonUrl, withoutSignature: options.withoutSignature });
-  return { ...built, html, markup, plainLength: plainOf(html).length };
+  const signed = (body) => body + (signature.html ? '\n\n' + (quote ? '<blockquote>' + signature.html + '</blockquote>' : signature.html) : '');
+  const oneCaption = built.layout === 'single' && built.images.length > 0;
+  const caption = oneCaption ? signed(built.caption) : built.caption;
+  const html = built.text ? signed(built.text) : '';
+  // У альбома кнопок не бывает: ссылка на бота уже строкой в подписи.
+  const markup = oneCaption && built.album ? null : postMarkup({ buttonText: built.buttonText, buttonUrl: built.buttonUrl, withoutSignature: options.withoutSignature });
+  return { ...built, caption, html, markup, oneCaption, plainLength: plainOf(oneCaption ? caption : html).length };
 }
 
 async function sendListing(group, post, token = data.config.botToken) {
   const record = (Array.isArray(data.objects) ? data.objects : []).find((item) => item.id === (post.listing && post.listing.objectId));
   if (!record) throw new Error('Объекта уже нет в каталоге');
-  const built = listingMessage(record, post.listing.language, { withoutSignature: post.withoutSignature, source: group.type === 'channel' ? 'channel' : 'group' });
+  const built = listingMessage(record, post.listing.language, { layout: post.listing.layout, withoutSignature: post.withoutSignature, source: group.type === 'channel' ? 'channel' : 'group' });
   const html = built.html;
   const markup = built.markup;
   const threadId = postThreadId(group, post);
   const threadOptions = threadId ? { threadId } : {};
+  const feedThread = threadId || (group.isForum ? GENERAL_TOPIC_ID : 0);
   const photos = built.images;
   let albumIds = [];
   if (photos.length >= 2) {
     const album = await sendPhotoAlbum(group.id, photos, built.caption, token, { parseMode: 'HTML', ...threadOptions });
     albumIds = album.map((message) => Number(message.message_id)).filter(Boolean);
   } else if (photos.length === 1) {
-    const photo = await sendPhotoMessage(group.id, photos[0], built.caption, token, null, { parseMode: 'HTML', ...threadOptions });
+    // Одно фото: в режиме «один пост» вместе с кнопкой; в «split» кнопка — под текстом.
+    const photo = await sendPhotoMessage(group.id, photos[0], built.caption, token, built.oneCaption ? markup : null, { parseMode: 'HTML', ...threadOptions });
     albumIds = photo && photo.message_id ? [Number(photo.message_id)] : [];
   }
-  if (albumIds.length) rememberOwnMessage(group, albumIds[0], plainOf(built.caption), 'photo', threadId || (group.isForum ? GENERAL_TOPIC_ID : 0));
-  let sent;
-  try {
-    sent = await sendMessage(group.id, html, token, {
-      track: false,
-      parse_mode: 'HTML',
-      ...(threadId ? { message_thread_id: threadId } : {}),
-      ...(markup ? { reply_markup: markup } : {}),
-      // В группе текст — ответ на альбом: видно, к чему он. В канале ответов на собственные посты нет.
-      ...(albumIds.length && group.type !== 'channel' ? { reply_parameters: { message_id: albumIds[0], allow_sending_without_reply: true } } : {}),
-    });
-  } catch (error) {
-    if (albumIds.length) throw new Error('Фотографии опубликованы, а текст — нет: ' + error.message + '. Повторно не отправляйте — в группе уже есть альбом.');
-    throw error;
+  if (albumIds.length) rememberOwnMessage(group, albumIds[0], plainOf(built.caption), 'photo', feedThread);
+  let messageId = albumIds[0] || 0;
+  if (html) {
+    let sent;
+    try {
+      sent = await sendMessage(group.id, html, token, {
+        track: false,
+        parse_mode: 'HTML',
+        ...(threadId ? { message_thread_id: threadId } : {}),
+        ...(markup ? { reply_markup: markup } : {}),
+        // В группе текст — ответ на альбом: видно, к чему он. В канале ответов на собственные посты нет.
+        ...(albumIds.length && group.type !== 'channel' ? { reply_parameters: { message_id: albumIds[0], allow_sending_without_reply: true } } : {}),
+      });
+    } catch (error) {
+      if (albumIds.length) throw new Error('Фотографии опубликованы, а текст — нет: ' + error.message + '. Повторно не отправляйте — в группе уже есть альбом.');
+      throw error;
+    }
+    messageId = (sent && Number(sent.message_id)) || messageId;
+    rememberOwnMessage(group, messageId, plainOf(html), 'text', feedThread);
   }
-  const messageId = sent && Number(sent.message_id);
-  rememberOwnMessage(group, messageId, plainOf(html), 'text', threadId || (group.isForum ? GENERAL_TOPIC_ID : 0));
   if (messageId && post.pin) {
     const pinned = await telegramRequest(token, 'pinChatMessage', { chat_id: group.id, message_id: messageId, disable_notification: !post.notify })
       .then(() => true)
@@ -727,7 +737,7 @@ function newGroupPost(fields) {
     pin: Boolean(fields.pin),
     notify: fields.notify !== false,
     // Объявление об объекте: текст и фотографии собираются в момент отправки, поэтому хранится только «что» и «на каком языке».
-    listing: fields.listing && fields.listing.objectId ? { objectId: cleanText(fields.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(fields.listing.language) ? fields.listing.language : 'ru' } : null,
+    listing: fields.listing && fields.listing.objectId ? { objectId: cleanText(fields.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(fields.listing.language) ? fields.listing.language : 'ru', layout: fields.listing.layout === 'split' ? 'split' : 'single' } : null,
     status: 'scheduled',
     sendAt: fields.sendAt,
     createdAt: new Date().toISOString(),

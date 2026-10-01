@@ -141,6 +141,7 @@ async function publishListing(res, record, body) {
     const queued = (data.groupPosts || []).filter((item) => item.status === 'scheduled').length;
     if (queued + targets.length > MAX_SCHEDULED_POSTS) return json(res, 400, { error: 'Слишком много отложенных публикаций' });
   }
+  const layout = body.layout === 'split' ? 'split' : 'single';
   const options = { withoutSignature: body.withoutSignature === true, pin: body.pin === true, notify: body.notify !== false };
   const results = [];
   for (const [index, target] of targets.entries()) {
@@ -151,7 +152,7 @@ async function publishListing(res, record, body) {
       if (!sendAt) await refreshGroup(group);
       const blocker = publishBlocker(group);
       if (blocker) throw new Error(blocker);
-      const fields = { ...options, groupId: group.id, threadId, listing: { objectId: record.id, language } };
+      const fields = { ...options, groupId: group.id, threadId, listing: { objectId: record.id, language, layout } };
       if (sendAt) {
         data.groupPosts = [...(data.groupPosts || []), newGroupPost({ ...fields, sendAt })];
         row.scheduled = true;
@@ -327,9 +328,12 @@ async function handleGroupApi(req, res, url) {
     if (!record) return json(res, 404, { error: 'Объект не найден' }), true;
     if (listingMatch[2] === 'preview' && req.method === 'GET') {
       const language = LISTING_LANGUAGES.includes(url.searchParams.get('language')) ? url.searchParams.get('language') : 'ru';
-      const message = listingMessage(record, language, { withoutSignature: url.searchParams.get('signature') === '0', source: 'group' });
+      const layout = url.searchParams.get('layout') === 'split' ? 'split' : 'single';
+      const message = listingMessage(record, language, { layout, withoutSignature: url.searchParams.get('signature') === '0', source: 'group' });
       return json(res, 200, {
         language,
+        layout: message.layout,
+        album: message.album,
         caption: message.caption,
         html: message.html,
         photoCount: message.images.length,

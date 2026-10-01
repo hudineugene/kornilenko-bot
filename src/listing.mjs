@@ -72,7 +72,7 @@ function descriptionBlocks(description) {
   const paragraphs = String(description || '').replace(/\r\n?/g, '\n').split(/\n{2,}/).map((item) => item.trim()).filter(Boolean);
   return paragraphs.map((paragraph, index) => {
     const lines = paragraph.split('\n').map((line) => line.trim()).filter(Boolean);
-    const html = lines.map((line, lineIndex) => {
+    const rendered = lines.map((line, lineIndex) => {
       const bullet = /^[-–—•*·▪✓✔✅☑🔹🔸]\s*/u.exec(line);
       const body = bullet ? line.slice(bullet[0].length) : line;
       if (bullet) return '▫️ ' + escapeTelegramHtml(body);
@@ -84,8 +84,9 @@ function descriptionBlocks(description) {
         return '<b>' + labelIcon(label[1]) + ' ' + escapeTelegramHtml(label[1]) + '</b>' + (sentence ? '\n' + escapeTelegramHtml(sentence) : '');
       }
       return escapeTelegramHtml(body);
-    }).join('\n');
-    return { html, plain: plainOf(html) };
+    });
+    const html = rendered.join('\n');
+    return { html, plain: plainOf(html), lines: rendered.map((item) => ({ html: item, plain: plainOf(item) })) };
   });
 }
 
@@ -106,7 +107,40 @@ function factRow(row) {
   return escapeTelegramHtml(row.slice(0, split + 2)) + '<b>' + escapeTelegramHtml(row.slice(split + 2)) + '</b>';
 }
 
-// options.reserve — сколько знаков уйдёт на подпись канала под текстом; options.source — метка источника в ссылке на бота.
+// Сколько описания помещается в budget знаков: целые абзацы, затем целые строки следующего, а если не помещается и
+// первый абзац — его начало по границе предложения. Возвращает готовые куски и признак «сократили».
+function fitDescription(blocks, budget) {
+  const fits = [];
+  let left = budget;
+  let truncated = false;
+  for (const block of blocks) {
+    if (block.plain.length + 2 <= left) {
+      fits.push(block.html);
+      left -= block.plain.length + 2;
+      continue;
+    }
+    truncated = true;
+    const lines = [];
+    for (const line of block.lines) {
+      if (line.plain.length + 1 > left) break;
+      lines.push(line.html);
+      left -= line.plain.length + 1;
+    }
+    if (lines.length) fits.push(lines.join('\n'));
+    else if (!fits.length && left > 120) {
+      const cut = block.plain.slice(0, left - 40);
+      const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('\n'), cut.lastIndexOf(' '));
+      fits.push(escapeTelegramHtml(cut.slice(0, end > 80 ? end + 1 : cut.length).trimEnd()) + '…');
+    }
+    break;
+  }
+  return { fits, truncated };
+}
+
+// options.layout: «single» (по умолчанию) — одно объявление одним постом: подпись к альбому или фото вмещает всё (до 1024
+// знаков), описание — раскрывающейся цитатой, сокращённое до того, что поместилось; «split» — фото и отдельное сообщение
+// с полным описанием (до 4096 знаков). Без фотографий в любом режиме — одно текстовое сообщение.
+// options.reserve — сколько знаков уйдёт на подпись канала; options.source — метка источника в ссылке на бота.
 function buildListing(record, language, options = {}) {
   const lang = ['ru', 'en', 'es'].includes(language) ? language : 'ru';
   const copy = PROPERTY_ACTION_TEXT[lang] || PROPERTY_ACTION_TEXT.ru;
@@ -125,17 +159,19 @@ function buildListing(record, language, options = {}) {
   const price = priceLines(record, lang);
   // Прозрачные картинки Telegram в альбом не берёт как фото — только документом, а документ в альбом не ставится.
   const images = recordImages(record, lang).filter((image) => !imageHasTransparency(image)).slice(0, 10);
+  const layout = options.layout === 'split' ? 'split' : 'single';
+  // Всё в подписи к фото: только в режиме «single» и когда фотографии есть.
+  const oneCaption = layout === 'single' && images.length > 0;
+  const album = images.length >= 2;
 
   const header = '🏡 <b>' + escapeTelegramHtml(title) + '</b>' + (subtitle ? '\n<i>' + escapeTelegramHtml(subtitle) + '</i>' : '');
 
-  // Геолокация — одной строкой: город, район, адрес и ссылка на карту. Подпись под первой фотографией: название, тип и
-  // сделка, цена и эта строка. Характеристик здесь нет — они во втором сообщении, которое ими и начинается: одна и та же
-  // информация в двух сообщениях не повторяется.
+  // Геолокация — одной строкой: город, район, адрес и ссылка на карту.
   const mapUrl = validHttpUrl(record.mapUrl);
   const locationLine = place || mapUrl
     ? '📍 ' + [escapeTelegramHtml(place), mapUrl ? '🗺 <a href="' + escapeTelegramHtml(mapUrl) + '">' + text.map + '</a>' : ''].filter(Boolean).join(' · ')
     : '';
-  const caption = [header, price, locationLine].filter(Boolean).join('\n');
+  const lead = [header, price, locationLine].filter(Boolean).join('\n');
 
   // Характеристики — отдельным блоком-цитатой с заголовком.
   const facts = propertySpecRows(record, lang, { compact: false });
@@ -154,12 +190,16 @@ function buildListing(record, language, options = {}) {
   const tags = [hashtag(text.tagDeal[record.dealType === 'rent' ? 'rent' : 'sale']), hashtag(type.toLowerCase()), hashtag(city), hashtag(district)]
     .filter(Boolean).filter((tag, index, all) => all.indexOf(tag) === index).join(' ');
 
-  // С фотографиями название, цена и геолокация — в подписи альбома, и сообщение начинается с характеристик. Без фотографий
-  // альбома нет, и всё идёт одним сообщением: название, цена, геолокация, характеристики.
-  const head = images.length
+  const buttonUrl = propertyDeepLink(record, cleanText(options.source, 40) || 'group');
+  // У альбома кнопок под сообщением не бывает: ссылка на бота — строкой в подписи. У одного фото и у текста — кнопка.
+  const botLink = oneCaption && album && buttonUrl ? '🤖 <a href="' + escapeTelegramHtml(buttonUrl) + '">' + escapeTelegramHtml(text.openBot.replace(/^🤖\s*/, '')) + '</a>' : '';
+
+  // В «split» с фотографиями название, цена и геолокация — в подписи альбома, а сообщение начинается с характеристик.
+  // Без фотографий и в «single» всё идёт вместе.
+  const head = layout === 'split' && images.length
     ? [factsBlock].filter(Boolean)
-    : [header, [price, locationLine].filter(Boolean).join('\n'), factsBlock].filter(Boolean);
-  const tail = [links, tags].filter(Boolean);
+    : [lead, factsBlock].filter(Boolean);
+  const tail = [botLink, links, tags].filter(Boolean);
 
   // Описание: на своём языке; нет перевода — русское, с честной пометкой, как в карточке бота.
   let description = localizedExact(record.description, lang);
@@ -170,44 +210,33 @@ function buildListing(record, language, options = {}) {
   } else if (lang !== 'ru' && description && description === localizedExact(record.description, 'ru')) inRussian = true;
   const blocks = descriptionBlocks(description);
   const descriptionHeading = blocks.length ? '📝 <b>' + escapeTelegramHtml(copy.descriptionTitle) + '</b>' : '';
-  const note = inRussian && copy.inRussian && blocks.length ? [{ html: '<i>' + escapeTelegramHtml(copy.inRussian) + '</i>', plain: copy.inRussian }] : [];
-
-  // Сколько знаков остаётся описанию: всё сообщение — не больше лимита Telegram, за вычетом шапки, хвоста и подписи.
-  const fixed = [...head, descriptionHeading, ...tail, ...note.map((item) => item.html)].filter(Boolean).map((part) => plainOf(part).length + 2).reduce((sum, value) => sum + value, 0) + reserve + SAFETY;
+  const note = inRussian && copy.inRussian && blocks.length ? '<i>' + escapeTelegramHtml(copy.inRussian) + '</i>' : '';
   const truncatedNote = '<i>' + escapeTelegramHtml(text.truncated) + '</i>';
-  let budget = MESSAGE_LIMIT - fixed;
-  const fits = [];
-  let truncated = false;
-  for (const block of blocks) {
-    if (block.plain.length + 2 <= budget) {
-      fits.push(block.html);
-      budget -= block.plain.length + 2;
-      continue;
-    }
-    truncated = true;
-    // Первый абзац важнее всего: если и он не помещается, режем его по предложению.
-    if (!fits.length && budget > 120) {
-      const cut = block.plain.slice(0, budget - 40);
-      const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('\n'), cut.lastIndexOf(' '));
-      fits.push(escapeTelegramHtml(cut.slice(0, end > 80 ? end + 1 : cut.length).trimEnd()) + '…');
-    }
-    break;
-  }
-  const descriptionBlock = fits.length ? [descriptionHeading + '\n' + fits.join('\n\n')] : [];
-  const body = [...head, ...descriptionBlock, ...note.map((item) => item.html), truncated ? truncatedNote : '', ...tail].filter(Boolean).join('\n\n');
+
+  // Сколько знаков остаётся описанию: лимит Telegram (подпись — 1024, сообщение — 4096) за вычетом всего остального и
+  // подписи канала. Сначала пробуем без пометки «сокращено»; не поместилось — оставляем место и для неё.
+  const limit = oneCaption ? CAPTION_LIMIT : MESSAGE_LIMIT;
+  const around = [...head, descriptionHeading, ...tail, note].filter(Boolean).map((part) => plainOf(part).length + 2).reduce((sum, value) => sum + value, 0) + reserve + SAFETY;
+  let { fits, truncated } = fitDescription(blocks, limit - around);
+  if (truncated) ({ fits } = fitDescription(blocks, limit - around - plainOf(truncatedNote).length - 2));
+  // Описание — раскрывающейся цитатой: в чате видны первые строки, остальное — по нажатию.
+  const descriptionBlock = fits.length ? [descriptionHeading + '\n<blockquote expandable>' + fits.join('\n\n') + '</blockquote>'] : [];
+  const body = [...head, ...descriptionBlock, note, truncated ? truncatedNote : '', ...tail].filter(Boolean).join('\n\n');
   const plainLength = plainOf(body).length;
 
-  const sourceLabel = cleanText(options.source, 40) || 'group';
   return {
     language: lang,
+    layout,
     title,
-    caption,
-    text: body,
+    // «single» с фотографиями: всё в подписи, второго сообщения нет. «split»: подпись — начало, текст — продолжение.
+    caption: oneCaption ? body : lead,
+    text: oneCaption ? '' : body,
     plainLength,
     truncated,
     images,
+    album,
     buttonText: text.openBot,
-    buttonUrl: propertyDeepLink(record, sourceLabel),
+    buttonUrl,
   };
 }
 
