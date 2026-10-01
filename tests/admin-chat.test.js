@@ -157,11 +157,18 @@ test('/inbox brings back what waits for an answer, and the admin can reply to it
 
   const calls = await adminSays('/inbox');
   const messages = sentTo(calls, ADMIN_CHAT);
-  assert.equal(messages[0].body.text, '📥 Ждут ответа: 1');
-  assert.equal(messages.length, 2);
-  assert.match(messages[1].body.text, /^📥 Ждёт ответа \d+ мин: сообщение\n👤 Ольга/);
-  assert.match(messages[1].body.text, /Сколько стоит вилла\?/);
-  assert.ok(messages[1].body.reply_markup.inline_keyboard.flat().some((button) => button.callback_data.startsWith('inq:closed:')));
+  // Один список: клиент, тип, сколько ждёт — и кнопка на каждого; карточка приходит по кнопке.
+  assert.equal(messages.length, 1);
+  assert.match(messages[0].body.text, /^📥 Ждут ответа: 1\n1\. Ольга — сообщение, \d+ мин/);
+  assert.doesNotMatch(messages[0].body.text, /Пётр/);
+  const button = messages[0].body.reply_markup.inline_keyboard.flat()[0];
+  assert.match(button.callback_data, /^inq:show:/);
+  const { adminPress } = require('./helpers/chat');
+  const shown = await adminPress(button.callback_data, 5);
+  const card = shown.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === ADMIN_CHAT)[0];
+  assert.match(card.body.text, /^📥 Ждёт ответа \d+ мин: сообщение\n👤 Ольга/);
+  assert.match(card.body.text, /Сколько стоит вилла\?/);
+  assert.ok(card.body.reply_markup.inline_keyboard.flat().some((item) => item.callback_data.startsWith('inq:closed:')));
 
   const reply = await adminSays('Цена 850 000 €', { replyTo: notificationFor(waiting.id) });
   assert.equal(sentTo(reply, waiting.id).length, 1);

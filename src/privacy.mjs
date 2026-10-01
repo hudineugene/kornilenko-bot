@@ -140,7 +140,7 @@ async function handlePrivacyCallback(query, token) {
     // данных «адрес» удалённого клиента — ответ менеджера воссоздал бы его
     // карточку и обращение заново.
     try {
-      await notifyAdministratorAction(user, 'Удалил свои данные', eraseDetails(user), '', null, { important: true });
+      await notifyAdministratorAction(user, 'Удалил свои данные', eraseDetails(user), '', null, { important: true, icon: '🗑' });
     } catch (error) {
       recordError('Уведомление администратору', error);
     }

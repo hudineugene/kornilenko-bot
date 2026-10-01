@@ -74,7 +74,7 @@ test('«В работу» у Марии: во всех трёх чатах од�
   assert.deepEqual(updated.map((call) => String(call.body.chat_id)).sort(), [ADMIN_CHAT, MARIA, PETER].sort(), 'карточка обновилась у всех');
   const lines = new Set(updated.map((call) => lastLineOf(call.body.text)));
   assert.equal(lines.size, 1, 'одна строка у всех: ' + [...lines].join(' | '));
-  assert.match([...lines][0], /^⏳ Ведёт: Мария, с \d{2}:\d{2} — клиент ждёт ответа$/);
+  assert.match([...lines][0], /^🙋 Ведёт: Мария, с \d{2}:\d{2} — клиент ждёт ответа$/);
   assert.ok(updated.every((call) => call.body.text.startsWith('📩')), 'остальной текст карточки сохранён');
   assert.ok(updated.every((call) => call.body.reply_markup), 'кнопки на месте');
 });
@@ -200,5 +200,5 @@ test('заявка с менеджером: напоминание уходит 
   assert.deepEqual(await bot.runInquiryReminders(noon), [inquiry.id]);
   const reminders = telegram.calls.filter((call) => call.method === 'sendMessage' && /^⏰/.test(call.body.text || ''));
   assert.deepEqual(reminders.map((call) => String(call.body.chat_id)), [PETER]);
-  assert.match(lastLineOf(reminders[0].body.text), /^⏳ Ведёт: Пётр/);
+  assert.match(lastLineOf(reminders[0].body.text), /^🙋 Ведёт: Пётр/);
 });

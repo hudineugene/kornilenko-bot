@@ -1015,7 +1015,7 @@ async function saveViewingPhone(message, user, token) {
     // Номер — продолжение записи на просмотр, а не новый «вопрос по объекту», который попадал в «ждут ответа».
     appendInquiryMessage(viewing, inquiryTimelineMessage(message, 'in', { text: phoneText }));
     viewing.updatedAt = new Date().toISOString();
-    void notifyAdministratorAction(user, 'Телефон для связи в день показа', phone, viewing.id, message.message_id, { important: true });
+    void notifyAdministratorAction(user, 'Телефон для связи в день показа', phone, viewing.id, message.message_id, { important: true, icon: '📞' });
   } else {
     createInquiry(user, phoneText, { type: 'question', propertyId: '', sourceMessage: message });
   }

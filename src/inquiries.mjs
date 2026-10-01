@@ -350,11 +350,11 @@ function inquiryStateLine(inquiry) {
   const owner = inquiry.assignee ? ' · ведёт: ' + inquiry.assignee : '';
   if (awaitingReply(inquiry)) {
     if (last) return '🆕 Клиент написал снова, ' + stateTime(inquiry.clientMessageAt) + owner;
-    if (inquiry.assignee) return '⏳ Ведёт: ' + inquiry.assignee + (inquiry.takenAt ? ', с ' + stateTime(inquiry.takenAt) : '') + ' — клиент ждёт ответа';
+    if (inquiry.assignee) return '🙋 Ведёт: ' + inquiry.assignee + (inquiry.takenAt ? ', с ' + stateTime(inquiry.takenAt) : '') + ' — клиент ждёт ответа';
     return '🆕 Ждёт ответа';
   }
   if (last) return '💬 Ответ: ' + (last.by || 'менеджер') + ', ' + stateTime(last.createdAt) + (inquiry.assignee && inquiry.assignee !== last.by ? owner : '');
-  if (inquiry.assignee) return '⏳ Ведёт: ' + inquiry.assignee + (inquiry.takenAt ? ', с ' + stateTime(inquiry.takenAt) : '');
+  if (inquiry.assignee) return '🙋 Ведёт: ' + inquiry.assignee + (inquiry.takenAt ? ', с ' + stateTime(inquiry.takenAt) : '');
   return '';
 }
 
@@ -409,7 +409,7 @@ function inquiryStatusMarkup(inquiry) {
   }
   const row = [];
   // «В работу» нужна, чтобы коллеги видели, кто ведёт заявку; у одиночки она только глушит напоминание — кнопки нет.
-  if (inquiry.status !== 'in_progress' && inquiryChats().length >= 2) row.push({ text: '⏳ В работу', callback_data: 'inq:in_progress:' + inquiry.id });
+  if (inquiry.status !== 'in_progress' && inquiryChats().length >= 2) row.push({ text: '🙋 В работу', callback_data: 'inq:in_progress:' + inquiry.id });
   row.push({ text: '✔️ Закрыть', callback_data: 'inq:closed:' + inquiry.id });
   rows.push(row);
   const planned = inquiry.followUpDate && !inquiry.followUpNotifiedAt ? ' (' + inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + ')' : '';
@@ -640,7 +640,7 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   const compact = Boolean(options.compact && inquiry);
   let text;
   if (compact) text = '💬 ' + ([user.firstName, user.lastName].filter(Boolean).join(' ') || 'Клиент') + ': ' + cleanDetails;
-  else if (options.important) text = buildInquiryCard(user, inquiry, { heading: '📩 ' + cleanText(title, 160), body: [cleanDetails], hint: Boolean(options.first) });
+  else if (options.important) text = buildInquiryCard(user, inquiry, { heading: (options.icon || '📩') + ' ' + cleanText(title, 160), body: [cleanDetails], hint: Boolean(options.first) });
   else text = ['👀 ' + cleanText(title, 160), who, ...(detailsWorthShowing(title, cleanDetails) ? ['', cleanDetails] : [])].filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n').trim();
   // Inquiries go to every manager; navigation only to the main admin.
   const chats = options.important ? inquiryChats() : inquiryChats().filter((chat) => chat.main);
@@ -690,7 +690,7 @@ async function notifyAdministrator(inquiry, user, options = {}) {
   return notifyAdministratorAction(user, (options.title || 'Новая заявка') + ': ' + inquiryTypeLabel(inquiry), repeated
     ? cleanText(options.text || inquiry.text, 4000)
     : [inquiryPropertyLine(inquiry), inquiryBody(inquiry, options.text || inquiry.text), matchingAttention].filter(Boolean).join('\n'),
-  inquiry.id, inquiry.sourceMessageId, { important: true, replyTo: options.replyTo, compact: repeated, first: !repeated });
+  inquiry.id, inquiry.sourceMessageId, { important: true, replyTo: options.replyTo, compact: repeated, first: !repeated && !inquiry.searchLead, icon: inquiry.searchLead ? '🔎' : '' });
 }
 
 function selectionMatchingAttention(inquiry) {

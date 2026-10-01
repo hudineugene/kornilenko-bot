@@ -465,7 +465,7 @@ test.describe('my requests', () => {
     assert.match(step.last.text, /^Просмотр отменён/);
     assert.equal(inquiry.status, 'closed');
     assert.ok(inquiry.viewing.cancelledAt);
-    assert.ok(adminMessages().some((message) => message.text.startsWith('📩 Клиент отменил просмотр') && message.text.includes('Вилла в Марбелье')));
+    assert.ok(adminMessages().some((message) => message.text.startsWith('🚫 Клиент отменил просмотр') && message.text.includes('Вилла в Марбелье')));
 
     step = await chat.press('myreq:yes:' + inquiry.id);
     assert.equal(step.popups.length, 1, 'a second cancel is stale');
@@ -575,7 +575,7 @@ test.describe('reminder, feedback and the day\'s list', () => {
     const second = await confirmedViewing(unhappy);
     telegram.calls = [];
     await unhappy.press('vfb:disliked:' + second.id);
-    assert.ok(adminMessages().some((message) => message.text.startsWith('📩 Отзыв после просмотра: не подошло')));
+    assert.ok(adminMessages().some((message) => message.text.startsWith('💬 Отзыв после просмотра: не подошло')));
     const photo = telegram.calls.find((call) => call.method === 'sendPhoto' && String(call.body.chat_id) === String(unhappy.id));
     assert.match(photo.body.caption, /Вилла в Эстепоне/);
   });

@@ -5,10 +5,12 @@ import { localDayKey } from './util.mjs';
 import { PLACES } from './places.mjs';
 import { data } from './store.mjs';
 import { sendMessage } from './telegram.mjs';
-import { adminChatFor, awaitingReply, inquiryTypeLabel } from './inquiries.mjs';
+import { adminCallbackAllowed, adminChatFor, awaitingReply, inquiryTypeLabel } from './inquiries.mjs';
+import { acknowledgeCallback } from './sections.mjs';
+import { userById } from './users.mjs';
 import { waitingConversationCount } from './admin-notifications.mjs';
 import { activityDigest, hoursAgoText, sendInquiryToAdministrator, weekFigures } from './notices.mjs';
-import { viewingsOverview } from './viewings.mjs';
+import { viewingsReply } from './viewings.mjs';
 import { BOT_COMMAND_DESCRIPTIONS } from './texts.mjs';
 
 // Shown in the command menu of the admin and manager chats only.
@@ -70,7 +72,8 @@ function inboxFor(chat) {
   return oneRowPerClient(data.inquiries.filter((inquiry) => awaitingReply(inquiry) && (chat.main || !inquiry.assignee || inquiry.assignee === chat.name)));
 }
 
-// Each inquiry comes again with its buttons, so the admin can reply to it.
+// /inbox — один список: клиент, тип, сколько ждёт. Карточка заявки приходит по кнопке, а не десять карточек заново
+// при каждом вызове.
 async function sendInbox(chat, token, now = new Date()) {
   const waiting = inboxFor(chat);
   if (!waiting.length) {
@@ -80,12 +83,40 @@ async function sendInbox(chat, token, now = new Date()) {
     return 0;
   }
   const shown = waiting.slice(0, INBOX_LIMIT);
-  await sendMessage(chat.chatId, '📥 Ждут ответа: ' + waiting.length + (waiting.length > shown.length ? '. Ниже ' + shown.length + ' самых давних, остальные — в панели: «' + PLACES.dialogs + '».' : ''), token, { track: false });
-  for (const inquiry of shown) {
+  const rows = shown.map((inquiry) => {
+    const user = userById(inquiry.userId) || {};
+    const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени';
     const since = Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || now.getTime();
-    await sendInquiryToAdministrator(inquiry, '📥 Ждёт ответа ' + hoursAgoText(now.getTime() - since) + ': ' + inquiryTypeLabel(inquiry), [], { chats: [chat] });
-  }
+    return { inquiry, line: name + ' — ' + inquiryTypeLabel(inquiry) + ', ' + hoursAgoText(now.getTime() - since), name };
+  });
+  await sendMessage(chat.chatId, [
+    '📥 Ждут ответа: ' + waiting.length,
+    ...rows.map((row, index) => (index + 1) + '. ' + row.line),
+    ...(waiting.length > shown.length ? ['', 'Показаны ' + shown.length + ' самых давних, остальные — в панели: «' + PLACES.dialogs + '».'] : []),
+    '',
+    'Нажмите на клиента — придёт его карточка.',
+  ].join('\n'), token, {
+    track: false,
+    reply_markup: { inline_keyboard: rows.map((row, index) => [{ text: (index + 1) + '. ' + row.name, callback_data: 'inq:show:' + row.inquiry.id }]) },
+  });
   return shown.length;
+}
+
+// Кнопка из списка /inbox: карточка этой заявки в чат нажавшего.
+async function handleInboxShowCallback(query, token) {
+  if (!adminCallbackAllowed(query)) {
+    await acknowledgeCallback(query, token, 'Эта кнопка устарела.');
+    return;
+  }
+  const chat = adminChatFor(query.message && query.message.chat ? query.message.chat.id : '');
+  const inquiry = data.inquiries.find((item) => item.id === String(query.data || '').split(':').slice(2).join(':'));
+  if (!chat || !inquiry) {
+    await acknowledgeCallback(query, token, 'Заявка не найдена — возможно, она удалена.');
+    return;
+  }
+  await acknowledgeCallback(query, token);
+  const since = Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || Date.now();
+  await sendInquiryToAdministrator(inquiry, '📥 Ждёт ответа ' + hoursAgoText(Date.now() - since) + ': ' + inquiryTypeLabel(inquiry), [], { chats: [chat] });
 }
 
 function statsText(now = new Date()) {
@@ -119,7 +150,8 @@ async function handleAdminChatMessage(message, token) {
     return true;
   }
   if (command === '/viewings') {
-    await sendMessage(chat.chatId, viewingsOverview(), token, { track: false });
+    const reply = viewingsReply();
+    await sendMessage(chat.chatId, reply.text, token, { track: false, ...(reply.markup ? { reply_markup: reply.markup } : {}) });
     return true;
   }
   if (command === '/stats') {
@@ -145,6 +177,7 @@ export {
   ADMIN_CHAT_HINT,
   ADMIN_COMMAND_DESCRIPTIONS,
   handleAdminChatMessage,
+  handleInboxShowCallback,
   inboxFor,
   sendInbox,
   statsText,

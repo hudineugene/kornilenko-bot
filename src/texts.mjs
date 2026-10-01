@@ -1344,7 +1344,21 @@ function applyInterfaceText(value) {
   return interfaceTextOverrides(next);
 }
 
+// Слова, которые клиент выбрал кнопкой при записи на просмотр («Por la tarde», «This weekend»), — по-русски, для менеджера.
+function russianViewingText(text) {
+  const value = String(text || '');
+  for (const code of ['en', 'es']) {
+    const copy = VIEWING_FORM_TEXT[code];
+    for (const key of ['timeOptions', 'dateOptions']) {
+      const index = copy && Array.isArray(copy[key]) ? copy[key].indexOf(value) : -1;
+      if (index >= 0 && VIEWING_FORM_TEXT.ru[key][index]) return VIEWING_FORM_TEXT.ru[key][index];
+    }
+  }
+  return value;
+}
+
 export {
+  russianViewingText,
   BOT_COMMAND_DESCRIPTIONS,
   CALCULATOR_TEXT,
   CATALOG_FILTER_TEXT,

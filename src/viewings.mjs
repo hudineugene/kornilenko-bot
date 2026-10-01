@@ -4,7 +4,7 @@
 import crypto from 'node:crypto';
 import { cleanText, dateFromDayKey, delay, displayPhone, localDayKey, managerNameFor } from './util.mjs';
 import { CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, PIPELINE_STAGES, normalizeViewing } from './data-format.mjs';
-import { INTERACTION_TEXT, MY_REQUESTS_TEXT, PROPERTY_ACTION_TEXT, VIEWING_FORM_TEXT, VIEWING_NOTICE_TEXT } from './texts.mjs';
+import { INTERACTION_TEXT, MY_REQUESTS_TEXT, PROPERTY_ACTION_TEXT, VIEWING_FORM_TEXT, VIEWING_NOTICE_TEXT, russianViewingText } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { markUnavailable, normalizeUser, userByChatId, userById } from './users.mjs';
@@ -146,15 +146,17 @@ function viewingWhen(inquiry, language) {
   // "Another date" is one free-text answer ("25 September after 4 pm"): the
   // time is part of it, and the form stored "As specified" as the time.
   const freeText = ['ru', 'en', 'es'].some((code) => VIEWING_FORM_TEXT[code] && VIEWING_FORM_TEXT[code].asSpecified === viewing.timeText);
+  // Менеджеру слова клиента («Por la tarde») — по-русски; самому клиенту — как он их выбрал.
+  const words = language === 'ru' ? russianViewingText : (text) => text;
   if (freeText) {
     return {
-      date: confirmedDate || viewing.dateText,
-      time: (confirmed && viewing.confirmedTime) || (confirmedDate ? viewing.dateText : ''),
+      date: confirmedDate || words(viewing.dateText),
+      time: (confirmed && viewing.confirmedTime) || (confirmedDate ? words(viewing.dateText) : ''),
     };
   }
   return {
-    date: confirmedDate || viewing.dateText || viewingDateLabel(viewing.date, language),
-    time: (confirmed && viewing.confirmedTime) || viewing.timeText,
+    date: confirmedDate || words(viewing.dateText) || viewingDateLabel(viewing.date, language),
+    time: (confirmed && viewing.confirmedTime) || words(viewing.timeText),
   };
 }
 
@@ -361,6 +363,12 @@ async function handleViewingConfirmCallback(query, token) {
   await acknowledgeCallback(query, token, 'Просмотр подтверждён — клиент получил сообщение');
   await refreshInquiryCards(inquiry, token);
   try {
+    // Под обзором /viewings кнопки свои: обновляем сам обзор, а не заменяем его кнопки на кнопки карточки.
+    if (String((query.message && query.message.text) || '').startsWith('📅 Сегодня')) {
+      const reply = viewingsReply();
+      await telegramRequest(token, 'editMessageText', { chat_id: query.message.chat.id, message_id: query.message.message_id, text: reply.text, reply_markup: reply.markup || { inline_keyboard: [] } });
+      return;
+    }
     await telegramRequest(token, 'editMessageReplyMarkup', {
       chat_id: query.message.chat.id,
       message_id: query.message.message_id,
@@ -392,7 +400,7 @@ async function cancelViewing(inquiry, user) {
   await notifyAdministratorAction(user, 'Клиент отменил просмотр', [
     property ? '🔖 ' + (localized(property.title, 'ru') || property.reference || property.id) : '',
     [when.date, when.time].filter(Boolean).join(', '),
-  ].filter(Boolean).join('\n'), inquiry.id, null, { important: true });
+  ].filter(Boolean).join('\n'), inquiry.id, null, { important: true, icon: '🚫' });
 }
 
 // --- Reminders, feedback and the day's list ------------------------------------
@@ -457,6 +465,7 @@ function agendaLine(inquiry, when) {
     when,
     property ? localized(property.title, 'ru') || property.reference || '' : '',
     name + (user.username ? ' (@' + user.username + ')' : '') + (user.phone ? ', ' + user.phone : ''),
+    inquiry.viewing && inquiry.viewing.online ? '📹 онлайн' : '',
   ].filter(Boolean).join(' — ');
 }
 
@@ -472,8 +481,8 @@ function viewingsOverview(now = new Date()) {
     const { confirmed, waiting } = dayViewings(key);
     unconfirmed += waiting.length;
     const lines = [
-      ...confirmed.map((inquiry) => agendaLine(inquiry, inquiry.viewing.confirmedTime || inquiry.viewing.timeText)),
-      ...waiting.map((inquiry) => agendaLine(inquiry, '⏳ ' + (inquiry.viewing.timeText || ''))),
+      ...confirmed.map((inquiry) => agendaLine(inquiry, inquiry.viewing.confirmedTime || russianViewingText(inquiry.viewing.timeText))),
+      ...waiting.map((inquiry) => agendaLine(inquiry, '⏳ ' + (russianViewingText(inquiry.viewing.timeText) || ''))),
     ];
     return [title + ', ' + viewingDateLabel(key, 'ru'), ...(lines.length ? lines : ['• нет'])].join('\n');
   };
@@ -483,12 +492,36 @@ function viewingsOverview(now = new Date()) {
     .sort((a, b) => String(a.viewing.date || '9999').localeCompare(String(b.viewing.date || '9999')));
   unconfirmed += later.length;
   if (later.length) {
-    sections.push(['⏳ Ждут подтверждения на другие дни:', ...later.slice(0, 10).map((inquiry) => agendaLine(inquiry, [viewingDateLabel(inquiry.viewing.date, 'ru') || inquiry.viewing.dateText, inquiry.viewing.timeText].filter(Boolean).join(', ')))].join('\n'));
+    sections.push(['⏳ Ждут подтверждения на другие дни:', ...later.slice(0, 10).map((inquiry) => agendaLine(inquiry, [viewingDateLabel(inquiry.viewing.date, 'ru') || russianViewingText(inquiry.viewing.dateText), russianViewingText(inquiry.viewing.timeText)].filter(Boolean).join(', ')))].join('\n'));
   }
   const laterConfirmed = openViewings().filter((inquiry) => inquiry.viewing.confirmedAt && inquiry.viewing.confirmedDate > tomorrow).length;
   if (laterConfirmed) sections.push('✅ Подтверждено на следующие дни: ' + laterConfirmed);
   if (unconfirmed) sections.push('⏳ — ещё не подтверждён: кнопка «✅ Подтвердить просмотр» под уведомлением о записи.');
   return sections.join('\n\n');
+}
+
+// Запросы на просмотр, которые ещё ждут подтверждения менеджера (сегодняшние и будущие), — по дате.
+function viewingsToConfirm(now = new Date()) {
+  const today = localDayKey(now);
+  return openViewings()
+    .filter((inquiry) => !inquiry.viewing.confirmedAt && (!inquiry.viewing.date || inquiry.viewing.date >= today))
+    .sort((a, b) => String(a.viewing.date || '9999').localeCompare(String(b.viewing.date || '9999')));
+}
+
+const VIEWING_BUTTONS_SHOWN = 6;
+
+// /viewings: обзор и под ним по кнопке на каждый ещё не подтверждённый просмотр — «Подтвердить: Пт 02.10, утром».
+function viewingsReply(now = new Date()) {
+  const waiting = viewingsToConfirm(now);
+  let text = viewingsOverview(now);
+  if (waiting.length) text = text.replace(/\n\n⏳ — ещё не подтверждён: [^\n]*$/, '') + '\n\n⏳ — ещё не подтверждён: кнопки ниже подтверждают дату и время, выбранные клиентом.';
+  const rows = waiting.slice(0, VIEWING_BUTTONS_SHOWN).map((inquiry) => {
+    const when = viewingWhen(inquiry, 'ru');
+    const user = userById(inquiry.userId) || {};
+    const label = '✅ ' + [[when.date, when.time].filter(Boolean).join(', ') || 'Подтвердить', user.firstName].filter(Boolean).join(' · ') + (inquiry.viewing.online ? ' 📹' : '');
+    return [{ text: label.length > 60 ? label.slice(0, 59) + '…' : label, callback_data: 'inq:confirm:' + inquiry.id }];
+  });
+  return { text, markup: rows.length ? { inline_keyboard: rows } : null };
 }
 
 // Today's viewings for the admin, once a day in the morning.
@@ -513,8 +546,8 @@ function viewingAgenda(now = new Date()) {
   if (!confirmed.length && !waiting.length) return '';
   return [
     '📅 Просмотры сегодня, ' + viewingDateLabel(today, 'ru'),
-    ...confirmed.map((inquiry) => agendaLine(inquiry, inquiry.viewing.confirmedTime || inquiry.viewing.timeText)),
-    ...(waiting.length ? ['', '⏳ Ждут подтверждения:', ...waiting.map((inquiry) => agendaLine(inquiry, inquiry.viewing.timeText))] : []),
+    ...confirmed.map((inquiry) => agendaLine(inquiry, inquiry.viewing.confirmedTime || russianViewingText(inquiry.viewing.timeText))),
+    ...(waiting.length ? ['', '⏳ Ждут подтверждения:', ...waiting.map((inquiry) => agendaLine(inquiry, russianViewingText(inquiry.viewing.timeText)))] : []),
   ].join('\n');
 }
 
@@ -626,7 +659,7 @@ async function handleViewingFeedbackCallback(query, token) {
     return;
   }
   saveDataNow();
-  void notifyAdministratorAction(user, 'Отзыв после просмотра: не подошло', title ? '🔖 ' + title : '', inquiry.id, null, { important: true });
+  void notifyAdministratorAction(user, 'Отзыв после просмотра: не подошло', title ? '🔖 ' + title : '', inquiry.id, null, { important: true, icon: '💬' });
   if (record) await sendSimilarProperty(chatId, user, record, token, { intro: copy.dislikedReply, noSimilarText: copy.dislikedNoSimilar });
   else await sendMessage(chatId, copy.dislikedNoSimilar, token, { reply_markup: menuKeyboard(language) });
 }
@@ -651,4 +684,5 @@ export {
   viewingReminderDue,
   viewingWhen,
   viewingsOverview,
+  viewingsReply,
 };

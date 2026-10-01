@@ -39,7 +39,7 @@ import { askGoal, handleGoalCallback } from './goal.mjs';
 import { handleDigestCallback } from './digest.mjs';
 import { handlePlanCallback } from './plan.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
-import { ADMIN_CHAT_HINT, handleAdminChatMessage } from './admin-commands.mjs';
+import { ADMIN_CHAT_HINT, handleAdminChatMessage, handleInboxShowCallback } from './admin-commands.mjs';
 import { handleChatJoinRequest, handleMyChatMember, rememberGroupMessage } from './groups.mjs';
 
 function findRule(text, language) {
@@ -157,6 +157,10 @@ async function handleUpdate(update, token) {
   }
   if (update.callback_query && String(update.callback_query.data || '').startsWith('inq:confirm:')) {
     await handleViewingConfirmCallback(update.callback_query, token);
+    return;
+  }
+  if (update.callback_query && String(update.callback_query.data || '').startsWith('inq:show:')) {
+    await handleInboxShowCallback(update.callback_query, token);
     return;
   }
   if (update.callback_query && String(update.callback_query.data || '').startsWith('inq:')) {
