@@ -971,7 +971,9 @@ function similarPropertyHtml(user, record, language, mode) {
     // Не больше трёх причин: остальное — шум на карточке.
     .slice(0, 3)
     .join(' · ');
+  // «Цена указана не у всех»: если у самой карточки цены нет, она об этом и так говорит строкой «Цена по запросу» — вторая строка лишняя.
   const warnings = (Array.isArray(detail.warnings) ? detail.warnings : [])
+    .filter((key) => !(key === 'priceMissing' && priceOnRequest(record)))
     .map((key) => cleanText(copy[SIMILAR_WARNING_KEYS[key]], 80))
     .filter(Boolean)
     .join(' · ');
@@ -997,7 +999,9 @@ function propertyCardCaption(user, record, language, catalog) {
   const maximum = recommendation ? Math.max(300, 950 - heading.length - position.length - recommendationLength) : 900;
   // Строка «что понял бот» в каталоге стоит вплотную к карточке, без пустой строки: так карточка с условиями не длиннее 12 строк.
   const separator = catalog && catalog.mode === 'all' && plainHeading.startsWith('🔎 ') && !recommendation ? '\n' : '\n\n';
-  return [context, recommendation, objectCaptionHtml(record, language, { maximum })].filter(Boolean).join(separator);
+  // Заголовок («Похожие объекты») и причины идут подряд, без пустой строки между ними: так над карточкой остаётся две строки, а не три.
+  const intro = [context, recommendation].filter(Boolean).join('\n');
+  return [intro, objectCaptionHtml(record, language, { maximum })].filter(Boolean).join(separator);
 }
 
 function catalogRecords(user, mode = 'all') {

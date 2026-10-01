@@ -80,9 +80,11 @@ function report(title, from, chatId) {
     const quote = (Array.isArray(b.entities) ? b.entities : []).find((item) => item.type === 'expandable_blockquote');
     const rows = quote ? phoneLines(shown.slice(0, quote.offset)) + 3 : phoneLines(shown);
     out.push('  ' + kind + ' ' + shown.replace(/\n/g, '\n     ').slice(0, 1500) + buttons(b.reply_markup) + '\n   ↳ строк на телефоне: ' + rows);
-    // Карточка объекта под фото: в каталоге до 10 строк телефона, в избранном, сравнении и «Похожих» — до 12.
+    // Карточка объекта под фото: в каталоге до 10 строк телефона, в избранном и сравнении — до 12, в «Похожих» — до 14.
     // Над карточкой каталога с условиями — строка «что понял бот» (до двух строк), поэтому там до 13.
-    const limit = String(call.body.caption || '').startsWith('<i>🔎 ') ? 13 : 12;
+    // В «Похожих» над карточкой ещё заголовок и причины («Почему подходит: …») — две строки: до 14.
+    const caption = String(call.body.caption || '');
+    const limit = caption.startsWith('<i>🔎 ') ? 13 : /^<i>(Похожие|Similar|Inmuebles similares)/i.test(caption) ? 14 : 12;
     if (call.method === 'sendPhoto' && call.body.caption && rows > limit) notes.push(title + ' — карточка в ' + rows + ' строк (правило: до ' + limit + ')');
     if (rows > 30) notes.push(title + ' — ответ в ' + rows + ' строк (больше экрана)');
     // Жирный заголовок — у каждого экрана с кнопками (правило этапов 45 и 49): первая строка — «значок Название».

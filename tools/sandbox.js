@@ -16,7 +16,9 @@ if (fs.existsSync(path.join(project, 'bot-media'))) {
   fs.cpSync(path.join(project, 'bot-media'), path.join(box, 'bot-media'), { recursive: true });
 }
 
-const data = JSON.parse(fs.readFileSync(path.join(project, 'bot-data.json'), 'utf8'));
+// Нет живого файла (чистая копия проекта) — песочница собирается из пустых данных; фотографии тогда не из чего взять.
+const source = path.join(project, 'bot-data.json');
+const data = fs.existsSync(source) ? JSON.parse(fs.readFileSync(source, 'utf8')) : { config: {}, objects: [] };
 data.config.active = true;
 data.config.botToken = '12345:FAKEFAKEFAKEFAKEFAKEFAKE';
 const salt = crypto.randomBytes(16).toString('hex');
@@ -95,6 +97,8 @@ data.objects = [
   demo(2, { dealType: 'rent', pricePeriod: 'month', priceValue: 1400, bedrooms: 1, bathrooms: 1, area: 55 }),
   demo(3, { status: 'reserved' }),
   demo(4, { propertyType: 'land', bedrooms: null, bathrooms: 0, area: 0, plotArea: 800, priceValue: 180000 }),
+  // Цена по запросу, три фотографии: так выглядит карточка комплекса, где цену называют после разговора.
+  demo(5, { priceValue: 0, price: three('', '', '') }),
 ];
 
 // --- демо-жизнь: клиенты, заявки и цифры за две недели ----------------------
