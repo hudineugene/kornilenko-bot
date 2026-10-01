@@ -523,7 +523,7 @@ function weeklyReportText(report) {
     ...(report.topProperties.length ? ['🔖 Больше всего заявок: ' + report.topProperties.slice(0, 2).map((item) => item.name + ' — ' + item.count).join(', ')] : []),
     ...(report.sources.length ? ['📣 Откуда пришли: ' + report.sources.slice(0, 3).map(([name, count]) => shortSource(name) + ' — ' + count).join(', ')] : []),
     ...funnelTextLines(report.funnel),
-    ...(report.sharedLists && (report.sharedLists.shared || report.sharedLists.opened) ? ['📤 Подборки: поделились ' + report.sharedLists.shared + ', открыли по ссылке ' + report.sharedLists.opened + comparison(report.sharedLists.opened, report.sharedLists.previousOpened)] : []),
+    ...(report.sharedLists && (report.sharedLists.shared || report.sharedLists.opened) ? ['📤 Списки: поделились ' + report.sharedLists.shared + ', открыли по ссылке ' + report.sharedLists.opened + comparison(report.sharedLists.opened, report.sharedLists.previousOpened)] : []),
     ...(report.broadcasts.count ? ['✉️ Рассылок: ' + report.broadcasts.count + ', получили ' + report.broadcasts.sent + ', откликнулись ' + report.broadcasts.responded] : []),
   ].join('\n');
 }

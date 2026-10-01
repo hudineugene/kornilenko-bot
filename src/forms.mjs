@@ -185,7 +185,7 @@ async function showPendingActionStep(user, token) {
     }
     const prompt = step === 'time' ? copy.askTime : step === 'custom_time' ? copy.askCustomTime : step === 'custom' ? copy.askCustom : copy.askDate;
     const title = step === 'date' ? localizedExact(property.title, language) || property.reference || '' : '';
-    await sendMessage(user.chatId, [title ? '🔖 ' + title : '', prompt].filter(Boolean).join('\n\n'), token, { reply_markup: viewingKeyboard(language, step, pending) });
+    await askViewingStep(user, pending, [title ? '🔖 ' + title : '', prompt].filter(Boolean).join('\n\n'), step, token, language);
     return true;
   }
   if (pending.type === 'manager_question') {
@@ -568,7 +568,7 @@ function viewingKeyboard(language, step, pending = null) {
   // страны он часто нужнее любой даты.
   if (step === 'date') return optionReplyKeyboard(copy.dateOptions.concat(copy.online), copy.cancel, copy.askDate);
   if (step === 'time') return optionReplyKeyboard(copy.timeOptions, copy.cancel, copy.askTime);
-  if (step === 'confirm') return optionReplyKeyboard([copy.confirm, copy.editDate, copy.editTime], copy.cancel, copy.review, 1);
+  if (step === 'confirm') return optionReplyKeyboard([copy.confirm, copy.editDate, copy.editTime], copy.cancel, copy.review, 3);
   return optionReplyKeyboard([], copy.cancel, step === 'custom_time' ? copy.askCustomTime : copy.askCustom);
 }
 
@@ -579,6 +579,20 @@ function viewingInlineRows(language, step, pending) {
   const rows = viewingKeyboard(language, step, pending).keyboard;
   let index = 0;
   return rows.map((row) => row.map((button) => ({ text: button.text, callback_data: 'vf:' + step + ':' + (index++) })));
+}
+
+// Вопрос записи на просмотр — всегда сообщением с кнопками под ним, нажали ли вы кнопку или набрали ответ текстом: раньше
+// набранный ответ менял кнопки под сообщением на клавиатуру чата, и запись шла двумя разными способами. Прежний вопрос теряет
+// кнопки, чтобы нажатия на нём не расходились с текущим шагом.
+async function askViewingStep(user, pending, body, step, token, language) {
+  const previous = pending.inlineMessageId;
+  const sent = await sendMessage(user.chatId, body, token, { reply_markup: { inline_keyboard: viewingInlineRows(language, step, pending) } });
+  if (sent && sent.message_id) {
+    pending.inlineMessageId = Number(sent.message_id);
+    scheduleSave();
+    if (previous) await telegramRequest(token, 'editMessageReplyMarkup', { chat_id: user.chatId, message_id: previous, reply_markup: { inline_keyboard: [] } }).catch(() => {});
+  }
+  return sent;
 }
 
 function viewingReviewText(copy, property, pending, language) {
@@ -593,7 +607,7 @@ async function sendViewingReview(user, pending, property, token, language, say =
   scheduleSave();
   const text = viewingReviewText(copy, property, pending, language);
   if (say) return say(text, 'confirm');
-  await sendMessage(user.chatId, text, token, { reply_markup: viewingKeyboard(language, 'confirm', pending) });
+  await askViewingStep(user, pending, text, 'confirm', token, language);
 }
 
 // Slot mode only when there is something to choose from.
@@ -660,7 +674,8 @@ function matchingOptions(list, matches) {
 // В написанном тексте есть время («17:00», «после 16», «вечером», «after 4 pm»)? Тогда отдельный вопрос о времени не нужен.
 function mentionsTime(text) {
   // «3.11» — это дата, поэтому время с точкой («17.30») отдельно не ищем: только «17:30», «17 ч», «после 16», слова.
-  return /\d{1,2}:\d{2}|\b\d{1,2}\s?(?:h|ч|am|pm)\b|\b(?:после|до|около|after|before|at|around|despu[eé]s|antes|a las)\s+\d|\b(?:в|at|a las)\s+\d{1,2}[.:]\d{2}|утр|вечер|днём|днем|обед|утром|morning|afternoon|evening|ma[nñ]ana por|tarde|noche/iu.test(String(text));
+  // Границу слова ставим через (?<![\p{L}\p{N}]): \b в JavaScript знает только латиницу и «после 16» не находил.
+  return /\d{1,2}:\d{2}|(?<![\p{L}\p{N}])\d{1,2}\s?(?:h|ч|am|pm)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:после|до|около|after|before|at|around|despu[eé]s|antes|a las)\s+\d|(?<![\p{L}\p{N}])(?:в|at|a las)\s+\d{1,2}[.:]\d{2}|утр|вечер|днём|днем|обед|утром|morning|afternoon|evening|ma[nñ]ana por|tarde|noche/iu.test(String(text));
 }
 
 function optionFromText(text, options) {
@@ -714,9 +729,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
   const property = data.objects.find((item) => item.id === pending.propertyId && item.status === 'active');
   const text = typeof message.text === 'string' ? message.text.trim() : '';
-  const keyboard = (step) => viewingKeyboard(language, step, pending);
-  // Ответ кнопкой меняет сообщение с вопросом; набранный текст, как и прежде,
-  // приходит новым сообщением с клавиатурой ответов.
+  // Ответ кнопкой меняет сообщение с вопросом; набранный текст приходит новым сообщением, тоже с кнопками под ним.
   const inline = context && context.inline ? context.inline : null;
   const say = async (body, step) => {
     if (inline) {
@@ -736,7 +749,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
         return;
       }
     }
-    await sendMessage(user.chatId, body, token, { reply_markup: keyboard(step) });
+    await askViewingStep(user, pending, body, step, token, language);
   };
   // Конец записи: сообщение остаётся итогом, без кнопок; главное меню чата на месте.
   const finish = async (body) => {
@@ -748,6 +761,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
         // отправим обычным сообщением ниже
       }
     }
+    if (pending.inlineMessageId) await telegramRequest(token, 'editMessageReplyMarkup', { chat_id: user.chatId, message_id: pending.inlineMessageId, reply_markup: { inline_keyboard: [] } }).catch(() => {});
     await sendMessage(user.chatId, body, token, { reply_markup: menuKeyboard(language) });
   };
   if (!property) {
@@ -888,6 +902,14 @@ async function handleViewingFormMessage(message, user, token, context = null) {
     if (pending.step === 'custom') {
       pending.data.date = text;
       pending.data.day = parseViewingDate(text);
+      // «25 октября» без времени: время спрашиваем, как и при дате на первом шаге, а не пишем менеджеру «Как указано».
+      if (!mentionsTime(text)) {
+        pending.data.time = '';
+        pending.step = 'time';
+        scheduleSave();
+        await say(copy.askTime, 'time');
+        return true;
+      }
       pending.data.time = copy.asSpecified;
     } else {
       pending.data.time = text;

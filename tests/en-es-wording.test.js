@@ -41,7 +41,7 @@ test('мастер подбора: «Buying or renting?», «5 properties match�
   assert.equal(en.wizardShow.replace('{count}', 4), '👀 Show 4 properties');
   assert.equal(en.wizardShowOne, '👀 Show 1 property');
   assert.equal(es.wizardShowOne, '👀 Ver 1 inmueble');
-  assert.equal(en.confirm, '✅ Send to agent');
+  assert.equal(en.confirm, '✅ Send request');
 });
 
 test('приветствие и помощь по умолчанию — новые; расстояние до моря — «Sea»', () => {
