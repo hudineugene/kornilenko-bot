@@ -893,7 +893,7 @@ function catalogHeading(mode, language, user = null, count = 0) {
   if (mode === 'recent') return (MY_AREA_TEXT[language] || MY_AREA_TEXT.ru).recentHeading;
   if (mode === 'digest') return digestHeading(language);
   if (mode === 'comparison') return (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).title;
-  if (mode === 'shared') return (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).sharedHeading;
+  if (mode === 'shared') return (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).sharedHeading.replace('{count}', () => String(count || ''));
   return (MENU_LABELS[language] || MENU_LABELS.ru).objects;
 }
 
@@ -2136,6 +2136,29 @@ function sharedListByCode(code) {
 }
 
 // Просроченные — вон; у одного хозяина не больше пяти; всего не больше трёхсот (самые старые уходят первыми).
+// Получатель подборки отметил объект 🤍 — отправитель узнаёт (один раз на объект и получателя).
+async function notifySharedListOwner(user, record, token) {
+  const list = sharedListByCode(user && user.sharedListCode);
+  if (!list || String(list.owner) === String(user.id) || !list.ids.includes(record.id)) return false;
+  const owner = data.users[String(list.owner)];
+  if (!owner || !owner.chatId || owner.blocked) return false;
+  list.marked = list.marked && typeof list.marked === 'object' ? list.marked : {};
+  const seen = Array.isArray(list.marked[user.id]) ? list.marked[user.id] : [];
+  if (seen.includes(record.id)) return false;
+  if (Object.keys(list.marked).length >= 20 && !list.marked[user.id]) return false;
+  list.marked[user.id] = [...seen, record.id].slice(-20);
+  scheduleSave();
+  const language = owner.preferredLanguage || 'ru';
+  const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  const title = localizedExact(record.title, language) || record.reference || '';
+  try {
+    await sendMessage(owner.chatId, copy.sharedMarked.replace('{title}', () => title), token, { track: false });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function pruneSharedLists() {
   if (!data.sharedLists) data.sharedLists = {};
   const entries = Object.entries(data.sharedLists).filter(([, list]) => !sharedListExpired(list));
@@ -2293,7 +2316,9 @@ export {
   objectPriceText,
   openPendingStartPayload,
   createSharedList,
+  notifySharedListOwner,
   sharedListCodeFromStartPayload,
+  sharedListByCode,
   priceOnRequest,
   promotionButtons,
   promotionIsActive,

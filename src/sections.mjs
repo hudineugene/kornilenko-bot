@@ -13,7 +13,7 @@ import { knownLeadPhone, startLeadEdit, startLeadForm, startViewingForm } from '
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { replyPromise, withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
-import { CATALOG_MODES, createSharedList, marketComparison, catalogHeading, catalogViewContext, escapeTelegramHtml, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { CATALOG_MODES, createSharedList, notifySharedListOwner, marketComparison, catalogHeading, catalogViewContext, escapeTelegramHtml, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
 import { similarPropertyRanking } from './similar.mjs';
 import { DEAD_END_TEXT, nearestByBudget } from './dead-end.mjs';
@@ -768,6 +768,7 @@ async function handlePropertyCallback(query, token) {
       favorites.add(record.id);
       notice = text.favoriteAdd;
       recordPropertyEvent(record.id, 'favorites');
+      void notifySharedListOwner(user, record, token);
     }
     user.favorites = Array.from(favorites).slice(0, 500);
     scheduleSave();

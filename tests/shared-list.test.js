@@ -83,7 +83,7 @@ test('получатель открывает ссылку: подборка к�
   guest.user.preferredLanguage = 'ru';
   const step = await guest.say('/start list_' + code);
   const card = lastCard(step);
-  assert.match(card.caption || card.text, /📤 Подборка для вас/);
+  assert.match(card.caption || card.text, /📤 Вам прислали подборку · объектов: 3/);
   assert.match(card.caption || card.text, /Первая квартира/);
   const buttons = buttonsOf(card);
   assert.ok(buttons.some((button) => button.text === '1 / 3'), buttons.map((button) => button.text).join(' | '));
@@ -109,11 +109,11 @@ test('подборка на английском и испанском; объе
 
   const en = createChat({ language: 'en' });
   const step = await en.say('/start list_' + code);
-  assert.match(lastCard(step).caption || lastCard(step).text, /A shortlist for you/);
+  assert.match(lastCard(step).caption || lastCard(step).text, /You were sent a shortlist · properties: 1/);
   assert.match(lastCard(step).caption || lastCard(step).text, /Demo|Первая квартира/);
   assert.ok(!buttonsOf(lastCard(step)).some((button) => /^\d+ \/ \d+$/.test(button.text)), 'остался один объект — листать нечего');
   const es = createChat({ language: 'es' });
-  assert.match(lastCard(await es.say('/start list_' + code)).caption || '', /Una selección para ti/);
+  assert.match(lastCard(await es.say('/start list_' + code)).caption || '', /Te han enviado una selección · inmuebles: 1/);
 });
 
 test('нет такой подборки, она устарела или в ней ничего не осталось — честное «недоступна»', async () => {
@@ -201,4 +201,50 @@ test('недельный отчёт считает, сколько раз под
   const report = weeklyReportData(new Date(), 'current');
   assert.deepEqual({ shared: report.sharedLists.shared, opened: report.sharedLists.opened }, { shared: 2, opened: 2 }, 'открытие мёртвой ссылки не считается');
   assert.match(weeklyReportText(report), /📤 Подборки: поделились 2, открыли по ссылке 2/);
+});
+
+test('отправитель узнаёт, что получатель отметил объект: один раз на объект; в «Моё» у получателя — путь назад к подборке', async () => {
+  const owner = createChat();
+  await favourite(owner, 'one', 'two');
+  const { code } = await share(owner);
+  const guest = createChat();
+  await guest.say('/start list_' + code);
+  const { telegram } = require('./helpers/chat');
+  telegram.calls = [];
+  await guest.press('property:favorite:one');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const told = telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(owner.id));
+  assert.equal(told.length, 1, 'отправитель получил сообщение');
+  assert.match(told[0].body.text, /По вашей подборке отметили: «Первая квартира»/);
+  // снял и поставил снова — повторно не сообщаем
+  await guest.press('property:favorite:one');
+  telegram.calls = [];
+  await guest.press('property:favorite:one');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(owner.id)).length, 0);
+  // свой список хозяина сам себе не пишет
+  await owner.say('/start list_' + code);
+  telegram.calls = [];
+  await owner.press('property:favorite:two');
+  assert.equal(telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(owner.id)).length, 0);
+  // «Моё»: строка «📤 Подборка 2» ведёт обратно
+  const mine = await guest.say(bot.text.menu.ru.more);
+  const row = buttonsOf(lastCard(mine)).find((button) => button.callback_data === 'catalog:shared:0');
+  assert.ok(row && /^📤 Подборка 2$/.test(row.text), row && row.text);
+});
+
+test('новичок по ссылке: короткое приветствие без фото и вопроса о цели, затем подборка с объяснением', async () => {
+  const owner = createChat();
+  await favourite(owner, 'one', 'two');
+  const { code } = await share(owner);
+  const { telegram } = require('./helpers/chat');
+  const fresh = createChat();
+  delete fresh.user.preferredLanguage;
+  fresh.user.languageCode = 'ru';
+  telegram.calls = [];
+  await fresh.say('/start list_' + code);
+  const toGuest = telegram.calls.filter((call) => String(call.body.chat_id) === String(fresh.id) && ['sendMessage', 'sendPhoto'].includes(call.method));
+  assert.ok(toGuest.length <= 2, 'приветствие и подборка — не больше двух сообщений: ' + toGuest.length);
+  assert.ok(!toGuest.some((call) => /Что вам ближе/.test(String(call.body.text))), 'вопроса о цели нет');
+  assert.match(String(toGuest[toGuest.length - 1].body.caption || toGuest[toGuest.length - 1].body.text), /Вам прислали подборку/);
 });

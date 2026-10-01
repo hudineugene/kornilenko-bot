@@ -316,7 +316,7 @@ async function handleUpdate(update, token) {
     const detail = 'Язык по настройкам Telegram: ' + LANGUAGE_NAMES[telegramLanguage]
       + (guessed && user.languageCode ? ' (в Telegram: ' + user.languageCode + ')' : '');
     void notifyAdministratorAction(user, 'Первый запуск', detail);
-    await sendWelcome(message.chat.id, user, token, { languageButton: guessed, goalFollows: command === '/start' });
+    await sendWelcome(message.chat.id, user, token, { languageButton: guessed, goalFollows: command === '/start', compact: command === '/start' && Boolean(sharedListCodeFromStartPayload(commandArgument)) });
     if (command === '/start') {
       // Ссылка на объект открывает объект; вопрос о цели — только когда открывать нечего.
       if (!(await openPendingStartPayload(user, token))) await askGoal(message.chat.id, user, token);

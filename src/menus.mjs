@@ -5,10 +5,10 @@ import { goalMenuRow } from './goal.mjs';
 import { planMenuRow } from './plan.mjs';
 import { fillTemplate } from './util.mjs';
 import { imageExists } from './media.mjs';
-import { BOT_COMMAND_DESCRIPTIONS, CATALOG_SUMMARY_TEXT, COMPARISON_TEXT, PRIVACY_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, EARLIER_CONTACT_LABELS, EARLIER_FAVORITES_LABELS, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
+import { PROPERTY_ACTION_TEXT, BOT_COMMAND_DESCRIPTIONS, CATALOG_SUMMARY_TEXT, COMPARISON_TEXT, PRIVACY_TEXT, LANGUAGE_NAMES, LANGUAGE_PICKER_TEXT, EARLIER_CONTACT_LABELS, EARLIER_FAVORITES_LABELS, LEGACY_MENU_LABELS, MAIN_MENU_TEXT, MENU_HINTS, MENU_LABELS, MY_AREA_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PREVIOUS_MENU_LABELS, SAVED_SEARCH_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
 import { data, runtime } from './store.mjs';
 import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
-import { catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, localizedExact, normalizedSavedSearch, promotionIsActive, searchExampleText, sendUiMessage } from './catalog.mjs';
+import { sharedListByCode, catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, localizedExact, normalizedSavedSearch, promotionIsActive, searchExampleText, sendUiMessage } from './catalog.mjs';
 import { tunnelInstalled } from './remote.mjs';
 import { inquiryChats } from './inquiries.mjs';
 import { ADMIN_COMMAND_DESCRIPTIONS } from './admin-commands.mjs';
@@ -132,6 +132,11 @@ async function sendWelcome(chatId, user, token, options = {}) {
   await clearCatalogMessages(chatId, user, token);
   // Сразу за приветствием бот спросит о цели своим вопросом — второй призыв «выберите раздел» в приветствии лишний.
   const goalFollows = Boolean(options.goalFollows) && !user.goal && !user.goalAskedAt;
+  // Пришёл по ссылке с подборкой: коротко здороваемся, без фото, примера запроса и вопросов — сразу подборка.
+  if (options.compact) {
+    await sendMessage(chatId, fillTemplate(languageMessages(language).greeting, user), token, { reply_markup: options.languageButton ? { ...menuKeyboard(language), keyboard: [...menuKeyboard(language).keyboard, [{ text: (MENU_LABELS[language] || MENU_LABELS.ru).language }]] } : menuKeyboard(language) });
+    return;
+  }
   const hint = MENU_HINTS[language].replace('{example}', () => (searchExampleText(user, language) ? ': ' + (language === 'en' ? '“' : '«') + searchExampleText(user, language) + (language === 'en' ? '”' : '»') : ''));
   const greeting = [
     fillTemplate(languageMessages(language).greeting, user),
@@ -192,6 +197,7 @@ async function sendMoreMenu(chatId, user, token) {
           { text: (SUBSCRIPTION_TEXT[language] || SUBSCRIPTION_TEXT.ru).menuButton, callback_data: 'subs:menu' },
         ],
         planMenuRow(user, language),
+        ...sharedMenuRow(user, language),
         [...goalMenuRow(language), ...(trustButtonRow(language) || [])],
         [
           { text: (PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).menuShort, callback_data: 'privacy:open' },
@@ -202,6 +208,14 @@ async function sendMoreMenu(chatId, user, token) {
       ],
     },
   });
+}
+
+// «📤 Подборка · 3» — вернуться к подборке, которую прислал друг: из «Моё» путь назад к ней всегда есть.
+function sharedMenuRow(user, language) {
+  if (!sharedListByCode(user.sharedListCode)) return [];
+  const count = catalogRecords(user, 'shared').length;
+  if (!count) return [];
+  return [[{ text: (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).sharedMenu + ' ' + count, callback_data: 'catalog:shared:0' }]];
 }
 
 async function sendLanguagePicker(chatId, token, currentLanguage = '') {

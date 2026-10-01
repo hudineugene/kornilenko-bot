@@ -851,6 +851,9 @@ function normalizeSharedLists(value) {
       owner: cleanText(list.owner, 40),
       createdAt: cleanText(list.createdAt, 40) || new Date().toISOString(),
       opens: Number.isFinite(Number(list.opens)) ? Math.max(0, Math.min(1000000, Math.round(Number(list.opens)))) : 0,
+      // Что получатели отметили 🤍: «клиент → объекты», чтобы отправителю не писать дважды об одном и том же.
+      marked: Object.fromEntries(Object.entries(list.marked && typeof list.marked === 'object' && !Array.isArray(list.marked) ? list.marked : {})
+        .slice(0, 20).map(([userId, marked]) => [cleanText(userId, 40), (Array.isArray(marked) ? marked : []).map((id) => cleanText(id, 100)).filter(Boolean).slice(0, 20)])),
     };
   }
   return result;
