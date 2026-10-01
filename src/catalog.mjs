@@ -1643,7 +1643,8 @@ function selectionWizardPanel(user, step) {
 
   if (current === 'deal') {
     const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
-    rows.push([{ text: action.forSale, callback_data: 'sel:deal:sale' }, { text: action.forRent, callback_data: 'sel:deal:rent' }]);
+    // Мастер отвечает словами продавца: «Купить / Снять», а не названиями режимов каталога «Продажа / Аренда».
+    rows.push([{ text: copy.wizardBuy || action.forSale, callback_data: 'sel:deal:sale' }, { text: copy.wizardRent || action.forRent, callback_data: 'sel:deal:rent' }]);
     rows.push([skip('type')]);
   } else if (current === 'type') {
     const labels = PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru;
@@ -1736,6 +1737,12 @@ async function handleSelectionWizardCallback(query, token) {
     step = 'deal';
   } else if (action === 'skip' || action === 'back') {
     step = SELECTION_WIZARD_STEPS.includes(value) ? value : 'deal';
+    // «Назад» — это «выбрать заново»: выбор этого шага и следующих снимается, и условия с числом подходящих показывают то, что реально выбрано.
+    if (action === 'back') {
+      const cleared = { deal: ['deal', 'minPrice', 'maxPrice', 'type', 'city', 'district', 'bedrooms'], type: ['type', 'city', 'district', 'maxPrice', 'minPrice', 'bedrooms'], city: ['city', 'district', 'maxPrice', 'minPrice', 'bedrooms'], budget: ['maxPrice', 'minPrice', 'bedrooms'], bedrooms: ['bedrooms'] }[step] || [];
+      const fresh = normalizedCatalogFilter(null, language);
+      for (const key of cleared) filter[key] = fresh[key];
+    }
   } else if (action === 'show') {
     user.catalogFilter = catalogFilterActive(filter) ? filter : null;
     scheduleSave();
