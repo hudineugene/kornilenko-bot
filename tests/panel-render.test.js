@@ -2614,12 +2614,15 @@ test('«Отчёт»: реклама → сделки — одна таблиц�
   sandbox.state.sources = [
     { source: 'instagram', users: 10, recent: 4, withRequests: 4, inquiries: 6, viewings: 3, deals: 1 },
     { source: '', users: 5, recent: 0, withRequests: 1, inquiries: 1, viewings: 0, deals: 0 },
+    { source: 'g1t47', title: 'Стройка без фильтров · Сегодня в продаже', opens: 7, users: 2, recent: 2, withRequests: 1, inquiries: 1, viewings: 0, deals: 0 },
   ];
   const html = String(sandbox.sourceTableCard());
-  for (const head of ['Источник', 'Клиентов', 'Заявок', 'Записались на просмотр', 'Сделок']) assert.ok(html.includes('>' + head + '<'), 'колонка: ' + head);
-  assert.match(html, /<td[^>]*><b>instagram<\/b><\/td><td class="right">10<\/td><td class="right">6<\/td><td class="right">3<\/td><td class="right"><b>1<\/b><\/td>/, 'строка источника: клиенты, заявки, просмотры, сделки');
+  for (const head of ['Источник', 'Новых клиентов', 'Заявок', 'Записались на просмотр', 'Сделок']) assert.ok(html.includes('>' + head + '<'), 'колонка: ' + head);
+  assert.match(html, /<td[^>]*><b>instagram<\/b><\/td><td class="right">0<\/td><td class="right">10<\/td><td class="right">6<\/td><td class="right">3<\/td><td class="right"><b>1<\/b><\/td>/, 'строка источника: клиенты, заявки, просмотры, сделки');
   assert.match(html, /без метки/, 'клиенты без метки — отдельной строкой');
-  assert.match(html, /Всего[\s\S]*?15[\s\S]*?7[\s\S]*?3[\s\S]*?1/, 'итог по всем источникам');
+  assert.match(html, /<b>Стройка без фильтров · Сегодня в продаже<\/b> <span class="small muted">g1t47<\/span><\/td><td class="right">7<\/td><td class="right">2<\/td>/, 'метка группы — названием группы и раздела, сама метка мелко, и сколько раз открыли бота');
+  assert.match(html, /Открыли бота/);
+  assert.match(html, /Всего<\/td><td class="right">7<\/td><td class="right">17<\/td><td class="right">8<\/td><td class="right">3<\/td><td class="right">1<\/td>/, 'итог по всем источникам: открыли бота, новые клиенты, заявки, просмотры, сделки');
   // Конструктор ссылки — в той же карточке.
   assert.match(html, /id="sourceLabel"/);
   assert.match(html, /id="makeSourceLink"/);

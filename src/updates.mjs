@@ -3,7 +3,7 @@
 import { cleanText, delay, fillTemplate } from './util.mjs';
 import { COMMAND_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, MANAGER_CONTACT_TEXT, MENU_LABELS, PROPERTY_ACTION_TEXT, SEARCH_UNCLEAR_TEXT } from './texts.mjs';
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
-import { recordActivity, recordDaily, recordError, recordPropertyEvent } from './analytics.mjs';
+import { recordActivity, recordDaily, recordError, recordPropertyEvent, recordSourceOpen } from './analytics.mjs';
 import { languageWasGuessed, leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from './users.mjs';
 import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, isLanguageChangeText, languageFromText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
@@ -276,6 +276,7 @@ async function handleUpdate(update, token) {
     ? leadSourceFromPayload(commandArgument) || sourceFromStartPayload(commandArgument)
     : '';
   if (sourceLabel) {
+    recordSourceOpen(sourceLabel);
     // The first link a client came through is kept: it is what brought them.
     if (!user.source) {
       user.source = sourceLabel;

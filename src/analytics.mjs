@@ -25,6 +25,19 @@ function recordDaily(kind, detail = '', amount = 1) {
   }
 }
 
+// Сколько раз открыли бота по ссылке с меткой источника — в том числе те, кто уже был клиентом: «пришёл сам» и «пришёл
+// из группы» для новичка и для знакомого — разные вещи. Считаем по метке (g3, g3t47, instagram…).
+const SOURCE_OPEN_LIMIT = 200;
+function recordSourceOpen(label) {
+  const key = cleanText(label, 40);
+  if (!key) return;
+  if (!data.analytics.sourceOpens || typeof data.analytics.sourceOpens !== 'object') data.analytics.sourceOpens = {};
+  const opens = data.analytics.sourceOpens;
+  if (!Object.hasOwn(opens, key) && Object.keys(opens).length >= SOURCE_OPEN_LIMIT) return;
+  opens[key] = Number(opens[key] || 0) + 1;
+  scheduleSave();
+}
+
 function propertyAnalytics(propertyId) {
   const id = String(propertyId || '');
   if (!id) return null;
@@ -109,6 +122,7 @@ function recordActivity(user, direction, text, kind = 'message', metadata = {}) 
 }
 
 export {
+  recordSourceOpen,
   ACTIVITY_KEPT,
   FUNNEL_STEPS,
   markFunnel,

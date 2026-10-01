@@ -139,9 +139,9 @@ test.describe('lead sources report', () => {
     try {
       const state = await (await call('GET', '/api/state')).json();
       assert.deepEqual(state.sources, [
-        { source: 'instagram', users: 2, recent: 1, withRequests: 2, inquiries: 3, viewings: 1, deals: 1 },
-        { source: 'facebook', users: 1, recent: 1, withRequests: 0, inquiries: 0, viewings: 0, deals: 0 },
-        { source: '', users: 1, recent: 0, withRequests: 1, inquiries: 1, viewings: 0, deals: 0 },
+        { source: 'instagram', users: 2, recent: 1, withRequests: 2, inquiries: 3, viewings: 1, deals: 1, opens: 0, title: '' },
+        { source: 'facebook', users: 1, recent: 1, withRequests: 0, inquiries: 0, viewings: 0, deals: 0, opens: 0, title: '' },
+        { source: '', users: 1, recent: 0, withRequests: 1, inquiries: 1, viewings: 0, deals: 0, opens: 0, title: '' },
       ]);
     } finally {
       delete data.users['503'];

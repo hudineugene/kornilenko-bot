@@ -8,6 +8,7 @@ import { nextOpening } from './hours.mjs';
 import { adminSendPlan } from './notify-plan.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, runtime, saveDataNow, scheduleSave } from './store.mjs';
+import { sourceDisplay } from './source-title.mjs';
 import { recordActivity, recordDaily, recordError } from './analytics.mjs';
 import { markUnavailable, normalizeUser, userByChatId, userById } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
@@ -576,7 +577,7 @@ const REPLY_HINT = '↩️ Ответьте на это сообщение — �
 function clientWho(user) {
   if (!user) return '👤 Клиент удалён';
   const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени';
-  return '👤 ' + name + (user.username ? ' (@' + user.username + ')' : '') + (user.source ? ' · 📣 ' + user.source : '') + (user.goal ? ' · 🎯 ' + goalLabelRu(user.goal) : '');
+  return '👤 ' + name + (user.username ? ' (@' + user.username + ')' : '') + (user.source ? ' · 📣 ' + sourceDisplay(user.source) : '') + (user.goal ? ' · 🎯 ' + goalLabelRu(user.goal) : '');
 }
 
 // Объект — по-русски, как всё остальное для менеджера.

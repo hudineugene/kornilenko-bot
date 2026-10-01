@@ -488,6 +488,16 @@ function topicErrorMessage(group, post, error) {
   return '';
 }
 
+// Метка источника для ссылки из поста: «g3» — группа №3, «g3t47» — раздел 47 в ней (см. source-title.mjs).
+function groupSourceLabel(group, threadId = 0) {
+  if (!group.sourceCode) {
+    const used = groupList().map((item) => Number(item.sourceCode)).filter(Number.isFinite);
+    group.sourceCode = String(Math.max(0, ...used) + 1);
+    scheduleSave();
+  }
+  return 'g' + group.sourceCode + (threadId > GENERAL_TOPIC_ID ? 't' + threadId : '');
+}
+
 // Можно ли публиковать в группу от имени бота: причина отказа словами или пустая строка. Телеграм не пускает бота в
 // канал без права «публикация сообщений»; в группе писать может любой участник, а закрытую для всех группу бот-админ
 // тоже обходит, поэтому для групп достаточно того, что он администратор.
@@ -533,10 +543,10 @@ function listingMessage(record, language, options = {}) {
 async function sendListing(group, post, token = data.config.botToken) {
   const record = (Array.isArray(data.objects) ? data.objects : []).find((item) => item.id === (post.listing && post.listing.objectId));
   if (!record) throw new Error('Объекта уже нет в каталоге');
-  const built = listingMessage(record, post.listing.language, { layout: post.listing.layout, withoutSignature: post.withoutSignature, source: group.type === 'channel' ? 'channel' : 'group' });
+  const threadId = postThreadId(group, post);
+  const built = listingMessage(record, post.listing.language, { layout: post.listing.layout, withoutSignature: post.withoutSignature, source: groupSourceLabel(group, threadId) });
   const html = built.html;
   const markup = built.markup;
-  const threadId = postThreadId(group, post);
   const threadOptions = threadId ? { threadId } : {};
   const feedThread = threadId || (group.isForum ? GENERAL_TOPIC_ID : 0);
   const photos = built.images;
@@ -767,6 +777,7 @@ export {
   postMarkup,
   postText,
   postToGroup,
+  groupSourceLabel,
   listingMessage,
   publishBlocker,
   messageLink,

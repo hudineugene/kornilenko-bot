@@ -94,6 +94,11 @@ function num(value) { return new Intl.NumberFormat("ru-RU").format(Number(value 
 function plural(value, one, few, many) { var n = Math.abs(Number(value || 0)) % 100, last = n % 10; return n > 10 && n < 20 ? many : last === 1 ? one : last >= 2 && last <= 4 ? few : many; }
 // Число и единица не разрываются переносом строки («7 дней», «350 000 €»): между ними неразрывный пробел (U+00A0).
 function counted(value, one, few, many) { return num(value) + "\u00a0" + plural(value, one, few, many); }
+// Метка источника по-человечески: «g3t47» — «Стройка без фильтров · Сегодня в продаже» (название знает бот); прочие метки как есть.
+function sourceName(label) {
+  var row = (state && state.sources || []).find(function (item) { return item.source === label; });
+  return row && row.title ? row.title : label || "";
+}
 function money(value, currency) { return num(value) + "\u00a0" + (currency === "USD" ? "$" : currency === "GBP" ? "£" : "€"); }
 // То же для готовых фраз: цифра, пробел и любое следующее за ней слово или знак единицы («7 дней», «5 из 9», «28 сент»,
 // «10 ГБ», «2 заявки», «350 000 €»). Число не остаётся на конце строки без своего слова.

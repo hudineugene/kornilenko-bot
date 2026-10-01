@@ -1,5 +1,6 @@
 // Ежедневная сводка и напоминания администратору о заявках без ответа.
 
+import { sourceDisplay } from './source-title.mjs';
 import { cleanText, dayKey, localDayKey } from './util.mjs';
 import { PLACES } from './places.mjs';
 import { MENU_LABELS } from './texts.mjs';
@@ -31,7 +32,7 @@ function activityDigest(dayKeyValue) {
   const newcomers = Object.values(data.users).filter((user) => String(user.firstSeenAt || '').slice(0, 10) === dayKeyValue);
   const newUsers = newcomers.length;
   const bySource = new Map();
-  for (const user of newcomers) bySource.set(user.source || 'без метки', (bySource.get(user.source || 'без метки') || 0) + 1);
+  for (const user of newcomers) bySource.set(sourceDisplay(user.source) || 'без метки', (bySource.get(sourceDisplay(user.source) || 'без метки') || 0) + 1);
   const sources = bySource.size > 1 || !bySource.has('без метки')
     ? Array.from(bySource).sort((a, b) => b[1] - a[1]).map(([name, count]) => name + ' — ' + count).join(', ')
     : '';
@@ -408,7 +409,7 @@ function botFunnel(users, start) {
     trackedFrom,
     partial: Boolean(earliest) && new Date(earliest) > start,
     byLanguage: groups((user) => ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'unknown'),
-    bySource: groups((user) => user.source || 'без метки').slice(0, 5),
+    bySource: groups((user) => sourceDisplay(user.source) || 'без метки').slice(0, 5),
   };
 }
 
@@ -443,7 +444,7 @@ function weeklyReportData(now = new Date(), which = 'last') {
     return { name: property ? localized(property.title, 'ru') || property.reference || id : 'удалённый объект', count };
   });
   const bySource = new Map();
-  for (const user of week.users) bySource.set(user.source || 'без метки', (bySource.get(user.source || 'без метки') || 0) + 1);
+  for (const user of week.users) bySource.set(sourceDisplay(user.source) || 'без метки', (bySource.get(sourceDisplay(user.source) || 'без метки') || 0) + 1);
   const broadcasts = data.broadcasts.filter((entry) => inWeek(entry.startedAt, start, end) && Number(entry.sent));
   // Подборки по ссылке: поделились / открыли за эту и прошлую неделю (по дням статистики бота).
   const dailySum = (field, from, to) => Object.entries((data.analytics && data.analytics.daily) || {})

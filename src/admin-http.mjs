@@ -2,6 +2,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { sourceTitle } from './source-title.mjs';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import zlib from 'node:zlib';
@@ -704,7 +705,14 @@ function sourceReport(now = Date.now()) {
     if (inquiry.type === 'viewing') row.viewings += 1;
     if (inquiry.pipelineStage === 'won') row.deals += 1;
   }
-  return Array.from(rows.values()).sort((a, b) => (a.source ? 0 : 1) - (b.source ? 0 : 1) || b.users - a.users || a.source.localeCompare(b.source));
+  // Метки, по которым только открывали бота (клиенты уже были), — тоже строки таблицы.
+  const opens = data.analytics && data.analytics.sourceOpens || {};
+  for (const label of Object.keys(opens)) if (!rows.has(label)) rows.set(label, { source: label, users: 0, recent: 0, withRequests: 0, inquiries: 0, viewings: 0, deals: 0 });
+  for (const row of rows.values()) {
+    row.opens = Number(opens[row.source]) || 0;
+    row.title = sourceTitle(row.source);
+  }
+  return Array.from(rows.values()).sort((a, b) => (a.source ? 0 : 1) - (b.source ? 0 : 1) || b.users - a.users || b.opens - a.opens || a.source.localeCompare(b.source));
 }
 
 // Карточка клиента для панели: в переписке участвуют только последние реакции,

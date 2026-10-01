@@ -801,6 +801,8 @@ function normalizeGroups(value) {
     updatedAt: cleanText(item.updatedAt, 40),
     lastMessageAt: cleanText(item.lastMessageAt, 40),
     lastPostAt: cleanText(item.lastPostAt, 40),
+    // Номер группы в метке источника («g3»): выдаётся один раз при первой публикации и не меняется.
+    sourceCode: /^\d{1,4}$/.test(String(item.sourceCode || '')) ? String(item.sourceCode) : '',
     // Язык, на котором последний раз публиковали объявление: подставляется по умолчанию.
     listingLanguage: ['ru', 'en', 'es'].includes(item.listingLanguage) ? item.listingLanguage : '',
     lastError: cleanText(item.lastError, 500),
@@ -1502,6 +1504,10 @@ function normalizeLoadedData(parsed) {
         properties: parsed.analytics && parsed.analytics.properties && typeof parsed.analytics.properties === 'object'
           ? parsed.analytics.properties
           : {},
+        // Открытия бота по ссылкам с меткой источника; появляется при первом открытии.
+        ...(parsed.analytics && parsed.analytics.sourceOpens && typeof parsed.analytics.sourceOpens === 'object' && !Array.isArray(parsed.analytics.sourceOpens)
+          ? { sourceOpens: Object.fromEntries(Object.entries(parsed.analytics.sourceOpens).slice(0, 200).map(([key, value]) => [cleanText(key, 40), Math.max(0, Math.floor(Number(value)) || 0)]).filter(([key]) => key)) }
+          : {}),
       },
       errors: Array.isArray(parsed.errors) ? parsed.errors.slice(0, 100) : [],
       adminNotificationStates: normalizeAdminNotificationStates(parsed.adminNotificationStates),

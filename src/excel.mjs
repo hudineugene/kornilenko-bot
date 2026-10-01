@@ -1,6 +1,7 @@
 // Выгрузка обращений в Excel (.xlsx) без сторонних библиотек.
 
 import zlib from 'node:zlib';
+import { sourceDisplay } from './source-title.mjs';
 import { data } from './store.mjs';
 import { userByChatId, userById } from './users.mjs';
 import { INQUIRY_STATUS_LABELS, inquiryTypeLabel } from './inquiries.mjs';
@@ -152,7 +153,7 @@ function inquiryExportRows(inquiries) {
       lead.name || '',
       lead.preferredTime || '',
       String(inquiry.language || '').toUpperCase(),
-      user.source || '',
+      sourceDisplay(user.source),
       property ? localized(property.title, 'ru') || property.reference || property.id : '',
       inquiry.text,
       user.note || inquiry.note || '',
@@ -211,7 +212,7 @@ function clientExportRows(users) {
       user.contactName || lead.name || '',
       user.preferredContactTime || lead.preferredTime || '',
       String(user.preferredLanguage || '').toUpperCase(),
-      user.source || '',
+      sourceDisplay(user.source),
       current ? PIPELINE_STAGE_LABELS[current.pipelineStage] || '' : '',
       current && current.status !== 'closed' && current.followUpDate ? current.followUpDate + (current.followUpTime ? ' ' + current.followUpTime : '') : '',
       inquiries.length,

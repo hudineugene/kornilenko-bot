@@ -236,7 +236,7 @@ test('публикация в три группы одним постом: ка�
   assert.deepEqual(topicCalls.map((call) => call.method), ['sendPhoto']);
   assert.equal(String(topicCalls[0].body.message_thread_id), '7');
   assert.equal(topicCalls[0].body.parse_mode, 'HTML');
-  assert.equal(topicCalls[0].body.reply_markup.inline_keyboard[0][0].url, 'https://t.me/kornilenko_bot?start=property_listing-object-1__src_group');
+  assert.equal(topicCalls[0].body.reply_markup.inline_keyboard[0][0].url, 'https://t.me/kornilenko_bot?start=property_listing-object-1__src_g2t7');
 
   assert.equal(sentCalls().filter((call) => String(call.body.chat_id) === '-1001000000003').length, 0, 'в чужую группу ничего не ушло');
 
@@ -261,7 +261,7 @@ test('«split» через API: альбом, затем полный текст
   assert.equal(channel[1].body.reply_parameters, undefined, 'в канале текст не ответ на альбом');
   assert.equal(channel[1].body.parse_mode, 'HTML');
   assert.match(channel[1].body.text, /^🧾 <b>Характеристики<\/b>/);
-  assert.equal(channel[1].body.reply_markup.inline_keyboard[0][0].url, 'https://t.me/kornilenko_bot?start=property_listing-object-1__src_channel');
+  assert.equal(channel[1].body.reply_markup.inline_keyboard[0][0].url, 'https://t.me/kornilenko_bot?start=property_listing-object-1__src_g1');
   const group = sentCalls().filter((call) => String(call.body.chat_id) === '-1001000000012');
   assert.deepEqual(group.map((call) => call.method), ['sendMediaGroup', 'sendMessage']);
   assert.equal(group[1].body.reply_parameters.message_id > 0, true, 'в группе текст — ответ на альбом');
