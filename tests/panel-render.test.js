@@ -2726,13 +2726,12 @@ test('воронка без шума: «без менеджера» — толь
   assert.ok(!/Без менеджера<\/span>/.test(html), 'значка «без менеджера» на карточках нет');
   assert.ok(!/Без менеджера/.test(html), 'и в цифрах, и в фильтре — тоже');
   assert.ok(!/class="chip ok">Отвечено</.test(html), 'значка «Отвечено» нет: это обычное состояние');
-  assert.match(html, /Ждёт ответа/, 'а то, что требует внимания, — на месте');
+  assert.match(html, /Ждёт · /, 'а то, что требует внимания, — на месте');
 
-  // Этап в списке карточки: «Перенести в…» и остальные этапы, без текущего (он уже назван колонкой).
+  // Перенос — кнопкой «⇄» на карточке (одно окно со списком этапов), а не выпадающим списком в каждой карточке.
   const card = html.slice(html.indexOf('<article class="funnel-card'), html.indexOf('</article>'));
-  assert.match(card, /<option value="" selected>Перенести в…<\/option>/);
-  assert.ok(!/<option value="new"/.test(card), 'текущий этап в списке не повторяется');
-  assert.match(card, /<option value="contact">/);
+  assert.match(card, /data-pipeline-move=/);
+  assert.ok(!/<select/.test(card), 'списка этапов в карточке нет');
   assert.ok((card.match(/class="chip/g) || []).length <= 3, 'не больше трёх значков на карточку');
 
   // Команда из двух и больше: пометка возвращается — её можно исправить.

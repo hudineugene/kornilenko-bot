@@ -395,7 +395,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-side .conversation-save{display:flex;flex-direction:column;gap:var(--sp-2);align-items:stretch}
 @media (max-width:1180px){.conversation-split{grid-template-columns:minmax(0,1fr)}.conversation-side{position:static}}
 @media(min-width:1181px){
-  .conversation-card{display:flex;flex-direction:column;height:calc(100vh - var(--header) - 156px);min-height:520px}
+  .conversation-card{display:flex;flex-direction:column;height:calc(100vh - var(--header) - 140px);min-height:520px}
   .conversation-card>.conversation-split{flex:1 1 auto;min-height:0;align-items:stretch}
   .conversation-card .conversation-main{min-height:0;overflow:auto}
   .conversation-card .conversation-thread{flex:1 1 auto;min-height:96px;max-height:none}
@@ -410,7 +410,44 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
   .conversation-card .reply-actions>.small{display:none}
   .conversation-card .editor-section>summary{padding:var(--sp-2) var(--sp-3)}
   .conversation-card .conversation-context,.conversation-card .viewing-card,.conversation-card .reply-box{flex:none}
-  .conversation-card .reply-box textarea{min-height:72px}
+  .conversation-card .reply-box textarea{min-height:56px;height:56px}
+  /* Переписке — не меньше четырёх сообщений на экране 1366×800: поле ответа ужато до трёх строк, файл и кнопка-ссылка — в одной полосе. */
+  .conversation-card .reply-box{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3)}
+  .conversation-card .reply-box>*{margin:0}
+  .conversation-card .reply-box>.reply-templates,.conversation-card .reply-box>.reply-quote,.conversation-card .reply-box>.reply-delivery{flex:1 1 100%}
+  /* Как в мессенджере: поле и «Отправить» в одной строке, под ними — файл и кнопка-ссылка. */
+  .conversation-card .reply-box>textarea{flex:1 1 260px;order:1;min-width:0}
+  .conversation-card .reply-box>.reply-actions{order:2;margin-left:0;align-self:stretch;align-items:stretch}
+  .conversation-card .reply-box>.reply-actions .btn{height:100%;min-height:56px}
+  .conversation-card .reply-box>.reply-attachments{order:3}
+  .conversation-card .reply-box>details.editor-section{order:4}
+  .conversation-card .reply-box>.reply-delivery{order:5}
+  .conversation-card .reply-box>.reply-attachments{flex:0 1 auto}
+  .conversation-card .reply-box>.reply-attachments .reply-file-name:not(.has-file){display:none}
+  .conversation-card .reply-box>details.editor-section{flex:1 1 0;min-width:200px}
+  .conversation-card .reply-box>details.editor-section[open]{flex-basis:100%}
+  .conversation-card .reply-box>details.editor-section>summary span{display:none}
+  .conversation-card .reply-box>.reply-actions{flex:0 0 auto}
+  .conversation-card .conversation-context .property-link{white-space:nowrap;flex:none;min-height:0}
+  .conversation-card .conversation-main{gap:var(--sp-2)}
+  .conversation-card .conversation-head{min-height:0;padding-top:var(--sp-2);padding-bottom:var(--sp-2)}
+  .conversation-card .conversation-avatar.large{width:34px;height:34px}
+  .conversation-card .conversation-context{padding:var(--sp-1) var(--sp-3)}
+  .conversation-card .conversation-main .viewing-card{padding:var(--sp-1) var(--sp-3)}
+  .conversation-card .conversation-thread{padding:var(--sp-2) var(--sp-3);gap:var(--sp-1)}
+  .conversation-card .reply-box{padding:var(--sp-2)}
+  .conversation-card .reply-box textarea,.conversation-card .reply-box>.reply-actions .btn{min-height:48px;height:48px}
+  .conversation-card .reply-box>.reply-actions .btn{height:100%}
+  /* Контекст заявки и запись на просмотр — по одной строке. */
+  .conversation-card .conversation-context{flex-wrap:nowrap;justify-content:space-between}
+  .conversation-card .conversation-context>div:first-child{min-width:0}
+  .conversation-card .conversation-context-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .conversation-card .conversation-main .viewing-card{flex-wrap:nowrap;white-space:nowrap}
+  .conversation-card .viewing-card-when{overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .conversation-card .viewing-card-head{flex-wrap:nowrap;width:auto}
+  .conversation-card .viewing-card-head>b{display:none}
+  .conversation-card .reply-box>details.editor-section{flex:0 1 auto;min-width:0}
+  .conversation-card .reply-box>details.editor-section[open]{flex:1 1 100%}
   .conversation-card .conversation-side{position:static;min-height:0;overflow:auto}
   /* Состояние заявки справа уже есть (в списке слева и в «Статусе»): рядом с именем оно лишнее. */
   .conversation-head .status-in-head{display:none}
@@ -458,7 +495,8 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .funnel-toolbar select{width:auto;min-width:210px}
 .funnel-toolbar>.small{margin-left:auto;white-space:nowrap}
 /* Колонки воронки — по 200 px: семь этапов рядом, без лишней ширины. */
-.funnel-board{display:grid;grid-template-columns:repeat(7,minmax(200px,1fr));gap:var(--sp-3);min-width:1480px;padding-bottom:var(--sp-2)}
+.funnel-board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:var(--sp-2);padding-bottom:var(--sp-2)}
+@media(max-width:1180px){.funnel-board{grid-template-columns:repeat(7,200px);min-width:1480px}}
 #viewBody:has(.funnel-board){overflow-x:auto;overscroll-behavior-inline:contain}
 .funnel-column{overflow:hidden;border-top:var(--edge) solid var(--muted)}
 .funnel-column.stage-contact{border-top-color:var(--brand-soft-line)}.funnel-column.stage-selection{border-top-color:var(--brand)}.funnel-column.stage-viewing{border-top-color:var(--brand-dark)}.funnel-column.stage-negotiation{border-top-color:var(--warn)}.funnel-column.stage-won{border-top-color:var(--live)}.funnel-column.stage-lost{border-top-color:var(--muted)}
@@ -474,11 +512,17 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .funnel-person{display:flex;min-width:0;flex:1;flex-direction:column}
 .funnel-person b,.funnel-person small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .funnel-person small{color:var(--muted);font-size:var(--fs-xs)}
-.funnel-arrow{color:var(--muted)}
+.funnel-arrow{display:none}
+.funnel-board .conversation-avatar{width:28px;height:28px;flex:none;font-size:var(--fs-xs)}
 .funnel-property{margin-top:var(--sp-2);overflow:hidden;color:var(--brand-dark);font-weight:600;text-overflow:ellipsis;white-space:nowrap}
 .funnel-signals{display:flex;gap:var(--sp-1);flex-wrap:wrap;margin:var(--sp-2) 0}
 .funnel-signals .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
-.pipeline-stage-select{padding:var(--sp-1) var(--sp-2);background:var(--surface-soft);font-size:var(--fs-sm)}
+.funnel-card{position:relative}
+.funnel-move{position:absolute;right:var(--sp-1);bottom:var(--sp-1);min-width:28px;min-height:28px;padding:0}
+.funnel-signals{padding-right:32px}
+.stage-picker{gap:var(--sp-2)}
+.stage-pick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left}
+.stage-pick span{font-weight:400;color:var(--muted);font-size:var(--fs-xs)}
 .funnel-empty{padding:var(--sp-5) var(--sp-2);color:var(--muted);text-align:center}
 .task-kpis{margin-bottom:var(--sp-3)}
 .task-toolbar{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3)}
@@ -812,7 +856,6 @@ dialog::backdrop{background:var(--overlay)}
   .funnel-toolbar{align-items:stretch;flex-direction:column}
   .funnel-toolbar .search,.funnel-toolbar select{width:100%;max-width:none;min-width:0}
   .funnel-toolbar>.small{margin-left:0}
-  .funnel-board{grid-template-columns:repeat(7,200px);min-width:1480px}
   .task-toolbar{align-items:stretch;flex-direction:column}
   .task-toolbar>.tabs{width:100%}
   .task-controls{width:100%;margin-left:0;flex-direction:column}

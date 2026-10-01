@@ -345,10 +345,10 @@ function pipelineCardHtml(row) {
     '<div class="funnel-signals">' +
       // Значок — только то, что требует внимания: «Отвечено» — обычное состояние, а
       // «без менеджера» имеет смысл, когда в команде есть кому назначить.
-      (row.group.waiting ? '<span class="chip ' + WAIT_CHIP[row.group.waitLevel] + '">Ждёт ответа · ' + waitDuration(row.group.waitAge) + '</span>' : "") +
+      (row.group.waiting ? '<span class="chip ' + WAIT_CHIP[row.group.waitLevel] + '" title="Клиент ждёт ответа">Ждёт · ' + waitDuration(row.group.waitAge) + '</span>' : "") +
       (item.assignee ? '<span class="chip">' + esc(item.assignee) + '</span>' : transferStaff().length > 1 ? chip("warn", 'Без менеджера') : "") +
       (item.followUpDate ? stepChip(item.followUpDate, item.followUpTime) : "") +
-    '</div><select class="pipeline-stage-select" data-pipeline-stage="' + esc(item.id) + '" aria-label="Перенести на другой этап">' + pipelineMoveOptions(row.stage) + '</select></article>';
+    '</div><button class="btn ghost icon funnel-move" data-pipeline-move="' + esc(item.id) + '" type="button" aria-label="Перенести на другой этап" title="Перенести на другой этап">⇄</button></article>';
 }
 function renderPipeline(host) {
   screenSettled();
@@ -373,19 +373,28 @@ function renderPipeline(host) {
   host.querySelectorAll("[data-inquiry]").forEach(function (button) {
     button.onclick = function () { selectConversation(button.dataset.inquiry); go("clients", "inbox"); };
   });
-  host.querySelectorAll("[data-pipeline-stage]").forEach(function (select) {
-    select.onchange = async function () {
-      if (!select.value) return;
-      select.disabled = true;
-      try {
-        var moved = (state.inquiries || []).find(function (entry) { return entry.id === select.dataset.pipelineStage; });
-        if (moved) await changeStageWithUndo(moved, select.value);
-        else {
-          await send("/api/inquiries/" + encodeURIComponent(select.dataset.pipelineStage), "PATCH", { pipelineStage: select.value });
-          toast("Этап обновлён");
-          await reload();
-        }
-      } catch (error) { select.disabled = false; fail(error); }
+  // Перенос — по кнопке «⇄» на карточке: одно окно со списком этапов вместо выпадающего списка в каждой карточке.
+  host.querySelectorAll("[data-pipeline-move]").forEach(function (button) {
+    button.onclick = function () {
+      var moved = (state.inquiries || []).find(function (entry) { return entry.id === button.dataset.pipelineMove; });
+      if (!moved) return;
+      var current = pipelineStageOf(moved);
+      var owner = userById(moved.userId) || {};
+      openDialog({
+        title: "Перенести: " + userName(owner),
+        body: '<div class="stack stage-picker">' + PIPELINE_STAGES.map(function (stage) {
+          return '<button class="btn ' + (stage[0] === current ? "" : "secondary") + ' stage-pick" type="button" data-stage="' + stage[0] + '"' + (stage[0] === current ? ' disabled aria-current="true"' : "") + '><b>' + esc(stage[1]) + '</b><span>' + esc(stage[2]) + "</span></button>";
+        }).join("") + "</div>",
+        footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button>',
+        ready: function (dialog) {
+          dialog.querySelectorAll("[data-stage]").forEach(function (pick) {
+            pick.onclick = async function () {
+              dialog.closeClean();
+              try { await changeStageWithUndo(moved, pick.dataset.stage); } catch (error) { fail(error); }
+            };
+          });
+        },
+      });
     };
   });
 }
@@ -1239,7 +1248,7 @@ function renderInquiryCard(host) {
     conversationOpenedByUser = false;
     markConversationRead(item.userId);
   }
-  host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><button class="btn ghost small conversation-back" id="backToList" type="button">← Диалоги</button><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + (user.username ? "@" + esc(user.username) + " · " : "") + (user.phone ? esc(user.phone) + " · " : "") + "ID " + esc(user.id) + (user.source ? ' · источник: ' + esc(user.source) : "") + '</div></div></div><div class="actions"><button class="btn secondary small conversation-side-toggle" id="sideToggle" type="button" aria-expanded="false" title="Статус, этап, заметка и следующий шаг">⋯ Сведения</button>' + statusChip(item, "status-in-head") + "</div></header>" +
+  host.innerHTML = '<div class="card conversation-card"><header class="conversation-head"><button class="btn ghost small conversation-back" id="backToList" type="button">← Диалоги</button><div class="conversation-person"><span class="conversation-avatar large">' + esc(initials(user.firstName)) + '</span><div><h3>' + esc(userName(user)) + '</h3><div class="small muted">' + [user.username ? "@" + esc(user.username) : "", user.phone ? esc(user.phone) : "", user.source ? "источник: " + esc(user.source) : ""].filter(Boolean).join(" · ") + '</div></div></div><div class="actions"><button class="btn secondary small conversation-side-toggle" id="sideToggle" type="button" aria-expanded="false" title="Статус, этап, заметка и следующий шаг">⋯ Сведения</button>' + statusChip(item, "status-in-head") + "</div></header>" +
     '<div class="card-body conversation-body conversation-split">' +
       '<div class="conversation-main">' +
       '<div class="conversation-context">' +
@@ -1371,6 +1380,7 @@ function renderInquiryCard(host) {
   }
   function showAttachment() {
     host.querySelector("#replyFileName").textContent = replyAttachment ? replyAttachment.name : "Фотография до 5 МБ или документ до 10 МБ";
+    host.querySelector("#replyFileName").classList.toggle("has-file", Boolean(replyAttachment));
     host.querySelector("#clearReplyFile").classList.toggle("hidden", !replyAttachment);
   }
   host.querySelectorAll("[data-reply-target]").forEach(function (button) {
