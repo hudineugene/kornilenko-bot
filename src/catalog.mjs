@@ -419,7 +419,7 @@ function objectCaption(record, language, options = {}) {
   }
   const details = [...specs];
   if (record.condition && (PROPERTY_CONDITION_LABELS[language] || PROPERTY_CONDITION_LABELS.ru)[record.condition]) {
-    details.push('🔑 ' + copy.conditionLabel + ': ' + (PROPERTY_CONDITION_LABELS[language] || PROPERTY_CONDITION_LABELS.ru)[record.condition]);
+    details.push('🛠 ' + copy.conditionLabel + ': ' + (PROPERTY_CONDITION_LABELS[language] || PROPERTY_CONDITION_LABELS.ru)[record.condition]);
   }
   if (record.reference) details.push('🏷 ' + copy.reference + ' ' + cleanText(record.reference, 80));
   const sections = [header.filter(Boolean), commercial];
@@ -1866,7 +1866,7 @@ function catalogFilterExtraScreen(user, language) {
   const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
   const savedCopy = SAVED_SEARCH_TEXT[language] || SAVED_SEARCH_TEXT.ru;
   const filter = normalizedCatalogFilter(user.catalogFilter, language);
-  const mark = (active, label) => (active ? '✅ ' : '') + label;
+  const mark = (active, label) => (active ? '✓ ' : '') + label;
   const rows = [];
   rows.push([
     { text: mark(filter.sort === 'asc', copy.sortAsc), callback_data: 'cfilter:sort:' + (filter.sort === 'asc' ? 'none' : 'asc') },

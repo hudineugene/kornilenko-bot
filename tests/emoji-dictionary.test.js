@@ -19,7 +19,7 @@ function linesWith(glyph) {
 }
 
 test('🏠 — только «Главное меню» (кнопка «В меню»)', () => {
-  const stray = linesWith('🏠').filter(({ line }) => !/mainMenu|backToMenu|'🏠 В меню'|'🏠 Main menu'|'🏠 Menú principal'/.test(line));
+  const stray = linesWith('🏠').filter(({ line }) => !/mainMenu|backToMenu|menu: '🏠/.test(line));
   assert.deepEqual(stray.map((item) => item.where), [], 'дом занят главным меню, для объекта — 🔖');
 });
 

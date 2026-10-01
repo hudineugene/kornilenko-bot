@@ -59,7 +59,7 @@ test.describe('дайджест', () => {
     assert.deepEqual(await digest.runWeeklyDigest(NOW, data.config.botToken), [String(chat.id)]);
     const [message] = sentTo(chat);
     assert.match(message.body.text, /^🗞 Что нового за неделю/);
-    assert.match(message.body.text, /🆕 Новые: 6/);
+    assert.match(message.body.text, /🏘 Новые: 6/);
     assert.equal((message.body.text.match(/^• /gm) || []).length, 4, 'в тексте не больше четырёх карточек');
     assert.ok(!message.body.text.includes('Старая'), 'старый объект не «новый»');
     assert.deepEqual(callbacksOf(message.body.reply_markup), ['digest:new', 'digest:off']);

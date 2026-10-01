@@ -133,7 +133,9 @@ function parseViewingDate(text, now = new Date()) {
 
 function viewingDateLabel(key, language) {
   if (!DAY_KEY_PATTERN.test(String(key || ''))) return '';
-  const formatted = new Intl.DateTimeFormat(LOCALES[language] || LOCALES.ru, { weekday: 'short', day: '2-digit', month: '2-digit' }).format(dateFromDayKey(key));
+  // Для русского «Чт 01.10» однозначно; в английском и испанском «01/10» читают то как день и месяц, то наоборот — пишем месяц словом.
+  const style = language === 'ru' || !LOCALES[language] ? { weekday: 'short', day: '2-digit', month: '2-digit' } : { weekday: 'short', day: 'numeric', month: 'short' };
+  const formatted = new Intl.DateTimeFormat(LOCALES[language] || LOCALES.ru, style).format(dateFromDayKey(key));
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 

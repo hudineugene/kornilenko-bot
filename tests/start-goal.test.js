@@ -29,7 +29,7 @@ test('первый /start: приветствие, затем один вопр�
   const question = step.replies[step.replies.length - 1];
   assert.match(question.text, /Что вам ближе\?/);
   assert.deepEqual(callbacksOf(question.markup), ['goal:live', 'goal:invest', 'goal:browse']);
-  assert.deepEqual(question.buttons, ['🏡 Купить для жизни', '📈 Инвестиция и аренда', '👀 Пока смотрю']);
+  assert.deepEqual(question.buttons, ['🏡 Купить для жизни', '📈 Инвестиция и аренда', '🧭 Пока смотрю']);
   assert.ok(chat.user.goalAskedAt, 'запомнено, что спросили');
   assert.ok(!chat.user.goal, 'ответа ещё нет');
 
@@ -96,7 +96,7 @@ test('цель можно сменить в «Моё → Моя цель»; те
   const personal = await chat.say(MENU.ru.more);
   assert.ok(callbacksOf(personal.last.markup).includes('goal:menu'));
   const menu = await chat.press('goal:menu');
-  assert.deepEqual(menu.last.buttons, ['🏡 Купить для жизни', '📈 Инвестиция и аренда', '✓ 👀 Пока смотрю'], 'текущая отмечена галочкой');
+  assert.deepEqual(menu.last.buttons, ['🏡 Купить для жизни', '📈 Инвестиция и аренда', '✓ 🧭 Пока смотрю'], 'текущая отмечена галочкой');
   await chat.press('goal:invest');
   assert.equal(chat.user.goal, 'invest');
 });

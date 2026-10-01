@@ -157,7 +157,7 @@ function client(id, name, lang) {
 
 const SAYINGS = {
   ru: { name: 'Анна', callTime: 'Сегодня после 18:00', ask: 'Куплю квартиру в Бенидорме до 400 000 €', follow: 'А когда можно посмотреть?' },
-  en: { name: 'John', callTime: 'Today after 6 pm', ask: 'I want to buy a flat in Benidorm up to 400,000 €', follow: 'When can I see it?' },
+  en: { name: 'John', callTime: 'Today after 18:00', ask: 'I want to buy a flat in Benidorm up to €400,000', follow: 'When can I see it?' },
   es: { name: 'Carlos', callTime: 'Hoy después de las 18:00', ask: 'Quiero comprar un piso en Benidorm hasta 400.000 €', follow: '¿Cuándo puedo verlo?' },
 };
 const CLIENT_IDS = { ru: 94000001, en: 94000002, es: 94000004 };
