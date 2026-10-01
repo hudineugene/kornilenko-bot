@@ -1281,7 +1281,7 @@ function relaxedCatalogFilter(user) {
   const raised = Math.ceil((filter.maxPrice * 1.2) / 1000) * 1000;
   if (filter.maxPrice) steps.push({ filter: { ...filter, maxPrice: raised }, change: copy.changePrice.replace('{value}', () => formattedPriceLimit(raised, language)) });
   if (filter.district) steps.push({ filter: { ...filter, district: '' }, change: copy.changeDistrict.replace('{value}', () => filter.district) });
-  if (filter.city) steps.push({ filter: { ...filter, city: '', district: '' }, change: copy.changeCity.replace('{value}', () => filter.city) });
+  if (filter.city) steps.push({ filter: { ...filter, city: '', district: '' }, change: copy.relaxCity.replace('{value}', () => filter.city) });
   if (filter.bedrooms > 1) steps.push({ filter: { ...filter, bedrooms: filter.bedrooms - 1 }, change: copy.changeBedrooms });
   if (filter.type) steps.push({ filter: { ...filter, type: '' }, change: copy.changeType.replace('{value}', () => (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[filter.type] || filter.type) });
   for (const step of steps) {
