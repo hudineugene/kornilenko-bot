@@ -99,7 +99,7 @@ test('подписи бота названы по-человечески, а н�
 
 test('автоответы и шаблоны ответов живут на одной вкладке', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
-  assert.match(PANEL_HTML, /\["rules", "Автоответы и шаблоны"\]/);
+  assert.match(PANEL_HTML, /\["rules", "Автоответы"\]/);
   assert.match(PANEL_HTML, /function templatesCardHtml\(\)/);
   assert.match(PANEL_HTML, /function bindTemplatesCard\(host, redraw\)/);
   // Карточка шаблонов рисуется прямо на вкладке автоответов.
@@ -116,14 +116,14 @@ test('«Контакты и о компании» собраны в одном �
   assert.match(PANEL_HTML, /data-about="1"/);
   assert.match(PANEL_HTML, /data-hours="1"/);
   assert.match(PANEL_HTML, /Сообщение в нерабочее время/);
-  assert.match(PANEL_HTML, /\["contacts", "Контакты и о компании"\]/);
+  assert.match(PANEL_HTML, /\["contacts", "Контакты"\]/);
 
   // «Разделы» больше не повторяют контакты и «О компании».
   assert.match(PANEL_HTML, /var fields = \[\["objects", "Объекты"\], \["promotions", "Акции"\]\]/);
-  assert.match(PANEL_HTML, /\["sections", "Если раздел пуст"\]/);
+  assert.match(PANEL_HTML, /\["sections", "Пустые разделы"\]/);
 
   // В настройках вместо поля — ссылка, где его искать.
-  assert.match(PANEL_HTML, /во вкладке «Тексты бота» → «Контакты и о компании»/);
+  assert.match(PANEL_HTML, /во вкладке «Тексты бота» → «Контакты»/);
   assert.ok(!/data-tr="hoursNote"/.test(PANEL_HTML), 'второго поля для того же текста больше нет');
 });
 
@@ -145,7 +145,7 @@ test('«Приветствие и меню» — на одной вкладке 
 
   // Ключ подстановки объяснён словами, а не как есть.
   assert.match(PANEL_HTML, /\{first_name\} подставит имя клиента/);
-  assert.match(PANEL_HTML, /\["welcome", "Приветствие и меню"\]/);
+  assert.match(PANEL_HTML, /\["welcome", "Приветствие"\]/);
   // Подписи кнопок сохраняются тем же нажатием.
   assert.match(PANEL_HTML, /payload\.menuLabels\[language\[0\]\]\[field\[0\]\] = input\.value/);
 });

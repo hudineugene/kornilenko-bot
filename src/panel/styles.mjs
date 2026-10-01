@@ -529,6 +529,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .funnel-move{position:absolute;right:var(--sp-1);bottom:var(--sp-1);min-width:30px;min-height:30px;padding:0}
 .funnel-signals{padding-right:32px}
 .stage-picker{gap:var(--sp-2)}
+.post-preview-column{position:sticky;top:calc(var(--header) + 72px)}
 .stage-pick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left}
 .stage-pick span{font-weight:400;color:var(--muted);font-size:var(--fs-xs)}
 .funnel-empty{padding:var(--sp-5) var(--sp-2);color:var(--muted);text-align:center}

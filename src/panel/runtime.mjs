@@ -877,7 +877,7 @@ function navItems() {
     { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
     { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"], ["channels", "Каналы и группы"]] },
     { id: "reports", icon: navIcon("reports"), title: "Отчёт" },
-    { id: "texts", icon: navIcon("texts"), title: "Тексты бота", tabs: [["welcome", "Приветствие и меню"], ["contacts", "Контакты и о компании"], ["trust", "Почему мы"], ["plan", "План покупки"], ["sections", "Если раздел пуст"], ["rules", "Автоответы и шаблоны"], ["interface", "Все подписи бота"]] },
+    { id: "texts", icon: navIcon("texts"), title: "Тексты бота", tabs: [["welcome", "Приветствие"], ["contacts", "Контакты"], ["trust", "Почему мы"], ["plan", "План покупки"], ["sections", "Пустые разделы"], ["rules", "Автоответы"], ["interface", "Все подписи бота"]] },
     { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["telegram", "Подключение"], ["data", "Данные и копии"], ["access", "Доступ"], ["feed", "Загрузка с сайта"]] },
   ];
 }

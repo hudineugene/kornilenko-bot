@@ -245,7 +245,7 @@ function renderWork(host) {
         [[0, "не обещать срок"], [5, "5 минут"], [10, "10 минут"], [15, "15 минут"], [30, "30 минут"], [60, "час"], [120, "2 часа"], [240, "4 часа"]].map(function (option) {
           return '<option value="' + option[0] + '"' + (Number(hours.replyMinutes || 0) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + '</select><div class="hint">Эту строку клиент видит на экране связи и после заявки. В нерабочее время вместо неё идёт текст ниже. Обещайте только то, что выдерживаете.</div></div>' +
-      '<div class="hint">Сообщение, которое клиент видит в нерабочее время, — во вкладке «Тексты бота» → «Контакты и о компании».</div>' +
+      '<div class="hint">Сообщение, которое клиент видит в нерабочее время, — во вкладке «Тексты бота» → «Контакты».</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Свободное время для просмотров</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="slotsOn"' + (slots.enabled ? " checked" : "") + "> Предлагать клиенту свободные слоты</label>" +

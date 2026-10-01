@@ -639,6 +639,9 @@ function renderGroupCard(host, group, mode) {
   var admin = group.status === "administrator" || group.status === "creator";
   var pinned = (group.messages || []).find(function (message) { return message.messageId === group.pinnedMessageId; });
   var showPost = mode !== "manage", showManage = mode !== "post";
+  // Предпросмотр — отдельная карточка: во вкладке «Пост в канал» она стоит справа от редактора, а не ниже первого экрана.
+  var previewCard = '<div class="card"><header><h3>Предпросмотр</h3><div class="actions"><span class="small muted">так увидят подписчики</span></div></header>' +
+    '<div class="card-body"><div class="tg-preview" id="postPreview"></div></div></div>';
   host.innerHTML =
     (showManage ? numberStrip([
       [membersWord(group), num(group.memberCount), "", groupKindName(group)],
@@ -667,8 +670,7 @@ function renderGroupCard(host, group, mode) {
         '<div class="grow"></div><button class="btn secondary" id="groupPreview" type="button">Себе для проверки</button>' +
         '<button class="btn" id="groupSend" type="button">Отправить</button></div>' +
       "</div></div>" +
-      '<div class="card"><header><h3>Предпросмотр</h3><div class="actions"><span class="small muted">так увидят подписчики</span></div></header>' +
-        '<div class="card-body"><div class="tg-preview" id="postPreview"></div></div></div>' +
+      (mode === "post" ? "" : previewCard) +
       groupPostQueue(group) +
       '<div class="card"><header><h3>' + (group.type === "channel" ? "Последние посты" : "Что бот видел в группе") + '</h3><div class="actions"><span class="small muted">историю Telegram не отдаёт</span></div></header>' +
         ((group.messages || []).length ? '<div class="list">' + (group.messages || []).slice().reverse().slice(0, 40).map(function (message) {
@@ -682,7 +684,7 @@ function renderGroupCard(host, group, mode) {
             (groupCan(group, "can_delete_messages") ? '<button class="btn ghost small" data-del="' + message.messageId + '" title="Удалить">✕</button>' : "") + "</div>";
         }).join("") + "</div>" : '<div class="empty"><b>Пока пусто</b>' + (group.type === "channel" ? "Посты появятся здесь после первой публикации." : "Бот видит сообщения группы, если в BotFather выключен privacy mode.") + "</div>") +
       "</div>" +
-    "</div>" : "") + (showManage ? '<div class="stack">' +
+    "</div>" : "") + (mode === "post" ? '<div class="stack post-preview-column">' + previewCard + '</div>' : "") + (showManage ? '<div class="stack">' +
       '<div class="card"><header><h3>' + esc(group.title || "Группа") + "</h3></header><div class=\"card-body stack\">" +
         '<div class="small muted">ID ' + esc(group.id) + (group.username ? " · @" + esc(group.username) : "") + "</div>" +
         (pinned ? '<div class="msg">📌 ' + esc(String(pinned.text || "").slice(0, 160)) + '<div class="msg-meta"><button class="btn ghost small" id="unpin" type="button">Открепить</button></div></div>' : '<div class="small muted">Закреплённого сообщения нет</div>') +
