@@ -52,6 +52,14 @@ test('диалог на компьютере: поле ответа — одно
   assert.ok(!/"ID " \+ esc\(user\.id\)/.test(inquiries), 'технического ID в шапке диалога нет');
 });
 
+test('диалог на телефоне: заявка — одной строкой, поле и «Отправить» рядом; адрес без диалога и «Клиенты» внизу ведут к списку; лист «Ещё» затемняет фон', () => {
+  assert.match(styles, /\.phone-chat \.conversation-context\{flex-direction:row;align-items:center;flex-wrap:nowrap/);
+  assert.match(styles, /\.phone-chat \.reply-box>textarea\{flex:1 1 0;order:1/);
+  assert.match(styles, /body:has\(\.more-sheet:not\(\.hidden\)\)::after\{[^}]*background:var\(--overlay\)/);
+  assert.match(runtime, /view === "clients" && tab === "inbox"\) \{[^}]*selectConversation\("", true\)/);
+  assert.match(runtime, /tabView === "clients"\) selectConversation\("", true\)/);
+});
+
 test('таблицы-списки — до 1100 px, шапка и содержимое начинаются с одного края', () => {
   assert.match(styles, /#viewBody>\.card:has\(>\.table-wrap\)[^{]*\{max-width:1100px\}/);
   assert.match(styles, /\.app-head,\.topbar\{padding-left:max\(var\(--sp-5\), calc\(\(100% - 1560px\) \/ 2 \+ var\(--sp-5\)\)\)/);

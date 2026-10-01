@@ -726,7 +726,9 @@ code{padding:0px var(--sp-1);border-radius:var(--radius-sm);background:var(--sur
 .deed-body .deed-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);color:inherit}
 .deed-head b{color:var(--text)}
 .deed-actions{flex:none;display:flex;align-items:center;gap:var(--sp-2)}
-@media (max-width:860px){.deed{align-items:center}.deed-body{flex:1 1 0}.deed-actions{gap:var(--sp-1)}}
+@media (max-width:860px){.deed{align-items:center}.deed-body{flex:1 1 0}.deed-actions{gap:var(--sp-1)}
+  /* Строка с перепиской на телефоне нажимается целиком; кнопка «Ответить» только съедала ширину и растягивала дело до 150 px. */
+  .deed[data-deed-row] .deed-actions [data-deed]{display:none}}
 /* Панель не достаёт до бота: красная полоса над шапкой, на любом экране; когда страницу
    прокрутили, о том же говорит точка состояния в шапке. */
 .link-alert{position:relative;z-index:var(--z-toast);background:var(--bad);color:var(--surface)}
@@ -916,6 +918,8 @@ dialog::backdrop{background:var(--overlay)}
   .tab-count{position:absolute;top:4px;left:calc(50% + 6px);min-width:18px;padding:0 var(--sp-1);border-radius:var(--radius-pill);background:var(--bad);color:var(--surface);font-size:var(--fs-xs);font-weight:700;text-align:center}
   .more-sheet{position:fixed;left:var(--gutter);right:var(--gutter);bottom:calc(64px + env(safe-area-inset-bottom));z-index:calc(var(--z-head) + 1);display:block;padding:var(--sp-2);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg)}
   .more-sheet.hidden{display:none}
+  /* Пока лист «Ещё» открыт, остальной экран затемнён; нажатие по затемнению закрывает лист. */
+  body:has(.more-sheet:not(.hidden))::after{content:"";position:fixed;inset:0;z-index:var(--z-head);background:var(--overlay)}
   .more-item{display:flex;align-items:center;gap:var(--sp-3);width:100%;min-height:48px;padding:var(--sp-3) var(--sp-3);border:0;border-radius:var(--radius);background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
   .more-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
   .more-item .ico{display:inline-flex;width:22px;height:22px;justify-content:center}
@@ -943,8 +947,33 @@ dialog::backdrop{background:var(--overlay)}
   .phone-chat #replyText{min-height:64px;height:64px}
   .phone-chat .reply-attachments{margin:var(--sp-1) 0}
   .phone-chat .reply-file-name,.phone-chat .reply-actions .muted{display:none}
-  .phone-chat .reply-actions .btn{width:100%}
   .phone-chat .reply-box .editor-section>summary{padding:var(--sp-2) var(--sp-3)}
+  /* Переписке — не меньше трёх сообщений: шапка, заявка и запись на просмотр — по одной-две строки, поле и «Отправить» — рядом. */
+  .phone-chat .conversation-head{padding:var(--sp-1) var(--sp-2);gap:var(--sp-1) var(--sp-2);min-height:0}
+  .phone-chat .conversation-avatar.large{display:none}
+  .phone-chat .conversation-head h3{font-size:var(--fs-lg)}
+  .phone-chat .conversation-main{gap:var(--sp-1)}
+  .phone-chat .conversation-context{flex-direction:row;align-items:center;flex-wrap:nowrap;justify-content:space-between;gap:var(--sp-2);padding:var(--sp-1) var(--sp-2)}
+  .phone-chat .conversation-context>div:first-child{min-width:0}
+  .phone-chat .conversation-context .field-label{display:none}
+  .phone-chat .conversation-context-title{margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .phone-chat .conversation-context .property-link{width:auto;flex:none;min-height:0;min-width:0;max-width:40%;padding:var(--sp-1) var(--sp-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .phone-chat .conversation-context .property-link>span:last-child{display:none}
+  .phone-chat .conversation-main .viewing-card{padding:var(--sp-1) var(--sp-2);gap:var(--sp-1) var(--sp-2)}
+  .phone-chat .viewing-card>.small{display:none}
+  .phone-chat .viewing-card-when{flex:1 1 100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .phone-chat .conversation-thread{padding:var(--sp-2);gap:var(--sp-1)}
+  .phone-chat .reply-box{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-2)}
+  .phone-chat .reply-box>*{margin:0}
+  .phone-chat .reply-box>.reply-quote{flex:1 1 100%}
+  .phone-chat .reply-box>textarea{flex:1 1 0;order:1;min-width:0;min-height:48px;height:48px}
+  .phone-chat .reply-box>.reply-actions{order:2;flex:0 0 auto}
+  .phone-chat .reply-box>.reply-actions .btn{min-height:48px;height:48px;width:auto}
+  .phone-chat .reply-box>.reply-attachments{order:3;flex:0 0 auto}
+  .phone-chat .reply-box>details.editor-section{order:4;flex:1 1 0;min-width:0}
+  .phone-chat .reply-box>details.editor-section[open]{flex-basis:100%}
+  .phone-chat .reply-box>details.editor-section>summary span{display:none}
+  .phone-chat .reply-box>.reply-delivery{order:5;flex:1 1 100%}
   .conversation-thread{max-height:42vh}
   .conversation-side-toggle{display:inline-flex}
   /* Статус, этап, заметка и следующий шаг — панель, выезжающая справа. */

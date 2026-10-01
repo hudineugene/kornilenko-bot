@@ -1006,7 +1006,12 @@ function renderTabBar() {
     if (more) more.setAttribute("aria-expanded", "false");
   }
   el("tabbar").querySelectorAll("[data-tab-view]").forEach(function (button) {
-    button.onclick = function () { closeSheet(); go(button.dataset.tabView, ""); };
+    button.onclick = function () {
+      closeSheet();
+      // «Клиенты» внизу ведут к списку диалогов, а не к тому, что открывали последним.
+      if (button.dataset.tabView === "clients") selectConversation("", true);
+      go(button.dataset.tabView, "");
+    };
   });
   el("moreSheet").querySelectorAll("[data-tab-view]").forEach(function (button) {
     button.onclick = function () { closeSheet(); go(button.dataset.tabView, ""); };
@@ -1626,6 +1631,10 @@ function applyRoute() {
   } else if (view === "clients" && tab === "inbox" && sub) {
     if ((state.inquiries || []).some(function (item) { return item.id === sub; })) selectConversation(sub, true);
     else sub = "";
+  } else if (view === "clients" && tab === "inbox") {
+    // Адрес без диалога — это список (кнопка «Назад» из диалога, нажатие на «Клиенты» внизу): прежний выбор снимаем.
+    selectConversation("", true);
+    sub = "";
   } else sub = "";
   currentView = view;
   currentTab = tab;
