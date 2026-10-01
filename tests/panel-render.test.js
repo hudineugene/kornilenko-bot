@@ -1513,7 +1513,8 @@ test('счётчик у «Переписки» — это клиенты, кот
   sandbox.renderNotificationBell();
   const deeds = sandbox.navItems().find((item) => item.id === 'today').count;
   assert.equal(deeds, state.attention.deeds, 'значок «Сегодня» — число дел от бота');
-  assert.equal(String(sandbox.document.getElementById('notificationCount').textContent), String(deeds), 'колокольчик показывает то же');
+  assert.equal(String(sandbox.document.getElementById('notificationCount').textContent), '', 'на колокольчике числа нет — оно уже стоит у «Сегодня»');
+  assert.match(String(sandbox.document.getElementById('notificationBell').title), new RegExp(String(deeds)), 'а число дел — в подписи колокольчика');
 
   const host = fakeElement('main');
   await sandbox.VIEWS.today.render(host, '');
@@ -1632,13 +1633,14 @@ test('одна лента: «Список дел» на «Сегодня» с ф
   const count = sandbox.deedList().length;
   assert.ok(count > 0, 'есть дела');
   assert.match(html, /data-deed="/, 'есть «Открыть»');
-  assert.match(html, /data-deed-hide="[^"]*"[^>]*>Скрыть</, 'и «Скрыть»');
+  assert.match(html, /data-deed-hide="[^"]*"[^>]*aria-label="Скрыть"/, 'и «Скрыть»');
   assert.match(html, new RegExp('data-feed-filter="active"[^>]*>Требуют внимания <span>' + count + '</span>'), 'один счётчик на вкладке');
   assert.match(html, /data-feed-filter="done"/, '«Выполненное» — фильтр той же ленты');
   assert.ok(!/Все события|Непрочитанные|Срочные/.test(html), 'второго набора счётчиков нет');
   // Колокольчик показывает то же число.
   sandbox.renderNotificationBell();
-  assert.equal(String(sandbox.document.getElementById('notificationCount').textContent), String(count), 'колокольчик = счётчик ленты');
+  assert.equal(String(sandbox.document.getElementById('notificationCount').textContent), '', 'колокольчик без числа');
+  assert.match(String(sandbox.document.getElementById('notificationBell').title), new RegExp(String(count)), 'число дел в подписи колокольчика');
 
   // Скрытое уходит в «Выполненное» и возвращается.
   const first = sandbox.deedList()[0];
@@ -3467,7 +3469,7 @@ test('«Сегодня» — это список дел с одной кнопк
   assert.match(html, /class="today-numbers"/, 'цифры одной строкой');
   assert.doesNotMatch(html, /class="card kpi"/, 'ряда KPI-карточек больше нет');
   assert.match(html, /Список дел/, 'главное на экране — дела');
-  assert.match(html, /Новое сообщение от Нина[\s\S]*?>Ответить</, 'у сообщения кнопка «Ответить»');
+  assert.match(html, /<b>Нина<\/b><span class="chip [a-z ]*">ждёт [^<]*<\/span>[\s\S]*?>Ответить</, 'у сообщения — имя, сколько ждёт и кнопка «Ответить»');
   assert.match(html, /Просмотр ждёт подтверждения[\s\S]*?>Подтвердить</, 'у просмотра — «Подтвердить»');
   assert.match(html, /data-deed-hide=/, 'дело можно убрать из списка');
 });

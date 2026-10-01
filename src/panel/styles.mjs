@@ -84,7 +84,7 @@ a:hover{text-decoration:underline}
 .global-item:hover,.global-item:focus{background:var(--brand-soft)}
 .global-item span{color:var(--muted);font-size:var(--fs-xs)}
 .global-empty{padding:var(--sp-3) var(--sp-3);color:var(--muted);font-size:var(--fs-sm)}
-.search-toggle{display:none}
+.btn.search-toggle{display:none}
 /* Поиск должен помещаться: на средней ширине текст состояния бота уступает ему место. */
 @media(max-width:1960px) and (min-width:861px){.head-tools #botStateText{display:none}}
 .nav-item{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-2);border:0;background:none;border-radius:var(--radius);color:var(--text);font:inherit;font-size:var(--fs-sm);text-align:left;cursor:pointer;white-space:nowrap}
@@ -96,6 +96,7 @@ a:hover{text-decoration:underline}
 .nav-item.active .count{background:var(--brand)}
 .head-tools{display:flex;align-items:center;gap:var(--sp-1);margin-left:auto;flex:none}
 .notification-bell{position:relative;display:inline-flex;width:34px;height:34px;align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--radius);background:transparent;color:var(--muted);font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.notification-bell b.dot{min-width:10px;width:10px;height:10px;padding:0;right:2px;top:1px}
 .notification-bell:hover,.notification-bell.active{border-color:var(--line);background:var(--surface-soft);color:var(--text)}
 .notification-bell b{position:absolute;right:-3px;top:-4px;min-width:18px;height:18px;padding:0 var(--sp-1);border:2px solid var(--surface);border-radius:var(--radius-pill);background:var(--bad);color:var(--surface);font-size:var(--fs-xs);line-height:14px;text-align:center}
 .state-line{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-2);border-radius:var(--radius);background:var(--surface-soft);white-space:nowrap}
@@ -170,6 +171,7 @@ tbody tr.selected{background:var(--brand-soft)}
 .editor-foot{justify-content:flex-end;gap:var(--sp-2)}
 .btn.small{padding:var(--sp-1) var(--sp-2);font-size:var(--fs-sm);border-radius:var(--radius-sm)}
 .btn.icon{padding:var(--sp-1) var(--sp-2)}
+.head-tools .btn.icon{flex:none;min-width:34px}
 .btn-ico{display:inline-flex;flex:none;width:16px;height:16px}
 @media (max-width:860px){.object-performance{min-height:44px}.objects-table .btn.icon,.objects-table [data-more]{min-width:44px;min-height:44px}}
 .hint-more{margin-top:var(--sp-1)}
@@ -662,12 +664,16 @@ code{padding:0px var(--sp-1);border-radius:var(--radius-sm);background:var(--sur
 .deed.done{opacity:.85}
 .deed{display:flex;align-items:flex-start;gap:var(--sp-3);padding:var(--row-pad);border-top:1px solid var(--line-soft)}
 .deed:first-child{border-top:0}
+.deed[data-deed-row]{cursor:pointer}
+.deed[data-deed-row]:hover{background:var(--surface-soft)}
 .deed-icon{flex:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);background:var(--surface-soft);color:var(--muted)}
 .deed.urgent .deed-icon{background:var(--bad-soft);color:var(--bad)}
 .deed-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .deed-body span{color:var(--muted);overflow-wrap:anywhere}
+.deed-body .deed-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);color:inherit}
+.deed-head b{color:var(--text)}
 .deed-actions{flex:none;display:flex;align-items:center;gap:var(--sp-2)}
-@media (max-width:860px){.deed{flex-wrap:wrap}.deed-actions{width:100%;justify-content:flex-end}}
+@media (max-width:860px){.deed{align-items:center}.deed-body{flex:1 1 0}.deed-actions{gap:var(--sp-1)}}
 /* Панель не достаёт до бота: красная полоса над шапкой, на любом экране; когда страницу
    прокрутили, о том же говорит точка состояния в шапке. */
 .link-alert{position:relative;z-index:var(--z-toast);background:var(--bad);color:var(--surface)}
@@ -843,7 +849,7 @@ dialog::backdrop{background:var(--overlay)}
 @media(max-width:860px){
   .head-nav{display:none !important}
   /* На телефоне поиск — значок 🔍 в шапке; поле раскрывается под ней. */
-  .search-toggle{display:inline-flex}
+  .btn.search-toggle{display:inline-flex}
   .global-search{display:none;position:fixed;left:var(--gutter);right:var(--gutter);top:calc(var(--header) + 6px);z-index:var(--z-toast);max-width:none;padding:var(--sp-2);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg)}
   .global-search.open{display:block}
   .global-results{position:static;margin-top:var(--sp-2);box-shadow:none;border:0;min-width:0;max-height:60vh}
@@ -932,7 +938,7 @@ dialog::backdrop{background:var(--overlay)}
   .state-line #botStateText{display:none}
   /* Поле поиска прячется за значок 🔍, как на телефоне: с ним пункты меню
      налезали друг на друга. Само меню при нехватке места листается вбок. */
-  .search-toggle{display:inline-flex}
+  .btn.search-toggle{display:inline-flex}
   .global-search{display:none;position:fixed;left:var(--gutter);right:var(--gutter);top:calc(var(--header) + 6px);z-index:var(--z-toast);max-width:none;padding:var(--sp-2);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg)}
   .global-search.open{display:block}
   .global-results{position:static;margin-top:var(--sp-2);box-shadow:none;border:0;min-width:0;max-height:60vh}

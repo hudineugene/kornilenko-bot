@@ -174,6 +174,24 @@ function doneRowsHtml() {
   }).join("") + '</div>';
 }
 
+// Заявка, к которой относится дело, и клиент: из них — сколько он ждёт и на каком языке пишет.
+function deedInquiry(item) {
+  var id = item && item.route && item.route.inquiryId;
+  return id ? (state.inquiries || []).find(function (entry) { return entry.id === id; }) || null : null;
+}
+
+// «Анна Соколова · ждёт 13 ч · ES»: у дела «клиент написал» видно, кто и сколько ждёт, а не двенадцать одинаковых «Новое сообщение».
+function deedHeadHtml(item) {
+  var inquiry = item.kind === "message" ? deedInquiry(item) : null;
+  if (!inquiry) return '<b>' + esc(item.title) + '</b>';
+  // Имя и чипы — одной строкой (иначе колонка растягивает чип на всю ширину).
+  var name = String(item.title || "").replace(/^Новое сообщение от /, "");
+  var user = userById(inquiry.userId) || {};
+  var level = waitLevel(inquiry);
+  var language = user.preferredLanguage && user.preferredLanguage !== "ru" ? ' ' + chip("", String(user.preferredLanguage).toUpperCase()) : "";
+  return '<span class="deed-head"><b>' + esc(name) + '</b>' + chip(WAIT_CHIP[level] || "bad", "ждёт " + waitDuration(waitAge(inquiry))) + language + '</span>';
+}
+
 // Сначала то, что горит, потом по времени: свежее сверху.
 function deedList() {
   var rank = { bad: 0, warn: 1 };
@@ -184,6 +202,8 @@ function deedList() {
     .sort(function (first, second) {
       var weight = (rank[first.severity] === undefined ? 2 : rank[first.severity]) - (rank[second.severity] === undefined ? 2 : rank[second.severity]);
       if (weight) return weight;
+      // Очередь ответов — как в «Ждут ответа»: сверху тот, кто ждёт дольше всех.
+      if (first.kind === "message" && second.kind === "message") return (Date.parse(first.createdAt) || 0) - (Date.parse(second.createdAt) || 0);
       return (Date.parse(second.createdAt) || 0) - (Date.parse(first.createdAt) || 0);
     });
 }
@@ -343,11 +363,11 @@ VIEWS.today = {
               '<label class="small muted" for="deedMe">Я —</label><select id="deedMe" style="width:auto;min-width:0">' + people.map(function (name) { return '<option value="' + esc(name) + '"' + (name === todayScope.me ? " selected" : "") + ">" + esc(name) + "</option>"; }).join("") + "</select>" +
               (scoped.active && scoped.hidden ? '<span class="small muted">Ещё ' + num(scoped.hidden) + ' — чужие или не про клиентов: они в «Все»</span>' : "") + "</div>" : "") +
             (feedFilter === "done" ? "" : deeds.length ? '<div class="deeds">' + deeds.map(function (item) {
-              return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '">' +
+              return '<div class="deed' + (item.severity === "bad" ? " urgent" : "") + '" data-deed-row="' + esc(item.id) + '">' +
                 '<span class="deed-icon">' + deedIcon(item) + '</span>' +
-                '<span class="deed-body"><b>' + esc(item.title) + '</b>' + (people.length > 1 && deedAssignee(item) === "" ? ' ' + chip("warn", 'Без менеджера') : "") + '<span>' + esc(item.text) + '</span></span>' +
+                '<span class="deed-body">' + deedHeadHtml(item) + (people.length > 1 && deedAssignee(item) === "" ? ' ' + chip("warn", 'Без менеджера') : "") + '<span>' + esc(item.text) + '</span></span>' +
                 '<span class="deed-actions"><button class="btn secondary small" type="button" data-deed="' + esc(item.id) + '">' + esc(deedAction(item)) + '</button>' +
-                '<button class="btn ghost small" type="button" data-deed-hide="' + esc(item.id) + '" title="Убрать из списка дел">Скрыть</button></span>' +
+                '<button class="btn ghost small" type="button" data-deed-hide="' + esc(item.id) + '" title="Убрать из списка дел" aria-label="Скрыть">✕</button></span>' +
               '</div>';
             }).join("") + '</div>' : '<div class="empty"><b>' + (scoped.active ? "Своих дел нет" : "Дел нет") + '</b>' + (scoped.active ? "За вами закреплённых дел сейчас нет" : "Все клиенты отвечены, просмотры подтверждены") + '</div>') +
           "</div>" +
@@ -388,6 +408,14 @@ VIEWS.today = {
       button.onclick = function () {
         var item = (state.notifications || []).find(function (entry) { return entry.id === button.dataset.deed; });
         if (item) runDeed(item, button);
+      };
+    });
+    // Вся строка — нажатие на главное действие («Ответить»), кроме кнопки «Скрыть».
+    host.querySelectorAll("[data-deed-row]").forEach(function (row) {
+      row.onclick = function (event) {
+        if (event.target.closest("button")) return;
+        var button = row.querySelector("[data-deed]");
+        if (button) button.click();
       };
     });
     host.querySelectorAll("[data-deed-hide]").forEach(function (button) {

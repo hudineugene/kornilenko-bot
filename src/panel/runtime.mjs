@@ -1522,7 +1522,9 @@ function renderNotificationBell() {
   var button = el("notificationBell"), badge = el("notificationCount");
   // Колокольчик считает то же, что и «Список дел»: нерешённые дела, а не только непрочитанные.
   var count = state ? deedCount() : 0;
-  badge.textContent = count > 99 ? "99+" : String(count);
+  // Число уже стоит у «Сегодня»: тут только точка «есть дела», иначе одно и то же число читается дважды.
+  badge.textContent = "";
+  badge.classList.add("dot");
   badge.classList.toggle("hidden", count === 0);
   button.classList.toggle("active", currentView === "today");
   button.setAttribute("aria-label", count ? "Открыть список дел: " + count + " " + plural(count, "дело", "дела", "дел") : "Открыть список дел");
