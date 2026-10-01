@@ -334,6 +334,31 @@ function pricePerSquareMetre(record, language) {
   return formatMoney(perMetre, symbol, language, 0) + '/' + metre + '²';
 }
 
+// «Рынок»: обычная цена за м² в районе (а если в районе мало объектов — в городе) по нашему же каталогу. Честность важнее
+// полноты: сравнение показываем только когда в группе не меньше пяти объектов на продажу в одной валюте с известной
+// площадью; берём медиану (одна дорогая вилла её не сдвигает), округляем до десятка — «≈ 3 300», а не «3 287».
+const MARKET_MIN_RECORDS = 5;
+function marketComparison(record, user, language) {
+  if (!record || record.dealType === 'rent') return null;
+  const own = Number(record.priceValue) / Number(record.area);
+  if (!Number.isFinite(own) || own <= 0) return null;
+  const key = (value) => localizedExact(value, 'ru', 160).toLowerCase();
+  const comparable = publishedCatalog(user).filter((item) => item.dealType !== 'rent' && item.currency === record.currency
+    && Number(item.priceValue) > 0 && Number(item.area) > 0 && key(item.city) && key(item.city) === key(record.city));
+  if (!comparable.some((item) => item.id === record.id)) comparable.push(record);
+  const byDistrict = key(record.district) ? comparable.filter((item) => key(item.district) === key(record.district)) : [];
+  const group = byDistrict.length >= MARKET_MIN_RECORDS ? byDistrict : comparable;
+  if (group.length < MARKET_MIN_RECORDS) return null;
+  const values = group.map((item) => Number(item.priceValue) / Number(item.area)).sort((a, b) => a - b);
+  const middle = Math.floor(values.length / 2);
+  const median = values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+  const typical = Math.round(median / 10) * 10;
+  if (!(typical > 0)) return null;
+  const percent = Math.round((own - median) / median * 100);
+  const district = group === byDistrict ? localizedExact(record.district, language, 160) : '';
+  return { place: [district, localizedExact(record.city, language, 160)].filter(Boolean).join(', '), typical, count: group.length, percent };
+}
+
 // Строка цены карточки: цена и, для продажи, цена за метр. Без значка 💰: она и так единственная жирная.
 function objectPriceLine(record, language) {
   const price = objectPriceText(record, language);
@@ -385,6 +410,15 @@ function objectCaption(record, language, options = {}) {
   if (record.reference) details.push('🏷 ' + copy.reference + ' ' + cleanText(record.reference, 80));
   const sections = [header.filter(Boolean), commercial];
   if (details.length) sections.push([copy.specificationsTitle, ...details]);
+  const market = options.market;
+  if (market && copy.marketTitle) {
+    const symbol = record.currency === 'USD' ? '$' : record.currency === 'GBP' ? '£' : '€';
+    const metre = (language === 'ru' ? 'м' : 'm') + '²';
+    const verdict = Math.abs(market.percent) < 3 ? copy.marketSame : (market.percent > 0 ? copy.marketHigher : copy.marketLower).replace('{percent}', () => String(Math.abs(market.percent)));
+    sections.push([copy.marketTitle,
+      copy.marketLine.replace('{place}', () => market.place).replace('{price}', () => formatMoney(market.typical, symbol, language, 0) + '/' + metre).replace('{count}', () => String(market.count)),
+      verdict]);
+  }
   if (description) sections.push([copy.descriptionTitle, description, ...(inRussian && copy.inRussian ? ['', copy.inRussian] : [])]);
   if (record.updatedAt) {
     const date = new Date(record.updatedAt);
@@ -414,7 +448,7 @@ function priceDropVisible(record, now = Date.now()) {
 
 function objectCaptionHtml(record, language, options = {}) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
-  const headings = new Set([copy.specificationsTitle, copy.descriptionTitle]);
+  const headings = new Set([copy.specificationsTitle, copy.descriptionTitle, copy.marketTitle]);
   const priceLine = objectPriceLine(record, language);
   let contentLines = 0;
   return objectCaption(record, language, options).split('\n').map((line) => {
@@ -2059,6 +2093,7 @@ export {
   normalizedCatalogFilter,
   numericText,
   objectCaption,
+  marketComparison,
   objectCaptionHtml,
   objectPriceText,
   openPendingStartPayload,
