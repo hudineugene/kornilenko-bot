@@ -773,6 +773,8 @@ dialog::backdrop{background:var(--overlay)}
 .recipient-summary small{overflow:hidden;color:var(--muted);font-size:var(--fs-xs);text-overflow:ellipsis;white-space:nowrap}
 .required{color:var(--bad);font-weight:700}
 .publication-check{border:1px solid var(--warn-line);border-radius:var(--radius);background:var(--warn-soft);overflow:hidden}
+.publication-check.is-ready{border-color:var(--ok-line);background:var(--ok-soft)}
+.publication-check.is-ready .publication-head{border-bottom-color:var(--ok-line)}
 .publication-head{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-3);border-bottom:1px solid var(--warn-soft)}
 .publication-head>div{display:flex;flex-direction:column;min-width:0}
 .publication-head>div span{font-size:var(--fs-sm);color:var(--muted)}

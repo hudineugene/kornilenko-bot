@@ -73,3 +73,18 @@ test('рассылка карточкой: предпросмотр = вступ
   assert.match(answer.rows[2][0], /Отписаться/);
   assert.equal((await realFetch(base + '/api/preview/broadcast', { method: 'POST', headers, body: JSON.stringify({ propertyId: 'нет' }) })).status, 404);
 });
+
+for (const language of ['ru', 'en', 'es']) {
+  test(language + ': у объекта с тремя фото в предпросмотре есть кнопка «📷 Фото · 3», как у настоящей карточки', async () => {
+    const record = bot.getData().objects[0];
+    const png = { mimeType: 'image/png', dataBase64: 'iVBORw0KGgo=' };
+    for (const code of ['ru', 'en', 'es']) record.imagesByLanguage[code] = [1, 2, 3].map((index) => ({ ...png, id: 'three-' + code + index }));
+    const chat = createChat({ language });
+    const step = await chat.say(MENU[language].objects);
+    const card = step.calls.find((call) => call.method === 'sendPhoto').body;
+    const answer = await (await realFetch(base + '/api/preview/object', { method: 'POST', headers, body: JSON.stringify({ ...fieldsOf(record, language), photoCount: 3 }) })).json();
+    const botRows = card.reply_markup.inline_keyboard.slice(0, 3).map((row) => row.map((button) => button.text));
+    assert.deepEqual(answer.rows.slice(0, 3), botRows, language + ': ряды совпадают, включая «Фото»: ' + JSON.stringify(answer.rows));
+    assert.ok(answer.rows.flat().some((label) => /^📷 /.test(label)));
+  });
+}

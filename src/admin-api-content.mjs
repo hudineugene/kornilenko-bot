@@ -7,6 +7,7 @@ import { imageExists } from './media.mjs';
 import { peekDeleted, rememberDeleted, takeDeleted } from './trash.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { contentButtons, objectCaptionHtml, recordImages } from './catalog.mjs';
+import { PROPERTY_ACTION_TEXT } from './texts.mjs';
 import { binaryImage, json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
 import { parseContentRecord } from './admin-input.mjs';
 import { queuePropertyAlerts } from './alerts.mjs';
@@ -42,9 +43,17 @@ async function handleContentApi(req, res, url) {
       const record = parseContentRecord({ ...body, title: empty ? { ru: '—' } : body.title, imageDataUrlsByLanguage: {}, removeImageIdsByLanguage: {} }, 'objects');
       if (empty) record.title = { ru: '', en: '', es: '' };
       const markup = contentButtons(record, language, null, 'property', null);
+      const rows = markup ? markup.inline_keyboard.map((row) => row.map((button) => button.text)) : [];
+      // В предпросмотре нет самих фотографий, но у настоящей карточки с двумя и более есть кнопка «📷 Фото · N»: показываем её.
+      const photoCount = Math.min(10, Math.max(0, Math.floor(Number(body.photoCount) || 0)));
+      if (photoCount > 1) {
+        const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+        const detailsRow = rows.find((row) => row.some((label) => label.includes(copy.details)));
+        if (detailsRow) detailsRow.unshift('📷 ' + copy.photos + ' · ' + photoCount);
+      }
       return json(res, 200, {
         caption: objectCaptionHtml(record, language, { maximum: 900 }),
-        rows: markup ? markup.inline_keyboard.map((row) => row.map((button) => button.text)) : [],
+        rows,
       });
     } catch (error) {
       return json(res, 400, { error: error.message });

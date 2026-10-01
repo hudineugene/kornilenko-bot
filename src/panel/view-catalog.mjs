@@ -525,6 +525,8 @@ function openRecordEditor(kind, id) {
         rows.forEach(function (row) { row.issues.forEach(function (issue) { if (missing.indexOf(issue) < 0) missing.push(issue); }); });
         var missingWords = counted(missing.length, "поле", "поля", "полей");
         var missingLine = missing.length ? "Не хватает: " + missingWords + " (" + missing.slice(0, 3).join(", ") + (missing.length > 3 ? "…" : "") + ")" : "";
+        // Цвет — по состоянию: «Все поля заполнены» не должно быть жёлтым («внимание»).
+        dialog.querySelector("#publicationCheck").classList.toggle("is-ready", ready);
         dialog.querySelector("#publicationCheck").innerHTML =
           '<div class="publication-head"><div><b>Готовность карточки</b><span>Единый стандарт для всех языков</span></div><span class="chip ' + state.chip + '">' + state.text + "</span></div>" +
           (missing.length
@@ -615,6 +617,9 @@ function openRecordEditor(kind, id) {
         previewTimer = setTimeout(function () {
           var fields = recordFields();
           fields.language = language;
+          // Сколько фотографий увидит клиент на этом языке (нет своих — берутся русские): от этого зависит кнопка «📷 Фото · N».
+          var own = dialog.querySelectorAll('[data-images="' + language + '"] .media-thumb img').length;
+          fields.photoCount = own || dialog.querySelectorAll('[data-images="ru"] .media-thumb img').length;
           send("/api/preview/object", "POST", fields).then(function (card) {
             if (serial !== previewSerial) return;
             var button = function (text) { return '<div class="tg-button">' + esc(text) + "</div>"; };
