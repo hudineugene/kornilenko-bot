@@ -573,8 +573,9 @@ test.describe('каталог списком', () => {
     assert.match(body.text, new RegExp(FILTER.listTitle + ' · 12'), 'видно, сколько всего объектов');
     const lines = body.text.split('\n').filter((line) => /^\d+\. /.test(line));
     assert.equal(lines.length, 8, 'восемь строк на странице');
-    assert.match(lines[0].replace(/[   ]/g, ' '), /^1\. Квартира · Бенидорм · 210 000 €$/, 'строка коротко описывает объект: спальни отпали, чтобы уложиться в 34 знака');
-    assert.ok(lines.every((line) => Array.from(line).length <= 34), 'ни одна строка списка не длиннее 34 знаков (иначе на телефоне переносится)');
+    // Строка — то, чем объекты различаются: цена, спальни, площадь, город (город целиком или никак).
+    assert.match(lines[0].replace(/\s/g, ' '), /^1\. 210 000 € · 2 сп\. · Бенидорм$/, 'площадь не поместилась — ушла, город остался целиком: ' + lines[0]);
+    assert.ok(lines.every((line) => Array.from(line).length <= 38), 'ни одна строка списка не длиннее 38 знаков (иначе на телефоне переносится)');
 
     const callbacks = callbacksOf(body.reply_markup);
     assert.ok(callbacks.includes('catalog:all:0'), 'номер открывает карточку');

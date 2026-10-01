@@ -1174,25 +1174,29 @@ async function sendUiMessage(chatId, user, text, token, options = {}) {
 const CATALOG_LIST_PAGE_SIZE = 8;
 
 function catalogListLine(record, language, number) {
-  const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const type = (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[record.propertyType] || '';
   const city = localizedExact(record.city, language, 80);
   const price = objectPriceText(record, language);
   const bedrooms = Number(record.bedrooms) > 0 ? record.bedrooms + ' ' + (language === 'ru' ? 'сп.' : language === 'es' ? 'dorm.' : 'bed') : '';
-  // Строка не длиннее 34 знаков: длиннее — переносится, и восемь объектов занимают шестнадцать строк. Сначала
-  // отпадают спальни, потом город сокращается (или уходит): тип и цена остаются всегда.
-  const LIMIT = 34;
+  const area = Number(record.area) > 0 ? numericText(record.area, language) + ' ' + (language === 'ru' ? 'м' : 'm') + '²' : '';
+  // «250 000 € · 2 сп. · 70 м² · Бенидорм»: то, чем объекты различаются, а не «Квартира · Бенидорм» пять раз подряд. Тип — только у
+  // необычного (вилла, участок): квартира подразумевается. Строка не длиннее 38 знаков: длиннее — переносится, и восемь объектов
+  // занимают шестнадцать строк.
+  const LIMIT = 38;
   const prefix = String(number) + '. ';
   const build = (list) => prefix + list.filter(Boolean).join(' · ');
-  const fits = (list) => Array.from(build(list)).length <= LIMIT;
-  let shownCity = city;
-  let shownBedrooms = bedrooms;
-  if (!fits([type, shownCity, price, shownBedrooms])) shownBedrooms = '';
-  if (!fits([type, shownCity, price, shownBedrooms]) && shownCity) {
-    const room = LIMIT - Array.from(build([type, price])).length - 3;
-    shownCity = room >= 4 ? shortenedText(shownCity, room) : '';
-  }
-  return build([type, shownCity, price, shownBedrooms]);
+  const kind = record.propertyType && record.propertyType !== 'apartment' ? type : '';
+  // Город целиком или никак («Benid…» ничего не говорит): если не помещается, сначала уходит площадь, потом спальни, потом город.
+  const variants = [
+    [kind, price, bedrooms, area, city],
+    [kind, price, bedrooms, '', city],
+    [kind, price, '', '', city],
+    [kind, price, bedrooms, area],
+    [kind, price, bedrooms],
+    [kind, price],
+  ];
+  const chosen = variants.find((list) => Array.from(build(list)).length <= LIMIT) || variants[variants.length - 1];
+  return build(chosen);
 }
 
 function catalogListPanel(user, records, page, mode) {
