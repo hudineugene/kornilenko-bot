@@ -96,8 +96,8 @@ test('версия 39: сохранённые прежние тексты уст
   const effective = effectiveTexts(saved);
   assert.equal(effective.menuLabels.en.contacts, '💬 Contact us', 'старая подпись кнопки заменена нынешней');
   assert.equal(effective.menuLabels.es.contacts, '💬 Contactar');
-  assert.equal(effective.managerContact.en.intro, '💬 Choose a convenient way to contact an agent.', 'agent, а не manager');
-  assert.equal(effective.managerContact.es.intro, '💬 Elige una forma cómoda de contactar con un asesor.', 'asesor, а не gestor');
+  assert.equal(effective.managerContact.en.intro, '💬 Contact an agent'+String.fromCharCode(10)+'Choose a convenient way.', 'agent, а не manager');
+  assert.equal(effective.managerContact.es.intro, '💬 Contacto con un asesor'+String.fromCharCode(10)+'Elige una forma cómoda.', 'asesor, а не gestor');
   // Своё — остаётся, в том числе рядом с прежним значением в той же группе.
   assert.equal(effective.menuLabels.en.objects, '🏡 Homes');
   assert.equal(effective.managerContact.en.received, OWN);

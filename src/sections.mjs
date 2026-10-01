@@ -191,7 +191,9 @@ async function sendAbout(chatId, user, token, full = false) {
   const language = user.preferredLanguage || 'ru';
   const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
   const source = fillTemplate(data.config.menu[language].about, user);
-  const text = full ? source : aboutPreview(source);
+  // Первая строка владельца — длинное предложение, а не название: над ним ставим заголовок экрана.
+  const heading = (MENU_LABELS[language] || MENU_LABELS.ru).about;
+  const text = [heading, full ? source : aboutPreview(source)].filter(Boolean).join('\n\n');
   const rows = [];
   if (!full && text.length < source.length) rows.push([{ text: '📖 ' + navigation.readMore, callback_data: 'about:full' }]);
   rows.push([{ text: (MENU_LABELS[language] || MENU_LABELS.ru).contacts, callback_data: 'about:contact' }]);
@@ -689,7 +691,7 @@ async function handlePropertyCallback(query, token) {
       }
     }
     const title = localizedExact(record.title, language) || record.reference || '';
-    await sendUiMessage(chatId, user, [title, text.managerPrompt].filter(Boolean).join('\n\n'), token, { reply_markup: propertyManagerMarkup(record, language, true) });
+    await sendUiMessage(chatId, user, [title ? '💬 ' + title : '', text.managerPrompt].filter(Boolean).join('\n\n'), token, { reply_markup: propertyManagerMarkup(record, language, true) });
     return;
   }
   if (actionName === 'price') {

@@ -16,7 +16,7 @@ const GOALS = ['live', 'invest', 'browse'];
 
 const GOAL_TEXT = {
   ru: {
-    ask: 'Что вам ближе? Так я подскажу, с чего начать.',
+    ask: '🎯 Что вам ближе?\nТак я подскажу, с чего начать.',
     live: '🏡 Купить для жизни',
     invest: '📈 Инвестиция и аренда',
     browse: '👀 Пока смотрю',
@@ -29,14 +29,14 @@ const GOAL_TEXT = {
     rent: '🔑 Про аренду',
     alerts: '🔔 Сообщать о новых',
     reply: {
-      live: 'Отлично — подберём вариант для жизни. С чего начнём?',
-      invest: 'Понятно, смотрим на доходность. Расходы при покупке можно посчитать на карточке объекта («Расчёт покупки»). Начнём с объектов или с расходов и налогов?',
-      browse: 'Хорошо, без спешки. Посмотрите объекты, а если хотите — буду сообщать о новых: для этого коротко задайте, что вам интересно.',
+      live: '🎯 Цель выбрана\nОтлично — подберём вариант для жизни. С чего начнём?',
+      invest: '🎯 Цель выбрана\nПонятно, смотрим на доходность. Расходы при покупке можно посчитать на карточке объекта («Расчёт покупки»). Начнём с объектов или с расходов и налогов?',
+      browse: '🎯 Цель выбрана\nХорошо, без спешки. Посмотрите объекты, а если хотите — буду сообщать о новых: для этого коротко задайте, что вам интересно.',
     },
     labels: { live: 'купить для жизни', invest: 'инвестиция и аренда', browse: 'пока смотрит' },
   },
   en: {
-    ask: 'What suits you best? It helps me suggest where to start.',
+    ask: '🎯 What suits you best?\nIt helps me suggest where to start.',
     live: '🏡 Buy to live',
     invest: '📈 Investment and rental',
     browse: '👀 Just browsing',
@@ -49,14 +49,14 @@ const GOAL_TEXT = {
     rent: '🔑 About renting out',
     alerts: '🔔 Tell me about new ones',
     reply: {
-      live: 'Great — let’s find a place to live. Where shall we start?',
-      invest: 'Understood, we’ll look at returns. You can work out the purchase costs on a property card (“Purchase estimate”). Start with properties or with costs and taxes?',
-      browse: 'Fine, no rush. Have a look at the properties, and if you like I will tell you about new ones: just tell me briefly what you are interested in.',
+      live: '🎯 Goal set\nGreat — let’s find a place to live. Where shall we start?',
+      invest: '🎯 Goal set\nUnderstood, we’ll look at returns. You can work out the purchase costs on a property card (“Purchase estimate”). Start with properties or with costs and taxes?',
+      browse: '🎯 Goal set\nFine, no rush. Have a look at the properties, and if you like I will tell you about new ones: just tell me briefly what you are interested in.',
     },
     labels: { live: 'buying to live', invest: 'investment and rental', browse: 'just browsing' },
   },
   es: {
-    ask: '¿Qué te interesa más? Así te sugiero por dónde empezar.',
+    ask: '🎯 ¿Qué te interesa más?\nAsí te sugiero por dónde empezar.',
     live: '🏡 Comprar para vivir',
     invest: '📈 Inversión y alquiler',
     browse: '👀 Solo estoy mirando',
@@ -69,9 +69,9 @@ const GOAL_TEXT = {
     rent: '🔑 Sobre el alquiler',
     alerts: '🔔 Avisarme de novedades',
     reply: {
-      live: 'Genial: busquemos un lugar para vivir. ¿Por dónde empezamos?',
-      invest: 'Entendido, veremos la rentabilidad. Puedes calcular los gastos de compra en la ficha del inmueble («Cálculo de compra»). ¿Empezamos por los inmuebles o por gastos e impuestos?',
-      browse: 'De acuerdo, sin prisa. Echa un vistazo a los inmuebles y, si quieres, te aviso de las novedades: solo cuéntame brevemente qué te interesa.',
+      live: '🎯 Objetivo elegido\nGenial: busquemos un lugar para vivir. ¿Por dónde empezamos?',
+      invest: '🎯 Objetivo elegido\nEntendido, veremos la rentabilidad. Puedes calcular los gastos de compra en la ficha del inmueble («Cálculo de compra»). ¿Empezamos por los inmuebles o por gastos e impuestos?',
+      browse: '🎯 Objetivo elegido\nDe acuerdo, sin prisa. Echa un vistazo a los inmuebles y, si quieres, te aviso de las novedades: solo cuéntame brevemente qué te interesa.',
     },
     labels: { live: 'comprar para vivir', invest: 'inversión y alquiler', browse: 'solo mirando' },
   },

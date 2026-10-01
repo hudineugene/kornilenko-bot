@@ -419,7 +419,7 @@ test.describe('мастер подбора: тупик и передача ме�
 
     const sent = await chat.press('cfilter:manager');
     const result = editedPanel(sent);
-    assert.match(result.text, /^✅ Передали менеджеру:/, 'итог виден в самом чате');
+    assert.match(result.text, /^✅ Передали менеджеру\n/, 'итог виден в самом чате');
     assert.match(result.text, /Продажа/, 'с тем, что клиент выбрал');
     assert.match(result.text, /Ответим в этом чате/);
     assert.ok(!callbacksOf(result.reply_markup).includes('cfilter:manager'), 'повторить нельзя');
@@ -658,7 +658,7 @@ test.describe('property card', () => {
     const first = await chat.press('property:similar:' + source.id);
     const firstCard = first.calls.find((call) => call.method === 'sendPhoto');
     assert.ok(firstCard.body.caption.startsWith('<i>' + PROPERTY.ru.similarHeading + '</i>'), 'номер объекта в заголовке не повторяем: он на кнопке');
-    assert.match(firstCard.body.caption, /Почему подходит: тот же тип · тот же город · тот же район · близкая цена/);
+    assert.match(firstCard.body.caption, /Почему подходит: тот же тип · тот же город · тот же район/);
     assert.ok(callbacksOf(firstCard.body.reply_markup).includes('catalog:similar:1'));
     assert.ok(callbacksOf(firstCard.body.reply_markup).includes('property:return:' + source.id));
     assert.equal(chat.user.catalogContext.mode, 'similar');

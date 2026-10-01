@@ -79,6 +79,10 @@ function report(title, from, chatId) {
     const rows = phoneLines(shown);
     out.push('  ' + kind + ' ' + shown.replace(/\n/g, '\n     ').slice(0, 1500) + buttons(b.reply_markup) + '\n   ↳ строк на телефоне: ' + rows);
     if (rows > 30) notes.push(title + ' — ответ в ' + rows + ' строк (больше экрана)');
+    // Жирный заголовок — у каждого экрана с кнопками (правило этапов 45 и 49): первая строка — «значок Название».
+    if (['sendMessage', 'editMessageText'].includes(call.method) && b.reply_markup && b.reply_markup.inline_keyboard && !(Array.isArray(b.entities) && b.entities.some((item) => item.type === 'bold' && item.offset === 0)) && !(b.parse_mode === 'HTML' && String(b.text || '').startsWith('<b>'))) {
+      notes.push('нет жирного заголовка: «' + String(b.text || '').split('\n')[0].slice(0, 60) + '»');
+    }
     checkButtons(title, b.reply_markup, call.method === 'sendPhoto' || call.method === 'editMessageMedia' || call.method === 'editMessageCaption');
     // Брак в тексте: неподставленные поля {count}, undefined, null, [object Object], NaN.
     const defect = /\{[a-zA-Z]+\}|undefined|\bnull\b|\[object|\bNaN\b/.exec(shown + ' ' + JSON.stringify(b.reply_markup || ''));

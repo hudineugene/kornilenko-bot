@@ -434,7 +434,7 @@ test.describe('my requests', () => {
 
     const step = await chat.say('/requests');
     const lines = step.last.text.split('\n');
-    assert.equal(lines[0], '📨 Ваши последние заявки и обращения:');
+    assert.equal(lines[0], '📨 Ваши заявки');
     assert.ok(lines.includes('❓ Вопрос'));
     assert.ok(lines.includes('📅 Просмотр · Вилла в Марбелье'));
     assert.ok(lines.some((line) => line.endsWith('— ✅ подтверждён')));

@@ -119,12 +119,15 @@ async function telegramCall(token, method, init, { signal, timeoutMs }) {
 // Заголовок — короткая первая строка со значка, без точки на конце (иначе это уже инструкция), за ней ещё текст.
 function screenTitleEntities(payload) {
   const text = payload && typeof payload.text === 'string' ? payload.text : '';
-  if (!text || payload.parse_mode || payload.entities || !payload.reply_markup || !Array.isArray(payload.reply_markup.inline_keyboard)) return null;
+  if (!text || payload.parse_mode || !payload.reply_markup || !Array.isArray(payload.reply_markup.inline_keyboard)) return null;
   const end = text.indexOf('\n');
   if (end < 2 || end > 60) return null;
   const line = text.slice(0, end);
-  if (!/^\p{Extended_Pictographic}/u.test(line) || /[.:!…»]$/.test(line.trimEnd())) return null;
-  return [{ type: 'bold', offset: 0, length: line.length }];
+  if (!/^(\p{Extended_Pictographic}|⋯)/u.test(line) || /[.:!…»]$/.test(line.trimEnd())) return null;
+  // Ссылки-подписи (карты, WhatsApp) уже лежат в entities: заголовок добавляем к ним, если они его не задевают.
+  const existing = Array.isArray(payload.entities) ? payload.entities : [];
+  if (existing.some((item) => item.offset < line.length)) return null;
+  return [{ type: 'bold', offset: 0, length: line.length }, ...existing];
 }
 
 // Строка «Открыть карту: https://…» и «Быстрее — в WhatsApp: https://wa.me/…» показывает клиенту голый адрес в пол-экрана.

@@ -1857,7 +1857,7 @@ function catalogPricePanel(user) {
     { text: '✎ ' + copy.customPrice, callback_data: 'cfilter:price:custom' },
   ]);
   rows.push([{ text: '⬅️ ' + copy.backToFilter, callback_data: 'cfilter:open' }]);
-  return { text: copy.priceTitle, markup: { inline_keyboard: rows } };
+  return { text: [copy.priceTitle, copy.priceHint].filter(Boolean).join('\n'), markup: { inline_keyboard: rows } };
 }
 
 // «Ещё»: то, чем пользуются редко — сортировка, своя цена, сохранённый поиск и
