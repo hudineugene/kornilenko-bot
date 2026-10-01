@@ -567,7 +567,7 @@ async function handleApi(req, res, url) {
     const adminChatId = cleanText(data.config.adminChatId, 40);
     if (!adminChatId) return json(res, 400, { error: 'Сначала укажите Chat ID администратора' });
     try {
-      await sendMessage(adminChatId, '✅ Уведомления работают. Теперь действия пользователей будут приходить в этот чат.', data.config.botToken, { track: false });
+      await sendMessage(adminChatId, '✅ Уведомления работают. Теперь действия клиентов будут приходить в этот чат.', data.config.botToken, { track: false });
       data.config.adminNotificationVerifiedAt = new Date().toISOString();
       saveDataNow();
       return json(res, 200, { ok: true });

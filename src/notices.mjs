@@ -1,6 +1,7 @@
 // Ежедневная сводка и напоминания администратору о заявках без ответа.
 
 import { cleanText, dayKey, localDayKey } from './util.mjs';
+import { PLACES } from './places.mjs';
 import { MENU_LABELS } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
@@ -44,9 +45,9 @@ function activityDigest(dayKeyValue) {
   return [
     '📊 Активность за ' + day + '.' + month + '.' + year,
     '',
-    'Новых пользователей: ' + newUsers + (sources ? ' (' + sources + ')' : ''),
+    'Новых клиентов: ' + newUsers + (sources ? ' (' + sources + ')' : ''),
     'Сообщений от клиентов: ' + received,
-    'Новых обращений: ' + inquiries,
+    'Новых заявок: ' + inquiries,
     ...(sections.length ? ['', 'Открывали разделы:', ...sections.map((line) => '• ' + line)] : []),
   ].join('\n');
 }
@@ -123,7 +124,7 @@ function lastClientText(inquiry) {
 // notification.
 async function sendInquiryToAdministrator(inquiry, heading, extraLines = [], options = {}) {
   const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
-  const name = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Пользователь удалён';
+  const name = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Клиент удалён';
   const username = user && user.username ? ' (@' + user.username + ')' : '';
   const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
   const text = [
@@ -229,7 +230,7 @@ async function runInquiryReminders(now = new Date()) {
   const rest = due.length - sent.length;
   if (rest > 0) {
     const restPlan = adminSendPlan('reminder');
-    if (restPlan.send) await sendMessage(adminChatId, '⏰ И ещё ' + rest + ' без ответа — они в панели: «Клиенты → Диалоги».', data.config.botToken, { track: false, ...restPlan.options });
+    if (restPlan.send) await sendMessage(adminChatId, '⏰ И ещё ' + rest + ' без ответа — они в панели: «' + PLACES.dialogs + '».', data.config.botToken, { track: false, ...restPlan.options });
     for (const inquiry of due.slice(REMINDERS_PER_RUN)) {
       inquiry.remindedAt = now.toISOString();
       inquiry.remindedSince = new Date(waitingSince(inquiry)).toISOString();
@@ -428,14 +429,14 @@ function weeklyReportText(report) {
     (report.which === 'current' ? '📈 Эта неделя, ' : '📈 Итоги недели ') + report.label,
     '',
     '👥 Новых клиентов: ' + report.users.count + comparison(report.users.count, report.users.previous),
-    '📩 Обращений: ' + report.inquiries.count + comparison(report.inquiries.count, report.inquiries.previous),
+    '📩 Заявок: ' + report.inquiries.count + comparison(report.inquiries.count, report.inquiries.previous),
     ...(report.inquiries.byType.length ? ['   ' + report.inquiries.byType.map(([name, count]) => name + ' — ' + count).join(', ')] : []),
     '📅 Просмотров: записались ' + report.viewings.booked + ', прошло ' + report.viewings.held,
     // Строка про сделки появляется, когда они были на этой или прошлой неделе:
     // «Сделок: 0» каждую неделю только мозолит глаза.
     ...(report.deals.count || report.deals.previous ? ['🤝 Сделок: ' + report.deals.count + comparison(report.deals.count, report.deals.previous)] : []),
     '⏳ Сейчас без ответа: ' + report.waiting,
-    ...(report.topProperties.length ? ['🔖 Больше всего обращений: ' + report.topProperties.map((item) => item.name + ' — ' + item.count).join(', ')] : []),
+    ...(report.topProperties.length ? ['🔖 Больше всего заявок: ' + report.topProperties.map((item) => item.name + ' — ' + item.count).join(', ')] : []),
     ...(report.sources.length ? ['📣 Откуда пришли: ' + report.sources.map(([name, count]) => name + ' — ' + count).join(', ')] : []),
     ...funnelTextLines(report.funnel),
     ...(report.sharedLists && (report.sharedLists.shared || report.sharedLists.opened) ? ['📤 Подборки: поделились ' + report.sharedLists.shared + ', открыли по ссылке ' + report.sharedLists.opened + comparison(report.sharedLists.opened, report.sharedLists.previousOpened)] : []),
@@ -472,7 +473,7 @@ async function runWeeklyReport(now = new Date()) {
 
 function runScheduledNotices() {
   runDailyDigest().catch((error) => recordError('Сводка активности', error));
-  runInquiryReminders().catch((error) => recordError('Напоминание об обращениях', error));
+  runInquiryReminders().catch((error) => recordError('Напоминание о заявках', error));
   runViewingNotices().catch((error) => recordError('Уведомления о просмотрах', error));
   runFollowUpReminders().catch((error) => recordError('Напоминание связаться с клиентом', error));
   runFormReminders().catch((error) => recordError('Напоминание о незаконченной форме', error));

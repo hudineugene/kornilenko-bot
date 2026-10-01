@@ -92,14 +92,15 @@ test('сообщения менеджеру ссылаются на раздел
     assert.doesNotMatch(source, /раздел «Обращения»/, file);
     assert.doesNotMatch(source, /журнал ошибок на главной/, file);
   }
-  assert.match(read('src', 'admin-commands.mjs'), /«Клиенты → Диалоги»/);
-  assert.match(read('src', 'status.mjs'), /«Настройки → Данные и копии»/);
+  assert.match(read('src', 'admin-commands.mjs'), /PLACES\.dialogs/);
+  assert.match(read('src', 'status.mjs'), /PLACES\.dataCopies/);
+  assert.match(read('src', 'places.mjs'), /dialogs: 'Клиенты → Диалоги'/);
 });
 
 test('жирный заголовок карточки — и в чате главного администратора, не только у менеджеров', async () => {
   const { screenTitleEntities } = await import('../src/telegram.mjs');
-  const payload = { text: '📩 Новое обращение: вопрос по объекту\n👤 Мария · ES', reply_markup: { inline_keyboard: [[{ text: 'В работу', callback_data: 'x' }]] } };
-  assert.deepEqual(screenTitleEntities({ ...payload, chat_id: 999 }), [{ type: 'bold', offset: 0, length: '📩 Новое обращение: вопрос по объекту'.length }]);
+  const payload = { text: '📩 Новая заявка: вопрос по объекту\n👤 Мария · ES', reply_markup: { inline_keyboard: [[{ text: 'В работу', callback_data: 'x' }]] } };
+  assert.deepEqual(screenTitleEntities({ ...payload, chat_id: 999 }), [{ type: 'bold', offset: 0, length: '📩 Новая заявка: вопрос по объекту'.length }]);
   assert.deepEqual(screenTitleEntities({ ...payload, chat_id: 123 }), screenTitleEntities({ ...payload, chat_id: 999 }), 'у менеджера так же');
 });
 

@@ -37,7 +37,7 @@ const sentTo = (calls, chatId, method = 'sendMessage') => calls.filter((call) =>
 test('text the admin types in their own chat is not an inquiry', async () => {
   const calls = await adminSays('Проверка, как это работает');
   const reply = sentTo(calls, ADMIN_CHAT).pop();
-  assert.match(reply.body.text, /^ℹ️ Это чат администратора/);
+  assert.match(reply.body.text, /^ℹ️ Сообщение никому не отправлено/);
   assert.match(reply.body.text, /\/inbox/);
   assert.equal(bot.getData().inquiries.length, 0);
 });
@@ -83,7 +83,7 @@ test('в группе-админчате /myid отвечает номером �
   const calls = await adminSays('/myid', { chatId: '-100777888', type: 'supergroup', fromId: 4242 });
   const answers = sentTo(calls, '-100777888');
   assert.equal(answers.length, 1);
-  assert.match(answers[0].body.text, /Chat ID этого чата: -100777888/);
+  assert.match(answers[0].body.text, /Telegram-чат \(номер для панели\): -100777888/);
   assert.equal(Object.keys(bot.getData().users).length, 0, 'клиента не завели');
 });
 
@@ -113,7 +113,7 @@ test('the client answering the manager continues the same inquiry', async () => 
   const answer = await client.say('Да, давайте завтра');
   assert.equal(client.inquiries.length, 1, 'one conversation, one inquiry');
   assert.match(client.inquiries[0].text, /рассрочка[\s\S]*давайте завтра/);
-  assert.match(sentTo(answer.calls, ADMIN_CHAT)[0].body.text, /^📩 Новое сообщение в обращении/);
+  assert.match(sentTo(answer.calls, ADMIN_CHAT)[0].body.text, /^📩 Новое сообщение в заявке/);
   assert.equal(answer.replies.length, 1, 'after a pause the client hears the message was received');
   assert.equal(bot.awaitingReply(client.inquiries[0]), true, 'the client wrote after the answer');
   // Лента: вопрос клиента, заготовка бота, ответ менеджера, ответ клиента и
@@ -164,7 +164,7 @@ test('/inbox brings back what waits for an answer, and the admin can reply to it
   const reply = await adminSays('Цена 850 000 €', { replyTo: notificationFor(waiting.id) });
   assert.equal(sentTo(reply, waiting.id).length, 1);
   const again = await adminSays('/inbox');
-  assert.equal(sentTo(again, ADMIN_CHAT)[0].body.text, '✅ Все обращения отвечены.');
+  assert.equal(sentTo(again, ADMIN_CHAT)[0].body.text, '✅ Все заявки отвечены.');
 });
 
 test('/viewings shows today and tomorrow, /stats the day and the week', async () => {
@@ -190,7 +190,7 @@ test('the notification shows the phone and earlier inquiries', async () => {
   client.inquiries[0].status = 'closed';
   const second = await client.say('Второй вопрос');
   const text = sentTo(second.calls, ADMIN_CHAT)[0].body.text;
-  assert.match(text, /\n📞 \+34 600 111 222\n🗂 Обращений раньше: 1\n/);
+  assert.match(text, /\n📞 \+34 600 111 222\n🗂 Заявок раньше: 1\n/);
 });
 
 test('the notification about a photo is a reply to the copied photo', async () => {

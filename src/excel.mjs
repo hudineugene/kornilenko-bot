@@ -127,12 +127,12 @@ const INQUIRY_EXPORT_COLUMNS = [
   { title: 'Язык', width: 6 },
   { title: 'Источник', width: 14 },
   { title: 'Объект', width: 28 },
-  { title: 'Текст обращения', width: 60 },
+  { title: 'Текст заявки', width: 60 },
   { title: 'Заметка о клиенте', width: 30 },
   { title: 'Ответов', width: 9 },
   { title: 'Последний ответ', width: 40 },
   { title: 'Обновлено', width: 17 },
-  { title: 'ID обращения', width: 38 },
+  { title: 'ID заявки', width: 38 },
 ];
 
 function inquiryExportRows(inquiries) {
@@ -177,8 +177,8 @@ const CLIENT_EXPORT_COLUMNS = [
   { title: 'Источник', width: 14 },
   { title: 'Этап', width: 14 },
   { title: 'Следующий шаг', width: 14 },
-  { title: 'Обращений', width: 10 },
-  { title: 'Последнее обращение', width: 30 },
+  { title: 'Заявок', width: 10 },
+  { title: 'Последняя заявка', width: 30 },
   { title: 'Избранных объектов', width: 11 },
   { title: 'Согласие на рассылки', width: 12 },
   { title: 'Бот доступен', width: 12 },

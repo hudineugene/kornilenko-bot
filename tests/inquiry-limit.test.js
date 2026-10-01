@@ -114,10 +114,10 @@ test('если закрытых нет, владелец узнаёт и об э
   assert.equal(response.status, 200, await response.text());
 
   assert.equal(data.inquiries.length, MAX);
-  assert.equal(data.errors[0] && data.errors[0].area, 'Предел обращений', 'в журнале панели есть запись');
+  assert.equal(data.errors[0] && data.errors[0].area, 'Предел заявок', 'в журнале панели есть запись');
   const notice = telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === ADMIN_CHAT);
   assert.equal(notice.length, 1, 'администратор получил предупреждение');
-  assert.match(notice[0].body.text, /Обращений стало больше/);
+  assert.match(notice[0].body.text, /Заявок стало больше/);
 });
 
 test('сначала уходят закрытые, живые остаются', async () => {
@@ -144,10 +144,10 @@ test('если закрытых не хватило — владелец узн�
 
   const notice = telegram.calls.filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === ADMIN_CHAT);
   assert.equal(notice.length, 1, 'администратор получил сообщение');
-  assert.match(notice[0].body.text, /Обращений стало больше/);
+  assert.match(notice[0].body.text, /Заявок стало больше/);
   assert.match(notice[0].body.text, /50/, 'сказано, сколько удалено');
   assert.match(notice[0].body.text, /Очистить|Excel/, 'и что с этим делать');
-  assert.equal(data.errors[0].area, 'Предел обращений', 'в журнале панели тоже осталась запись');
+  assert.equal(data.errors[0].area, 'Предел заявок', 'в журнале панели тоже осталась запись');
 
   // Второй раз за сутки не повторяем: поток обращений не должен стать потоком
   // предупреждений.
@@ -176,7 +176,7 @@ test('поток обращений не вытесняет из журнала 
     trimInquiries();
   }
 
-  const overflow = data.errors.filter((entry) => entry.area === 'Предел обращений');
+  const overflow = data.errors.filter((entry) => entry.area === 'Предел заявок');
   assert.equal(overflow.length, 1, 'о переполнении сказано один раз за сутки, а не 150');
   assert.ok(data.errors.some((entry) => entry.area === 'Сохранение данных'), 'запись о сбое записи на диск на месте');
   assert.equal(data.inquiries.length, MAX, 'предел соблюдён');

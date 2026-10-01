@@ -35,7 +35,7 @@ test.describe('client', () => {
     const [inquiry] = chat.inquiries;
     assert.equal(inquiry.type, 'question');
     assert.match(inquiry.text, /Акция «Летняя скидка»/);
-    assert.ok(adminMessages().some((message) => message.text.startsWith('📩 Новое обращение: вопрос менеджеру') && message.text.includes('Летняя скидка')));
+    assert.ok(adminMessages().some((message) => message.text.startsWith('📩 Новая заявка: вопрос менеджеру') && message.text.includes('Летняя скидка')));
   });
 
   test('an ended promotion cannot be answered any more', async () => {
@@ -77,7 +77,7 @@ test.describe('client', () => {
     assert.match(inquiry.text, new RegExp(PROPERTY.ru.askPrice));
     const notification = adminMessages().find((message) => message.text.startsWith('📩'));
     assert.equal(notification.text, [
-      '📩 Новое обращение: вопрос по объекту',
+      '📩 Новая заявка: вопрос по объекту',
       '👤 Анна · RU',
       '',
       '🔖 Вилла без цены',
@@ -137,7 +137,7 @@ test.describe('admin chat copies', () => {
       },
     });
     assert.equal(calls.filter((call) => call.method === 'copyMessage').length, 0);
-    assert.ok(adminMessages().some((message) => message.text.startsWith('📩 Новое обращение: вопрос по объекту')));
+    assert.ok(adminMessages().some((message) => message.text.startsWith('📩 Новая заявка: вопрос по объекту')));
     assert.equal(chat.inquiries[0].sourceMessageId, 4321, 'the admin\'s reply still quotes the card in the client\'s chat');
   });
 
@@ -160,7 +160,7 @@ test.describe('admin', () => {
     await chat.say('Нужна консультация по ВНЖ');
     const [notification] = adminMessages();
     assert.equal(notification.text, [
-      '📩 Новое обращение: вопрос менеджеру',
+      '📩 Новая заявка: вопрос менеджеру',
       '👤 Анна · RU',
       '',
       'Нужна консультация по ВНЖ',
@@ -230,9 +230,9 @@ test.describe('admin', () => {
     assert.equal(digest, [
       '📊 Активность за 17.09.2026',
       '',
-      'Новых пользователей: 1',
+      'Новых клиентов: 1',
       'Сообщений от клиентов: 7',
-      'Новых обращений: 2',
+      'Новых заявок: 2',
       '',
       'Открывали разделы:',
       '• Объекты — 4',

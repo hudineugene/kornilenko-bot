@@ -48,7 +48,7 @@ test('a client inquiry reaches the admin and every manager', async () => {
   const inquiry = chat.inquiries[0];
   assert.equal(sentTo(ADMIN_CHAT).filter((call) => call.body.text.startsWith('📩')).length, 1);
   const [toManager] = sentTo(MANAGER_CHAT);
-  assert.match(toManager.body.text, /^📩 Новое обращение/);
+  assert.match(toManager.body.text, /^📩 Новая заявка/);
   assert.ok(Object.keys(bot.getData().adminReplyTargets).some((key) => !key.includes(':')), 'the main admin keeps plain keys');
   assert.ok(managerNotificationId(inquiry.id) > 0);
   assert.equal(bot.getData().config.managers[0].verifiedAt !== '', true, 'a delivered message proves the chat works');
@@ -62,7 +62,10 @@ test('a manager answers from their chat; the inquiry is theirs', async () => {
   await managerMessage('Да, в субботу в 11:00 удобно?', managerNotificationId(inquiry.id));
   const [toClient] = sentTo(chat.id);
   assert.match(toClient.body.text, /Да, в субботу в 11:00 удобно\?/);
-  assert.match(sentTo(MANAGER_CHAT)[0].body.text, /^✅ Сообщение отправлено/);
+  const reaction = telegram.calls.find((call) => call.method === "setMessageReaction" && String(call.body.chat_id) === MANAGER_CHAT);
+  assert.ok(reaction, "ответ подтверждён реакцией на сообщение менеджера, а не отдельным сообщением");
+  assert.equal(reaction.body.reaction[0].emoji, "👌");
+  assert.equal(sentTo(MANAGER_CHAT).length, 0, "лишних сообщений в чате менеджера нет");
   assert.equal(sentTo(ADMIN_CHAT).length, 0, 'the confirmation goes to the one who answered');
   assert.equal(inquiry.replies[0].by, 'Мария');
   assert.equal(inquiry.assignee, 'Мария');

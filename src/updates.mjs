@@ -11,6 +11,7 @@ import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, hand
 import {
   adminChatFor,
   createInquiry,
+  handleAdministratorEdit,
   handleAdministratorReply,
   handleInquiryStatusCallback,
   handleMessageReaction,
@@ -74,7 +75,9 @@ function albumKey(message) {
 function albumMessage(update) {
   const message = update && update.message;
   if (!message || !message.media_group_id || message.albumMessageIds) return null;
-  if (!message.chat || message.chat.type !== 'private' || adminChatFor(message.chat.id)) return null;
+  if (!message.chat || message.chat.type !== 'private') return null;
+  // Альбом сотрудника собираем только когда это ответ на карточку клиента.
+  if (adminChatFor(message.chat.id) && !message.reply_to_message) return null;
   return message;
 }
 
@@ -121,6 +124,11 @@ function waitForAlbum(message) {
 }
 
 async function handleUpdate(update, token) {
+  // Менеджер поправил отправленный ответ.
+  if (update.edited_message) {
+    await handleAdministratorEdit(update.edited_message, token);
+    return;
+  }
   // The bot was added to a group, promoted or removed.
   if (update.my_chat_member) {
     handleMyChatMember(update.my_chat_member);
@@ -209,8 +217,8 @@ async function handleUpdate(update, token) {
       }
     } catch (error) {
       runtime.lastError = error.message;
-      recordError('Действие пользователя', error);
-      console.error('Не удалось выполнить действие пользователя:', error.message);
+      recordError('Действие клиента', error);
+      console.error('Не удалось выполнить действие клиента:', error.message);
       const copy = INTERACTION_TEXT[callbackUser.preferredLanguage] || INTERACTION_TEXT.ru;
       await sendMessage(callbackChatId, copy.failed, token, { reply_markup: menuKeyboard(callbackUser.preferredLanguage || 'ru') }).catch(() => {});
     }
@@ -288,7 +296,7 @@ async function handleUpdate(update, token) {
     scheduleSave();
   }
   if (command === '/myid') {
-    void notifyAdministratorAction(user, 'Запросил свой Telegram ID', 'Chat ID: ' + String(message.chat.id));
+    void notifyAdministratorAction(user, 'Запросил свой Telegram ID', 'Telegram-чат: ' + String(message.chat.id));
     const copy = COMMAND_TEXT[user.preferredLanguage || 'ru'] || COMMAND_TEXT.ru;
     await sendMessage(message.chat.id, copy.myId + ' ' + String(message.chat.id), token);
     return;
@@ -664,8 +672,8 @@ async function handleUpdate(update, token) {
       recordBotAnswer(user, answer, { messageId: sent && sent.message_id });
     } catch (error) {
       runtime.lastError = error.message;
-      recordError('Ответ пользователю', error);
-      console.error('Не удалось ответить пользователю:', error.message);
+      recordError('Ответ клиенту', error);
+      console.error('Не удалось ответить клиенту:', error.message);
     }
   }
 }
@@ -851,7 +859,7 @@ async function pollingLoop(generation, token) {
       const updates = await telegramRequest(token, 'getUpdates', {
         offset: runtime.offset,
         timeout: 25,
-        allowed_updates: ['message', 'callback_query', 'message_reaction', 'my_chat_member', 'chat_join_request', 'channel_post'],
+        allowed_updates: ['message', 'callback_query', 'edited_message', 'message_reaction', 'my_chat_member', 'chat_join_request', 'channel_post'],
       }, controller.signal);
       if (generation !== runtime.generation) break;
       markTelegramSuccess();

@@ -105,7 +105,7 @@ async function runRetentionCleanup(now = new Date(), token = data.config.botToke
   if (adminChatId && token && (plan.users.length || removeIds.size)) {
     const lines = ['🗂 Срок хранения данных (' + months + ' мес.): удалены данные, от которых давно ничего не было.'];
     if (plan.users.length) lines.push('Клиентов: ' + plan.users.length);
-    if (removeIds.size) lines.push('Отдельных обращений: ' + removeIds.size);
+    if (removeIds.size) lines.push('Отдельных заявок: ' + removeIds.size);
     lines.push('Не удаляются те, кто ждёт ответа, с предстоящим просмотром или напоминанием. Срок меняется в панели: ' + PLACES.retention + '.');
     await sendMessage(adminChatId, lines.join('\n'), token, { track: false }).catch((error) => recordError('Срок хранения данных', error));
   }

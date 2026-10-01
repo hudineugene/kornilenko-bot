@@ -117,7 +117,7 @@ test('менеджер видит цель: в уведомлении о зая�
   await new Promise((resolve) => setTimeout(resolve, 10));
   bot.getData().config.notifyMode = 'all';
   await chat.say('Хочу купить квартиру для сдачи в аренду');
-  const notice = adminMessages().find((message) => /Новое обращение|сообщение/i.test(message.text));
+  const notice = adminMessages().find((message) => /Новая заявка|сообщение/i.test(message.text));
   assert.ok(notice, 'заявка дошла менеджеру');
   assert.match(notice.text, /🎯 инвестиция и аренда/);
 });

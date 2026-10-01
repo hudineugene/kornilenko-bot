@@ -1379,7 +1379,7 @@ test.describe('lead source', () => {
       data.users['77' + id] = { id: '77' + id, chatId: Number('77' + id), firstName: 'U', firstSeenAt: yesterday + 'T10:00:00.000Z', source, activity: [] };
     }
     const digest = await bot.runDailyDigest(new Date(2026, 8, 18, 10, 0));
-    assert.match(digest, /Новых пользователей: 3 \(instagram — 2, без метки — 1\)/);
+    assert.match(digest, /Новых клиентов: 3 \(instagram — 2, без метки — 1\)/);
   });
 });
 

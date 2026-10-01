@@ -279,7 +279,7 @@ async function confirmViewing(inquiry, options = {}, token = data.config.botToke
 
 async function confirmViewingOnce(inquiry, options, token) {
   const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
-  if (!user || !user.chatId) throw new Error('У пользователя нет доступного чата');
+  if (!user || !user.chatId) throw new Error('У клиента нет доступного чата');
   const viewing = normalizeViewing(inquiry.viewing || {});
   const date = options.date != null ? String(options.date) : viewing.date;
   const time = options.time != null ? String(options.time) : '';
@@ -337,13 +337,13 @@ async function handleViewingConfirmCallback(query, token) {
   const id = String(query.data || '').split(':').slice(2).join(':');
   const inquiry = data.inquiries.find((item) => item.id === id);
   if (!inquiry || inquiry.type !== 'viewing') {
-    await acknowledgeCallback(query, token, 'Обращение не найдено — возможно, оно удалено.');
+    await acknowledgeCallback(query, token, 'Заявка не найдена — возможно, она удалена.');
     return;
   }
   // An old button (another manager's chat, or a notification sent before the
   // panel confirmed or the client cancelled) must not change the viewing.
   const viewing = inquiry.viewing || {};
-  const stale = inquiry.status === 'closed' ? 'Обращение закрыто' + (viewing.cancelledAt ? ': клиент отменил просмотр' : '')
+  const stale = inquiry.status === 'closed' ? 'Заявка закрыта' + (viewing.cancelledAt ? ': клиент отменил просмотр' : '')
     : viewing.confirmedAt ? 'Просмотр уже подтверждён' + (viewing.confirmedDate ? ' на ' + [viewingDateLabel(viewing.confirmedDate, 'ru'), viewing.confirmedTime].filter(Boolean).join(', ') : '') + '. Изменить дату можно в панели.'
       : '';
   if (stale) {

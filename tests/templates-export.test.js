@@ -309,7 +309,7 @@ test.describe('Excel: клиенты', () => {
     assert.equal(anna.E, 'Утром');
     assert.equal(anna.G, 'instagram');
     assert.equal(anna.J, 1, 'одно обращение');
-    assert.match(anna.K, /, (новое|в работе|закрыто)$/, 'последнее обращение: вид и статус');
+    assert.match(anna.K, /, (ждёт ответа|в работе|закрыта)$/, 'последнее обращение: вид и статус');
     assert.equal(anna.L, 2, 'избранных объектов');
     assert.equal(anna.M, 'да', 'согласие на рассылки есть');
     assert.equal(anna.N, 'да');
@@ -353,11 +353,11 @@ test.describe('Excel export', () => {
     const [header, first, second, third] = sheetCells(files['xl/worksheets/sheet1.xml']);
     assert.equal(header.A, 'Создано');
     assert.equal(header.J, 'Источник');
-    assert.equal(header.L, 'Текст обращения');
+    assert.equal(header.L, 'Текст заявки');
     assert.equal(third, undefined, 'unknown ids are skipped');
 
     assert.equal(first.Q, 'inq-question');
-    assert.equal(first.B, 'закрыто');
+    assert.equal(first.B, 'закрыта');
     assert.equal(first.C, 'вопрос по объекту');
     assert.equal(first.K, 'Вилла у моря');
     assert.equal(first.L, '=HYPERLINK(&quot;http://evil&quot;)', 'formula-like text stays a string');

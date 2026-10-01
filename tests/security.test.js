@@ -119,12 +119,12 @@ test('a reply to an unknown notification is refused, not forwarded or turned int
       from: { id: Number(ADMIN_CHAT) },
       chat: { id: Number(ADMIN_CHAT) },
       text: 'Ответ',
-      reply_to_message: { message_id: 424242, from: { id: BOT_ID }, date: Math.floor(Date.now() / 1000), text: 'Действие пользователя\nПолучатель ID: 101' },
+      reply_to_message: { message_id: 424242, from: { id: BOT_ID }, date: Math.floor(Date.now() / 1000), text: 'Действие клиента\nПолучатель ID: 101' },
     },
   }, TOKEN);
   assert.equal(sentTo(101).length, 0);
   assert.equal(sentTo(ADMIN_CHAT).length, 1);
-  assert.match(sentTo(ADMIN_CHAT)[0].body.text, /не удалось определить получателя/);
+  assert.match(sentTo(ADMIN_CHAT)[0].body.text, /Это сообщение не про клиента — ответ никому не ушёл/);
   assert.equal(data.inquiries.length, 0);
 });
 

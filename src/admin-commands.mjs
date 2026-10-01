@@ -2,6 +2,7 @@
 // ответа, просмотры, цифры за день и неделю — без панели, с телефона.
 
 import { localDayKey } from './util.mjs';
+import { PLACES } from './places.mjs';
 import { data } from './store.mjs';
 import { sendMessage } from './telegram.mjs';
 import { adminChatFor, awaitingReply, inquiryTypeLabel } from './inquiries.mjs';
@@ -12,20 +13,15 @@ import { BOT_COMMAND_DESCRIPTIONS } from './texts.mjs';
 
 // Shown in the command menu of the admin and manager chats only.
 const ADMIN_COMMAND_DESCRIPTIONS = {
-  inbox: 'Обращения без ответа',
+  inbox: 'Заявки без ответа',
   viewings: 'Просмотры сегодня и завтра',
   stats: 'Цифры за сегодня и неделю',
 };
 const INBOX_LIMIT = 10;
 
 const ADMIN_CHAT_HINT = [
-  'ℹ️ Это чат администратора — сообщение никому не отправлено.',
-  '',
-  'Чтобы ответить клиенту, ответьте на его уведомление: смахните сообщение влево или выберите «Ответить».',
-  '',
-  '/inbox — обращения без ответа',
-  '/viewings — просмотры сегодня и завтра',
-  '/stats — цифры за сегодня и неделю',
+  'ℹ️ Сообщение никому не отправлено.',
+  'Чтобы ответить клиенту, ответьте на его карточку (смахните влево). /inbox — кто ждёт ответа.',
 ].join('\n');
 
 // В группе, назначенной чатом администратора или менеджера, бот отвечает только
@@ -35,7 +31,7 @@ const ADMIN_CHAT_HINT = [
 const GROUP_COMMANDS_HINT = [
   'ℹ️ Это рабочий чат — здесь бот понимает только команды для сотрудников:',
   '',
-  '/inbox — обращения без ответа',
+  '/inbox — заявки без ответа',
   '/viewings — просмотры сегодня и завтра',
   '/stats — цифры за сегодня и неделю',
   '',
@@ -80,11 +76,11 @@ async function sendInbox(chat, token, now = new Date()) {
   if (!waiting.length) {
     // Менеджер без своих заявок не должен думать, что всё отвечено, если у коллег клиент ждёт.
     const colleagues = chat.main ? 0 : oneRowPerClient(data.inquiries.filter(awaitingReply)).length;
-    await sendMessage(chat.chatId, colleagues ? '📥 У вас нет заявок без ответа; у коллег ждут: ' + colleagues + '.' : '✅ Все обращения отвечены.', token, { track: false });
+    await sendMessage(chat.chatId, colleagues ? '📥 У вас нет заявок без ответа; у коллег ждут: ' + colleagues + '.' : '✅ Все заявки отвечены.', token, { track: false });
     return 0;
   }
   const shown = waiting.slice(0, INBOX_LIMIT);
-  await sendMessage(chat.chatId, '📥 Ждут ответа: ' + waiting.length + (waiting.length > shown.length ? '. Ниже ' + shown.length + ' самых давних, остальные — в панели: «Клиенты → Диалоги».' : ''), token, { track: false });
+  await sendMessage(chat.chatId, '📥 Ждут ответа: ' + waiting.length + (waiting.length > shown.length ? '. Ниже ' + shown.length + ' самых давних, остальные — в панели: «' + PLACES.dialogs + '».' : ''), token, { track: false });
   for (const inquiry of shown) {
     const since = Date.parse(inquiry.clientMessageAt || inquiry.createdAt) || now.getTime();
     await sendInquiryToAdministrator(inquiry, '📥 Ждёт ответа ' + hoursAgoText(now.getTime() - since) + ': ' + inquiryTypeLabel(inquiry), [], { chats: [chat] });
@@ -101,12 +97,12 @@ function statsText(now = new Date()) {
   const waiting = waitingConversationCount();
   return [
     '📊 Сегодня, ' + label(now),
-    ...(today.length ? today : ['Новых пользователей: 0', 'Сообщений от клиентов: 0', 'Новых обращений: 0']),
+    ...(today.length ? today : ['Новых клиентов: 0', 'Сообщений от клиентов: 0', 'Новых заявок: 0']),
     '📥 Ждут ответа: ' + waiting + (waiting ? ' — /inbox' : ''),
     '',
     '📈 С понедельника, ' + label(monday),
     'Новых клиентов: ' + week.users.length,
-    'Обращений: ' + week.inquiries.length,
+    'Заявок: ' + week.inquiries.length,
     'Записей на просмотр: ' + week.inquiries.filter((inquiry) => inquiry.type === 'viewing').length,
   ].join('\n');
 }
@@ -134,7 +130,7 @@ async function handleAdminChatMessage(message, token) {
   // работает, чтобы владелец мог посмотреть бота своими глазами.
   if (message.chat.type === 'private') return false;
   if (command === '/myid') {
-    await sendMessage(chat.chatId, 'Chat ID этого чата: ' + String(message.chat.id), token, { track: false });
+    await sendMessage(chat.chatId, 'Telegram-чат (номер для панели): ' + String(message.chat.id), token, { track: false });
     return true;
   }
   if (OWN_COMMANDS.has(command) && !meantForAnotherBot(text)) {

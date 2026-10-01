@@ -4,6 +4,7 @@
 // администратору»). Приходят только главному администратору.
 
 import { cleanText, delay, localDayKey } from './util.mjs';
+import { PLACES } from './places.mjs';
 import { data, runtime, scheduleSave } from './store.mjs';
 import { sendMessage } from './telegram.mjs';
 import { adminSendPlan } from './notify-plan.mjs';
@@ -129,7 +130,7 @@ function announceError(area, error, now = new Date()) {
   data.lastErrorNoticeAt = now.toISOString();
   scheduleSave();
   const message = cleanText(error && error.message ? error.message : error, 300) || 'неизвестная ошибка';
-  void sendStatusNotice('❗ Внутренняя ошибка бота (' + area + '): ' + message + '\nБот продолжает работать. Подробности — в панели: «Настройки → Данные и копии».');
+  void sendStatusNotice('❗ Внутренняя ошибка бота (' + area + '): ' + message + '\nБот продолжает работать. Подробности — в панели: «' + PLACES.dataCopies + '».');
   return true;
 }
 

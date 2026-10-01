@@ -59,8 +59,8 @@ async function handleClientsApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const user = userById(decodeURIComponent(directMessageMatch[1]));
-    if (!user) return json(res, 404, { error: 'Пользователь не найден' });
-    if (!user.chatId || user.blocked) return json(res, 400, { error: 'Пользователь сейчас недоступен для сообщений' });
+    if (!user) return json(res, 404, { error: 'Клиент не найден' });
+    if (!user.chatId || user.blocked) return json(res, 400, { error: 'Клиент сейчас недоступен для сообщений' });
     try {
       const body = await readJson(req);
       const text = cleanText(body.text, 4000);
@@ -138,7 +138,7 @@ async function handleClientsApi(req, res, url) {
       return json(res, 200, { ok: true, inquiryId: inquiry.id });
     } catch (error) {
       if (userUnavailableError(error)) markUnavailable(user);
-      recordError('Личное сообщение пользователю', error);
+      recordError('Личное сообщение клиенту', error);
       return json(res, 400, { error: 'Не удалось отправить сообщение: ' + error.message });
     }
   }
@@ -148,7 +148,7 @@ async function handleClientsApi(req, res, url) {
     const session = requireAuth(req, res);
     if (!session) return;
     const user = userById(decodeURIComponent(userExportMatch[1]));
-    if (!user) return json(res, 404, { error: 'Пользователь не найден' });
+    if (!user) return json(res, 404, { error: 'Клиент не найден' });
     const payload = JSON.stringify(userDataExport(user), null, 2);
     securityHeaders(res);
     res.writeHead(200, {
@@ -165,14 +165,14 @@ async function handleClientsApi(req, res, url) {
     const session = requireAuth(req, res);
     if (!session) return;
     const user = userById(decodeURIComponent(userMatch[1]));
-    if (!user) return json(res, 404, { error: 'Пользователь не найден' });
+    if (!user) return json(res, 404, { error: 'Клиент не найден' });
     return json(res, 200, { user: panelUserView(user) });
   }
   if (userMatch && req.method === 'DELETE') {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const user = userById(decodeURIComponent(userMatch[1]));
-    if (!user) return json(res, 404, { error: 'Пользователь не найден' });
+    if (!user) return json(res, 404, { error: 'Клиент не найден' });
     const result = eraseUserData(user);
     saveDataNow();
     return json(res, 200, { ok: true, ...result });
@@ -181,7 +181,7 @@ async function handleClientsApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const user = userById(decodeURIComponent(userMatch[1]));
-    if (!user) return json(res, 404, { error: 'Пользователь не найден' });
+    if (!user) return json(res, 404, { error: 'Клиент не найден' });
     const body = await readJson(req);
     if (body.note != null) user.note = cleanText(body.note, CLIENT_NOTE_LIMIT);
     if (Array.isArray(body.tags)) user.tags = body.tags.map((tag) => cleanText(tag, 40)).filter(Boolean).slice(0, 20);
@@ -218,8 +218,8 @@ async function handleClientsApi(req, res, url) {
         return (!from || day >= from) && (!to || day <= to);
       });
     }
-    const file = xlsxWorkbook('Обращения', INQUIRY_EXPORT_COLUMNS, inquiryExportRows(inquiries));
-    const name = 'Обращения ' + localDayKey() + '.xlsx';
+    const file = xlsxWorkbook('Заявки', INQUIRY_EXPORT_COLUMNS, inquiryExportRows(inquiries));
+    const name = 'Заявки ' + localDayKey() + '.xlsx';
     securityHeaders(res);
     res.writeHead(200, {
       'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -579,7 +579,7 @@ async function handleClientsApi(req, res, url) {
   const transferTarget = (name) => inquiryChats().find((chat) => chat.name === name) || null;
   const transferClientName = (inquiry) => {
     const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
-    return user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Пользователь удалён';
+    return user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Клиент удалён';
   };
   const transferActor = () => cleanText(data.config.adminName, 60) || 'Администратор';
 
@@ -588,7 +588,7 @@ async function handleClientsApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const inquiry = data.inquiries.find((item) => item.id === decodeURIComponent(transferOneMatch[1]));
-    if (!inquiry) return json(res, 404, { error: 'Обращение не найдено' });
+    if (!inquiry) return json(res, 404, { error: 'Заявка не найдена' });
     const body = await readJson(req);
     const to = cleanText(body.to, 60);
     if (!to || !staffNames().includes(to)) return json(res, 400, { error: 'Выберите, кому передать клиента, из списка менеджеров' });
@@ -651,7 +651,7 @@ async function handleClientsApi(req, res, url) {
     const id = decodeURIComponent(inquiryMatch[1]);
     const before = data.inquiries.length;
     data.inquiries = data.inquiries.filter((item) => item.id !== id);
-    if (data.inquiries.length === before) return json(res, 404, { error: 'Обращение не найдено' });
+    if (data.inquiries.length === before) return json(res, 404, { error: 'Заявка не найдена' });
     saveDataNow();
     return json(res, 200, { ok: true });
   }
@@ -660,10 +660,10 @@ async function handleClientsApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const inquiry = data.inquiries.find((item) => item.id === decodeURIComponent(inquiryMatch[1]));
-    if (!inquiry) return json(res, 404, { error: 'Обращение не найдено' });
+    if (!inquiry) return json(res, 404, { error: 'Заявка не найдена' });
     const body = await readJson(req);
     if (body.status != null && !['new', 'in_progress', 'closed'].includes(body.status)) {
-      return json(res, 400, { error: 'Некорректный статус обращения' });
+      return json(res, 400, { error: 'Некорректный статус заявки' });
     }
     if (body.pipelineStage != null && !['', ...PIPELINE_STAGES].includes(body.pipelineStage)) {
       return json(res, 400, { error: 'Некорректный этап воронки' });
@@ -728,7 +728,7 @@ async function handleClientsApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const inquiry = data.inquiries.find((item) => item.id === decodeURIComponent(inquiryViewingMatch[1]));
-    if (!inquiry) return json(res, 404, { error: 'Обращение не найдено' });
+    if (!inquiry) return json(res, 404, { error: 'Заявка не найдена' });
     const body = await readJson(req);
     try {
       await confirmViewing(inquiry, { date: cleanText(body.date, 10), time: cleanText(body.time, 5), source: 'panel' });
@@ -746,7 +746,7 @@ async function handleClientsApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const inquiry = data.inquiries.find((item) => item.id === decodeURIComponent(inquiryReplyMatch[1]));
-    if (!inquiry) return json(res, 404, { error: 'Обращение не найдено' });
+    if (!inquiry) return json(res, 404, { error: 'Заявка не найдена' });
     const body = await readJson(req);
     const text = cleanText(body.text, 3800);
     const requestedId = cleanText(body.clientRequestId, 100);
@@ -784,7 +784,7 @@ async function handleClientsApi(req, res, url) {
     if (buttonUrl && !validHttpUrl(buttonUrl)) return json(res, 400, { error: 'Ссылка кнопки должна начинаться с http:// или https://' });
     if ((buttonText && !buttonUrl) || (buttonUrl && !buttonText)) return json(res, 400, { error: 'Для кнопки нужны и название, и ссылка' });
     const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
-    if (!user || !user.chatId) return json(res, 400, { error: 'У пользователя нет доступного чата' });
+    if (!user || !user.chatId) return json(res, 400, { error: 'У клиента нет доступного чата' });
     const requestedReplyTo = Number(body.replyToMessageId);
     let replyTarget = null;
     if (body.replyToMessageId != null && body.replyToMessageId !== '') {
@@ -865,7 +865,7 @@ async function handleClientsApi(req, res, url) {
       return json(res, 200, { ok: true, deliveredAt: createdAt, messageId: sentMessage && sentMessage.message_id ? Number(sentMessage.message_id) : null });
     } catch (error) {
       if (userUnavailableError(error)) markUnavailable(user);
-      recordError('Ответ на обращение', error);
+      recordError('Ответ на заявку', error);
       return json(res, 400, { error: 'Не удалось отправить ответ: ' + error.message });
     }
   }

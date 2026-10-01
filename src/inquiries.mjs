@@ -161,15 +161,15 @@ function reportInquiryOverflow(openRemoved, now = new Date()) {
   // может писать на диск.
   if (data.lastInquiryOverflowFor === today) return;
   data.lastInquiryOverflowFor = today;
-  recordError('Предел обращений', new Error('Список обращений упёрся в предел ' + MAX_INQUIRIES
-    + ': удаляются самые старые обращения в работе (в этот раз — ' + openRemoved
+  recordError('Предел заявок', new Error('Список заявок упёрся в предел ' + MAX_INQUIRIES
+    + ': удаляются самые старые заявки в работе (в этот раз — ' + openRemoved
     + '). Дальше за сегодня бот об этом не напоминает.'));
   scheduleSave();
   void sendStatusNotice([
-    '⚠️ Обращений стало больше ' + MAX_INQUIRIES,
+    '⚠️ Заявок стало больше ' + MAX_INQUIRIES,
     '',
-    'Место закончилось, и самые старые обращения в работе пришлось удалить: ' + openRemoved + '.',
-    'Закройте отработанные обращения или очистите старые в панели: ' + PLACES.cleanup + '.',
+    'Место закончилось, и самые старые заявки в работе пришлось удалить: ' + openRemoved + '.',
+    'Закройте отработанные заявки или очистите старые в панели: ' + PLACES.cleanup + '.',
     'Перед очисткой их можно выгрузить в Excel — там же, кнопкой «Выгрузить в Excel».',
   ].join('\n')).catch(() => {});
 }
@@ -244,7 +244,7 @@ function createInquiry(user, text, context = {}) {
       if (acknowledgesMessage(type, context)) merged.acknowledgedAt = new Date().toISOString();
     }
     scheduleSave();
-    const notify = (copies) => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в обращении', replyTo: copies });
+    const notify = (copies) => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в заявке', replyTo: copies });
     if (isClientMedia(context.sourceMessage)) {
       void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken, merged)
         .then(notify)
@@ -394,7 +394,7 @@ function inquiryTypeLabel(inquiry) {
   return INQUIRY_TYPE_LABELS[inquiry.type] || 'сообщение';
 }
 
-const INQUIRY_STATUS_LABELS = { new: 'новое', in_progress: 'в работе', closed: 'закрыто' };
+const INQUIRY_STATUS_LABELS = { new: 'ждёт ответа', in_progress: 'в работе', closed: 'закрыта' };
 
 // Buttons under an inquiry notification let the admin keep statuses from
 // Telegram, without opening the panel.
@@ -461,7 +461,7 @@ async function handleInquiryStatusCallback(query, token) {
   const [, status, ...rest] = String(query.data || '').split(':');
   const inquiry = data.inquiries.find((item) => item.id === rest.join(':'));
   if (!inquiry || (!Object.hasOwn(INQUIRY_STATUS_LABELS, status) && !['follow', 'take', 'keep'].includes(status))) {
-    await acknowledgeCallback(query, token, 'Обращение не найдено — возможно, оно удалено.');
+    await acknowledgeCallback(query, token, 'Заявка не найдена — возможно, она удалена.');
     return;
   }
   // «Оставить»: менеджер передумал забирать заявку — вопрос убираем.
@@ -568,7 +568,7 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   const decision = adminNotificationDecision(user, Boolean(options.important));
   if (decision === 'drop') return false;
   if (decision === 'notice') {
-    await sendMessage(adminChatId, '⚠️ ' + name + username + ' (ID ' + user.id + ') присылает слишком много сообщений. Уведомления о новых сообщениях этого пользователя приостановлены на ' + Math.round(ADMIN_MESSAGE_NOTIFY_LIMIT.windowMs / 60000) + ' минут. Все сообщения сохраняются в панели.', data.config.botToken, { track: false }).catch((error) => recordError('Уведомление администратору', error));
+    await sendMessage(adminChatId, '⚠️ ' + name + username + ' (ID ' + user.id + ') присылает слишком много сообщений. Уведомления о новых сообщениях этого клиента приостановлены на ' + Math.round(ADMIN_MESSAGE_NOTIFY_LIMIT.windowMs / 60000) + ' минут. Все сообщения сохраняются в панели.', data.config.botToken, { track: false }).catch((error) => recordError('Уведомление администратору', error));
     return false;
   }
   // Routing of replies does not depend on this text (see adminReplyTargets),
@@ -580,7 +580,7 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   // inquiries tell a returning client from a new one.
   const phone = options.important && user.phone ? '📞 ' + cleanText(user.phone, 40) : '';
   const earlier = options.important ? data.inquiries.filter((item) => item.userId === String(user.id) && item.id !== inquiryId).length : 0;
-  const history = earlier ? '🗂 Обращений раньше: ' + earlier : '';
+  const history = earlier ? '🗂 Заявок раньше: ' + earlier : '';
   const notification = options.important
     ? ['📩 ' + cleanText(title, 160), who, ...[phone, history].filter(Boolean), '', cleanDetails, '', '↩️ Ответьте на это сообщение — ответ получит клиент.']
     : ['👀 ' + cleanText(title, 160), who, ...(detailsWorthShowing(title, cleanDetails) ? ['', cleanDetails] : [])];
@@ -641,7 +641,7 @@ async function notifyAdministrator(inquiry, user, options = {}) {
     }
   }
   const matchingAttention = selectionMatchingAttention(inquiry);
-  return notifyAdministratorAction(user, (options.title || 'Новое обращение') + ': ' + inquiryTypeLabel(inquiry), [
+  return notifyAdministratorAction(user, (options.title || 'Новая заявка') + ': ' + inquiryTypeLabel(inquiry), [
     propertyLine,
     text,
     matchingAttention,
@@ -914,6 +914,25 @@ function looksLikeUserNotification(message) {
   return /Получатель ID:/.test(String(replied.text || replied.caption || ''));
 }
 
+// Понятная причина вместо сырой ошибки Telegram: что случилось и что делать. Сама ошибка — в журнал (recordError).
+function humanSendError(error, user) {
+  if (user && userUnavailableError(error)) {
+    return 'Клиент заблокировал бота — сообщение не доставлено.' + (user.phone ? ' Позвоните: ' + user.phone : ' Телефона у клиента нет — только панель.');
+  }
+  if (Number(error && error.telegramCode) === 429) return 'Telegram просит подождать — сообщение не отправлено. Повторите через минуту.';
+  return 'Сообщение не доставлено. Повторите позже; подробности — в «' + PLACES.dataCopies + '».';
+}
+
+// Подтверждение ответа: реакция 👌 на сообщение менеджера, а не ещё одно сообщение в чате. Если реакцию поставить нельзя —
+// короткая строка.
+async function confirmStaffMessage(message, token, name) {
+  try {
+    await telegramRequest(token, 'setMessageReaction', { chat_id: message.chat.id, message_id: message.message_id, reaction: [{ type: 'emoji', emoji: '👌' }] });
+  } catch {
+    await sendMessage(message.chat.id, '✅ Отправлено' + (name ? ': ' + name : ''), token, { track: false }).catch(() => {});
+  }
+}
+
 async function handleAdministratorReply(message, token) {
   const adminChat = message && message.chat ? adminChatFor(message.chat.id) : null;
   if (!adminChat) return false;
@@ -923,7 +942,7 @@ async function handleAdministratorReply(message, token) {
     // A reply to an old notification must not fall through and be treated
     // as a message from a client.
     if (!looksLikeUserNotification(message)) return false;
-    await sendMessage(adminChatId, '⚠️ Сообщение не отправлено: не удалось определить получателя этого уведомления. Ответьте пользователю из панели управления.', token, { track: false }).catch(() => {});
+    await sendMessage(adminChatId, '⚠️ Это сообщение не про клиента — ответ никому не ушёл. Откройте /inbox и ответьте на карточку клиента.', token, { track: false }).catch(() => {});
     return true;
   }
   const user = userByChatId(target.chatId);
@@ -934,6 +953,7 @@ async function handleAdministratorReply(message, token) {
     const replyParameters = target.sourceMessageId != null && Number.isFinite(Number(target.sourceMessageId))
       ? { message_id: Number(target.sourceMessageId), allow_sending_without_reply: true }
       : null;
+    const album = Array.isArray(message.albumMessageIds) ? message.albumMessageIds : [];
     let copied;
     let sentCount = 1;
     if (message.text) {
@@ -941,6 +961,21 @@ async function handleAdministratorReply(message, token) {
         track: false,
         ...(replyParameters ? { reply_parameters: replyParameters } : {}),
       });
+    } else if (album.length) {
+      // Альбом менеджера — один ответ: одна шапка и все снимки, а не три «Ответа менеджера» с тремя фото.
+      await sendMessage(target.chatId, header, token, { track: false, ...(replyParameters ? { reply_parameters: replyParameters } : {}) });
+      const all = [message.message_id, ...album];
+      let sent = [];
+      try {
+        sent = await telegramRequest(token, 'copyMessages', { chat_id: target.chatId, from_chat_id: message.chat.id, message_ids: all });
+      } catch {
+        for (const id of all) {
+          const one = await telegramRequest(token, 'copyMessage', { chat_id: target.chatId, from_chat_id: message.chat.id, message_id: id }).catch(() => null);
+          if (one) sent.push(one);
+        }
+      }
+      copied = Array.isArray(sent) ? sent[0] : null;
+      sentCount = 1 + all.length;
     } else {
       await sendMessage(target.chatId, header, token, {
         track: false,
@@ -961,7 +996,12 @@ async function handleAdministratorReply(message, token) {
       if (inquiry) {
         inquiry.replies = Array.isArray(inquiry.replies) ? inquiry.replies : [];
         const createdAt = new Date().toISOString();
-        inquiry.replies.push({ id: crypto.randomUUID(), text: messageSummary(message), source: 'telegram', by: adminChat.name, createdAt, telegramMessageId: copied && copied.message_id ? Number(copied.message_id) : null });
+        inquiry.replies.push({
+          id: crypto.randomUUID(), text: messageSummary(message), source: 'telegram', by: adminChat.name, createdAt,
+          telegramMessageId: copied && copied.message_id ? Number(copied.message_id) : null,
+          // Откуда ответ: по этому номеру найдём его, если менеджер потом поправит сообщение.
+          adminChatId: String(message.chat.id), adminMessageId: Number(message.message_id),
+        });
         inquiry.replies = inquiry.replies.slice(-50);
         appendInquiryMessage(inquiry, inquiryTimelineMessage(message, 'out', {
           text: messageSummary(message), source: 'telegram', by: adminChat.name, createdAt,
@@ -970,6 +1010,14 @@ async function handleAdministratorReply(message, token) {
           replyToText: ((inquiry.messages || []).find((entry) => entry.direction === 'in' && Number(entry.telegramMessageId) === Number(target.sourceMessageId)) || {}).text || '',
         }));
         if (inquiry.status === 'new') inquiry.status = 'in_progress';
+        // Ответ в закрытую заявку не должен оставлять её закрытой: клиент снова в разговоре.
+        if (inquiry.status === 'closed') {
+          inquiry.status = 'in_progress';
+          if (['won', 'lost'].includes(inquiry.pipelineStage)) {
+            inquiry.pipelineStage = 'contact';
+            inquiry.wonAt = '';
+          }
+        }
         // Ответ менеджера из Telegram тоже двигает воронку «Новая» → «Связались»,
         // как ответ из панели.
         if (!inquiry.pipelineStage || inquiry.pipelineStage === 'new') inquiry.pipelineStage = 'contact';
@@ -983,11 +1031,42 @@ async function handleAdministratorReply(message, token) {
     }
     saveDataNow();
     if (answeredInquiry) void refreshInquiryCards(answeredInquiry, token);
-    await sendMessage(adminChatId, '✅ Сообщение отправлено пользователю' + (user ? ' ' + ([user.firstName, user.lastName].filter(Boolean).join(' ') || user.id) : '') + '.', token, { track: false });
+    await confirmStaffMessage(message, token, user ? [user.firstName, user.lastName].filter(Boolean).join(' ') : '');
   } catch (error) {
     if (user && userUnavailableError(error)) markUnavailable(user);
     recordError('Ответ администратора из Telegram', error);
-    await sendMessage(adminChatId, '❌ Не удалось отправить сообщение: ' + error.message, token, { track: false }).catch(() => {});
+    await sendMessage(adminChatId, '❌ ' + humanSendError(error, user), token, { track: false }).catch(() => {});
+  }
+  return true;
+}
+
+// Менеджер поправил уже отправленный ответ: правим и сообщение у клиента (текст или подпись), если оно ещё доступно.
+async function handleAdministratorEdit(message, token) {
+  const adminChat = message && message.chat ? adminChatFor(message.chat.id) : null;
+  if (!adminChat) return false;
+  const inquiry = data.inquiries.find((item) => (item.replies || []).some((reply) => reply.adminMessageId === Number(message.message_id) && reply.adminChatId === String(message.chat.id)));
+  const reply = inquiry && inquiry.replies.find((item) => item.adminMessageId === Number(message.message_id) && item.adminChatId === String(message.chat.id));
+  if (!reply || !reply.telegramMessageId) return false;
+  const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
+  if (!user) return true;
+  const language = user.preferredLanguage || 'ru';
+  const header = (MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru).replyHeader;
+  try {
+    if (typeof message.text === 'string') {
+      await telegramRequest(token, 'editMessageText', { chat_id: user.chatId, message_id: reply.telegramMessageId, text: header + '\n\n' + cleanText(message.text, 3800) });
+    } else if (message.caption !== undefined) {
+      await telegramRequest(token, 'editMessageCaption', { chat_id: user.chatId, message_id: reply.telegramMessageId, caption: cleanText(message.caption, 1000) });
+    } else {
+      return true;
+    }
+    reply.text = messageSummary(message);
+    const timeline = (inquiry.messages || []).find((entry) => entry.direction === 'out' && Number(entry.telegramMessageId) === Number(reply.telegramMessageId));
+    if (timeline) timeline.text = messageSummary(message);
+    saveDataNow();
+    await confirmStaffMessage(message, token, '');
+  } catch (error) {
+    recordError('Правка ответа клиенту', error);
+    await sendMessage(adminChat.chatId, '❌ Исправление до клиента не дошло: Telegram не даёт изменить это сообщение. Отправьте новый ответ.', token, { track: false }).catch(() => {});
   }
   return true;
 }
@@ -1013,6 +1092,7 @@ export {
   copyUserMessageToAdministrator,
   createInquiry,
   detailsWorthShowing,
+  handleAdministratorEdit,
   handleAdministratorReply,
   handleInquiryStatusCallback,
   handleMessageReaction,
