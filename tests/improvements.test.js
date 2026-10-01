@@ -794,7 +794,7 @@ test.describe('catalog filter', () => {
     await chat.press('cfilter:deal:sale');
     // Пороги цены живут на своём экране, на фильтре цена — одной кнопкой.
     panel = await chat.press('cfilter:prices:0');
-    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => withoutCount(button.text).replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 250 000 €', 'до 400 000 €', 'до 600 000 €', 'до 1 000 000 €', '✎ ' + FILTER.customPrice]);
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => withoutCount(button.text).replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 250 000 €', 'до 400 000 €', 'до 600 000 €', 'до 1 000 000 €', '✏️ ' + FILTER.customPrice]);
     await chat.press('cfilter:price:400000');
     assert.deepEqual(bot.catalogRecords(chat.user).map((record) => record.id), ['sale-marbella-2', 'sale-estepona-3'], 'a price on request is left out');
 
@@ -808,7 +808,7 @@ test.describe('catalog filter', () => {
     await chat.press('cfilter:deal:rent');
     assert.equal(chat.user.catalogFilter.maxPrice, 0, 'a purchase limit does not carry over to rent');
     panel = await chat.press('cfilter:prices:0');
-    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => withoutCount(button.text).replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 1 200 €', 'до 2 000 €', 'до 3 000 €', '✎ ' + FILTER.customPrice]);
+    assert.deepEqual(buttons().filter((button) => button.callback_data.startsWith('cfilter:price:')).map((button) => withoutCount(button.text).replace(/[  ]/g, ' ')), ['✓ ' + FILTER.anyPrice, 'до 1 200 €', 'до 2 000 €', 'до 3 000 €', '✏️ ' + FILTER.customPrice]);
     await chat.press('cfilter:show');
     const filterButton = cardMarkup().inline_keyboard.flat().find((button) => button.callback_data === 'cfilter:open');
     assert.equal(filterButton.text, FILTER.button + ' ✓');

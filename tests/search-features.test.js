@@ -112,14 +112,19 @@ test('«Ещё»: переключатели только тех признак�
   assert.ok(labels.some((label) => /Сад/.test(label)));
   assert.ok(!labels.some((label) => /Терраса/.test(label)), 'в каталоге ни у кого нет террасы — кнопки нет');
 
+  // Признак переключается на месте: экран «Ещё» остаётся, галочка меняется; условия — на главном экране фильтра.
   const on = await chat.press('cfilter:feat:pool');
-  assert.match(panelOf(on).text, /бассейн/);
-  assert.match(panelOf(on).text, /Подходит: 1/, panelOf(on).text);
-  const again = await chat.press('cfilter:more');
-  assert.ok(panelOf(again).buttons.some((label) => /^✓ 🏊 Бассейн/.test(label)), panelOf(again).buttons.join(' | '));
+  assert.ok(panelOf(on).buttons.some((label) => /^✓ 🏊 Бассейн/.test(label)), panelOf(on).buttons.join(' | '));
+  const main = await chat.press('cfilter:open');
+  assert.match(panelOf(main).text, /бассейн/);
+  assert.match(panelOf(main).text, /Подходит: 1/, panelOf(main).text);
+  assert.ok(panelOf(main).buttons.some((label) => label === '⋯ Ещё · 1'), 'на «Ещё» — число выбранного: ' + panelOf(main).buttons.join(' | '));
+  await chat.press('cfilter:more');
   const off = await chat.press('cfilter:feat:pool');
-  assert.doesNotMatch(panelOf(off).text, /бассейн/);
-  assert.match(panelOf(off).text, /Подходит: 3/);
+  assert.ok(!panelOf(off).buttons.some((label) => /^✓ 🏊/.test(label)));
+  const mainOff = await chat.press('cfilter:open');
+  assert.doesNotMatch(panelOf(mainOff).text, /бассейн/);
+  assert.match(panelOf(mainOff).text, /Подходит: 3/);
 });
 
 test('сохранённый поиск помнит признак; формат данных 52 читает и старый сохранённый поиск без признаков', async () => {

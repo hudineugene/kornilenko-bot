@@ -1831,7 +1831,7 @@ function catalogFilterPanel(user) {
   }
   // «Показать» и «Ещё» — одним рядом: экран фильтра не длиннее шести рядов.
   const tail = [
-    [{ text: copy.show + ' ' + found, callback_data: 'cfilter:show' }, { text: '⋯ ' + copy.moreOptions, callback_data: 'cfilter:more' }],
+    [{ text: copy.show + ' ' + found, callback_data: 'cfilter:show' }, { text: '⋯ ' + copy.moreOptions + (featuresOf(filter).length + (filter.sort ? 1 : 0) ? ' · ' + (featuresOf(filter).length + (filter.sort ? 1 : 0)) : ''), callback_data: 'cfilter:more' }],
   ];
   // Если в каталоге много типов или цен, лишние ряды убираем — сначала у цен,
   // потом у типов. Хотя бы один ряд у каждого остаётся.
@@ -1886,8 +1886,8 @@ function catalogPricePanel(user) {
     rows.push([{ text: '✓ ' + copy.from + ' ' + formattedPriceLimit(filter.minPrice, language), callback_data: 'cfilter:minprice:0' }]);
   }
   rows.push([
-    { text: '✎ ' + copy.minimumPrice, callback_data: 'cfilter:minprice:custom' },
-    { text: '✎ ' + copy.customPrice, callback_data: 'cfilter:price:custom' },
+    { text: '✏️ ' + copy.minimumPrice, callback_data: 'cfilter:minprice:custom' },
+    { text: '✏️ ' + copy.customPrice, callback_data: 'cfilter:price:custom' },
   ]);
   rows.push([{ text: '⬅️ ' + copy.backToFilter, callback_data: 'cfilter:open' }]);
   return { text: [copy.priceTitle, copy.priceHint].filter(Boolean).join('\n'), markup: { inline_keyboard: rows } };
@@ -2081,7 +2081,8 @@ async function handleCatalogFilterCallback(query, token) {
   const districtChoices = action === 'city' && filter.city
     ? catalogDistricts(publishedCatalog(user), user.preferredLanguage, filter.city)
     : [];
-  const panel = action === 'more'
+  // Признаки и сортировка переключаются на месте, на экране «Ещё»: четыре признака — четыре нажатия, а не восемь.
+  const panel = ['more', 'feat', 'sort'].includes(action)
     ? catalogFilterExtraScreen(user, user.preferredLanguage)
     : districtChoices.length > CATALOG_INLINE_LOCATION_LIMIT
       ? catalogLocationPanel(user, 'district', 0)
