@@ -7,7 +7,7 @@ import { normalizePipelineStage, normalizeSelectionMatching, normalizeViewing } 
 import { nextOpening } from './hours.mjs';
 import { adminSendPlan } from './notify-plan.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
-import { data, saveDataNow, scheduleSave } from './store.mjs';
+import { data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError } from './analytics.mjs';
 import { markUnavailable, normalizeUser, userByChatId, userById } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
@@ -396,11 +396,19 @@ function inquiryTypeLabel(inquiry) {
 
 const INQUIRY_STATUS_LABELS = { new: 'ждёт ответа', in_progress: 'в работе', closed: 'закрыта' };
 
+// Ссылка на диалог в панели — только когда включён доступ из интернета (адрес туннеля меняется при каждом запуске).
+function panelDialogRow(inquiry) {
+  const tunnel = runtime.tunnel || {};
+  if (tunnel.status !== 'online' || !String(tunnel.url || '').startsWith('https://')) return null;
+  return [{ text: '🖥 Открыть диалог', url: tunnel.url + '/#/clients/inbox/' + inquiry.id }];
+}
+
 // Buttons under an inquiry notification let the admin keep statuses from
 // Telegram, without opening the panel.
 function inquiryStatusMarkup(inquiry) {
   if (!inquiry) return null;
-  if (inquiry.status === 'closed') return { inline_keyboard: [[{ text: '↩️ Открыть снова', callback_data: 'inq:new:' + inquiry.id }]] };
+  const panel = panelDialogRow(inquiry);
+  if (inquiry.status === 'closed') return { inline_keyboard: [[{ text: '↩️ Открыть снова', callback_data: 'inq:new:' + inquiry.id }], ...(panel ? [panel] : [])] };
   const rows = [];
   // A viewing request is confirmed with the date and time the client chose;
   // another date is set in the panel.
@@ -414,6 +422,7 @@ function inquiryStatusMarkup(inquiry) {
   rows.push(row);
   const planned = inquiry.followUpDate && !inquiry.followUpNotifiedAt ? ' (' + inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + ')' : '';
   rows.push([{ text: planned ? '📌 Напомню' + planned : '📌 Напомнить завтра', callback_data: 'inq:follow:' + inquiry.id }]);
+  if (panel) rows.push(panel);
   return { inline_keyboard: rows };
 }
 

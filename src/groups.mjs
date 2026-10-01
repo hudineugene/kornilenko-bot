@@ -7,6 +7,8 @@
 
 import crypto from 'node:crypto';
 import { cleanText } from './util.mjs';
+import { PLACES } from './places.mjs';
+import { tellAdminProblem } from './notify-plan.mjs';
 import { normalizePublishing } from './data-format.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { temporaryDeliveryError } from './broadcasts.mjs';
@@ -247,6 +249,7 @@ function handleChatJoinRequest(update) {
     at: new Date().toISOString(),
   });
   scheduleSave();
+  void tellAdminProblem('join-' + group.id + '-' + from.id, '👥 Заявка на вступление в «' + (group.title || 'группу') + '»: ' + group.joinRequests[group.joinRequests.length - 1].name + (from.username ? ' (@' + from.username + ')' : '') + '. Одобрить можно в Telegram или в «' + PLACES.groups + '».');
   return group;
 }
 
@@ -612,6 +615,7 @@ async function runDueGroupPosts(now = new Date(), token = data.config.botToken) 
       }
       post.status = 'failed';
       recordError('Отложенная публикация в группу', error);
+      void tellAdminProblem('group-post-' + post.id, '❌ Отложенный пост не опубликован: ' + cleanText(error.message, 200) + '. Подробности: «' + PLACES.groups + '».');
     }
   }
   if (sent.length || duePosts(now).length) scheduleSave();

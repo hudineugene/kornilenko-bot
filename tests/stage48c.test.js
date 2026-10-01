@@ -155,3 +155,48 @@ test('/viewings: у ждущего подтверждения — кнопка �
   assert.ok(edit, 'обзор обновлён');
   assert.deepEqual(edit.body.reply_markup, { inline_keyboard: [] }, 'кнопки подтверждения убраны');
 });
+
+test('путь в панель: при включённом доступе из интернета на карточке — кнопка «Открыть диалог» с адресом диалога; без него кнопки нет', async () => {
+  const inquiry = await waitingClient('Анна', 1);
+  const urls = () => bot.inquiryStatusMarkup(inquiry).inline_keyboard.flat().filter((button) => button.url).map((button) => button.url);
+  assert.deepEqual(urls(), [], 'без туннеля ссылки нет');
+  const { runtime } = await import('../src/store.mjs');
+  const before = runtime.tunnel;
+  runtime.tunnel = { status: 'online', url: 'https://quiet-fox.trycloudflare.com', host: 'quiet-fox.trycloudflare.com', error: '' };
+  try {
+    assert.deepEqual(urls(), ['https://quiet-fox.trycloudflare.com/#/clients/inbox/' + inquiry.id]);
+    inquiry.status = 'closed';
+    assert.equal(urls().length, 1, 'у закрытой заявки ссылка тоже есть');
+  } finally {
+    runtime.tunnel = before;
+  }
+});
+
+// --- Сбои, о которых раньше не знал никто, кроме журнала в панели
+test('заявка на вступление в группу и сбой загрузки с сайта приходят в Telegram, повтор в течение часа — нет', async () => {
+  const { forgetProblems } = await import('../src/notify-plan.mjs');
+  forgetProblems();
+  telegram.calls = [];
+  const request = { update_id: 970001, chat_join_request: { chat: { id: -100777, type: 'supergroup', title: 'Клиенты Марбельи' }, from: { id: 5001, first_name: 'Лаура', username: 'laura' }, date: Math.floor(Date.now() / 1000) } };
+  await bot.processUpdates([request], 'test-token');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const join = toAdmin().find((body) => /Заявка на вступление/.test(body.text));
+  assert.ok(join, 'сообщение пришло');
+  assert.match(join.text, /«Клиенты Марбельи»: Лаура \(@laura\)/);
+  assert.match(join.text, /«Публикации → Каналы и группы»/);
+
+  bot.getData().config.feedImport = { daily: true, url: 'https://example.com/feed.xml', publishNew: false };
+  const failing = async () => { throw new Error('Сайт не отвечает'); };
+  telegram.calls = [];
+  await bot.runDailyFeedImport(new Date(2026, 8, 21, 10, 30), failing);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const feed = toAdmin().find((body) => /Не удалось загрузить объекты с сайта/.test(body.text));
+  assert.ok(feed, 'сбой загрузки — в Telegram');
+  assert.match(feed.text, /Сайт не отвечает/);
+  telegram.calls = [];
+  bot.getData().config.feedImport.lastRunAt = '';
+  await bot.runDailyFeedImport(new Date(2026, 8, 21, 10, 40), failing);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(toAdmin().filter((body) => /Не удалось загрузить/.test(body.text)).length, 0, 'тот же сбой в течение часа второй раз не шлём');
+  forgetProblems();
+});

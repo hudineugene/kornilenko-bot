@@ -1,6 +1,8 @@
 // Рассылки.
 
 import { cleanText, delay, fillTemplate } from './util.mjs';
+import { PLACES } from './places.mjs';
+import { tellAdminProblem } from './notify-plan.mjs';
 import { PIPELINE_STAGES, normalizePipelineStage } from './data-format.mjs';
 import { imageExists } from './media.mjs';
 import { PROPERTY_ACTION_TEXT, SUBSCRIPTION_TEXT } from './texts.mjs';
@@ -252,6 +254,7 @@ async function runBroadcast(entry) {
           entry.pausedAt = new Date().toISOString();
           entry.error = cleanText('Связь с Telegram потеряна, рассылка продолжится сама: ' + error.message, 400);
           recordError('Рассылка приостановлена', error);
+          void tellAdminProblem('broadcast-paused', '⏸ Рассылка приостановлена: нет связи с Telegram. Она продолжится сама, когда связь вернётся. Подробности: «' + PLACES.broadcasts + '».');
           saveBroadcastProgress();
           return;
         }
@@ -279,6 +282,8 @@ async function runBroadcast(entry) {
     entry.error = '';
     entry.pausedAt = '';
     entry.finishedAt = new Date().toISOString();
+    // Итог в Telegram — только если не всем дошло: «получили все» владельцу сообщать незачем.
+    if (entry.failed) void tellAdminProblem('broadcast-done-' + entry.id, '✉️ Рассылка завершена: получили ' + entry.sent + ', не доставлено ' + entry.failed + ' (клиент заблокировал бота или удалил чат). Подробности: «' + PLACES.broadcasts + '».', Date.now());
   } finally {
     runtime.broadcastRunning = false;
     saveBroadcastProgress();
@@ -298,6 +303,7 @@ async function runDueBroadcasts() {
     due.status = 'failed';
     due.error = cleanText(error.message, 400);
     recordError('Запланированная рассылка', error);
+    void tellAdminProblem('broadcast-failed-' + due.id, '❌ Рассылка не отправлена: ' + cleanText(error.message, 200) + '. Подробности: «' + PLACES.broadcasts + '».');
   }
 }
 

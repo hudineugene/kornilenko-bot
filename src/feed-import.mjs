@@ -7,6 +7,8 @@
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import { cleanText } from './util.mjs';
+import { PLACES } from './places.mjs';
+import { tellAdminProblem } from './notify-plan.mjs';
 import { PROPERTY_TYPE_LABELS } from './texts.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
@@ -587,6 +589,7 @@ async function runDailyFeedImport(now = new Date(), fetcher = fetch, lookup = dn
     data.config.feedImport = { ...data.config.feedImport, lastError: cleanText(error.message, 300) };
     saveDataNow();
     recordError('Загрузка объектов с сайта', error);
+    void tellAdminProblem('feed-import', '⚠️ Не удалось загрузить объекты с сайта: ' + cleanText(error.message, 200) + '. Завтра попробую снова; адрес можно проверить в «' + PLACES.feed + '».');
     return null;
   }
 }

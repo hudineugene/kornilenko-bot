@@ -3,6 +3,8 @@
 
 import { data } from './store.mjs';
 import { normalizeNotifyPrefs } from './data-format.mjs';
+import { cleanText } from './util.mjs';
+import { sendMessage } from './telegram.mjs';
 
 function minutesOf(clock) {
   const [hours, minutes] = String(clock).split(':').map(Number);
@@ -26,4 +28,28 @@ function adminSendPlan(kind, now = new Date()) {
   return { send: true, options: silent ? { disable_notification: true } : {} };
 }
 
-export { adminSendPlan };
+// Сбой, о котором владелец должен узнать не из журнала в панели, а в Telegram: рассылка, отложенный пост, загрузка с сайта.
+// Одно и то же — не чаще раза в час; сам отправка не должна ничего ломать, поэтому ошибки глотаем.
+const PROBLEM_REPEAT_MS = 60 * 60 * 1000;
+const problemsSentAt = new Map();
+
+async function tellAdminProblem(key, text, now = Date.now()) {
+  const chatId = cleanText(data.config && data.config.adminChatId, 40);
+  if (!chatId || !data.config.botToken) return false;
+  if (now - (problemsSentAt.get(key) || 0) < PROBLEM_REPEAT_MS) return false;
+  const plan = adminSendPlan('system');
+  if (!plan.send) return false;
+  problemsSentAt.set(key, now);
+  try {
+    await sendMessage(chatId, text, data.config.botToken, { track: false, ...plan.options });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function forgetProblems() {
+  problemsSentAt.clear();
+}
+
+export { adminSendPlan, forgetProblems, tellAdminProblem };
