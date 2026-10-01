@@ -186,10 +186,14 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     // число заданных условий. Какие именно условия — видно в заголовке.
     const filterRow = [{ text: shortenedText(copy.button, 24) + (filterCount ? ' ✓' : ''), callback_data: 'cfilter:open' }];
     if (catalog.filter.summary) filterRow.push({ text: mobileButtonText('💬', copy.sendToManager), callback_data: 'cfilter:manager' });
+    // Когда объектов много, листать карточки по одной долго — предлагаем список. «Фильтр» и «Списком» — одним рядом.
+    const listButton = kind === 'property' && catalog.totalPages > CATALOG_LIST_PAGE_SIZE
+      ? { text: copy.listMode, callback_data: 'clist:' + catalog.mode + ':' + Math.floor(catalog.page / CATALOG_LIST_PAGE_SIZE) }
+      : null;
+    if (listButton && filterRow.length < 2) filterRow.push(listButton);
     rows.push(filterRow);
-  }
-  // Когда объектов много, листать карточки по одной долго — предлагаем список.
-  if (kind === 'property' && catalog && catalog.totalPages > CATALOG_LIST_PAGE_SIZE) {
+    if (listButton && filterRow.length >= 2 && !filterRow.includes(listButton)) rows.push([listButton]);
+  } else if (kind === 'property' && catalog && catalog.totalPages > CATALOG_LIST_PAGE_SIZE) {
     const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
     rows.push([{ text: copy.listMode, callback_data: 'clist:' + catalog.mode + ':' + Math.floor(catalog.page / CATALOG_LIST_PAGE_SIZE) }]);
   }
@@ -271,13 +275,14 @@ function shortenedText(value, maximum) {
   return slice.slice(0, boundary > Math.floor(maximum * 0.65) ? boundary + (slice[boundary] === '.' ? 1 : 0) : maximum).trimEnd() + '…';
 }
 
-// The card shows the first paragraph of the description; bullet lists and
-// the rest are in Details.
+// The card shows the first paragraph of the description, no longer than two phone lines (≈72 characters);
+// bullet lists and the rest are in Details.
+const TEASER_LIMIT = 72;
 function descriptionTeaser(description) {
   const paragraph = String(description || '').split('\n')
     .map((line) => line.trim())
     .find((line) => line && !/^[-–—•*·▪✓✔✅☑🔹🔸]/u.test(line)) || '';
-  return shortenedText(paragraph, 150);
+  return shortenedText(paragraph, TEASER_LIMIT);
 }
 
 // "Benidorm, Levante, Calle X 5, Benidorm" → the city is not repeated when
@@ -408,7 +413,8 @@ function objectCaption(record, language, options = {}) {
   const specs = propertySpecRows(record, language, { compact: !full });
   if (!full) {
     const teaser = descriptionTeaser(description);
-    const sections = [header.filter(Boolean), commercial, specs, teaser ? [teaser] : [], inRussian && copy.inRussian ? [copy.inRussian] : []].filter((section) => section.length);
+    // Цена, место и характеристики — один блок без пустой строки: так карточка каталога не длиннее десяти строк телефона.
+    const sections = [header.filter(Boolean), commercial.concat(specs), teaser ? [teaser] : [], inRussian && copy.inRussian ? [copy.inRussian] : []].filter((section) => section.length);
     return shortenedText(sections.map((section) => section.join('\n')).join('\n\n'), maximum);
   }
   const details = [...specs];
@@ -942,6 +948,8 @@ function similarPropertyHtml(user, record, language, mode) {
   const reasons = (Array.isArray(detail.reasons) ? detail.reasons : [])
     .map((key) => cleanText(copy[SIMILAR_REASON_KEYS[key]], 60))
     .filter(Boolean)
+    // Не больше трёх причин: остальное — шум на карточке.
+    .slice(0, 3)
     .join(' · ');
   const warnings = (Array.isArray(detail.warnings) ? detail.warnings : [])
     .map((key) => cleanText(copy[SIMILAR_WARNING_KEYS[key]], 80))
