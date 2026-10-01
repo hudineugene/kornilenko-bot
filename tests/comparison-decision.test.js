@@ -47,7 +47,7 @@ test('«цена за м²» и «расходы при покупке» — в 
   assert.ok(villa.some((line) => /^🧾 ≈ /.test(line) && !line.includes('★')));
   assert.ok(flat.some((line) => /^🧾 ≈ /.test(line) && line.includes('★')), 'расходы ниже у более дешёвого объекта');
 
-  assert.match(text, /★ — лучшее значение/, 'внизу — что означает звёздочка');
+  assert.match(text, /★ — лучшее из сравниваемых/, 'внизу — что означает звёздочка');
   assert.ok(text.split('\n').length <= 30, 'сравнение помещается в 30 строк: ' + text.split('\n').length);
 });
 
@@ -91,11 +91,11 @@ test('калькулятор выключен — строки «расходо�
 test('на английском и испанском — своя легенда и свои единицы', async () => {
   const en = await compare(createChat({ language: 'en' }), [VILLA, FLAT]);
   assert.match(en.last.text, /€3,478\/m²/);
-  assert.match(en.last.text, /★ — best value/);
+  assert.match(en.last.text, /★ — best of the compared/);
   assert.match(en.last.text, /Villa · For sale/);
   const es = await compare(createChat({ language: 'es' }), [VILLA, FLAT]);
   assert.match(es.last.text, /3\.478 €\/m²/);
-  assert.match(es.last.text, /★ — mejor valor/);
+  assert.match(es.last.text, /★ — el mejor de los comparados/);
 });
 
 test('«Обсудить эти объекты» передаёт менеджеру, что сравнивалось, и подтверждает клиенту', async () => {
