@@ -167,6 +167,11 @@ async function handleUpdate(update, token) {
     await handleInquiryStatusCallback(update.callback_query, token);
     return;
   }
+  // Кнопка на карточке-примере, присланной владельцу из панели: действия у неё нет.
+  if (update.callback_query && String(update.callback_query.data || '') === 'preview:demo') {
+    await acknowledgeCallback(update.callback_query, token, 'Это пример карточки: у клиента кнопки работают');
+    return;
+  }
   if (update.callback_query) {
     const callbackData = String(update.callback_query.data || '');
     const callbackChat = update.callback_query.message && update.callback_query.message.chat;

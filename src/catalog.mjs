@@ -1426,6 +1426,24 @@ async function sendPropertyCard(chatId, user, token, record, catalog = null) {
   return true;
 }
 
+// Карточка объекта «как у клиента» — владельцу в его чат, для проверки перед публикацией. Собирается теми же функциями, что
+// и настоящая карточка (подпись, кнопки, «Подробнее»), но ничего не меняет: клиента, избранное и счётчики показов не трогает.
+// Кнопки с действиями неактивны (нажатие отвечает «это пример»): иначе у владельца завелась бы заявка от самого себя.
+async function sendPropertyPreview(chatId, record, language, token) {
+  const lang = ['ru', 'en', 'es'].includes(language) ? language : 'ru';
+  const copy = PROPERTY_ACTION_TEXT[lang] || PROPERTY_ACTION_TEXT.ru;
+  const user = { id: 'preview', preferredLanguage: lang, favorites: [], comparison: [] };
+  const caption = propertyCardCaption(user, record, lang, null);
+  const markup = contentButtons(record, lang, user, 'property', null);
+  const inert = markup ? { inline_keyboard: markup.inline_keyboard.map((row) => row.map((button) => (button.url ? button : { text: button.text, callback_data: 'preview:demo' }))) } : null;
+  const images = recordImages(record, lang);
+  if (images.length) await sendPhotoMessage(chatId, images[0], caption, token, inert, { parseMode: 'HTML' });
+  else await sendMessage(chatId, caption, token, { ...(inert ? { reply_markup: inert } : {}), parse_mode: 'HTML' });
+  // То, что клиент увидит по «Подробнее».
+  await sendMessage(chatId, '<i>' + escapeTelegramHtml(copy.details) + '</i>\n\n' + objectCaptionHtml(record, lang, { full: true }), token, { parse_mode: 'HTML' });
+  return { photos: images.length };
+}
+
 // Показ одной фотографии объекта прямо в карточке. Сообщение то же самое —
 // меняются картинка, подпись и кнопки, поэтому чат не растёт.
 async function showPropertyPhoto(chatId, user, token, message, record, index) {
@@ -2347,6 +2365,7 @@ export {
   sendCatalog,
   sendCatalogPage,
   sendPropertyCard,
+  sendPropertyPreview,
   sendUiMessage,
   showCatalogPricePrompt,
   startCatalogPriceInput,

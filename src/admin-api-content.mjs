@@ -6,12 +6,13 @@ import { normalizeBuyPlan, normalizeGuidePages, pruneOrphanPropertyAnalytics } f
 import { imageExists } from './media.mjs';
 import { peekDeleted, rememberDeleted, takeDeleted } from './trash.mjs';
 import { data, saveDataNow } from './store.mjs';
-import { contentButtons, objectCaptionHtml, recordImages } from './catalog.mjs';
+import { contentButtons, objectCaptionHtml, recordImages, sendPropertyPreview } from './catalog.mjs';
 import { PROPERTY_ACTION_TEXT } from './texts.mjs';
 import { binaryImage, json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
 import { parseContentRecord } from './admin-input.mjs';
 import { queuePropertyAlerts } from './alerts.mjs';
 import { broadcastCardContent } from './broadcasts.mjs';
+import { PLACES } from './places.mjs';
 
 // Каждая ветка сама отвечает клиенту и возвращает управление. Если не подошла
 // ни одна, функция возвращает false — тогда запрос ищут в других модулях.
@@ -105,6 +106,24 @@ async function handleContentApi(req, res, url) {
   // A property-centric view for the manager: aggregate counters plus the
   // clients who showed a concrete signal of interest. Keeping this endpoint
   // separate avoids limiting the list to the 500 users returned by /api/state.
+  // Прислать карточку объекта владельцу в Telegram — как её увидит клиент (на выбранном языке), с «Подробнее».
+  const previewSendMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/preview-send$/);
+  if (previewSendMatch && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return true;
+    const body = await readJson(req);
+    const record = data.objects.find((item) => item.id === decodeURIComponent(previewSendMatch[1]));
+    if (!record) return json(res, 404, { error: 'Объект не найден' }), true;
+    const chatId = cleanText(data.config.adminChatId, 40);
+    if (!chatId) return json(res, 400, { error: 'Чат администратора не подключён: карточку некуда прислать. Подключите его: ' + PLACES.adminChat + '.' }), true;
+    try {
+      const sent = await sendPropertyPreview(chatId, record, body.language, data.config.botToken);
+      return json(res, 200, { ok: true, photos: sent.photos }), true;
+    } catch (error) {
+      return json(res, 400, { error: 'Не удалось прислать карточку: ' + error.message }), true;
+    }
+  }
+
   const propertyInsightsMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/insights$/);
   if (propertyInsightsMatch && req.method === 'GET') {
     const session = requireAuth(req, res);

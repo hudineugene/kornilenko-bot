@@ -184,6 +184,9 @@ function openObjectExtras(id) {
       '<button class="btn secondary" data-edit-object="1" type="button">✎ Редактировать</button>' +
       '<button class="btn" data-channel="1" type="button">➤ Опубликовать в группы</button>' +
       '<span class="small muted">Красивый пост в выбранные группы и каналы: фотографии, цена, характеристики и полное описание.</span>' +
+      '<div class="field"><label>Прислать мне карточку в Telegram — как её увидит клиент</label><div class="row">' + LANGUAGES.map(function (item) {
+        return '<button class="btn secondary small" type="button" data-preview-send="' + item[0] + '">' + item[1] + "</button>";
+      }).join("") + '</div></div>' +
       '<div class="row"><button class="btn secondary" data-move="up" type="button">↑ Поднять в списке</button>' +
       '<button class="btn secondary" data-move="down" type="button">↓ Опустить в списке</button></div>' +
       '<button class="btn secondary" data-copy="1" type="button">⧉ Создать копию</button>' +
@@ -193,6 +196,9 @@ function openObjectExtras(id) {
     footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button>',
     ready: function (dialog) {
       dialog.querySelector("[data-edit-object]").onclick = function () { dialog.closeClean(); openRecordEditor("objects", id); };
+      dialog.querySelectorAll("[data-preview-send]").forEach(function (button) {
+        button.onclick = function () { sendObjectPreview(id, button.dataset.previewSend); };
+      });
       dialog.querySelector("[data-channel]").onclick = function () {
         dialog.closeClean();
         openChannelPost(id);
@@ -254,6 +260,14 @@ function listingTopicName(group, threadId) {
 function listingTopicRow(group, topic, checked) {
   return '<label class="listing-topic"><input type="checkbox" data-pick data-thread="' + topic.id + '"' + (checked ? " checked" : "") + '><span>' + esc(topic.name || "Раздел №" + topic.id) +
     (topic.closed ? ' <span class="small muted">закрыт для участников</span>' : "") + "</span></label>";
+}
+
+// Прислать карточку объекта в Telegram владельцу — ровно как её увидит клиент (с «Подробнее»), на выбранном языке.
+async function sendObjectPreview(id, language) {
+  try {
+    await send("/api/objects/" + encodeURIComponent(id) + "/preview-send", "POST", { language: language });
+    toast("Карточка отправлена в ваш Telegram");
+  } catch (error) { fail(error); }
 }
 
 // Обновить опубликованные посты объекта на месте: цена, статус и описание берутся из карточки. Без groupId и messageId —
@@ -650,7 +664,7 @@ function openRecordEditor(kind, id) {
           '<div class="hint">Включённая акция показывается только между датами начала и окончания включительно.</div>' +
           '<div class="field"><label>Ссылка</label><input id="fUrl" value="' + esc(record && record.url || "") + '"></div>' +
         "</div></details>") +
-    '</div><aside class="editor-preview-panel"><div class="editor-preview-head"><b>Как увидит клиент</b><span id="recordPreviewLanguage">Русский</span></div><div class="tg-preview" id="recordPreview"></div><div class="tg-note gap-top">Предпросмотр обновляется сразу. Telegram может незначительно изменить переносы строк.</div></aside></div>';
+    '</div><aside class="editor-preview-panel"><div class="editor-preview-head"><b>Как увидит клиент</b><span id="recordPreviewLanguage">Русский</span></div><div class="tg-preview" id="recordPreview"></div>' + (isObject && record ? '<div class="row gap-top"><button class="btn ghost small" id="recordPreviewSend" type="button" title="Придёт сохранённая карточка на выбранном языке, вместе с «Подробнее»: на телефоне видно, как её увидит клиент">📲 Прислать мне в Telegram</button></div>' : '') + '<div class="tg-note gap-top">Предпросмотр обновляется сразу. Telegram может незначительно изменить переносы строк.</div></aside></div>';
 
   openDialog({
     title: title,
@@ -855,6 +869,8 @@ function openRecordEditor(kind, id) {
           }).catch(function () {});
         }, 180);
       }
+      var previewSend = dialog.querySelector("#recordPreviewSend");
+      if (previewSend) previewSend.onclick = function () { if (record) sendObjectPreview(record.id, dialog.dataset.activeLanguage || "ru"); };
       function renderRecordPreview() {
         var language = dialog.dataset.activeLanguage || "ru";
         var words = previewWords[language] || previewWords.ru;
