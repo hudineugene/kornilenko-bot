@@ -1268,15 +1268,18 @@ function relaxedCatalogFilter(user) {
   const language = user.preferredLanguage || 'ru';
   const filter = normalizedCatalogFilter(user.catalogFilter);
   const published = publishedCatalog(user);
+  const copy = CATALOG_FILTER_TEXT[language] || CATALOG_FILTER_TEXT.ru;
   const steps = [];
-  if (filter.maxPrice) steps.push({ ...filter, maxPrice: Math.ceil((filter.maxPrice * 1.2) / 1000) * 1000 });
-  if (filter.district) steps.push({ ...filter, district: '' });
-  if (filter.city) steps.push({ ...filter, city: '', district: '' });
-  if (filter.bedrooms > 1) steps.push({ ...filter, bedrooms: filter.bedrooms - 1 });
-  if (filter.type) steps.push({ ...filter, type: '' });
+  // «change» — что именно смягчили: «Без условия „Дом“», а не голое «Сад» (как раньше выглядело «Ближайшие варианты: 1 — Сад»).
+  const raised = Math.ceil((filter.maxPrice * 1.2) / 1000) * 1000;
+  if (filter.maxPrice) steps.push({ filter: { ...filter, maxPrice: raised }, change: copy.changePrice.replace('{value}', () => formattedPriceLimit(raised, language)) });
+  if (filter.district) steps.push({ filter: { ...filter, district: '' }, change: copy.changeDistrict.replace('{value}', () => filter.district) });
+  if (filter.city) steps.push({ filter: { ...filter, city: '', district: '' }, change: copy.changeCity.replace('{value}', () => filter.city) });
+  if (filter.bedrooms > 1) steps.push({ filter: { ...filter, bedrooms: filter.bedrooms - 1 }, change: copy.changeBedrooms });
+  if (filter.type) steps.push({ filter: { ...filter, type: '' }, change: copy.changeType.replace('{value}', () => (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[filter.type] || filter.type) });
   for (const step of steps) {
-    const count = applyCatalogFilter(published, step, language).length;
-    if (count) return { filter: step, count, summary: catalogFilterSummary(step, language) };
+    const count = applyCatalogFilter(published, step.filter, language).length;
+    if (count) return { filter: step.filter, count, change: step.change, summary: catalogFilterSummary(step.filter, language) };
   }
   return null;
 }
@@ -1324,7 +1327,7 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
     // условий (бюджет чуть выше, без района или города), и предлагаем следить
     // за новыми объектами или передать запрос менеджеру.
     const nearby = relaxedCatalogFilter(user);
-    const nearbyLine = nearby ? '\n\n' + copy.nearby.replace('{count}', () => (String(nearby.count))).replace('{summary}', () => (nearby.summary)) : '';
+    const nearbyLine = nearby ? '\n\n' + copy.nearby.replace('{count}', () => (String(nearby.count))).replace('{change}', () => (nearby.change)) : '';
     const notify = (SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru).wizardNotify;
     // Четыре действия вместо семи-восьми: ближайшее (если есть), следить за новыми, написать
     // менеджеру (WhatsApp рядом), сбросить условия. «Фильтр», «Подбор» и «Главное меню» — на
@@ -1336,6 +1339,8 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
       ...(nearby ? [[{ text: copy.showNearby, callback_data: 'cfilter:nearby' }]] : []),
       [{ text: notify, callback_data: 'saved:save' }],
       talk,
+      // «Фильтр» рядом со сбросом: текст зовёт изменить условия, значит и кнопка нужна.
+      [{ text: copy.button, callback_data: 'cfilter:open' }],
       [{ text: copy.reset, callback_data: 'cfilter:reset' }],
     ] } });
     return true;

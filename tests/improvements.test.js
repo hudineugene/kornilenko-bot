@@ -745,9 +745,9 @@ test.describe('catalog filter', () => {
     assert.ok(shown.last.text.startsWith(FILTER.empty));
     // Пустой ответ не тупик: есть «ближайшие» (без типа), слежение за новыми и менеджер.
     // Четыре действия: ближайшее, следить за новыми, менеджеру, сбросить; «Фильтр», «Подбор» и меню — на клавиатуре.
-    assert.deepEqual(callbacksOf(shown.last.markup), ['cfilter:nearby', 'saved:save', 'cfilter:manager', 'cfilter:reset']);
-    assert.equal(shown.last.markup.inline_keyboard.length, 4, 'четыре ряда');
-    assert.match(shown.last.text, /Ближайшие варианты: \d+ — /);
+    assert.deepEqual(callbacksOf(shown.last.markup), ['cfilter:nearby', 'saved:save', 'cfilter:manager', 'cfilter:open', 'cfilter:reset']);
+    assert.equal(shown.last.markup.inline_keyboard.length, 5, 'пять рядов: ближайшее, следить, написать, «Фильтр», сбросить');
+    assert.match(shown.last.text, /Без типа «Дом» — найдено: \d+/);
     await chat.press('cfilter:reset');
     assert.equal(chat.user.catalogFilter, null);
     assert.equal(bot.catalogRecords(chat.user).length, 7);
@@ -1668,7 +1668,7 @@ test('«Объекты» из меню открывает весь катало�
   // Бюджет чуть ниже цены виллы: ничего нет, но при бюджете +20 % вилла находится.
   chat.user.catalogFilter = { deal: 'sale', type: '', bedrooms: 0, city: 'Альтеа', maxPrice: 400000 };
   const empty = await chat.press('catalog:all:0');
-  assert.match(empty.last.text, /Ближайшие варианты: 1 — /, 'видно, что найдётся при небольшом смягчении');
+  assert.match(empty.last.text, /Бюджет чуть выше — до 480\s000\s€ — найдено: 1/, 'видно, что найдётся при небольшом смягчении');
   assert.ok(callbacksOf(empty.last.markup).includes('cfilter:nearby'));
   assert.ok(callbacksOf(empty.last.markup).includes('saved:save'), '«Сообщать о новых»');
   assert.ok(callbacksOf(empty.last.markup).includes('cfilter:manager'), '«Передать менеджеру»');
