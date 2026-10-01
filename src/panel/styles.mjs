@@ -95,7 +95,7 @@ a:hover{text-decoration:underline}
 .nav-item .count{margin-left:auto;min-width:20px;padding:0px var(--sp-2);border-radius:var(--radius);background:var(--bad);color:var(--surface);font-weight:700;text-align:center}
 .nav-item.active .count{background:var(--brand)}
 .head-tools{display:flex;align-items:center;gap:var(--sp-1);margin-left:auto;flex:none}
-.notification-bell{position:relative;display:inline-flex;width:34px;height:34px;align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--radius);background:transparent;color:var(--muted);font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.notification-bell{position:relative;display:inline-flex;width:36px;height:36px;align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--radius);background:transparent;color:var(--muted);font:inherit;font-size:var(--fs-sm);cursor:pointer}
 .notification-bell b.dot{min-width:10px;width:10px;height:10px;padding:0;right:2px;top:1px}
 .notification-bell:hover,.notification-bell.active{border-color:var(--line);background:var(--surface-soft);color:var(--text)}
 .notification-bell b{position:absolute;right:-3px;top:-4px;min-width:18px;height:18px;padding:0 var(--sp-1);border:2px solid var(--surface);border-radius:var(--radius-pill);background:var(--bad);color:var(--surface);font-size:var(--fs-xs);line-height:14px;text-align:center}
@@ -108,7 +108,7 @@ a:hover{text-decoration:underline}
 .topbar{position:sticky;top:var(--header);z-index:var(--z-sticky);display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-4);padding:var(--sp-2) var(--sp-5);background:color-mix(in srgb, var(--bg) 94%, transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .topbar .sub{color:var(--muted)}
 .topbar .page-tabs{flex:0 1 auto;min-width:0;max-width:100%;gap:var(--sp-1);padding:0;background:none;border:0;border-radius:0}
-.topbar .page-tabs button{padding:var(--sp-2) var(--sp-3);border-radius:0;border-bottom:2px solid transparent;color:var(--muted)}
+.topbar .page-tabs button{padding:0 var(--sp-3);border-radius:0;border-bottom:2px solid transparent;color:var(--muted)}
 .topbar .page-tabs button:hover{color:var(--text)}
 .topbar .page-tabs button.active{background:none;box-shadow:none;color:var(--brand);border-bottom-color:var(--brand)}
 .topbar h1{white-space:nowrap}
@@ -123,7 +123,7 @@ a:hover{text-decoration:underline}
 .card,.funnel-card,.task-card{box-shadow:var(--shadow)}
 .task-card,.viewing-card{border-left:var(--edge) solid var(--flag,var(--line))}
 .card>header{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--line-soft)}
-.card>header .actions{margin-left:auto;display:flex;gap:var(--sp-2)}
+.card>header .actions{margin-left:auto;display:flex;align-items:center;gap:var(--sp-2)}
 .card-body{padding:var(--sp-4)}
 .card-body.tight{padding:var(--sp-3) var(--sp-4)}
 .kpi{display:flex;flex-direction:column;gap:2px;padding:var(--sp-3) var(--sp-4)}
@@ -171,7 +171,11 @@ tbody tr.selected{background:var(--brand-soft)}
 .editor-foot{justify-content:flex-end;gap:var(--sp-2)}
 .btn.small{padding:var(--sp-1) var(--sp-2);font-size:var(--fs-sm);border-radius:var(--radius-sm)}
 .btn.icon{padding:var(--sp-1) var(--sp-2)}
-.head-tools .btn.icon{flex:none;min-width:34px}
+/* Высот у кнопок две: 36 (обычная, вкладка, пункт меню, колокольчик) и 30 (малая). Вертикальные отступы не задаём — высоту держит min-height. */
+.btn,.btn.small,.btn.icon{padding-top:0;padding-bottom:0}
+.btn.small,.card>header .actions .btn,#pageActions .btn{white-space:nowrap}
+.tabs button{min-height:36px;display:inline-flex;align-items:center}
+.head-tools .btn.icon{flex:none;min-width:36px}
 .btn-ico{display:inline-flex;flex:none;width:16px;height:16px}
 @media (max-width:860px){.object-performance{min-height:44px}.objects-table .btn.icon,.objects-table [data-more]{min-width:44px;min-height:44px}}
 .hint-more{margin-top:var(--sp-1)}
@@ -274,7 +278,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 @media (max-width:860px){.reply-templates{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:var(--sp-1)}.template-chip{min-height:38px}}
 .deeds-scope{padding:var(--sp-3) var(--sp-4) 0;align-items:center;gap:var(--sp-2)}
 .tabs{display:flex;gap:2px;padding:2px;overflow:auto}
-.tabs button{padding:var(--sp-2) var(--sp-3);border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);font:inherit;font-size:var(--fs-sm);font-weight:600;cursor:pointer;white-space:nowrap}
+.tabs button{padding:0 var(--sp-3);border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);font:inherit;font-size:var(--fs-sm);font-weight:600;cursor:pointer;white-space:nowrap}
 .tabs button.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
 .search{position:relative;flex:1;min-width:140px;max-width:320px}
 .search input{padding-left:28px}
@@ -518,7 +522,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .funnel-signals{display:flex;gap:var(--sp-1);flex-wrap:wrap;margin:var(--sp-2) 0}
 .funnel-signals .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .funnel-card{position:relative}
-.funnel-move{position:absolute;right:var(--sp-1);bottom:var(--sp-1);min-width:28px;min-height:28px;padding:0}
+.funnel-move{position:absolute;right:var(--sp-1);bottom:var(--sp-1);min-width:30px;min-height:30px;padding:0}
 .funnel-signals{padding-right:32px}
 .stage-picker{gap:var(--sp-2)}
 .stage-pick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left}
@@ -568,7 +572,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .client-inquiry small{overflow:hidden;color:var(--muted);font-size:var(--fs-sm);text-overflow:ellipsis;white-space:nowrap}
 .client-inquiry time{color:var(--muted);font-size:var(--fs-xs);white-space:nowrap}
 .client-inquiry i{color:var(--muted);font-style:normal}
-.object-performance{display:flex;flex-direction:column;gap:2px;align-items:flex-end;background:none;border:0;cursor:pointer;color:inherit;font:inherit;padding:2px 0;white-space:nowrap}
+.object-performance{display:flex;flex-direction:row;min-height:30px;gap:var(--sp-2);align-items:center;background:none;border:0;cursor:pointer;color:inherit;font:inherit;padding:2px 0;white-space:nowrap}
 .object-performance small{color:var(--muted);font-size:var(--fs-xs)}
 .object-performance:hover{background:var(--brand-soft);color:var(--brand-dark)}
 .object-performance b{font-size:var(--fs-sm)}
