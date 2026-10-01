@@ -2427,7 +2427,7 @@ test('«Отчёт»: воронка бота — шаги от «зашли» �
     bySource: [{ key: 'instagram', joined: 6, catalog: 5, details: 3, inquiry: 2, viewing: 1, confirmed: 1 }, { key: 'без метки', joined: 4, catalog: 3, details: 2, inquiry: 1, viewing: 1, confirmed: 0 }],
   };
   const html = String(sandbox.weeklyCard({ report: { ...base, funnel }, text: '' }));
-  assert.match(html, /Воронка бота/);
+  assert.match(html, /Что сделали новые клиенты недели/);
   for (const step of ['Зашли', 'Открыли каталог', 'Нажали «Подробнее»', 'Оставили заявку', 'Записались на просмотр', 'Получили подтверждение']) assert.ok(html.includes(step), 'шаг: ' + step);
   assert.match(html, /Открыли каталог[\s\S]*?8[\s\S]*?80%/, 'проценты — от «зашли»');
   assert.match(html, /Русский/);
@@ -2447,8 +2447,8 @@ test('«Отчёт»: воронка бота — шаги от «зашли» �
   assert.match(untracked, /Оставили заявку/);
 
   // Новых клиентов не было — воронки нет; старый ответ без воронки не ломает страницу.
-  assert.ok(!String(sandbox.weeklyCard({ report: { ...base, funnel: { ...funnel, joined: 0 } }, text: '' })).includes('Воронка бота'));
-  assert.ok(!String(sandbox.weeklyCard({ report: base, text: '' })).includes('Воронка бота'));
+  assert.ok(!String(sandbox.weeklyCard({ report: { ...base, funnel: { ...funnel, joined: 0 } }, text: '' })).includes('Что сделали новые клиенты недели'));
+  assert.ok(!String(sandbox.weeklyCard({ report: base, text: '' })).includes('Что сделали новые клиенты недели'));
 });
 
 test('«Почему мы»: вкладка в «Текстах бота»; поля, отзывы с разрешением, статус «виден / скрыт», сохранение', async () => {
