@@ -2293,6 +2293,7 @@ export {
   handleSelectionWizardCallback,
   sendSelectionWizard,
   searchExampleText,
+  catalogListLine,
   catalogFilterState,
   catalogFilterSummary,
   catalogRecords,

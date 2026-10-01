@@ -9,6 +9,8 @@ import { notifyAdministratorAction } from './inquiries.mjs';
 import { normalizedSavedSearch, sendUiMessage } from './catalog.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 import { backButtonText } from './util.mjs';
+import { data } from './store.mjs';
+import { planOf, setPlanReminders } from './plan.mjs';
 
 function subscriptionPanel(user) {
   const language = user.preferredLanguage || 'ru';
@@ -21,6 +23,11 @@ function subscriptionPanel(user) {
     [{ text: (newsOn ? '✅ ' : '⬜ ') + copy.news, callback_data: 'subs:news:' + (newsOn ? 'off' : 'on') }],
     [{ text: (alertsOn ? '✅ ' : '⬜ ') + copy.alerts, callback_data: 'subs:alerts:' + (alertsOn ? 'off' : 'on') }],
   ];
+  // Выключатели писем, которые владелец включил: раньше их можно было выключить кнопкой под письмом, а вернуть было нечем.
+  const engagement = (data.config && data.config.engagement) || {};
+  if (engagement.digest) rows.push([{ text: (user.digestOptOut ? '⬜ ' : '✅ ') + copy.digest, callback_data: 'subs:digest:' + (user.digestOptOut ? 'on' : 'off') }]);
+  if (engagement.comeback) rows.push([{ text: (user.comebackOptOut ? '⬜ ' : '✅ ') + copy.comeback, callback_data: 'subs:comeback:' + (user.comebackOptOut ? 'on' : 'off') }]);
+  if (engagement.planReminder) rows.push([{ text: (planOf(user).remindOptOut ? '⬜ ' : '✅ ') + copy.planReminder, callback_data: 'subs:plan:' + (planOf(user).remindOptOut ? 'on' : 'off') }]);
   // Сохранённый поиск — это тоже «что мне присылать», поэтому он здесь, а не
   // отдельной строкой в «Моё».
   rows.push([{
@@ -64,6 +71,12 @@ async function handleSubscriptionCallback(query, token) {
     const changed = (user.propertyAlerts !== false) !== (value === 'on');
     user.propertyAlerts = value === 'on';
     if (changed) void notifyAdministratorAction(user, value === 'on' ? 'Включил уведомления об объектах' : 'Отключил уведомления об объектах');
+  } else if (kind === 'digest' && ['on', 'off'].includes(value)) {
+    user.digestOptOut = value === 'off';
+  } else if (kind === 'comeback' && ['on', 'off'].includes(value)) {
+    user.comebackOptOut = value === 'off';
+  } else if (kind === 'plan' && ['on', 'off'].includes(value)) {
+    setPlanReminders(user, value === 'on');
   } else if (kind !== 'menu') {
     await acknowledgeCallback(query, token);
     return;

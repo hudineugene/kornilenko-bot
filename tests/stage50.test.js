@@ -8,6 +8,11 @@ const { bot, telegram, callbacksOf, createChat, property, resetData, cleanup } =
 
 const { menu: MENU } = bot.text;
 const plain = (html) => String(html).replace(/<[^>]*>/g, '');
+// Экран бота после нажатия: бот правит сообщение на месте, поэтому смотрим на последний sendMessage/editMessageText.
+const panelOf = (step) => {
+  const call = [...step.calls].reverse().find((item) => ['sendMessage', 'editMessageText'].includes(item.method) && item.body.reply_markup);
+  return { text: String(call.body.text), buttons: call.body.reply_markup.inline_keyboard.flat().map((button) => button.text), markup: call.body.reply_markup };
+};
 const captionOf = (calls) => {
   const card = calls.find((call) => call.method === 'sendPhoto' || call.method === 'editMessageMedia');
   return card ? plain(card.body.caption || (card.body.media && card.body.media.caption)) : '';
@@ -88,3 +93,52 @@ test('после записи без телефона — фраза «Оста�
 });
 
 void callbacksOf;
+
+test('«Уведомления»: выключатели письма-подборки, «вернуться» и напоминаний о плане — на одном экране, обратимые; выключенных владельцем функций на экране нет', async () => {
+  const chat = createChat();
+  const off = await chat.press('subs:menu');
+  const offLabels = panelOf(off).buttons.join(' | ');
+  assert.doesNotMatch(offLabels, /Новинки раз в неделю|Напомнить вернуться|Напоминания о плане/, 'функции выключены в настройках бота: кнопок нет');
+  bot.getData().config.engagement = { digest: true, comeback: true, planReminder: true };
+  const on = await chat.press('subs:menu');
+  for (const label of ['Новинки раз в неделю', 'Напомнить вернуться', 'Напоминания о плане']) assert.ok(panelOf(on).buttons.includes('✅ ' + label), label + ': ' + panelOf(on).buttons.join(' | '));
+  await chat.press('subs:digest:off');
+  await chat.press('subs:comeback:off');
+  const shown = await chat.press('subs:plan:off');
+  assert.equal(chat.user.digestOptOut, true);
+  assert.equal(chat.user.comebackOptOut, true);
+  assert.equal(chat.user.plan.remindOptOut, true);
+  assert.ok(panelOf(shown).buttons.includes('⬜ Напоминания о плане'));
+  await chat.press('subs:digest:on');
+  await chat.press('subs:plan:on');
+  assert.equal(chat.user.digestOptOut, false, 'включить обратно можно');
+  assert.equal(chat.user.plan.remindOptOut, false);
+});
+
+test('мастер подбора: «Купить / Снять», «Назад» на первый шаг снимает прежний выбор и счётчик', async () => {
+  const chat = createChat();
+  const first = await chat.press('sel:restart:deal');
+  assert.deepEqual(panelOf(first).buttons.slice(0, 2), ['Купить', 'Снять']);
+  await chat.press('sel:deal:sale');
+  const typed = await chat.press('sel:type:villa');
+  assert.match(panelOf(typed).text, /Вилла/);
+  const back = await chat.press('sel:back:deal');
+  assert.doesNotMatch(panelOf(back).text, /Продажа|Вилла/, 'условия сняты: ' + panelOf(back).text);
+  assert.match(panelOf(back).text, /Подходит: 2/, 'счётчик показывает весь каталог');
+});
+
+test('«Списком»: цена, спальни, площадь и город — а не пять одинаковых «Квартира · Бенидорм»', () => {
+  const lines = bot.getData().objects.map((record, index) => bot.catalogListLine(record, 'ru', index + 1));
+  for (const line of lines) assert.ok(Array.from(line).length <= 38, line);
+  assert.match(lines[1], /^2\. .*€/, lines[1]);
+});
+
+test('пустой результат: рядом со сбросом есть «Фильтр», а смягчение названо словами', async () => {
+  const chat = createChat();
+  await chat.press('cfilter:open');
+  chat.user.catalogFilter = { deal: 'sale', type: 'land', bedrooms: 0, city: '', district: '', minPrice: 0, maxPrice: 0, sort: '' };
+  const step = await chat.press('catalog:all:0');
+  const callbacks = callbacksOf(step.last.markup);
+  assert.ok(callbacks.includes('cfilter:open') && callbacks.includes('cfilter:reset'), callbacks.join(' | '));
+  assert.match(step.last.text, /Без типа «Участок» — найдено: \d/, step.last.text);
+});

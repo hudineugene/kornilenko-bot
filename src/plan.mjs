@@ -136,6 +136,11 @@ function savePlan(user, plan) {
   scheduleSave();
 }
 
+// Выключатель напоминаний о плане: тот же, что кнопка «Не напоминать», но обратимый — на экране «Уведомления».
+function setPlanReminders(user, enabled) {
+  savePlan(user, { ...planOf(user), remindOptOut: !enabled });
+}
+
 // Первый шаг, который ещё не отмечен; после последнего — steps.length.
 function currentStepIndex(user) {
   const plan = planOf(user);
@@ -399,6 +404,8 @@ export {
   planProgress,
   planReminderDue,
   runPlanReminders,
+  setPlanReminders,
+  planOf,
   parsePlanHelp,
   planHelpSteps,
 };

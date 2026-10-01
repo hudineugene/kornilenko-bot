@@ -15,7 +15,7 @@ import { splitTelegramText, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, languageFromText, menuItemForText } from './menus.mjs';
 import { formReminderDue, runFormReminders, viewingDateValue } from './forms.mjs';
 import { awaitingReply, createInquiry, inquiryStatusMarkup } from './inquiries.mjs';
-import { catalogFilterPanel, catalogRecords, contentButtons, searchExampleText, objectCaption, objectCaptionHtml, objectPriceText, propertyDeepLink, propertyIdFromStartPayload, propertyPublicationIssues, recordImages, sourceFromStartPayload, propertyPublicationReadiness, propertyReadyForLanguage } from './catalog.mjs';
+import { catalogFilterPanel, catalogListLine, catalogRecords, contentButtons, searchExampleText, objectCaption, objectCaptionHtml, objectPriceText, propertyDeepLink, propertyIdFromStartPayload, propertyPublicationIssues, recordImages, sourceFromStartPayload, propertyPublicationReadiness, propertyReadyForLanguage } from './catalog.mjs';
 import './sections.mjs';
 import { handleUpdate, processUpdates } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
@@ -131,6 +131,7 @@ export {
   objectCaption,
   objectCaptionHtml,
   searchExampleText,
+  catalogListLine,
   objectPriceText,
   parseContentRecord,
   parseBedrooms,
