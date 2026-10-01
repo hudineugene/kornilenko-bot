@@ -256,7 +256,9 @@ function objectPriceText(record, language) {
         ? copy.priceWeek
         : '';
     const currency = cleanText(record.currency, 10) || 'EUR';
-    return [formatMoney(priceValue, CURRENCY_SYMBOLS[currency.toUpperCase()] || currency, language, 2), period].filter(Boolean).join(' ');
+    // «От»: у комплекса из нескольких квартир цена — самого дешёвого варианта.
+    const prefix = record.priceFrom === true ? copy.priceFrom : '';
+    return [prefix, formatMoney(priceValue, CURRENCY_SYMBOLS[currency.toUpperCase()] || currency, language, 2), period].filter(Boolean).join(' ');
   }
   return localizedExact(record.price, language, 120) || copy.priceOnRequest;
 }

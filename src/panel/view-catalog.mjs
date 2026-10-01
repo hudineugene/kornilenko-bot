@@ -134,7 +134,7 @@ function renderObjects(host) {
           (missingLanguages(record).length ? '<br><span class="chip warn" title="' + esc(publicationSummary(record)) + '">не готово: ' + esc(missingLanguages(record).join(", ")) + "</span>" : "") + "</td>" +
         "<td>" + esc((PROPERTY_TYPES.find(function (type) { return type[0] === record.propertyType; }) || ["", "—"])[1]) + '<br><span class="small muted">' + (record.dealType === "rent" ? "аренда" : "продажа") + "</span></td>" +
         "<td>" + esc(localized(record.city, "ru") || "—") + "</td>" +
-        '<td class="right nowrap">' + (record.priceValue ? esc(money(record.priceValue, record.currency)) : esc(localized(record.price, "ru") || "по запросу")) + "</td>" +
+        '<td class="right nowrap">' + (record.priceValue ? esc((record.priceFrom ? "от " : "") + money(record.priceValue, record.currency)) : esc(localized(record.price, "ru") || "по запросу")) + "</td>" +
         '<td><span class="chip ' + statusKind(record.status) + '">' + esc(statusName(record.status)) + "</span></td>" +
         // Цифры с подписями: сколько показов и сколько заявок. Иначе два числа подряд
         // читаются как что угодно.
@@ -391,6 +391,7 @@ function openRecordEditor(kind, id) {
           '<div class="field"><label>Валюта</label><select id="fCurrency">' + ["EUR", "USD", "GBP"].map(function (code) {
             return '<option value="' + code + '"' + (record && record.currency === code ? " selected" : "") + ">" + code + "</option>";
           }).join("") + "</select></div>" +
+          '<div class="field"><label>Вид цены</label><label class="check"><input type="checkbox" id="fPriceFrom"' + (record && record.priceFrom ? " checked" : "") + '> Цена «от» — самого дешёвого варианта</label></div>' +
           '<div class="field"><label>Период</label><select id="fPeriod"><option value="total">Цена целиком</option><option value="month"' + (record && record.pricePeriod === "month" ? " selected" : "") + '>в месяц</option><option value="week"' + (record && record.pricePeriod === "week" ? " selected" : "") + ">в неделю</option></select></div>" +
         "</div>" +
         '<div class="grid cols-3">' + translatedField("city", "Город", record && record.city, false, "", true) + translatedField("district", "Район", record && record.district) + translatedField("price", "Цена по запросу / текст", record && record.price) + "</div>" +
@@ -599,7 +600,9 @@ function openRecordEditor(kind, id) {
           var currency = value("fCurrency") || "EUR";
           var symbols = { EUR: "€", USD: "$", GBP: "£" };
           var period = value("fPeriod") === "month" ? actions.priceMonth : value("fPeriod") === "week" ? actions.priceWeek : "";
-          return [new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(amount), symbols[currency] || currency, period].filter(Boolean).join(" ");
+          var fromBox = dialog.querySelector("#fPriceFrom");
+          var from = fromBox && fromBox.checked ? actions.priceFrom : "";
+          return [from, new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(amount), symbols[currency] || currency, period].filter(Boolean).join(" ");
         }
         return translatedValue("price", language) || actions.priceOnRequest || "";
       }
@@ -743,6 +746,7 @@ function openRecordEditor(kind, id) {
             priceValue: dialog.querySelector("#fPrice").value,
             currency: dialog.querySelector("#fCurrency").value,
             pricePeriod: dialog.querySelector("#fPeriod").value,
+            priceFrom: dialog.querySelector("#fPriceFrom").checked,
             bedrooms: dialog.querySelector("#fBedrooms").value,
             bathrooms: dialog.querySelector("#fBathrooms").value,
             area: dialog.querySelector("#fArea").value,

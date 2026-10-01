@@ -204,6 +204,7 @@ function parseContentRecord(body, kind, existing = {}) {
       priceValue: optionalNumber(body.priceValue, 'цена'),
       currency: ['EUR', 'USD', 'GBP', 'UAH', 'RUB'].includes(body.currency) ? body.currency : 'EUR',
       pricePeriod: ['total', 'month', 'week'].includes(body.pricePeriod) ? body.pricePeriod : 'total',
+      priceFrom: body.priceFrom === true,
       dealType: ['sale', 'rent'].includes(body.dealType) ? body.dealType : 'sale',
       propertyType: ['apartment', 'house', 'villa', 'townhouse', 'land', 'commercial', 'newbuild', 'other'].includes(body.propertyType) ? body.propertyType : 'apartment',
       reference: cleanText(body.reference, 80),

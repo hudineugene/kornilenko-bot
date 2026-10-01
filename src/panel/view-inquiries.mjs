@@ -1701,7 +1701,7 @@ function clientPropertiesHtml(user) {
   if (!rows.length) return '<div class="card-body"><span class="small muted">Интересы пока не сформированы: избранное, просмотренное и подходящие объекты появятся здесь.</span></div>';
   return '<div class="client-properties">' + rows.map(function (row) {
     var record = row.property;
-    var price = record.priceValue ? money(record.priceValue, record.currency) : localized(record.price, "ru") || "цена по запросу";
+    var price = record.priceValue ? (record.priceFrom ? "от " : "") + money(record.priceValue, record.currency) : localized(record.price, "ru") || "цена по запросу";
     return '<button class="client-property" data-client-object="' + esc(record.id) + '" type="button"><span class="client-property-title"><b>' + esc(localized(record.title, "ru") || record.reference || record.id) + '</b><small>' + esc(row.labels.join(" · ")) + '</small></span><span class="client-property-price">' + esc(price) + '</span><span>→</span></button>';
   }).join("") + "</div>";
 }

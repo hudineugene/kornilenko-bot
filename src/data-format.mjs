@@ -1447,6 +1447,8 @@ function normalizeLoadedData(parsed) {
           price: normalizeLocalizedField(record.price, 120),
           currency: cleanText(record.currency, 10) || 'EUR',
           pricePeriod: ['total', 'month', 'week'].includes(record.pricePeriod) ? record.pricePeriod : 'total',
+          // Цена «от»: у комплекса — цена самого дешёвого варианта.
+          priceFrom: record.priceFrom === true,
           badges: Array.isArray(record.badges) ? record.badges.map((item) => cleanText(item, 30)).filter(Boolean).slice(0, 6) : [],
           // Видео или 3D-тур: ссылка на YouTube, Matterport и подобное.
           videoUrl: cleanText(record.videoUrl, 500),
