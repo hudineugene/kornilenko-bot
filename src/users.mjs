@@ -160,7 +160,7 @@ function normalizeUser(from, chatId, countMessage = true) {
     lastCallback: previous.lastCallback && typeof previous.lastCallback === 'object' ? previous.lastCallback : null,
     lastInboundMessageId: previous.lastInboundMessageId != null && Number.isFinite(Number(previous.lastInboundMessageId)) ? Number(previous.lastInboundMessageId) : null,
     catalogContext: previous.catalogContext && typeof previous.catalogContext === 'object' ? {
-      mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison', 'digest'].includes(previous.catalogContext.mode) ? previous.catalogContext.mode : 'all',
+      mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison', 'digest', 'shared'].includes(previous.catalogContext.mode) ? previous.catalogContext.mode : 'all',
       page: Math.max(0, Number(previous.catalogContext.page) || 0),
       propertyId: cleanText(previous.catalogContext.propertyId, 100),
     } : { mode: 'all', page: 0, propertyId: '' },
@@ -185,6 +185,8 @@ function normalizeUser(from, chatId, countMessage = true) {
     digestNewIds: idList(previous.digestNewIds),
     digestDropIds: idList(previous.digestDropIds),
     digestIds: idList(previous.digestIds),
+    // Подборка, которую клиент сейчас листает по присланной ссылке.
+    sharedListCode: /^[A-Za-z0-9_-]{6,32}$/.test(String(previous.sharedListCode || '')) ? String(previous.sharedListCode) : '',
     comebackIds: idList(previous.comebackIds),
     comebackAt: cleanText(previous.comebackAt, 40),
     comebackOptOut: Boolean(previous.comebackOptOut),
@@ -260,6 +262,7 @@ function userDataExport(user) {
     groupMessages: traces.groupMessages.map(clone),
     groupJoinRequests: traces.joinRequests.map(clone),
     adminNotifications: traces.notificationKeys.map((key) => clone({ key, ...(data.adminNotificationStates[key] || {}) })),
+    sharedLists: Object.entries(data.sharedLists || {}).filter(([, list]) => String(list.owner) === String(user.id)).map(([code, list]) => clone({ code, ...list })),
   };
 }
 
@@ -272,6 +275,9 @@ function eraseUserData(user) {
   const id = traces.id;
   const chatId = traces.chatId;
   delete data.users[id];
+  for (const [code, list] of Object.entries(data.sharedLists || {})) {
+    if (String(list.owner) === id) delete data.sharedLists[code];
+  }
   usersByChatId.delete(chatId);
   inquiryTimes.delete(id);
   for (const key of [id, id + ':messages', id + ':activity']) {

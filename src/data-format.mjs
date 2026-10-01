@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 50;
+const DATA_VERSION = 51;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -302,6 +302,7 @@ const defaultData = {
   replyTemplates: [],
   adminReplyTargets: {},
   adminReplyTargetsSince: '',
+  sharedLists: {},
   telegramOffset: 0,
   // Номера последних обработанных обновлений: защита от повторной обработки
   // после нештатной остановки.
@@ -836,6 +837,25 @@ function pruneOrphanPropertyAnalytics(root) {
   for (const id of Object.keys(properties)) if (!existing.has(id)) delete properties[id];
 }
 
+// Подборки, которыми клиенты делятся ссылкой: короткий код → список объектов. Живут 90 дней; хозяин нужен, чтобы удалить
+// подборки вместе с его данными.
+function normalizeSharedLists(value) {
+  const result = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
+  for (const [code, list] of Object.entries(value).slice(0, 1000)) {
+    if (!/^[A-Za-z0-9_-]{6,32}$/.test(code) || !list || typeof list !== 'object') continue;
+    const ids = (Array.isArray(list.ids) ? list.ids : []).map((id) => cleanText(id, 100)).filter(Boolean).slice(0, 20);
+    if (!ids.length) continue;
+    result[code] = {
+      ids,
+      owner: cleanText(list.owner, 40),
+      createdAt: cleanText(list.createdAt, 40) || new Date().toISOString(),
+      opens: Number.isFinite(Number(list.opens)) ? Math.max(0, Math.min(1000000, Math.round(Number(list.opens)))) : 0,
+    };
+  }
+  return result;
+}
+
 function normalizeAdminReplyTargets(value) {
   const result = {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
@@ -1278,7 +1298,7 @@ function normalizeLoadedData(parsed) {
         } : null,
         lastInboundMessageId: user.lastInboundMessageId != null && Number.isFinite(Number(user.lastInboundMessageId)) ? Number(user.lastInboundMessageId) : null,
         catalogContext: user.catalogContext && typeof user.catalogContext === 'object' ? {
-          mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison', 'digest'].includes(user.catalogContext.mode) ? user.catalogContext.mode : 'all',
+          mode: ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison', 'digest', 'shared'].includes(user.catalogContext.mode) ? user.catalogContext.mode : 'all',
           page: Math.max(0, Number(user.catalogContext.page) || 0),
           propertyId: cleanText(user.catalogContext.propertyId, 100),
         } : { mode: 'all', page: 0, propertyId: '' },
@@ -1462,6 +1482,7 @@ function normalizeLoadedData(parsed) {
         ? parsed.handledUpdateIds.map((id) => Number(id)).filter((id) => Number.isFinite(id)).slice(-200)
         : [],
       adminReplyTargets: normalizeAdminReplyTargets(parsed.adminReplyTargets),
+      sharedLists: normalizeSharedLists(parsed.sharedLists),
       // Notifications sent before this version have no entry in the map.
       adminReplyTargetsSince: cleanText(parsed.adminReplyTargetsSince, 40) || new Date().toISOString(),
     };

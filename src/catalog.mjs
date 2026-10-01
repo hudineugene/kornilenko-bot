@@ -196,6 +196,12 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
   if (kind === 'property' && catalog && catalog.mode === 'recent') {
     rows.push([{ text: (MENU_LABELS[language] || MENU_LABELS.ru).more, callback_data: 'nav:my' }]);
   }
+  if (kind === 'property' && catalog && catalog.mode === 'favorites') {
+    rows.push([{ text: mobileButtonText('', action.shareList, 34), callback_data: 'shared:create' }]);
+  }
+  if (kind === 'property' && catalog && catalog.mode === 'shared') {
+    rows.push([{ text: '🏘 ' + (NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru).browse, callback_data: 'catalog:all:0' }]);
+  }
   if (kind === 'property' && catalog && catalog.mode === 'comparison') {
     rows.push([{ text: (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).title, callback_data: 'compare:view' }]);
   }
@@ -840,7 +846,7 @@ function catalogFilterState(user) {
 // "all" is the catalog with the client's filter, "favorites" the saved
 // properties, "matches" what fitted the client's last selection form and
 // "similar" the ranked alternatives to the last property they opened.
-const CATALOG_MODES = ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison', 'digest'];
+const CATALOG_MODES = ['all', 'favorites', 'matches', 'similar', 'recent', 'comparison', 'digest', 'shared'];
 const COMPARISON_LIMIT = 3;
 
 function catalogMode(mode) {
@@ -854,6 +860,7 @@ function catalogHeading(mode, language) {
   if (mode === 'recent') return (MY_AREA_TEXT[language] || MY_AREA_TEXT.ru).recentHeading;
   if (mode === 'digest') return digestHeading(language);
   if (mode === 'comparison') return (COMPARISON_TEXT[language] || COMPARISON_TEXT.ru).title;
+  if (mode === 'shared') return (PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru).sharedHeading;
   return (MENU_LABELS[language] || MENU_LABELS.ru).objects;
 }
 
@@ -974,6 +981,11 @@ function catalogRecords(user, mode = 'all') {
     return (Array.isArray(user.recentlyViewed) ? user.recentlyViewed : [])
       .map((id) => byId.get(String(id)))
       .filter(Boolean);
+  }
+  if (mode === 'shared') {
+    const list = sharedListByCode(user && user.sharedListCode);
+    const byId = new Map(active.map((record) => [record.id, record]));
+    return list ? list.ids.map((id) => byId.get(String(id))).filter(Boolean) : [];
   }
   if (mode === 'comparison') {
     const byId = new Map(active.map((record) => [record.id, record]));
@@ -1290,7 +1302,9 @@ async function sendCatalogPage(chatId, user, token, page = 0, mode = 'all') {
     const empty = EMPTY_STATE_TEXT[language] || EMPTY_STATE_TEXT.ru;
     const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
     const manager = MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru;
-    const text = mode === 'favorites'
+    const text = mode === 'shared'
+      ? action.listUnavailable
+      : mode === 'favorites'
       ? empty.favorites
       : mode === 'similar'
         ? action.noSimilar
@@ -2038,6 +2052,57 @@ async function sendCatalog(chatId, user, token) {
   return sendCatalogPage(chatId, user, token, catalogPageFromContext(user, 'all'), 'all');
 }
 
+// --- Подборки по ссылке -------------------------------------------------------------------------------------------------
+const SHARED_LIST_DAYS = 90;
+const SHARED_LIST_MAX_IDS = 20;
+const SHARED_LIST_PER_OWNER = 5;
+const SHARED_LIST_TOTAL = 300;
+
+function sharedListExpired(list) {
+  const created = Date.parse(list && list.createdAt);
+  return !Number.isFinite(created) || Date.now() - created > SHARED_LIST_DAYS * 24 * 3600 * 1000;
+}
+
+function sharedListByCode(code) {
+  const key = String(code || '');
+  const list = /^[A-Za-z0-9_-]{6,32}$/.test(key) && data.sharedLists ? data.sharedLists[key] : null;
+  return list && !sharedListExpired(list) ? list : null;
+}
+
+// Просроченные — вон; у одного хозяина не больше пяти; всего не больше трёхсот (самые старые уходят первыми).
+function pruneSharedLists() {
+  if (!data.sharedLists) data.sharedLists = {};
+  const entries = Object.entries(data.sharedLists).filter(([, list]) => !sharedListExpired(list));
+  const byOwner = new Map();
+  const keep = [];
+  for (const entry of entries.sort((a, b) => Date.parse(b[1].createdAt) - Date.parse(a[1].createdAt))) {
+    const count = (byOwner.get(entry[1].owner) || 0) + 1;
+    byOwner.set(entry[1].owner, count);
+    if (count <= SHARED_LIST_PER_OWNER) keep.push(entry);
+  }
+  data.sharedLists = Object.fromEntries(keep.slice(0, SHARED_LIST_TOTAL));
+}
+
+// Избранное клиента → подборка с короткой ссылкой. Тот же набор объектов у того же хозяина — та же ссылка, а не новая.
+function createSharedList(user) {
+  const ids = catalogRecords(user, 'favorites').map((record) => record.id).slice(0, SHARED_LIST_MAX_IDS);
+  const username = cleanText(data.bot && data.bot.username, 80).replace(/^@/, '');
+  if (!ids.length || !/^[A-Za-z0-9_]{5,}$/.test(username)) return null;
+  if (!data.sharedLists) data.sharedLists = {};
+  pruneSharedLists();
+  const same = Object.entries(data.sharedLists).find(([, list]) => String(list.owner) === String(user.id) && list.ids.slice().sort().join('|') === ids.slice().sort().join('|'));
+  const code = same ? same[0] : crypto.randomBytes(8).toString('base64url');
+  if (!same) data.sharedLists[code] = { ids, owner: String(user.id), createdAt: new Date().toISOString(), opens: 0 };
+  if (!same) pruneSharedLists();
+  scheduleSave();
+  return { code, count: ids.length, link: 'https://t.me/' + username + '?start=list_' + code };
+}
+
+function sharedListCodeFromStartPayload(payload) {
+  const match = cleanText(payload, 140).match(/^list_([A-Za-z0-9_-]{6,32})$/);
+  return match ? match[1] : '';
+}
+
 function propertyIdFromStartPayload(payload) {
   const value = cleanText(payload, 140);
   // Сначала ссылка с меткой источника: в простом виде «код объекта» захватил бы
@@ -2059,10 +2124,24 @@ async function openPendingStartPayload(user, token) {
   if (!payload) return false;
   user.pendingStartPayload = '';
   scheduleSave();
-  const propertyId = propertyIdFromStartPayload(payload);
-  if (!propertyId) return false;
   const language = user.preferredLanguage || 'ru';
   const action = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  const listCode = sharedListCodeFromStartPayload(payload);
+  if (listCode) {
+    const list = sharedListByCode(listCode);
+    user.sharedListCode = list ? listCode : '';
+    const available = list ? catalogRecords(user, 'shared') : [];
+    if (!available.length) {
+      await sendMessage(user.chatId, action.listUnavailable, token, { reply_markup: menuKeyboard(language) });
+      return true;
+    }
+    list.opens = (Number(list.opens) || 0) + 1;
+    scheduleSave();
+    await sendCatalogPage(user.chatId, user, token, 0, 'shared');
+    return true;
+  }
+  const propertyId = propertyIdFromStartPayload(payload);
+  if (!propertyId) return false;
   const record = data.objects.find((item) => item.id === propertyId && ['active', 'reserved'].includes(item.status) && propertyReadyForLanguage(item, language));
   if (!record) {
     await sendMessage(user.chatId, action.propertyUnavailable, token, { reply_markup: menuKeyboard(language) });
@@ -2145,6 +2224,8 @@ export {
   objectCaptionHtml,
   objectPriceText,
   openPendingStartPayload,
+  createSharedList,
+  sharedListCodeFromStartPayload,
   priceOnRequest,
   promotionButtons,
   promotionIsActive,

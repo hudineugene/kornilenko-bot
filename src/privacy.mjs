@@ -34,9 +34,9 @@ function storedSummary(user) {
   // Подписи в виде «что: сколько» — так не нужно согласовывать числа со словами
   // в трёх языках.
   const words = {
-    ru: { name: 'имя в Telegram', username: 'имя пользователя', phone: 'телефон', contactName: 'имя для связи', requests: 'заявки и сообщения', favorites: 'избранное', comparison: 'сравнение', saved: 'сохранённый поиск', recent: 'просмотренные объекты', since: 'первое обращение' },
-    en: { name: 'Telegram name', username: 'username', phone: 'phone', contactName: 'contact name', requests: 'requests and messages', favorites: 'favourites', comparison: 'comparison', saved: 'saved search', recent: 'viewed properties', since: 'first contact' },
-    es: { name: 'nombre en Telegram', username: 'usuario', phone: 'teléfono', contactName: 'nombre de contacto', requests: 'solicitudes y mensajes', favorites: 'favoritos', comparison: 'comparación', saved: 'búsqueda guardada', recent: 'inmuebles vistos', since: 'primer contacto' },
+    ru: { name: 'имя в Telegram', username: 'имя пользователя', phone: 'телефон', contactName: 'имя для связи', requests: 'заявки и сообщения', favorites: 'избранное', comparison: 'сравнение', saved: 'сохранённый поиск', sharedLists: 'подборки, которыми вы поделились', recent: 'просмотренные объекты', since: 'первое обращение' },
+    en: { name: 'Telegram name', username: 'username', phone: 'phone', contactName: 'contact name', requests: 'requests and messages', favorites: 'favourites', comparison: 'comparison', saved: 'saved search', sharedLists: 'shortlists you shared', recent: 'viewed properties', since: 'first contact' },
+    es: { name: 'nombre en Telegram', username: 'usuario', phone: 'teléfono', contactName: 'nombre de contacto', requests: 'solicitudes y mensajes', favorites: 'favoritos', comparison: 'comparación', saved: 'búsqueda guardada', sharedLists: 'selecciones que compartiste', recent: 'inmuebles vistos', since: 'primer contacto' },
   }[language] || {};
   const rows = [];
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
@@ -51,6 +51,8 @@ function storedSummary(user) {
   const comparison = Array.isArray(user.comparisonIds) ? user.comparisonIds.length : 0;
   if (comparison) rows.push('• ' + words.comparison + ': ' + comparison);
   if (user.savedSearch) rows.push('• ' + words.saved);
+  const shared = Object.values(data.sharedLists || {}).filter((list) => String(list.owner) === String(user.id)).length;
+  if (shared) rows.push('• ' + words.sharedLists + ': ' + shared);
   const recent = Array.isArray(user.recentlyViewed) ? user.recentlyViewed.length : 0;
   if (recent) rows.push('• ' + words.recent + ': ' + recent);
   if (user.firstSeenAt) rows.push('• ' + words.since + ': ' + firstContactDate(user.firstSeenAt, language));

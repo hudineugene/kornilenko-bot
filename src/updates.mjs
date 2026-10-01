@@ -20,9 +20,9 @@ import {
   recordBotAnswer,
   serviceMessage,
 } from './inquiries.mjs';
-import { catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, handleCatalogListCallback, handleSelectionWizardCallback, openPendingStartPayload, propertyIdFromStartPayload, sendSelectionWizard, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
+import { sharedListCodeFromStartPayload, catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, handleCatalogListCallback, handleSelectionWizardCallback, openPendingStartPayload, propertyIdFromStartPayload, sendSelectionWizard, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
 import { catalogRequest, searchSignalCount } from './search.mjs';
-import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleContactCallback, handleGuideCallback, sendGuidePage, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
+import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleSharedListCallback, handleContactCallback, handleGuideCallback, sendGuidePage, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
 import { handleAlertsCallback } from './alerts.mjs';
 import { handleViewingConfirmCallback, handleViewingFeedbackCallback } from './viewings.mjs';
@@ -177,6 +177,7 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('catalog:')) await handleCatalogCallback(update.callback_query, token);
       else if (callbackData.startsWith('property:')) await handlePropertyCallback(update.callback_query, token);
       else if (callbackData.startsWith('compare:')) await handleComparisonCallback(update.callback_query, token, notifyAdministratorAction);
+      else if (callbackData.startsWith('shared:')) await handleSharedListCallback(update.callback_query, token);
       else if (callbackData.startsWith('saved:')) await handleSavedSearchCallback(update.callback_query, token, notifyAdministratorAction);
       else if (callbackData.startsWith('promotions:')) await handlePromotionCallback(update.callback_query, token);
       else if (callbackData.startsWith('contact:')) await handleContactCallback(update.callback_query, token);
@@ -271,7 +272,15 @@ async function handleUpdate(update, token) {
     scheduleSave();
   }
   // Ссылка на объект открывает карточку и тогда, когда несёт метку источника.
-  if (command === '/start' && commandArgument && propertyIdFromStartPayload(commandArgument)) {
+  // Подборка, присланная другом: пришёл «по подборке» — это и есть его источник.
+  if (command === '/start' && sharedListCodeFromStartPayload(commandArgument)) {
+    if (!user.source) {
+      user.source = 'podborka';
+      user.sourceAt = new Date().toISOString();
+    }
+    user.pendingStartPayload = commandArgument;
+    scheduleSave();
+  } else if (command === '/start' && commandArgument && propertyIdFromStartPayload(commandArgument)) {
     user.pendingStartPayload = commandArgument;
     scheduleSave();
   } else if (command === '/start' && commandArgument && !sourceLabel) {

@@ -13,7 +13,7 @@ import { knownLeadPhone, startLeadEdit, startLeadForm, startViewingForm } from '
 import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { replyPromise, withOffHoursNote } from './hours.mjs';
 import { calculatorButton } from './calculator.mjs';
-import { CATALOG_MODES, marketComparison, catalogHeading, catalogViewContext, escapeTelegramHtml, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
+import { CATALOG_MODES, createSharedList, marketComparison, catalogHeading, catalogViewContext, escapeTelegramHtml, catalogMode, catalogRecords, clearCatalogMessages, clearGalleryMessages, clearUiMessages, COMPARISON_LIMIT, contentButtons, deleteCatalogMessages, editPropertyCard, localizedExact, mobileButtonText, objectCaptionHtml, openPendingStartPayload, promotionButtons, promotionIsActive, propertyReadyForLanguage, propertyShareUrl, recordImages, sendCatalogPage, sendPropertyCard, sendSelectionWizard, sendUiMessage, shortenedText, showCatalogPageFromCallback, showPropertyPhoto, translateCatalogFilterCity, validHttpUrl, whatsappContactUrl } from './catalog.mjs';
 import { addToComparison, comparisonContains, sendComparison } from './comparison.mjs';
 import { similarPropertyRanking } from './similar.mjs';
 import { DEAD_END_TEXT, nearestByBudget } from './dead-end.mjs';
@@ -381,6 +381,28 @@ async function acknowledgeCallback(query, token, text = '') {
   } catch {
     // The requested action can still complete when the short callback notification expires.
   }
+}
+
+// «📤 Поделиться подборкой»: ссылка на избранное и кнопка «Отправить» — откроется выбор чата Telegram.
+async function handleSharedListCallback(query, token) {
+  const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
+  const user = normalizeUser(query.from, chatId, false);
+  const language = user.preferredLanguage || 'ru';
+  const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
+  const [, action] = String(query.data || '').split(':');
+  if (action !== 'create') return acknowledgeCallback(query, token);
+  if (!catalogRecords(user, 'favorites').length) return acknowledgeCallback(query, token, copy.shareListEmpty);
+  const shared = createSharedList(user);
+  if (!shared) return acknowledgeCallback(query, token, copy.shareListNoLink);
+  await acknowledgeCallback(query, token);
+  const navigation = NAVIGATION_TEXT[language] || NAVIGATION_TEXT.ru;
+  const shareUrl = 'https://t.me/share/url?url=' + encodeURIComponent(shared.link) + '&text=' + encodeURIComponent(copy.listSharePrefix);
+  await sendUiMessage(chatId, user, copy.shareListReady.replace('{count}', () => String(shared.count)) + '\n\n' + shared.link, token, {
+    reply_markup: { inline_keyboard: [
+      [{ text: copy.shareListSend, url: shareUrl }],
+      [{ text: '⬅️ ' + (MENU_LABELS[language] || MENU_LABELS.ru).favorites.replace(/^\P{L}+/u, ''), callback_data: 'catalog:favorites:0' }],
+    ] },
+  });
 }
 
 async function handleCatalogCallback(query, token) {
@@ -846,6 +868,7 @@ export {
   whatsappRow,
   handleAboutCallback,
   handleCatalogCallback,
+  handleSharedListCallback,
   handleContactCallback,
   handleLanguageCallback,
   handleNavigationCallback,
