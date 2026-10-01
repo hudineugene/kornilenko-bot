@@ -360,7 +360,28 @@ function cleanTextSafe(value) {
   return String(value == null ? '' : value).slice(0, 300);
 }
 
+// Подписчики на «данные изменились» (мгновенные обновления панели). Вызываются при каждом сохранении и каждом
+// scheduleSave — должны быть дешёвыми. Панель меняет данные через saveDataNow, бот — через scheduleSave: сигнал нужен от обоих.
+const dataChangeListeners = new Set();
+function onDataChange(listener) {
+  dataChangeListeners.add(listener);
+  return () => dataChangeListeners.delete(listener);
+}
+// Запись по таймеру после scheduleSave: о самом изменении панель уже оповещена, второй сигнал не нужен.
+let quietSave = false;
+function notifyDataChange() {
+  if (quietSave) return;
+  for (const listener of dataChangeListeners) {
+    try {
+      listener();
+    } catch {
+      // сигнал панели не должен мешать сохранению
+    }
+  }
+}
+
 function saveDataNow() {
+  notifyDataChange();
   const directory = path.dirname(DATA_FILE);
   fs.mkdirSync(directory, { recursive: true });
   if (containsEmbeddedImages(data)) {
@@ -439,6 +460,7 @@ function cancelScheduledSave() {
 // Throttled rather than debounced: a steady stream of updates must not
 // postpone the write indefinitely.
 function scheduleSave() {
+  notifyDataChange();
   // Во время рассылки файл сохраняет сама рассылка — раз в пять секунд и в
   // конце. Иначе каждый получатель тянул бы за собой запись всего файла:
   // на пяти тысячах клиентов это тысячи перезаписей за одну рассылку.
@@ -447,6 +469,7 @@ function scheduleSave() {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     try {
+      quietSave = true;
       saveDataNow();
       saveRetryPause = 0;
     } catch {
@@ -456,6 +479,8 @@ function scheduleSave() {
       runtime.nextSaveRetryAt = new Date(Date.now() + saveRetryPause).toISOString();
       saveTimer = setTimeout(() => { saveTimer = null; scheduleSave(); }, saveRetryPause);
       if (saveTimer.unref) saveTimer.unref();
+    } finally {
+      quietSave = false;
     }
   }, 150);
 }
@@ -687,6 +712,7 @@ export {
   snapshotBeforeRestore,
   verifyPasswordAsync,
   onSaveFailure,
+  onDataChange,
   BACKUP_DIRECTORY,
   applyConfiguredTimeZone,
   DAILY_BACKUPS_KEPT,

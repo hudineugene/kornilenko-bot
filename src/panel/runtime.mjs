@@ -176,6 +176,7 @@ function sessionExpired() {
   if (sessionEnded || !appStarted) return;
   sessionEnded = true;
   clearInterval(refreshTimer);
+  if (eventSource) { eventSource.close(); eventSource = null; }
   // Открытое окно — модальное, оно закрывает собой экран входа. Закрываем его
   // сами: иначе войти можно только закрыв окно вручную, а оно ещё и переспросит
   // про несохранённые изменения, которые сохранить всё равно уже некуда.
@@ -1750,6 +1751,27 @@ async function boot() {
   }
 }
 
+// Мгновенные обновления: сервер присылает сигнал «данные изменились», панель сразу спрашивает новое. Таймер ниже остаётся
+// запасным путём (нет EventSource, туннель оборвал поток). Одновременно идёт не больше одного запроса; пришёл сигнал во время
+// запроса — после него спрашиваем ещё раз.
+var eventSource = null, eventRefreshing = false, eventAgain = false;
+async function refreshOnSignal() {
+  if (eventRefreshing) { eventAgain = true; return; }
+  eventRefreshing = true;
+  try {
+    do { eventAgain = false; await refresh(); } while (eventAgain);
+  } catch (e) {
+  } finally { eventRefreshing = false; }
+}
+function connectEvents() {
+  if (typeof window.EventSource !== "function" || sessionEnded) return;
+  if (eventSource) eventSource.close();
+  eventSource = new window.EventSource("/api/events");
+  eventSource.addEventListener("changed", function () {
+    if (appStarted && !sessionEnded) refreshOnSignal();
+  });
+}
+
 async function startApp() {
   await reload(false);
   appStarted = true;
@@ -1760,6 +1782,7 @@ async function startApp() {
   el("app").classList.remove("hidden");
   applyRoute();
   clearInterval(refreshTimer);
+  connectEvents();
   refreshTimer = setInterval(function () {
     // Вкладку не смотрят — обновлять нечего. А несохранённая форма и открытое
     // окно больше не отменяют обновление целиком: счётчик «Переписки» и

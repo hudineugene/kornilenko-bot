@@ -48,6 +48,7 @@ import {
 import { REMOTE_LOGIN_ANSWER_MS, REMOTE_LOGIN_CODE_ATTEMPTS, decoyRemoteLogin, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
 import { attemptKey, forgetLoginAttempts, loginAllowed, rememberFailedLogin, validateBackupStructure, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { handleGroupApi } from './group-api.mjs';
+import { openEventStream } from './panel-events.mjs';
 import { autostartStatus, setAutostart } from './autostart.mjs';
 import { readAllAdminNotifications, updateAdminNotification } from './admin-notifications.mjs';
 
@@ -256,6 +257,14 @@ async function handleApi(req, res, url) {
     const session = requireAuth(req, res);
     if (!session) return;
     return json(res, 200, { csrf: session.csrf });
+  }
+
+  // Поток «данные изменились» для открытой панели (панель сама спрашивает новое, см. panel-events.mjs).
+  if (url.pathname === '/api/events' && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    openEventStream(req, res, securityHeaders);
+    return;
   }
 
   if (url.pathname === '/api/state' && req.method === 'GET') {
