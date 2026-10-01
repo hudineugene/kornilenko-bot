@@ -113,7 +113,9 @@ test('the client answering the manager continues the same inquiry', async () => 
   const answer = await client.say('Да, давайте завтра');
   assert.equal(client.inquiries.length, 1, 'one conversation, one inquiry');
   assert.match(client.inquiries[0].text, /рассрочка[\s\S]*давайте завтра/);
-  assert.match(sentTo(answer.calls, ADMIN_CHAT)[0].body.text, /^📩 Новое сообщение в заявке/);
+  assert.match(sentTo(answer.calls, ADMIN_CHAT)[0].body.text, /^💬 Анна: Да, давайте завтра/, 'повторное сообщение — коротко, без заголовка и кнопок');
+  assert.equal(sentTo(answer.calls, ADMIN_CHAT)[0].body.reply_markup, undefined);
+  assert.ok(sentTo(answer.calls, ADMIN_CHAT)[0].body.reply_parameters, 'и ответом на первую карточку');
   assert.equal(answer.replies.length, 1, 'after a pause the client hears the message was received');
   assert.equal(bot.awaitingReply(client.inquiries[0]), true, 'the client wrote after the answer');
   // Лента: вопрос клиента, заготовка бота, ответ менеджера, ответ клиента и

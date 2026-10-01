@@ -695,14 +695,14 @@ async function handlePropertyCallback(query, token) {
   if (actionName === 'price') {
     recordPropertyEvent(record.id, 'questions');
     await acknowledgeCallback(query, token);
-    createInquiry(user, propertyRequestText(record, language, 'question') + '\n\n' + text.askPrice, { type: 'question', propertyId: record.id });
+    createInquiry(user, propertyRequestText(record, 'ru', 'question') + '\n\n' + PROPERTY_ACTION_TEXT.ru.askPrice, { type: 'question', propertyId: record.id });
     await sendMessage(chatId, withOffHoursNote([text.received, '🔖 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
     return;
   }
   if (actionName === 'availability') {
     recordPropertyEvent(record.id, 'availability');
     await acknowledgeCallback(query, token);
-    const inquiry = propertyRequestText(record, language, 'question') + '\n\n' + text.availability;
+    const inquiry = propertyRequestText(record, 'ru', 'question') + '\n\n' + PROPERTY_ACTION_TEXT.ru.availability;
     createInquiry(user, inquiry, { type: 'question', propertyId: record.id, sourceMessage: query.message });
     await sendMessage(chatId, withOffHoursNote([text.received, '🔖 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
     return;
@@ -839,7 +839,7 @@ async function handlePropertyCallback(query, token) {
     if (actionName === 'viewing') {
       await acknowledgeCallback(query, token);
       if (record.status === 'reserved') {
-        const inquiry = propertyRequestText(record, language, 'question') + '\n\n' + text.availability;
+        const inquiry = propertyRequestText(record, 'ru', 'question') + '\n\n' + PROPERTY_ACTION_TEXT.ru.availability;
         createInquiry(user, inquiry, { type: 'question', propertyId: record.id, sourceMessage: query.message });
         await sendMessage(chatId, withOffHoursNote([text.received, '🔖 ' + (localizedExact(record.title, language) || record.reference || '')].filter(Boolean).join('\n\n'), language, { user }), token, { reply_markup: menuKeyboard(language) });
       } else {

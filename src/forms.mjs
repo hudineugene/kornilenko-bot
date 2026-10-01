@@ -914,11 +914,11 @@ async function handleViewingFormMessage(message, user, token, context = null) {
       return true;
     }
     const details = [
-      propertyRequestText(property, language, 'viewing'),
-      copy.reviewLabels[1] + ': ' + cleanText(pending.data.date, 160),
-      copy.reviewLabels[2] + ': ' + cleanText(pending.data.time, 160),
+      propertyRequestText(property, 'ru', 'viewing'),
+      VIEWING_FORM_TEXT.ru.reviewLabels[1] + ': ' + cleanText(pending.data.date, 160),
+      VIEWING_FORM_TEXT.ru.reviewLabels[2] + ': ' + cleanText(pending.data.time, 160),
       // Формат показа менеджеру важен: на видеосвязь он не едет.
-      ...(pending.data.online === true ? ['📹 ' + copy.onlineLabel] : []),
+      ...(pending.data.online === true ? ['📹 ' + VIEWING_FORM_TEXT.ru.onlineLabel] : []),
       ...(slotBooking ? ['', '✅ Время из свободных окон — просмотр подтверждён автоматически'] : []),
     ].join('\n');
     const viewing = { date: pending.data.day, dateText: pending.data.date, timeText: pending.data.time, online: pending.data.online === true };

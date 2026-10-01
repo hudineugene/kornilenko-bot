@@ -244,7 +244,7 @@ function createInquiry(user, text, context = {}) {
       if (acknowledgesMessage(type, context)) merged.acknowledgedAt = new Date().toISOString();
     }
     scheduleSave();
-    const notify = (copies) => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в заявке', replyTo: copies });
+    const notify = (copies) => notifyAdministrator(merged, user, { text: cleanText(text, 4000), title: 'Новое сообщение в заявке', repeated: true, replyTo: copies });
     if (isClientMedia(context.sourceMessage)) {
       void copyUserMessageToAdministrator(context.sourceMessage, data.config.botToken, merged)
         .then(notify)
@@ -559,6 +559,63 @@ function adminNotificationDecision(user, important) {
   return 'notice';
 }
 
+// --- Карточка заявки: один сборщик на уведомление, напоминание и /inbox ---------------------------------------------------
+const LANGUAGE_WORDS = { en: 'по-английски', es: 'по-испански' };
+const REPLY_HINT = '↩️ Ответьте на это сообщение — ответ получит клиент.';
+
+function clientWho(user) {
+  if (!user) return '👤 Клиент удалён';
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени';
+  return '👤 ' + name + (user.username ? ' (@' + user.username + ')' : '') + (user.source ? ' · 📣 ' + user.source : '') + (user.goal ? ' · 🎯 ' + goalLabelRu(user.goal) : '');
+}
+
+// Объект — по-русски, как всё остальное для менеджера.
+function inquiryPropertyLine(inquiry) {
+  const property = inquiry && inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
+  return property ? '🔖 ' + (localized(property.title, 'ru') || property.reference || property.id) : '';
+}
+
+// Текст заявки без повторов: объект уже показан строкой, а имя и телефон анкеты — в шапке карточки.
+function inquiryBody(inquiry, text = inquiry && inquiry.text) {
+  let body = String(text || '');
+  const property = inquiry && inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
+  if (property) {
+    for (const type of ['question', 'viewing', 'interest']) {
+      // Текст заявки теперь по-русски; у прежних заявок приставка на языке клиента — убираем обе.
+      for (const wording of ['ru', inquiry.language]) {
+        const prefix = propertyRequestText(property, wording, type);
+        if (body.startsWith(prefix)) body = body.slice(prefix.length).trim();
+      }
+    }
+  }
+  if (inquiry && inquiry.type === 'lead') body = body.split('\n').filter((line) => !/^(Имя|Телефон): /.test(line)).join('\n');
+  return body.trim();
+}
+
+// Шапка, кто, язык («Клиент пишет по-испански»), телефон, число прежних заявок, тело и — только на первой карточке клиента —
+// подсказка «Ответьте на это сообщение».
+function buildInquiryCard(user, inquiry, { heading, body = [], hint = false } = {}) {
+  const language = (inquiry && inquiry.language) || (user && user.preferredLanguage) || '';
+  const lines = [heading, clientWho(user)];
+  if (LANGUAGE_WORDS[language]) lines.push('🌐 Клиент пишет ' + LANGUAGE_WORDS[language]);
+  if (user && user.phone) lines.push('📞 ' + cleanText(user.phone, 40));
+  const earlier = user ? data.inquiries.filter((item) => item.userId === String(user.id) && (!inquiry || item.id !== inquiry.id)).length : 0;
+  if (earlier) lines.push('🗂 Заявок раньше: ' + earlier);
+  lines.push('', ...body.filter((line) => line !== undefined && line !== null && line !== false));
+  if (hint) lines.push('', REPLY_HINT);
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// Номер сообщения-карточки этой заявки в чате — чтобы повторные сообщения клиента шли ответом на неё.
+function inquiryCardMessageId(inquiry, chatId) {
+  const entries = Object.entries(data.adminReplyTargets || {})
+    .filter(([key, target]) => target.inquiryId === inquiry.id && target.card && (String(chatId) === cleanText(data.config.adminChatId, 40) ? !key.includes(':') : key.startsWith(String(chatId) + ':')))
+    .sort((a, b) => (Date.parse(a[1].createdAt) || 0) - (Date.parse(b[1].createdAt) || 0));
+  if (!entries.length) return null;
+  const id = Number(entries[0][0].split(':').pop());
+  return Number.isFinite(id) ? id : null;
+}
+
 async function notifyAdministratorAction(user, title, details = '', inquiryId = '', sourceMessageId = null, options = {}) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
   if (!adminChatId || !data.config.botToken || !user || !user.chatId || adminChatFor(user.chatId)) return false;
@@ -573,28 +630,26 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   }
   // Routing of replies does not depend on this text (see adminReplyTargets),
   // so it only carries what a person needs to read.
-  const language = user.preferredLanguage ? ' · ' + user.preferredLanguage.toUpperCase() : '';
-  const who = '👤 ' + name + username + language + (user.source ? ' · 📣 ' + user.source : '') + (user.goal ? ' · 🎯 ' + goalLabelRu(user.goal) : '');
+  const who = clientWho(user);
   const cleanDetails = cleanText(details, 4000);
+  const inquiry = options.important && inquiryId ? data.inquiries.find((item) => item.id === inquiryId) : null;
   // A manager calling back needs the number without opening the panel; past
   // inquiries tell a returning client from a new one.
-  const phone = options.important && user.phone ? '📞 ' + cleanText(user.phone, 40) : '';
-  const earlier = options.important ? data.inquiries.filter((item) => item.userId === String(user.id) && item.id !== inquiryId).length : 0;
-  const history = earlier ? '🗂 Заявок раньше: ' + earlier : '';
-  const notification = options.important
-    ? ['📩 ' + cleanText(title, 160), who, ...[phone, history].filter(Boolean), '', cleanDetails, '', '↩️ Ответьте на это сообщение — ответ получит клиент.']
-    : ['👀 ' + cleanText(title, 160), who, ...(detailsWorthShowing(title, cleanDetails) ? ['', cleanDetails] : [])];
-  const text = notification.filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n').trim();
-  const inquiry = options.important && inquiryId ? data.inquiries.find((item) => item.id === inquiryId) : null;
+  // Повторное сообщение клиента в той же заявке — не новая карточка с кнопками, а короткий ответ на первую.
+  const compact = Boolean(options.compact && inquiry);
+  let text;
+  if (compact) text = '💬 ' + ([user.firstName, user.lastName].filter(Boolean).join(' ') || 'Клиент') + ': ' + cleanDetails;
+  else if (options.important) text = buildInquiryCard(user, inquiry, { heading: '📩 ' + cleanText(title, 160), body: [cleanDetails], hint: Boolean(options.first) });
+  else text = ['👀 ' + cleanText(title, 160), who, ...(detailsWorthShowing(title, cleanDetails) ? ['', cleanDetails] : [])].filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n').trim();
   // Inquiries go to every manager; navigation only to the main admin.
   const chats = options.important ? inquiryChats() : inquiryChats().filter((chat) => chat.main);
-  const shownText = inquiry ? cardWithState(text, inquiry) : text;
+  const shownText = inquiry && !compact ? cardWithState(text, inquiry) : text;
   let delivered = false;
   for (const chat of chats) {
     try {
       const messageIds = [];
-      const markup = inquiryStatusMarkup(inquiry);
-      const replyTo = options.replyTo instanceof Map ? options.replyTo.get(String(chat.chatId)) : null;
+      const markup = compact ? null : inquiryStatusMarkup(inquiry);
+      const replyTo = (options.replyTo instanceof Map ? options.replyTo.get(String(chat.chatId)) : null) || (compact ? inquiryCardMessageId(inquiry, chat.chatId) : null);
       await sendMessage(chat.chatId, shownText, data.config.botToken, {
         track: false,
         messageIds,
@@ -602,7 +657,7 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
         ...(markup ? { reply_markup: markup } : {}),
         ...(replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {}),
       });
-      rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId, card: inquiry ? text : '' }, chat.chatId);
+      rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId, card: inquiry && !compact ? text : '' }, chat.chatId);
       delivered = true;
       markAdminChatVerified(chat, true);
     } catch (error) {
@@ -628,24 +683,13 @@ function markAdminChatVerified(chat, verified) {
 }
 
 async function notifyAdministrator(inquiry, user, options = {}) {
-  const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
-  const propertyLine = property
-    ? '🔖 ' + (localized(property.title, inquiry.language) || property.reference || property.id)
-    : '';
-  let text = options.text || inquiry.text;
-  // Property requests start with "Question about: <title>", already shown above.
-  if (property) {
-    for (const type of ['question', 'viewing', 'interest']) {
-      const prefix = propertyRequestText(property, inquiry.language, type);
-      if (text.startsWith(prefix)) text = text.slice(prefix.length).trim();
-    }
-  }
   const matchingAttention = selectionMatchingAttention(inquiry);
-  return notifyAdministratorAction(user, (options.title || 'Новая заявка') + ': ' + inquiryTypeLabel(inquiry), [
-    propertyLine,
-    text,
-    matchingAttention,
-  ].filter(Boolean).join('\n'), inquiry.id, inquiry.sourceMessageId, { important: true, replyTo: options.replyTo });
+  const repeated = options.repeated === true;
+  // Первое сообщение заявки — карточка со всем нужным; следующие сообщения клиента в ней — коротко, ответом на неё.
+  return notifyAdministratorAction(user, (options.title || 'Новая заявка') + ': ' + inquiryTypeLabel(inquiry), repeated
+    ? cleanText(options.text || inquiry.text, 4000)
+    : [inquiryPropertyLine(inquiry), inquiryBody(inquiry, options.text || inquiry.text), matchingAttention].filter(Boolean).join('\n'),
+  inquiry.id, inquiry.sourceMessageId, { important: true, replyTo: options.replyTo, compact: repeated, first: !repeated });
 }
 
 function selectionMatchingAttention(inquiry) {
@@ -1096,6 +1140,9 @@ export {
   handleAdministratorReply,
   handleInquiryStatusCallback,
   handleMessageReaction,
+  buildInquiryCard,
+  inquiryBody,
+  inquiryPropertyLine,
   inquiryStateLine,
   refreshInquiryCards,
   inquiryChats,

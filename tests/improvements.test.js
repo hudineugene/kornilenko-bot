@@ -1360,7 +1360,7 @@ test.describe('lead source', () => {
     const client = newcomer('ru', 'Марина');
     await client.say('/start src_google');
     await client.say('Нужна квартира в Бенидорме');
-    assert.ok(adminMessages().some((message) => message.text.includes('👤 Марина · RU · 📣 google')));
+    assert.ok(adminMessages().some((message) => message.text.includes('👤 Марина · 📣 google')));
   });
 
   test('only valid labels are accepted', () => {

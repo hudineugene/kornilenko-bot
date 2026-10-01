@@ -78,7 +78,7 @@ test.describe('client', () => {
     const notification = adminMessages().find((message) => message.text.startsWith('📩'));
     assert.equal(notification.text, [
       '📩 Новая заявка: вопрос по объекту',
-      '👤 Анна · RU',
+      '👤 Анна',
       '',
       '🔖 Вилла без цены',
       PROPERTY.ru.askPrice,
@@ -161,7 +161,7 @@ test.describe('admin', () => {
     const [notification] = adminMessages();
     assert.equal(notification.text, [
       '📩 Новая заявка: вопрос менеджеру',
-      '👤 Анна · RU',
+      '👤 Анна',
       '',
       'Нужна консультация по ВНЖ',
       '',
@@ -208,7 +208,7 @@ test.describe('admin', () => {
     bot.getData().config.notifyMode = 'all';
     const chat = createChat();
     await chat.say(MENU.ru.promotions);
-    assert.deepEqual(adminMessages().map((message) => message.text), ['👀 Открыл раздел «Акции»\n👤 Анна · RU']);
+    assert.deepEqual(adminMessages().map((message) => message.text), ['👀 Открыл раздел «Акции»\n👤 Анна']);
   });
 
   test('"only inquiries" becomes the mode once for existing installations', () => {

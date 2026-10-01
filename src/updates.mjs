@@ -495,7 +495,7 @@ async function handleUpdate(update, token) {
     const property = data.objects.find((item) => item.id === pending.propertyId);
     if (property) {
       const type = pending.type === 'viewing' ? 'viewing' : 'question';
-      const prefix = propertyRequestText(property, user.preferredLanguage, type);
+      const prefix = propertyRequestText(property, 'ru', type);
       createInquiry(user, prefix + '\n\n' + (text || summary), { type, propertyId: property.id, sourceMessage: message });
       recordPropertyEvent(property.id, type === 'viewing' ? 'viewings' : 'questions');
       const received = (PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received;
@@ -626,7 +626,7 @@ async function handleUpdate(update, token) {
         }
         if (found) {
           // A question that names a property: the manager sees which one.
-          const inquiry = createInquiry(user, propertyRequestText(found.record, user.preferredLanguage, 'question') + '\n\n' + text, { type: 'question', propertyId: found.record.id, sourceMessage: message });
+          const inquiry = createInquiry(user, propertyRequestText(found.record, 'ru', 'question') + '\n\n' + text, { type: 'question', propertyId: found.record.id, sourceMessage: message });
           recordPropertyEvent(found.record.id, 'questions');
           const title = localizedExact(found.record.title, user.preferredLanguage) || found.record.reference || '';
           answer = mergedAnswer(inquiry) ? '' : [(PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received, title ? '🔖 ' + title : ''].filter(Boolean).join('\n\n');

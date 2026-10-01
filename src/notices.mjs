@@ -7,7 +7,7 @@ import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { userByChatId, userById } from './users.mjs';
 import { sendMessage } from './telegram.mjs';
-import { awaitingReply, inquiryChats, inquiryStateLine, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
+import { awaitingReply, buildInquiryCard, inquiryBody, inquiryChats, inquiryPropertyLine, inquiryStateLine, inquiryStatusMarkup, inquiryTypeLabel, rememberAdminReplyTarget } from './inquiries.mjs';
 import { localized, shortenedText } from './catalog.mjs';
 import { runViewingNotices } from './viewings.mjs';
 import { waitingConversationCount } from './admin-notifications.mjs';
@@ -124,18 +124,8 @@ function lastClientText(inquiry) {
 // notification.
 async function sendInquiryToAdministrator(inquiry, heading, extraLines = [], options = {}) {
   const user = userById(inquiry.userId) || userByChatId(inquiry.chatId);
-  const name = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Без имени' : 'Клиент удалён';
-  const username = user && user.username ? ' (@' + user.username + ')' : '';
-  const property = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
-  const text = [
-    heading,
-    '👤 ' + name + username + (inquiry.language ? ' · ' + inquiry.language.toUpperCase() : '') + (user && user.phone ? ' · ' + user.phone : ''),
-    '',
-    ...(property ? ['🔖 ' + (localized(property.title, inquiry.language) || property.reference || property.id)] : []),
-    shortenedText(lastClientText(inquiry), 500),
-    ...extraLines,
-    ...(user ? ['', '↩️ Ответьте на это сообщение — ответ получит клиент.'] : []),
-  ].join('\n');
+  // Карточка — тем же сборщиком, что и первое уведомление; подсказка «Ответьте на это сообщение» бывает только на первой.
+  const text = buildInquiryCard(user, inquiry, { heading, body: [...(inquiryPropertyLine(inquiry) ? [inquiryPropertyLine(inquiry)] : []), shortenedText(inquiryBody(inquiry, lastClientText(inquiry)), 500), ...extraLines] });
   const shownText = inquiryStateLine(inquiry) ? text + '\n\n' + inquiryStateLine(inquiry) : text;
   // The main admin and every manager: whoever is free can answer. A planned
   // follow-up goes to the one who took the inquiry.

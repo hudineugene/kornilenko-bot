@@ -40,11 +40,9 @@ test('an inquiry left unanswered past the threshold is reminded about once', asy
   const [reminder] = adminMessages();
   assert.equal(reminder.text, [
     '⏰ Ждёт ответа 3 ч: сообщение',
-    '👤 Анна · RU',
+    '👤 Анна',
     '',
     'Есть ли квартиры у моря?',
-    '',
-    '↩️ Ответьте на это сообщение — ответ получит клиент.',
     '',
     '🆕 Ждёт ответа',
   ].join('\n'));
@@ -188,13 +186,12 @@ test.describe('follow-ups', () => {
     const [message] = adminMessages();
     assert.equal(message.text, [
       '📌 Пора связаться с клиентом (18.09): сообщение',
-      '👤 Анна · RU · +34 600 123 123',
+      '👤 Анна',
+      '📞 +34 600 123 123',
       '',
       'Хочу обсудить ипотеку',
       '',
       '📝 Обещал прислать расчёт',
-      '',
-      '↩️ Ответьте на это сообщение — ответ получит клиент.',
       '',
       '🆕 Ждёт ответа',
     ].join('\n'));

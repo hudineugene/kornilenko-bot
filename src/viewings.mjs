@@ -607,7 +607,7 @@ async function handleViewingFeedbackCallback(query, token) {
   const title = property ? localized(property.title, 'ru') || property.reference || property.id : '';
   if (kind === 'liked') {
     createInquiry(user, [
-      record ? propertyRequestText(record, language, 'interest') : '',
+      record ? propertyRequestText(record, 'ru', 'interest') : '',
       'После просмотра: понравилось, хочет обсудить следующие шаги',
     ].filter(Boolean).join('\n\n'), { type: record ? 'interest' : 'general', propertyId: record ? record.id : '' });
     saveDataNow();
