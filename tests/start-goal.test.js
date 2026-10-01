@@ -65,7 +65,7 @@ test('«Инвестиция и аренда»: объекты, расходы �
   const step = await chat.press('goal:invest');
   assert.equal(chat.user.goal, 'invest');
   const edit = step.calls.find((call) => call.method === 'editMessageText');
-  assert.match(edit.body.text, /Расчёт покупки/);
+  assert.match(edit.body.text, /«Подробнее».*🧮 Расчёт/);
   assert.deepEqual(callbacksOf(edit.body.reply_markup), ['catalog:all:0', 'guide:page:2', 'guide:page:4']);
 });
 

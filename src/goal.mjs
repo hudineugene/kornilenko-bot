@@ -8,6 +8,7 @@
 import { scheduleSave } from './store.mjs';
 import { normalizeUser } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
+import { sendUiMessage } from './catalog.mjs';
 import { notifyAdministratorAction } from './inquiries.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 import { INTERACTION_TEXT } from './texts.mjs';
@@ -30,7 +31,7 @@ const GOAL_TEXT = {
     alerts: '🔔 Сообщать о новых',
     reply: {
       live: '🎯 Цель выбрана\nОтлично — подберём вариант для жизни. С чего начнём?',
-      invest: '🎯 Цель выбрана\nПонятно, смотрим на доходность. Расходы при покупке можно посчитать на карточке объекта («Расчёт покупки»). Начнём с объектов или с расходов и налогов?',
+      invest: '🎯 Цель выбрана\nПонятно, смотрим на доходность. Расходы при покупке можно посчитать в «Подробнее» на карточке объекта («🧮 Расчёт»). Начнём с объектов или с расходов и налогов?',
       browse: '🎯 Цель выбрана\nХорошо, без спешки. Посмотрите объекты, а если хотите — буду сообщать о новых: для этого коротко задайте, что вам интересно.',
     },
     labels: { live: 'купить для жизни', invest: 'инвестиция и аренда', browse: 'пока смотрит' },
@@ -50,7 +51,7 @@ const GOAL_TEXT = {
     alerts: '🔔 Tell me about new ones',
     reply: {
       live: '🎯 Goal set\nGreat — let’s find a place to live. Where shall we start?',
-      invest: '🎯 Goal set\nUnderstood, we’ll look at returns. You can work out the purchase costs on a property card (“Purchase estimate”). Start with properties or with costs and taxes?',
+      invest: '🎯 Goal set\nUnderstood, we’ll look at returns. You can work out the purchase costs in “Details” on a property card (“🧮 Estimate”). Start with properties or with costs and taxes?',
       browse: '🎯 Goal set\nFine, no rush. Have a look at the properties, and if you like I will tell you about new ones: just tell me briefly what you are interested in.',
     },
     labels: { live: 'buying to live', invest: 'investment and rental', browse: 'just browsing' },
@@ -70,7 +71,7 @@ const GOAL_TEXT = {
     alerts: '🔔 Avisarme de novedades',
     reply: {
       live: '🎯 Objetivo elegido\nGenial: busquemos un lugar para vivir. ¿Por dónde empezamos?',
-      invest: '🎯 Objetivo elegido\nEntendido, veremos la rentabilidad. Puedes calcular los gastos de compra en la ficha del inmueble («Cálculo de compra»). ¿Empezamos por los inmuebles o por gastos e impuestos?',
+      invest: '🎯 Objetivo elegido\nEntendido, veremos la rentabilidad. Puedes calcular los gastos de compra en «Detalles» de la ficha del inmueble («🧮 Cálculo»). ¿Empezamos por los inmuebles o por gastos e impuestos?',
       browse: '🎯 Objetivo elegido\nDe acuerdo, sin prisa. Echa un vistazo a los inmuebles y, si quieres, te aviso de las novedades: solo cuéntame brevemente qué te interesa.',
     },
     labels: { live: 'comprar para vivir', invest: 'inversión y alquiler', browse: 'solo mirando' },
@@ -132,7 +133,8 @@ async function handleGoalCallback(query, token) {
 
   if (action === 'menu') {
     await acknowledgeCallback(query, token);
-    await sendMessage(chatId, copy.ask, token, { reply_markup: questionMarkup(language, user.goal) });
+    // Экран цели заменяет прежний, а не копится в чате.
+    await sendUiMessage(chatId, user, copy.ask, token, { reply_markup: questionMarkup(language, user.goal) });
     return;
   }
   if (!GOALS.includes(action)) {
@@ -157,7 +159,7 @@ async function handleGoalCallback(query, token) {
       // Сообщение уже не изменить.
     }
   }
-  await sendMessage(chatId, text, token, { reply_markup: markup });
+  await sendUiMessage(chatId, user, text, token, { reply_markup: markup });
 }
 
 export { GOALS, GOAL_TEXT, askGoal, goalCopy, goalLabelRu, goalMenuRow, handleGoalCallback };

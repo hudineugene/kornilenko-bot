@@ -263,7 +263,8 @@ async function sendHelp(chatId, user, token) {
   await sendUiMessage(chatId, user, text, token, { reply_markup: { inline_keyboard: [
     [{ text: labels.objects, callback_data: 'catalog:all:0' }],
     [{ text: labels.selection, callback_data: 'selection:start' }],
-    [{ text: labels.contacts, callback_data: 'contact:question' }],
+    // «Связаться» всегда ведёт на экран контактов; кнопка, открывающая вопрос, так и называется.
+    [{ text: (MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru).question, callback_data: 'contact:question' }],
     [{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }],
   ] } });
 }
@@ -509,7 +510,7 @@ async function sendSimilarProperty(chatId, user, record, token, options = {}) {
     await sendUiMessage(chatId, user, options.noSimilarText || copy.noSimilar, token, { reply_markup: { inline_keyboard: [
       [{ text: deadEnd.notify, callback_data: 'saved:similar:' + record.id }],
       ...(nearby.length ? [[{ text: deadEnd.budget, callback_data: 'property:nearprice:' + record.id }]] : []),
-      [{ text: (MENU_LABELS[language] || MENU_LABELS.ru).contacts, callback_data: 'contact:question' }],
+      [{ text: (MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru).question, callback_data: 'contact:question' }],
       ...(whatsapp ? [whatsapp] : []),
       [{ text: '⬅️ ' + navigation.backToCard, callback_data: 'property:return:' + record.id }],
     ] } });
