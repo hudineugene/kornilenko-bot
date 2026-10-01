@@ -128,10 +128,10 @@ function buildListing(record, language, options = {}) {
 
   const header = '🏡 <b>' + escapeTelegramHtml(title) + '</b>' + (subtitle ? '\n<i>' + escapeTelegramHtml(subtitle) + '</i>' : '');
 
-  // Подпись под первой фотографией — как карточка каталога в боте: название, цена, место и строки значков.
-  const compactFacts = propertySpecRows(record, lang, { compact: true });
+  // Подпись под первой фотографией: название, тип и сделка, цена, город и район. Характеристик здесь нет — они в сообщении
+  // ниже: одна и та же информация в двух сообщениях не повторяется.
   const shortPlace = [city, district].filter(Boolean).join(', ');
-  const caption = [header, price, shortPlace ? '📍 ' + escapeTelegramHtml(shortPlace) : '', compactFacts.map(escapeTelegramHtml).join('\n')].filter(Boolean).join('\n');
+  const caption = [header, price, shortPlace ? '📍 ' + escapeTelegramHtml(shortPlace) : ''].filter(Boolean).join('\n');
 
   // Характеристики — отдельным блоком-цитатой с заголовком.
   const facts = propertySpecRows(record, lang, { compact: false });
@@ -152,9 +152,12 @@ function buildListing(record, language, options = {}) {
   const tags = [hashtag(text.tagDeal[record.dealType === 'rent' ? 'rent' : 'sale']), hashtag(type.toLowerCase()), hashtag(city), hashtag(district)]
     .filter(Boolean).filter((tag, index, all) => all.indexOf(tag) === index).join(' ');
 
-  // Цена и адрес — над характеристиками. Название — только если нет фотографий (иначе оно уже в подписи альбома).
-  const placeLines = [price, place ? '📍 ' + escapeTelegramHtml(place) : ''].filter(Boolean).join('\n');
-  const head = [images.length ? '' : header, placeLines, factsBlock].filter(Boolean);
+  // С фотографиями название, цена и город уже в подписи альбома — сообщение начинается с адреса (его в подписи нет) и
+  // характеристик. Без фотографий альбома нет, и всё это идёт одним сообщением: название, цена, место, характеристики.
+  const addressLine = address ? '📍 ' + escapeTelegramHtml(address) : '';
+  const head = images.length
+    ? [addressLine, factsBlock].filter(Boolean)
+    : [header, [price, place ? '📍 ' + escapeTelegramHtml(place) : ''].filter(Boolean).join('\n'), factsBlock].filter(Boolean);
   const tail = [links, tags].filter(Boolean);
 
   // Описание: на своём языке; нет перевода — русское, с честной пометкой, как в карточке бота.

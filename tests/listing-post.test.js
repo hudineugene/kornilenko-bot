@@ -94,14 +94,17 @@ function setGroups(groups) {
 
 test('пост устроен как карточка в боте: фото с подписью, отдельно характеристики, ниже описание с заголовками', () => {
   const built = bot.buildListing(objectById(), 'ru', { source: 'group' });
-  // Подпись под альбомом — как карточка каталога: название, тип и сделка, цена, место, строка значков.
-  assert.match(built.caption, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>\n💶 <b>от\s147\s312\s€/, 'название жирным, знаки < и & не ломают разметку');
-  assert.match(built.caption, /📍 Финестрат, Эль Мускарет\n🛏 2 · 🚿 1 · 📐 53 м²/, 'строка значков как у карточки в боте');
+  // Подпись под альбомом: название, тип и сделка, цена, город и район — и больше ничего.
+  assert.match(built.caption, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>\n💶 <b>от\s147\s312\s€[^\n]*\n📍 Финестрат, Эль Мускарет$/, 'название жирным, знаки < и & не ломают разметку');
+  assert.ok(!/🛏|🚿|📐/.test(built.caption), 'характеристик в подписи нет: они ниже, отдельным блоком');
   assert.ok(built.caption.length <= 1024, 'подпись к фото — не длиннее 1024 знаков');
 
   const text = built.text;
-  assert.ok(!/Riviera/.test(text), 'есть фотографии — название уже в подписи альбома, второй раз не повторяем');
-  assert.match(text, /^💶 <b>от\s147\s312\s€[^\n]*\n📍 Финестрат, Эль Мускарет\n\n🧾 <b>Характеристики<\/b>\n<blockquote>🛏 Спальни: <b>2<\/b>\n🚿 Санузлы: <b>1<\/b>\n📐 Площадь: <b>53 м²<\/b>/, 'сначала цена и место, затем блок «Характеристики» цитатой, значения жирным');
+  // Ничего из подписи во втором сообщении не повторяется: ни название, ни цена, ни город с районом.
+  assert.ok(!/Riviera/.test(text), 'название уже в подписи альбома');
+  assert.ok(!/💶/.test(text), 'цена уже в подписи альбома');
+  assert.ok(!/📍 Финестрат/.test(text), 'город и район уже в подписи альбома');
+  assert.match(text, /^🧾 <b>Характеристики<\/b>\n<blockquote>🛏 Спальни: <b>2<\/b>\n🚿 Санузлы: <b>1<\/b>\n📐 Площадь: <b>53 м²<\/b>/, 'сообщение начинается с блока «Характеристики» цитатой, значения жирным');
   assert.match(text, /🛠 Состояние: <b>Новое<\/b>/);
   assert.match(text, /🏷 № объекта: <b>RIV-1<\/b><\/blockquote>/);
   assert.ok(text.indexOf('🧾') < text.indexOf('📝 <b>Описание</b>'), 'характеристики выше описания');
@@ -116,9 +119,14 @@ test('пост устроен как карточка в боте: фото с �
   assert.equal(built.images.length, 3);
   assert.equal(built.truncated, false);
 
-  // Без фотографий подписи альбома нет — название и тип уходят в текст.
+  // Адреса в подписи нет — он первой строкой сообщения.
+  const withAddress = bot.buildListing(listingObject({ address: { ru: 'Calle Alcudia 1', en: '', es: '' } }), 'ru');
+  assert.match(withAddress.text, /^📍 Calle Alcudia 1\n\n🧾 /);
+  assert.ok(!/Calle Alcudia/.test(withAddress.caption));
+
+  // Без фотографий альбома нет — всё одним сообщением: название, цена, место, характеристики.
   const bare = bot.buildListing(listingObject({ imagesByLanguage: { ru: [], en: [], es: [] } }), 'ru');
-  assert.match(bare.text, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>/);
+  assert.match(bare.text, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>\n\n💶 <b>от\s147\s312[^\n]*\n📍 Финестрат, Эль Мускарет\n\n🧾 /);
   assert.equal(bare.images.length, 0);
 });
 
@@ -250,8 +258,9 @@ test('отложенная публикация: пост хранит толь�
   // Пока пост ждал, владелец поправил цену: уйдёт новая.
   objectById().priceValue = 150000;
   await bot.runDueGroupPosts(new Date(Date.parse(when) + 1000));
-  const message = sentCalls().find((call) => call.method === 'sendMessage');
-  assert.match(message.body.text, /150\s000\s€/);
+  // Цена — в подписи альбома (во втором сообщении её нет, чтобы не повторяться).
+  const album = sentCalls().find((call) => call.method === 'sendMediaGroup');
+  assert.match(JSON.parse(album.body.media)[0].caption, /150\s000\s€/);
   assert.equal(data.groupPosts[queued].status, 'sent');
   assert.equal(objectById().publications[0].groupId, '-1001000000005');
 });
