@@ -10,6 +10,7 @@ import { telegramRequest } from './telegram.mjs';
 import { persistImage } from './media.mjs';
 import { json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
 import { objectCaption, propertyDeepLink, recordImages } from './catalog.mjs';
+import { LISTING_LANGUAGES, MAX_SCHEDULED_POSTS, futureDate, requestedThread, runListingPublish } from './listing-publish.mjs';
 import {
   GENERAL_TOPIC_ID,
   fetchAdministrators,
@@ -30,7 +31,6 @@ import {
   rememberTopic,
 } from './groups.mjs';
 
-const MAX_SCHEDULED_POSTS = 50;
 // Member permissions a group can set for everyone (setChatPermissions).
 const CHAT_PERMISSIONS = [
   'can_send_messages',
@@ -75,18 +75,6 @@ function topicFromInput(group, value) {
   return Number(link[4]);
 }
 
-function requestedThread(group, value) {
-  const threadId = Math.floor(Number(value)) || 0;
-  return threadId > GENERAL_TOPIC_ID && group.isForum ? threadId : 0;
-}
-
-function futureDate(value) {
-  const time = Date.parse(String(value || ''));
-  if (!Number.isFinite(time)) throw new Error('Укажите дату и время публикации');
-  if (time < Date.now() - 60 * 1000) throw new Error('Дата публикации уже прошла');
-  return new Date(time).toISOString();
-}
-
 // Текст поста — та же подпись, что видит клиент в карточке, плюс кнопка со
 // ссылкой на объект в боте. Метка источника в ссылке показывает, что клиент
 // пришёл из канала.
@@ -108,69 +96,10 @@ function channelPostForProperty(record, language, body = {}) {
 
 const CHANNEL_BUTTON_TEXT = { ru: '🤖 Смотреть в боте', en: '🤖 View in the bot', es: '🤖 Ver en el bot' };
 
-const LISTING_LANGUAGES = ['ru', 'en', 'es'];
-const MAX_LISTING_TARGETS = 20;
-// Telegram разрешает в группу около 20 сообщений в минуту: между группами делаем паузу, а в одну — альбом и текст.
-const LISTING_PAUSE_MS = 1500;
-
-// Публикация объявления в выбранные группы. Одна неудача не останавливает остальные: на каждую группу — своя строка
-// результата (ссылка на пост или причина отказа словами).
+// Публикация объявления в выбранные группы — общий код с командой /post (listing-publish.mjs).
 async function publishListing(res, record, body) {
-  const list = Array.isArray(body.targets) ? body.targets : [];
-  if (!list.length) return json(res, 400, { error: 'Выберите хотя бы одну группу' });
-  if (list.length > MAX_LISTING_TARGETS) return json(res, 400, { error: 'Не больше ' + MAX_LISTING_TARGETS + ' групп за раз' });
-  if (!['active', 'reserved'].includes(record.status)) return json(res, 400, { error: 'Объект скрыт или продан — по ссылке из поста клиент его не увидит. Верните объект в каталог и повторите.' });
-  const seen = new Set();
-  const targets = [];
-  for (const item of list) {
-    const group = groupById(cleanText(item && item.groupId, 40));
-    if (!group) continue;
-    const threadId = requestedThread(group, item.threadId);
-    const key = group.id + ':' + threadId;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    targets.push({ group, threadId, language: LISTING_LANGUAGES.includes(item.language) ? item.language : 'ru' });
-  }
-  if (!targets.length) return json(res, 404, { error: 'Выбранные группы не найдены' });
-  let sendAt = '';
-  if (body.sendAt) {
-    try {
-      sendAt = futureDate(body.sendAt);
-    } catch (error) {
-      return json(res, 400, { error: error.message });
-    }
-    const queued = (data.groupPosts || []).filter((item) => item.status === 'scheduled').length;
-    if (queued + targets.length > MAX_SCHEDULED_POSTS) return json(res, 400, { error: 'Слишком много отложенных публикаций' });
-  }
-  const layout = body.layout === 'split' ? 'split' : 'single';
-  const options = { withoutSignature: body.withoutSignature === true, pin: body.pin === true, notify: body.notify !== false };
-  const results = [];
-  for (const [index, target] of targets.entries()) {
-    const { group, threadId, language } = target;
-    const row = { groupId: group.id, title: group.title || group.id, threadId, language, ok: false, error: '', link: '', scheduled: false };
-    try {
-      // Права могли измениться с прошлой проверки: смотрим свежие, а не те, что в списке.
-      if (!sendAt) await refreshGroup(group);
-      const blocker = publishBlocker(group);
-      if (blocker) throw new Error(blocker);
-      const fields = { ...options, groupId: group.id, threadId, listing: { objectId: record.id, language, layout } };
-      if (sendAt) {
-        data.groupPosts = [...(data.groupPosts || []), newGroupPost({ ...fields, sendAt })];
-        row.scheduled = true;
-      } else {
-        const messageId = await postToGroup(group, newGroupPost({ ...fields, sendAt: new Date().toISOString() }));
-        row.link = messageLink(group, messageId, threadId);
-      }
-      row.ok = true;
-    } catch (error) {
-      row.error = cleanText(error && error.message, 400) || 'Не удалось опубликовать';
-      recordError('Публикация объявления в группу «' + (group.title || group.id) + '»', error);
-    }
-    results.push(row);
-    if (!sendAt && index < targets.length - 1) await delay(LISTING_PAUSE_MS);
-  }
-  saveDataNow();
-  return json(res, 200, { ok: results.some((row) => row.ok), results, publications: record.publications || [] });
+  const { status, body: answer } = await runListingPublish(record, body);
+  return json(res, status, answer);
 }
 
 // Удаление опубликованного объявления из группы: все его сообщения (альбом и текст). Запись об этом посте на объекте

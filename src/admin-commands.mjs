@@ -12,12 +12,14 @@ import { waitingConversationCount } from './admin-notifications.mjs';
 import { activityDigest, hoursAgoText, sendInquiryToAdministrator, weekFigures } from './notices.mjs';
 import { viewingsReply } from './viewings.mjs';
 import { BOT_COMMAND_DESCRIPTIONS } from './texts.mjs';
+import { startPostCommand } from './post-command.mjs';
 
 // Shown in the command menu of the admin and manager chats only.
 const ADMIN_COMMAND_DESCRIPTIONS = {
   inbox: 'Заявки без ответа',
   viewings: 'Просмотры сегодня и завтра',
   stats: 'Цифры за сегодня и неделю',
+  post: 'Опубликовать объект в группы',
 };
 const INBOX_LIMIT = 10;
 
@@ -36,13 +38,14 @@ const GROUP_COMMANDS_HINT = [
   '/inbox — заявки без ответа',
   '/viewings — просмотры сегодня и завтра',
   '/stats — цифры за сегодня и неделю',
+  '/post — опубликовать объект в группы',
   '',
   'Меню клиента, заявки и анкеты живут в личной переписке с ботом.',
 ].join('\n');
 
 // Команды самого бота: на них в группе отвечаем подсказкой. Чужие (/poll,
 // команда другого бота) молча пропускаем — это не наш разговор.
-const OWN_COMMANDS = new Set(['/inbox', '/viewings', '/stats', '/myid',
+const OWN_COMMANDS = new Set(['/inbox', '/viewings', '/stats', '/post', '/myid',
   ...Object.keys(BOT_COMMAND_DESCRIPTIONS.ru).map((name) => '/' + name)]);
 
 function meantForAnotherBot(text) {
@@ -152,6 +155,10 @@ async function handleAdminChatMessage(message, token) {
   if (command === '/viewings') {
     const reply = viewingsReply();
     await sendMessage(chat.chatId, reply.text, token, { track: false, ...(reply.markup ? { reply_markup: reply.markup } : {}) });
+    return true;
+  }
+  if (command === '/post') {
+    await startPostCommand(chat, token);
     return true;
   }
   if (command === '/stats') {
