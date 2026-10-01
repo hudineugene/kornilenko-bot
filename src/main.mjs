@@ -32,6 +32,7 @@ import { monthlyPayment, purchaseEstimate } from './calculator.mjs';
 import { decryptBackup, encryptBackup, runTelegramBackup, setBackupPassword } from './offsite.mjs';
 import { applyImport, parseXml, planImport, planSummary, propertyTypeOf, publicAddress, readFeed, runDailyFeedImport } from './feed-import.mjs';
 import { newGroupPost, postToGroup, refreshGroup, runDueGroupPosts, topicTitle } from './groups.mjs';
+import { buildListing } from './listing.mjs';
 import { announceError, announceStart, sendStatusNotice, startNoticeText, stopNoticeText, telegramContactLost, telegramContactRestored } from './status.mjs';
 import { hostAllowed, loginAttempts, requestIsRemote, sessions } from './admin-http.mjs';
 import { parseContentRecord } from './admin-input.mjs';
@@ -144,6 +145,7 @@ export {
   planSummary,
   postToGroup,
   newGroupPost,
+  buildListing,
   refreshGroup,
   topicTitle,
   PREVIOUS_HELP_DEFAULTS as previousHelpDefaults,

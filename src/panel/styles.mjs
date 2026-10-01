@@ -663,6 +663,31 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .tg-buttons .row{gap:2px}
 .tg-button{flex:1;text-align:center;padding:var(--sp-2) var(--sp-2);border-radius:var(--radius);background:var(--surface);color:var(--brand);box-shadow:var(--shadow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tg-note{color:var(--muted)}
+.tg-text blockquote{margin:0;padding-left:var(--sp-2);border-left:var(--edge) solid var(--brand)}
+.tg-album{display:grid;gap:2px}
+.tg-album[data-count="1"]{grid-template-columns:minmax(0,1fr)}
+.tg-album:not([data-count="1"]){grid-template-columns:repeat(2,minmax(0,1fr))}
+.tg-album[data-count="3"] .tg-album-cell:first-child{grid-column:1 / -1}
+.tg-album-cell{position:relative;display:block;aspect-ratio:4 / 3;overflow:hidden;background:var(--line)}
+.tg-bubble .tg-album-cell img{width:100%;height:100%;object-fit:cover}
+.tg-album-more{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--glass);color:var(--surface);font-size:var(--fs-xl);font-weight:600}
+/* Публикация объявления в группы: слева — куда, справа — что получат подписчики. */
+.listing-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,400px);gap:var(--sp-4);align-items:start}
+.listing-targets{display:flex;flex-direction:column;gap:var(--sp-2)}
+.listing-target{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-3);padding:var(--sp-2) var(--sp-3);border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--surface-soft)}
+.listing-target.is-blocked{opacity:.75}
+.listing-pick{display:flex;align-items:center;gap:var(--sp-2);flex:1 1 200px;min-width:0;cursor:pointer}
+.listing-pick>span{display:flex;flex-direction:column;min-width:0}
+.listing-opts{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+.listing-opts select{width:auto;min-width:0;max-width:100%}
+.listing-done{flex:1 1 100%}
+.listing-preview-col{position:sticky;top:0;min-width:0}
+.listing-seg{display:inline-flex;gap:var(--sp-1)}
+.listing-seg .btn.active{border-color:var(--brand);background:var(--brand-soft);color:var(--brand-dark)}
+.listing-result{padding:var(--sp-2) var(--sp-3);border-left:var(--edge) solid var(--line);background:var(--surface-soft)}
+.listing-result.ok{border-left-color:var(--ok)}
+.listing-result.bad{border-left-color:var(--bad)}
+@media(max-width:860px){.listing-layout{grid-template-columns:minmax(0,1fr)}.listing-preview-col{position:static}}
 .markup-bar{gap:2px;padding:var(--sp-1)}
 .markup-bar .btn{padding:2px var(--sp-2);min-width:30px}
 code{padding:0px var(--sp-1);border-radius:var(--radius-sm);background:var(--surface-soft);border:1px solid var(--line);font-size:var(--fs-sm)}

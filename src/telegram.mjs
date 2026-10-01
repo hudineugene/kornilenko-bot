@@ -269,6 +269,48 @@ async function sendPhotoMessage(chatId, image, caption, token, replyMarkup, opti
   return result;
 }
 
+// Альбом из 2–10 фотографий одним сообщением; подпись — под первой. Уже загруженные фотографии идут по file_id,
+// остальные — файлами. Если Telegram не принял чей-то file_id, весь альбом уходит заново файлами.
+async function sendPhotoAlbum(chatId, images, caption, token, options = {}) {
+  const list = (Array.isArray(images) ? images : []).slice(0, 10);
+  if (list.length < 2) throw new Error('В альбоме нужно хотя бы две фотографии');
+  async function attempt(useFileIds) {
+    const files = {};
+    const media = list.map((image, index) => {
+      const fileId = useFileIds ? knownFileId(image) : '';
+      const item = { type: 'photo', media: fileId || 'attach://photo' + index };
+      if (!fileId) files['photo' + index] = { upload: new Blob([imageBytes(image)], { type: image.mimeType }), fileName: String(image.name || 'photo' + index + '.jpg') };
+      if (index === 0 && caption) {
+        item.caption = caption;
+        if (options.parseMode) item.parse_mode = options.parseMode;
+      }
+      return item;
+    });
+    return telegramMultipartRequest(token, 'sendMediaGroup', {
+      chat_id: String(chatId),
+      media: JSON.stringify(media),
+      message_thread_id: options.threadId ? String(options.threadId) : undefined,
+      reply_parameters: options.replyParameters || undefined,
+      ...files,
+    });
+  }
+  let result;
+  try {
+    result = await attempt(true);
+  } catch (error) {
+    if (!staleFileIdError(error)) throw error;
+    for (const image of list) rememberFileId(image, '');
+    result = await attempt(false);
+  }
+  (Array.isArray(result) ? result : []).forEach((message, index) => {
+    if (message && Array.isArray(message.photo) && message.photo.length && list[index]) rememberFileId(list[index], message.photo[message.photo.length - 1].file_id);
+  });
+  data.stats.messagesSent += list.length;
+  recordDaily('sent');
+  scheduleSave();
+  return Array.isArray(result) ? result : [];
+}
+
 // PNG с прозрачностью Telegram сохраняет только как файл (документ).
 async function sendDocumentMessage(chatId, image, caption, token, replyMarkup, options = {}) {
   const bytes = imageBytes(image);
@@ -371,6 +413,7 @@ export {
   rememberFileId,
   sendMessage,
   sendDocumentMessage,
+  sendPhotoAlbum,
   sendPhotoMessage,
   splitTelegramText,
   telegramCall,

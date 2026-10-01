@@ -2,12 +2,12 @@
 // приглашения, заявки на вступление. Все действия — от имени бота.
 
 import crypto from 'node:crypto';
-import { cleanText } from './util.mjs';
+import { cleanText, delay } from './util.mjs';
 import { MAX_RUBRICS, normalizePublishing } from './data-format.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { telegramRequest } from './telegram.mjs';
-import { persistImage } from './media.mjs';
+import { imageHasTransparency, persistImage } from './media.mjs';
 import { json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
 import { objectCaption, propertyDeepLink, recordImages } from './catalog.mjs';
 import {
@@ -19,8 +19,11 @@ import {
   forgetTopic,
   groupById,
   groupList,
+  listingMessage,
+  messageLink,
   newGroupPost,
   postToGroup,
+  publishBlocker,
   refreshGroup,
   refreshGroups,
   rememberTopic,
@@ -104,13 +107,78 @@ function channelPostForProperty(record, language, body = {}) {
 
 const CHANNEL_BUTTON_TEXT = { ru: '🤖 Смотреть в боте', en: '🤖 View in the bot', es: '🤖 Ver en el bot' };
 
+const LISTING_LANGUAGES = ['ru', 'en', 'es'];
+const MAX_LISTING_TARGETS = 20;
+// Telegram разрешает в группу около 20 сообщений в минуту: между группами делаем паузу, а в одну — альбом и текст.
+const LISTING_PAUSE_MS = 1500;
+
+// Публикация объявления в выбранные группы. Одна неудача не останавливает остальные: на каждую группу — своя строка
+// результата (ссылка на пост или причина отказа словами).
+async function publishListing(res, record, body) {
+  const list = Array.isArray(body.targets) ? body.targets : [];
+  if (!list.length) return json(res, 400, { error: 'Выберите хотя бы одну группу' });
+  if (list.length > MAX_LISTING_TARGETS) return json(res, 400, { error: 'Не больше ' + MAX_LISTING_TARGETS + ' групп за раз' });
+  if (!['active', 'reserved'].includes(record.status)) return json(res, 400, { error: 'Объект скрыт или продан — по ссылке из поста клиент его не увидит. Верните объект в каталог и повторите.' });
+  const seen = new Set();
+  const targets = [];
+  for (const item of list) {
+    const group = groupById(cleanText(item && item.groupId, 40));
+    if (!group) continue;
+    const threadId = requestedThread(group, item.threadId);
+    const key = group.id + ':' + threadId;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    targets.push({ group, threadId, language: LISTING_LANGUAGES.includes(item.language) ? item.language : 'ru' });
+  }
+  if (!targets.length) return json(res, 404, { error: 'Выбранные группы не найдены' });
+  let sendAt = '';
+  if (body.sendAt) {
+    try {
+      sendAt = futureDate(body.sendAt);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+    const queued = (data.groupPosts || []).filter((item) => item.status === 'scheduled').length;
+    if (queued + targets.length > MAX_SCHEDULED_POSTS) return json(res, 400, { error: 'Слишком много отложенных публикаций' });
+  }
+  const options = { withoutSignature: body.withoutSignature === true, pin: body.pin === true, notify: body.notify !== false };
+  const results = [];
+  for (const [index, target] of targets.entries()) {
+    const { group, threadId, language } = target;
+    const row = { groupId: group.id, title: group.title || group.id, threadId, language, ok: false, error: '', link: '', scheduled: false };
+    try {
+      // Права могли измениться с прошлой проверки: смотрим свежие, а не те, что в списке.
+      if (!sendAt) await refreshGroup(group);
+      const blocker = publishBlocker(group);
+      if (blocker) throw new Error(blocker);
+      const fields = { ...options, groupId: group.id, threadId, listing: { objectId: record.id, language } };
+      if (sendAt) {
+        data.groupPosts = [...(data.groupPosts || []), newGroupPost({ ...fields, sendAt })];
+        row.scheduled = true;
+      } else {
+        const messageId = await postToGroup(group, newGroupPost({ ...fields, sendAt: new Date().toISOString() }));
+        row.link = messageLink(group, messageId, threadId);
+      }
+      row.ok = true;
+    } catch (error) {
+      row.error = cleanText(error && error.message, 400) || 'Не удалось опубликовать';
+      recordError('Публикация объявления в группу «' + (group.title || group.id) + '»', error);
+    }
+    results.push(row);
+    if (!sendAt && index < targets.length - 1) await delay(LISTING_PAUSE_MS);
+  }
+  saveDataNow();
+  return json(res, 200, { ok: results.some((row) => row.ok), results, publications: record.publications || [] });
+}
+
 // Every route here is /api/groups/... and needs an authenticated session.
 async function handleGroupApi(req, res, url) {
   // Публикация объекта в канал живёт здесь же: ей нужны и канал, и отправка
   // поста, которые описаны в этом файле.
-  const objectChannelPost = /^\/api\/objects\/[^/]+\/channel-post$/.test(url.pathname);
+  const objectChannelPost = /^\/api\/objects\/[^/]+\/(channel-post|listing-preview|listing-publish)$/.test(url.pathname);
   if (!url.pathname.startsWith('/api/groups') && !url.pathname.startsWith('/api/group-posts') && url.pathname !== '/api/publishing' && !objectChannelPost) return false;
-  const session = requireAuth(req, res, true);
+  // Чтение (GET) защитного кода не требует — панель его в такие запросы не кладёт; любое изменение — требует.
+  const session = requireAuth(req, res, req.method !== 'GET');
   if (!session) return true;
 
   // Постоянная подпись под постами и рубричные плашки.
@@ -250,6 +318,31 @@ async function handleGroupApi(req, res, url) {
       recordError('Публикация объекта в канал', error);
       return json(res, 400, { error: 'Не удалось опубликовать: ' + error.message }), true;
     }
+  }
+
+  // Объявление об объекте в несколько групп сразу: предпросмотр и публикация.
+  const listingMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/listing-(preview|publish)$/);
+  if (listingMatch) {
+    const record = (data.objects || []).find((item) => item.id === decodeURIComponent(listingMatch[1]));
+    if (!record) return json(res, 404, { error: 'Объект не найден' }), true;
+    if (listingMatch[2] === 'preview' && req.method === 'GET') {
+      const language = LISTING_LANGUAGES.includes(url.searchParams.get('language')) ? url.searchParams.get('language') : 'ru';
+      const message = listingMessage(record, language, { withoutSignature: url.searchParams.get('signature') === '0', source: 'group' });
+      return json(res, 200, {
+        language,
+        caption: message.caption,
+        html: message.html,
+        photoCount: message.images.filter((image) => !imageHasTransparency(image)).length,
+        buttonText: message.buttonText,
+        hasButton: Boolean(message.markup),
+        truncated: message.truncated,
+        plainLength: message.plainLength,
+      }), true;
+    }
+    if (listingMatch[2] === 'publish' && req.method === 'POST') {
+      return publishListing(res, record, await readJson(req)), true;
+    }
+    return json(res, 405, { error: 'Неверный метод' }), true;
   }
 
   if (!match) return json(res, 404, { error: 'Неизвестный запрос' }), true;

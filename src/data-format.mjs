@@ -801,8 +801,23 @@ function normalizeGroups(value) {
     updatedAt: cleanText(item.updatedAt, 40),
     lastMessageAt: cleanText(item.lastMessageAt, 40),
     lastPostAt: cleanText(item.lastPostAt, 40),
+    // Язык, на котором последний раз публиковали объявление: подставляется по умолчанию.
+    listingLanguage: ['ru', 'en', 'es'].includes(item.listingLanguage) ? item.listingLanguage : '',
     lastError: cleanText(item.lastError, 500),
   }));
+}
+
+function normalizePublications(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 30).map((item) => ({
+    groupId: cleanText(item && item.groupId, 40),
+    title: cleanText(item && item.title, 200),
+    language: ['ru', 'en', 'es'].includes(item && item.language) ? item.language : 'ru',
+    at: cleanText(item && item.at, 40),
+    messageId: Math.max(0, Number(item && item.messageId) || 0),
+    threadId: Math.max(0, Math.floor(Number(item && item.threadId)) || 0),
+    link: cleanText(item && item.link, 300),
+  })).filter((item) => item.groupId);
 }
 
 function normalizeGroupPosts(value) {
@@ -819,6 +834,7 @@ function normalizeGroupPosts(value) {
     withoutSignature: Boolean(item.withoutSignature),
     pin: Boolean(item.pin),
     notify: item.notify !== false,
+    listing: item.listing && item.listing.objectId ? { objectId: cleanText(item.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(item.listing.language) ? item.listing.language : 'ru' } : null,
     status: ['scheduled', 'sent', 'failed', 'cancelled'].includes(item.status) ? item.status : 'scheduled',
     sendAt: cleanText(item.sendAt, 40),
     sentAt: cleanText(item.sentAt, 40),
@@ -1460,6 +1476,8 @@ function normalizeLoadedData(parsed) {
           priceChangedAt: cleanText(record.priceChangedAt, 40),
           // Когда объект впервые стал доступен клиентам: по нему дайджест находит новые.
           publishedAt: cleanText(record.publishedAt, 40),
+          // Куда объявление уже публиковали в группах и каналах (последние 30).
+          publications: normalizePublications(record.publications),
         };
       }) : [],
       promotions: Array.isArray(parsed.promotions) ? parsed.promotions.map((record) => {

@@ -182,8 +182,8 @@ function openObjectExtras(id) {
     title: "Ещё действия",
     body: '<div class="stack"><div class="small muted">' + esc(title) + "</div>" +
       '<button class="btn secondary" data-edit-object="1" type="button">✎ Редактировать</button>' +
-      '<button class="btn" data-channel="1" type="button">➤ Опубликовать в канал</button>' +
-      '<span class="small muted">Пост с фотографией, ценой и кнопкой «Смотреть в боте».</span>' +
+      '<button class="btn" data-channel="1" type="button">➤ Опубликовать в группы</button>' +
+      '<span class="small muted">Красивый пост в выбранные группы и каналы: фотографии, цена, характеристики и полное описание.</span>' +
       '<div class="row"><button class="btn secondary" data-move="up" type="button">↑ Поднять в списке</button>' +
       '<button class="btn secondary" data-move="down" type="button">↓ Опустить в списке</button></div>' +
       '<button class="btn secondary" data-copy="1" type="button">⧉ Создать копию</button>' +
@@ -224,71 +224,171 @@ function openObjectExtras(id) {
   });
 }
 
-// Пост об объекте в канал: текст берём из карточки, чтобы в канале и в боте
-// клиент видел одно и то же, но даём поправить перед отправкой.
+// Объявление об объекте в группы и каналы. Список — только те, где бот администратор; у каждой группы свой язык поста
+// и (в форуме) своя тема. Справа — предпросмотр ровно того, что получат подписчики: альбом, подпись, полный текст и кнопка.
+var LISTING_ADMIN = ["administrator", "creator"];
+
+function listingBlocker(group) {
+  if (group.type === "channel" && !(group.rights && group.rights.can_post_messages)) return "У бота нет права публиковать в этом канале";
+  return "";
+}
+
+function listingKind(group) {
+  return group.type === "channel" ? "канал" : group.isForum ? "группа с темами" : "группа";
+}
+
 function openChannelPost(id) {
   var record = (state.objects || []).find(function (item) { return String(item.id) === String(id); });
   if (!record) return;
-  var channels = (state.groups || []).filter(function (group) { return group.type === "channel"; });
-  if (!channels.length) {
+  var title = localized(record.title, "ru") || record.reference || "Объект";
+  var groups = (state.groups || []).filter(function (group) { return LISTING_ADMIN.indexOf(group.status) >= 0; });
+  var hiddenCount = (state.groups || []).filter(function (group) { return group.status === "member"; }).length;
+  if (!groups.length) {
     return openDialog({
-      title: "Каналов пока нет",
-      body: '<div class="stack"><div>Чтобы публиковать объекты, подключите канал в «Публикации → Каналы и группы» и сделайте бота его администратором.</div></div>',
+      title: "Групп, куда можно публиковать, нет",
+      body: '<div class="stack"><div>Публиковать можно только туда, где бот — администратор. Добавьте бота в нужную группу или канал в Telegram и назначьте его администратором — группа сама появится в «Публикации → Каналы и группы».</div>' +
+        (hiddenCount ? '<div class="msg">Групп, где бот только участник: ' + hiddenCount + '. Сделайте его администратором — и они появятся здесь.</div>' : "") + "</div>",
       footer: '<button class="btn secondary" data-close="1" type="button">Закрыть</button><button class="btn" id="goChannels" type="button">Открыть «Каналы и группы»</button>',
       ready: function (dialog) {
         dialog.querySelector("#goChannels").onclick = function () { dialog.closeClean(); go("posts", "channels"); };
       },
     });
   }
-  openDialog({
-    title: "Опубликовать в канал",
+  function previousOf(group) {
+    return (record.publications || []).filter(function (item) { return item.groupId === group.id; })[0];
+  }
+  var rows = groups.map(function (group) {
+    var blocker = listingBlocker(group);
+    var last = previousOf(group);
+    var language = group.listingLanguage || "ru";
+    var topics = group.isForum ? (group.topics || []).filter(function (topic) { return topic.id > 1 && !topic.closed; }) : [];
+    return '<div class="listing-target' + (blocker ? " is-blocked" : "") + '" data-group="' + esc(group.id) + '">' +
+      '<label class="listing-pick"><input type="checkbox" data-pick' + (blocker ? " disabled" : "") + '><span><b>' + esc(group.title || group.id) + '</b>' +
+      '<span class="small muted">' + listingKind(group) + (group.memberCount ? " · " + counted(group.memberCount, "участник", "участника", "участников") : "") + "</span></span></label>" +
+      (blocker ? '<div class="small bad-text">' + esc(blocker) + "</div>" : '<div class="listing-opts"><select data-lang aria-label="Язык поста">' + LANGUAGES.map(function (item) {
+        return '<option value="' + item[0] + '"' + (item[0] === language ? " selected" : "") + ">" + item[1] + "</option>";
+      }).join("") + "</select>" +
+      (group.isForum ? '<select data-topic aria-label="Тема"><option value="0">Общая тема</option>' + topics.map(function (topic) {
+        return '<option value="' + topic.id + '">' + esc(topic.name || "Тема №" + topic.id) + "</option>";
+      }).join("") + "</select>" : "") + "</div>") +
+      (last ? '<div class="small muted listing-done">Уже публиковали ' + dateTime(last.at) + (last.link ? ' · <a href="' + esc(last.link) + '" target="_blank" rel="noopener">открыть пост</a>' : "") + "</div>" : "") +
+      "</div>";
+  }).join("");
+  var dialog = openDialog({
+    title: "Опубликовать в группы",
+    drawer: true,
+    wide: true,
     protectChanges: true,
-    body: '<div class="stack">' +
-      '<div class="field"><label for="channelTarget">Канал</label><select id="channelTarget">' + channels.map(function (group) {
-        return '<option value="' + esc(group.id) + '">' + esc(group.title || group.id) + (group.memberCount ? " · " + counted(group.memberCount, "подписчик", "подписчика", "подписчиков") : "") + "</option>";
-      }).join("") + "</select></div>" +
-      '<div class="field"><label for="channelLanguage">Язык поста</label><select id="channelLanguage">' + LANGUAGES.map(function (language) {
-        return '<option value="' + language[0] + '">' + language[1] + "</option>";
-      }).join("") + "</select></div>" +
-      '<div class="field"><label for="channelText">Текст поста</label><textarea id="channelText" class="area-sm" placeholder="Загрузка…"></textarea>' +
-      '<div class="hint">По умолчанию — та же подпись, что видит клиент в карточке объекта.</div></div>' +
-      '<div class="grid cols-2"><div class="field"><label for="channelButton">Кнопка</label><input id="channelButton" value="🏠 Смотреть в боте"></div>' +
-      '<div class="field"><label for="channelWhen">Отправить позже</label><input id="channelWhen" type="datetime-local"></div></div>' +
-      '<div class="msg">Кнопка ведёт на карточку этого объекта в боте. По ссылке видно, что клиент пришёл из канала.</div>' +
-      "</div>",
-    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="channelSend" type="button">Опубликовать</button>',
-    ready: function (dialog) {
-      var text = dialog.querySelector("#channelText");
-      var language = dialog.querySelector("#channelLanguage");
-      // Текст показываем тот же, что стоит в карточке на выбранном языке.
-      function fillText() {
-        var caption = [localized(record.title, language.value), localized(record.city, language.value), localized(record.description, language.value)]
-          .filter(Boolean).join("\n\n");
-        text.value = caption;
+    body: '<div class="listing-layout"><div class="stack">' +
+      '<div><b>' + esc(title) + '</b><div class="small muted">Пост: альбом с фотографиями и полным описанием, ценой, характеристиками и кнопкой «Смотреть в боте».</div></div>' +
+      '<div class="listing-targets" id="listingTargets">' + rows + "</div>" +
+      (hiddenCount ? '<div class="small muted">Ещё ' + counted(hiddenCount, "группа", "группы", "групп") + ', где бот не администратор, не показаны.</div>' : "") +
+      '<label class="check"><input type="checkbox" id="listingSignature" checked> Добавить подпись и кнопки из «Оформления постов»</label>' +
+      '<label class="check"><input type="checkbox" id="listingPin"> Закрепить пост в группе</label>' +
+      '<div class="field"><label for="listingWhen">Отправить позже</label><input id="listingWhen" type="datetime-local"><div class="hint">Пусто — опубликуем сразу. Текст соберётся в момент отправки: если вы успеете поправить цену, уйдёт новая.</div></div>' +
+      '</div><aside class="listing-preview-col"><div class="editor-preview-head"><b>Предпросмотр Telegram</b><span class="listing-seg" id="listingSeg">' + LANGUAGES.map(function (item) {
+        return '<button class="btn small secondary" type="button" data-preview-lang="' + item[0] + '">' + item[0].toUpperCase() + "</button>";
+      }).join("") + '</span></div><div class="tg-preview" id="listingPreview"><span class="tg-note">Загрузка…</span></div><div class="tg-note gap-top" id="listingPreviewNote"></div></aside></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="listingSend" type="button" disabled>Опубликовать</button>',
+    ready: function (box) {
+      var previewLanguage = "ru";
+      var previewSerial = 0;
+      var send_ = box.querySelector("#listingSend");
+      function picked() {
+        return Array.prototype.slice.call(box.querySelectorAll(".listing-target")).filter(function (row) {
+          return row.querySelector("[data-pick]").checked;
+        });
       }
-      fillText();
-      language.onchange = fillText;
-      dialog.querySelector("#channelSend").onclick = async function () {
-        var when = dialog.querySelector("#channelWhen").value;
-        var target = dialog.querySelector("#channelTarget");
-        var where = target.options[target.selectedIndex].textContent;
+      function refreshButton() {
+        var count = picked().length;
+        send_.disabled = !count;
+        var when = box.querySelector("#listingWhen").value;
+        send_.textContent = count ? (when ? "Запланировать · " : "Опубликовать · ") + counted(count, "группа", "группы", "групп") : "Опубликовать";
+      }
+      async function drawPreview() {
+        var ticket = ++previewSerial;
+        box.querySelectorAll("[data-preview-lang]").forEach(function (button) {
+          button.classList.toggle("active", button.dataset.previewLang === previewLanguage);
+          button.setAttribute("aria-pressed", String(button.dataset.previewLang === previewLanguage));
+        });
+        try {
+          var preview = await api("/api/objects/" + encodeURIComponent(id) + "/listing-preview?language=" + previewLanguage + (box.querySelector("#listingSignature").checked ? "" : "&signature=0"));
+          if (ticket !== previewSerial) return;
+          var shots = propertyImages(record, previewLanguage).slice(0, 10);
+          var album = shots.length ? '<div class="tg-album" data-count="' + Math.min(shots.length, 4) + '">' + shots.slice(0, 4).map(function (image, index) {
+            var more = index === 3 && shots.length > 4 ? '<span class="tg-album-more">+' + (shots.length - 4) + "</span>" : "";
+            return '<span class="tg-album-cell"><img src="' + esc(imageUrl("objects", record.id, image)) + '" alt="">' + more + "</span>";
+          }).join("") + "</div>" : "";
+          box.querySelector("#listingPreview").innerHTML =
+            (album || preview.caption ? '<div class="tg-bubble">' + album + (preview.caption ? '<div class="tg-text">' + preview.caption + "</div>" : "") + "</div>" : "") +
+            '<div class="tg-bubble"><div class="tg-text">' + preview.html + "</div></div>" +
+            (preview.hasButton ? '<div class="tg-buttons"><div class="tg-button">' + esc(preview.buttonText) + "</div></div>" : '<div class="tg-note warn-text">Кнопки «Смотреть в боте» не будет: у бота нет публичного имени.</div>');
+          var notes = [];
+          if (!shots.length) notes.push("У объекта нет фотографий — уйдёт только текст.");
+          if (preview.truncated) notes.push("Описание длиннее лимита Telegram (4096 знаков) и будет сокращено со ссылкой на полную карточку в боте.");
+          box.querySelector("#listingPreviewNote").textContent = notes.join(" ");
+        } catch (error) {
+          if (ticket === previewSerial) box.querySelector("#listingPreview").innerHTML = '<span class="tg-note warn-text">Не удалось собрать предпросмотр: ' + esc(error.message) + "</span>";
+        }
+      }
+      box.querySelectorAll("[data-preview-lang]").forEach(function (button) {
+        button.onclick = function () { previewLanguage = button.dataset.previewLang; drawPreview(); };
+      });
+      box.querySelector("#listingSignature").onchange = drawPreview;
+      box.querySelector("#listingWhen").oninput = refreshButton;
+      box.querySelectorAll(".listing-target").forEach(function (row) {
+        row.querySelector("[data-pick]").onchange = function () {
+          // Предпросмотр — на языке выбранной группы: так видно, что туда уйдёт.
+          var lang = row.querySelector("[data-lang]");
+          if (this.checked && lang && lang.value !== previewLanguage) { previewLanguage = lang.value; drawPreview(); }
+          refreshButton();
+        };
+        var language = row.querySelector("[data-lang]");
+        if (language) language.onchange = function () {
+          row.querySelector("[data-pick]").checked = true;
+          previewLanguage = language.value;
+          drawPreview();
+          refreshButton();
+        };
+      });
+      drawPreview();
+      send_.onclick = async function () {
+        var chosen = picked();
+        if (!chosen.length) return;
+        var when = box.querySelector("#listingWhen").value;
+        var names = chosen.map(function (row) { return row.querySelector("b").textContent; });
         if (!(await confirmDialog(
-          when ? "Запланировать публикацию?" : "Опубликовать в канал?",
-          where + ". " + (when ? "Отправим " + dateTime(zonedDateTimeToIso(when)) + "." : "Пост уйдёт сразу.") + " Изменить опубликованное нельзя, только удалить.",
+          when ? "Запланировать публикацию?" : "Опубликовать объявление?",
+          title + " → " + names.join(", ") + ". " + (when ? "Отправим " + dateTime(zonedDateTimeToIso(when)) + "." : "Пост уйдёт сразу.") + " Изменить опубликованное нельзя, только удалить в Telegram.",
           when ? "Запланировать" : "Опубликовать"
         ))) return;
+        send_.disabled = true;
+        send_.textContent = "Публикуем…";
         try {
-          await send("/api/objects/" + encodeURIComponent(id) + "/channel-post", "POST", {
-            groupId: target.value,
-            language: language.value,
-            text: text.value,
-            buttonText: dialog.querySelector("#channelButton").value,
+          var result = await send("/api/objects/" + encodeURIComponent(id) + "/listing-publish", "POST", {
+            targets: chosen.map(function (row) {
+              var lang = row.querySelector("[data-lang]"), topic = row.querySelector("[data-topic]");
+              return { groupId: row.dataset.group, language: lang ? lang.value : "ru", threadId: topic ? Number(topic.value) || 0 : 0 };
+            }),
+            withoutSignature: !box.querySelector("#listingSignature").checked,
+            pin: box.querySelector("#listingPin").checked,
             sendAt: when ? zonedDateTimeToIso(when) : "",
           });
-          dialog.closeClean();
-          toast(when ? "Публикация запланирована" : "Опубликовано в канале");
-          await reload();
-        } catch (error) { fail(error); }
+          var good = result.results.filter(function (row) { return row.ok; }).length;
+          box.querySelector(".dialog-body").innerHTML = '<div class="stack"><div><b>' + (good === result.results.length ? "Готово" : good ? "Опубликовано частично" : "Не получилось") + "</b>" +
+            '<div class="small muted">' + (when ? "Запланировано: " : "Опубликовано: ") + good + " из " + result.results.length + "</div></div>" +
+            result.results.map(function (row) {
+              return '<div class="listing-result ' + (row.ok ? "ok" : "bad") + '"><b>' + (row.ok ? "✓ " : "✕ ") + esc(row.title) + "</b>" +
+                (row.ok ? (row.scheduled ? '<span class="small muted"> · ждёт своего времени</span>' : row.link ? ' <a href="' + esc(row.link) + '" target="_blank" rel="noopener">открыть пост</a>' : "") : '<div class="small bad-text">' + esc(row.error) + "</div>") + "</div>";
+            }).join("") + "</div>";
+          box.querySelector(".dialog-foot").innerHTML = '<button class="btn" data-close="1" type="button">Закрыть</button>';
+          box.querySelector(".dialog-foot [data-close]").onclick = function () { box.closeClean(); };
+          if (good) await reload();
+        } catch (error) {
+          send_.disabled = false;
+          refreshButton();
+          fail(error);
+        }
       };
     },
   });
@@ -564,7 +664,7 @@ function openRecordEditor(kind, id) {
         if (foot) {
           foot.innerHTML = live
             ? '<button class="btn secondary" id="unpublish" type="button" title="Объект пропадёт из каталога, переписка и заявки останутся">Снять с публикации</button>' +
-              '<button class="btn secondary" id="postToChannel" type="button"' + (record ? "" : " disabled") + ' title="' + (record ? "Пост с фотографией, ценой и кнопкой «Смотреть в боте»" : "Сначала сохраните объект") + '">➤ В канал</button>' +
+              '<button class="btn secondary" id="postToChannel" type="button"' + (record ? "" : " disabled") + ' title="' + (record ? "Красивый пост с фотографиями и полным описанием — в выбранные группы и каналы" : "Сначала сохраните объект") + '">➤ В группы</button>' +
               '<button class="btn" id="saveRecord" type="button">Сохранить</button>'
             : '<button class="btn secondary" id="saveDraft" type="button">' + (status === "sold" ? "Сохранить" : "Сохранить как черновик") + '</button>' +
               (status === "sold" || russianReady ? "" : '<span class="small warn-text publish-why" id="publishWhy">Опубликовать нельзя. ' + esc(missingLine) + "</span>") +

@@ -192,7 +192,7 @@ test('у объекта кнопки «Опубликовать» и «Сохр�
   assert.match(PANEL_HTML, /id="publishNow"/, 'внизу формы — «Опубликовать»');
   assert.match(PANEL_HTML, /id="saveDraft"[^]*?Сохранить как черновик/, 'и «Сохранить как черновик»');
   assert.match(PANEL_HTML, /id="unpublish"[^]*?Снять с публикации/, 'у опубликованного — «Снять с публикации»');
-  assert.match(PANEL_HTML, /id="postToChannel"[^]*?➤ В канал/, '«Опубликовать в канал» — на виду, в подвале');
+  assert.match(PANEL_HTML, /id="postToChannel"[^]*?➤ В группы/, '«Опубликовать в группы» — на виду, в подвале');
   assert.match(PANEL_HTML, /Объект сразу появится в каталоге у клиентов/);
   assert.match(PANEL_HTML, /Объект пропадёт из каталога, переписка и заявки останутся/);
   assert.ok(!/id="togglePublish"/.test(PANEL_HTML), 'кнопки вверху формы больше нет');

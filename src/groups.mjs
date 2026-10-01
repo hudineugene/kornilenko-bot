@@ -13,8 +13,9 @@ import { normalizePublishing } from './data-format.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { temporaryDeliveryError } from './broadcasts.mjs';
 import { recordError } from './analytics.mjs';
-import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
+import { sendDocumentMessage, sendMessage, sendPhotoAlbum, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { imageExists, imageHasTransparency } from './media.mjs';
+import { buildListing, plainOf } from './listing.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { applyPrivateChatStatus } from './users.mjs';
 
@@ -487,8 +488,98 @@ function topicErrorMessage(group, post, error) {
   return '';
 }
 
+// Можно ли публиковать в группу от имени бота: причина отказа словами или пустая строка. Телеграм не пускает бота в
+// канал без права «публикация сообщений»; в группе писать может любой участник, а закрытую для всех группу бот-админ
+// тоже обходит, поэтому для групп достаточно того, что он администратор.
+const PUBLISHER_STATUSES = ['administrator', 'creator'];
+
+function publishBlocker(group) {
+  if (!group) return 'Группа не найдена';
+  if (!PUBLISHER_STATUSES.includes(group.status)) {
+    return ['left', 'kicked'].includes(group.status) ? 'Бота нет в этой группе' : 'Бот не администратор — сделайте его администратором в Telegram';
+  }
+  if (group.type === 'channel' && !(group.rights && group.rights.can_post_messages)) return 'У бота нет права публиковать сообщения в канале';
+  return '';
+}
+
+// Ссылка на сообщение: у публичной группы — по имени, у закрытой — вида t.me/c/<номер>/<сообщение>.
+function messageLink(group, messageId, threadId = 0) {
+  if (!group || !messageId) return '';
+  const thread = threadId > GENERAL_TOPIC_ID ? '/' + threadId : '';
+  if (group.username) return 'https://t.me/' + group.username + thread + '/' + messageId;
+  const internal = String(group.id).replace(/^-100/, '');
+  return /^\d+$/.test(internal) ? 'https://t.me/c/' + internal + thread + '/' + messageId : '';
+}
+
+// Объявление об объекте: альбом с фотографиями и подписью, следом — полный текст с кнопкой. Если альбом ушёл, а текст
+// нет, повторять нельзя (в группе окажутся два альбома) — об этом говорит ошибка.
+// Всё, что уйдёт в группу: подпись альбома, полный текст вместе с подписью канала, кнопки и фотографии. Тот же сбор
+// нужен предпросмотру в панели, чтобы владелец видел ровно то, что получат подписчики.
+function listingMessage(record, language, options = {}) {
+  const publishing = normalizePublishing(data.config.publishing);
+  const signature = options.withoutSignature ? { html: '', plain: '' } : formatLinks(signatureBlock(publishing));
+  const built = buildListing(record, language, { reserve: signature.plain.length + 4, source: options.source });
+  const quote = signature.html && publishing.signatureQuote;
+  const html = built.text + (signature.html ? '\n\n' + (quote ? '<blockquote>' + signature.html + '</blockquote>' : signature.html) : '');
+  const markup = postMarkup({ buttonText: built.buttonText, buttonUrl: built.buttonUrl, withoutSignature: options.withoutSignature });
+  return { ...built, html, markup, plainLength: plainOf(html).length };
+}
+
+async function sendListing(group, post, token = data.config.botToken) {
+  const record = (Array.isArray(data.objects) ? data.objects : []).find((item) => item.id === (post.listing && post.listing.objectId));
+  if (!record) throw new Error('Объекта уже нет в каталоге');
+  const built = listingMessage(record, post.listing.language, { withoutSignature: post.withoutSignature, source: group.type === 'channel' ? 'channel' : 'group' });
+  const html = built.html;
+  const markup = built.markup;
+  const threadId = postThreadId(group, post);
+  const threadOptions = threadId ? { threadId } : {};
+  const photos = built.images.filter((image) => !imageHasTransparency(image)).slice(0, 10);
+  let albumIds = [];
+  if (photos.length >= 2) {
+    const album = await sendPhotoAlbum(group.id, photos, built.caption, token, { parseMode: 'HTML', ...threadOptions });
+    albumIds = album.map((message) => Number(message.message_id)).filter(Boolean);
+  } else if (photos.length === 1) {
+    const photo = await sendPhotoMessage(group.id, photos[0], built.caption, token, null, { parseMode: 'HTML', ...threadOptions });
+    albumIds = photo && photo.message_id ? [Number(photo.message_id)] : [];
+  }
+  if (albumIds.length) rememberOwnMessage(group, albumIds[0], plainOf(built.caption), 'photo', threadId || (group.isForum ? GENERAL_TOPIC_ID : 0));
+  let sent;
+  try {
+    sent = await sendMessage(group.id, html, token, {
+      track: false,
+      parse_mode: 'HTML',
+      ...(threadId ? { message_thread_id: threadId } : {}),
+      ...(markup ? { reply_markup: markup } : {}),
+      // В группе текст — ответ на альбом: видно, к чему он. В канале ответов на собственные посты нет.
+      ...(albumIds.length && group.type !== 'channel' ? { reply_parameters: { message_id: albumIds[0], allow_sending_without_reply: true } } : {}),
+    });
+  } catch (error) {
+    if (albumIds.length) throw new Error('Фотографии опубликованы, а текст — нет: ' + error.message + '. Повторно не отправляйте — в группе уже есть альбом.');
+    throw error;
+  }
+  const messageId = sent && Number(sent.message_id);
+  rememberOwnMessage(group, messageId, plainOf(html), 'text', threadId || (group.isForum ? GENERAL_TOPIC_ID : 0));
+  if (messageId && post.pin) {
+    const pinned = await telegramRequest(token, 'pinChatMessage', { chat_id: group.id, message_id: messageId, disable_notification: !post.notify })
+      .then(() => true)
+      .catch((error) => { recordError('Закрепление объявления', error); return false; });
+    if (pinned) group.pinnedMessageId = messageId;
+  }
+  group.lastPostAt = new Date().toISOString();
+  if (threadId) rememberTopic(group, threadId, { at: group.lastPostAt });
+  // Что и куда уже опубликовано — для предупреждения «это объявление здесь уже было».
+  record.publications = [
+    { groupId: group.id, title: cleanText(group.title, 200), language: built.language, at: group.lastPostAt, messageId: messageId || 0, threadId, link: messageLink(group, messageId || albumIds[0] || 0, threadId) },
+    ...(Array.isArray(record.publications) ? record.publications : []),
+  ].slice(0, 30);
+  group.listingLanguage = built.language;
+  scheduleSave();
+  return messageId || 0;
+}
+
 // Повтор без ссылки mailto, если Telegram её не принял.
 async function postToGroup(group, post, token = data.config.botToken) {
+  if (post && post.listing && post.listing.objectId) return sendListing(group, post, token);
   try {
     return await sendPost(group, post, token);
   } catch (error) {
@@ -635,6 +726,8 @@ function newGroupPost(fields) {
     withoutSignature: Boolean(fields.withoutSignature),
     pin: Boolean(fields.pin),
     notify: fields.notify !== false,
+    // Объявление об объекте: текст и фотографии собираются в момент отправки, поэтому хранится только «что» и «на каком языке».
+    listing: fields.listing && fields.listing.objectId ? { objectId: cleanText(fields.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(fields.listing.language) ? fields.listing.language : 'ru' } : null,
     status: 'scheduled',
     sendAt: fields.sendAt,
     createdAt: new Date().toISOString(),
@@ -663,6 +756,10 @@ export {
   postMarkup,
   postText,
   postToGroup,
+  listingMessage,
+  publishBlocker,
+  messageLink,
+  sendListing,
   signatureBlock,
   signatureText,
   topicTitle,
