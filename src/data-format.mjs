@@ -10,7 +10,7 @@ import { normalizedSimilarPropertyDetails } from './similar.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 49;
+const DATA_VERSION = 50;
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -652,6 +652,7 @@ function migrateSavedSearch(interfaceText, messages) {
   }
 }
 
+const SAVED_SEARCH_FEATURES = ['sea', 'pool', 'terrace', 'parking', 'garden'];
 const SAVED_SEARCH_TYPES = new Set(['apartment', 'house', 'villa', 'townhouse', 'land', 'commercial', 'newbuild', 'other']);
 function normalizeSavedSearchData(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -670,8 +671,10 @@ function normalizeSavedSearchData(value) {
       : 0,
     sort: '',
   };
+  const features = Array.isArray(incoming.features) ? SAVED_SEARCH_FEATURES.filter((key) => incoming.features.includes(key)) : [];
+  if (features.length) filter.features = features;
   if (filter.minPrice && filter.maxPrice && filter.minPrice > filter.maxPrice) filter.minPrice = 0;
-  if (!filter.deal && !filter.type && !filter.bedrooms && !filter.city && !filter.district && !filter.minPrice && !filter.maxPrice) return null;
+  if (!filter.deal && !filter.type && !filter.bedrooms && !filter.city && !filter.district && !filter.minPrice && !filter.maxPrice && !features.length) return null;
   return {
     filter,
     enabled: source.enabled !== false,

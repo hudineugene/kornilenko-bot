@@ -122,7 +122,7 @@ function mobileButtonText(icon, label, maximum = 28) {
 function catalogFilterCriteriaCount(value) {
   const filter = normalizedCatalogFilter(value);
   return [filter.deal, filter.type, filter.bedrooms, filter.city, filter.district, filter.minPrice, filter.maxPrice, filter.sort]
-    .filter(Boolean).length;
+    .filter(Boolean).length + featuresOf(filter).length;
 }
 
 function contentButtons(record, language, user, kind = 'promotion', catalog = null) {
@@ -488,6 +488,31 @@ function promotionIsActive(record, now = Date.now()) {
 // makes the way back to the chosen conditions predictable.
 const CATALOG_FILTER_MIN_RECORDS = 1;
 const CATALOG_FILTER_BEDROOMS = [1, 2, 3, 4];
+// Признаки, которые клиент называет словами: «у моря», «с бассейном». В данных объекта для них отдельных полей нет, поэтому
+// честно проверяем то, что есть: расстояние до моря (до 500 м) и слова в карточке, которую написал владелец. Не написано в
+// карточке — объект под признак не попадает.
+const CATALOG_FEATURES = ['sea', 'pool', 'terrace', 'parking', 'garden'];
+const SEA_NEAR_METRES = 500;
+const FEATURE_PATTERNS = {
+  sea: /первая линия|первой линии|у моря|на берегу моря|beachfront|seafront|first line|frente al mar|primera l[ií]nea/iu,
+  pool: /бассейн|(?<![\p{L}])pool(?![\p{L}])|piscina/iu,
+  terrace: /террас|terrace|terraza/iu,
+  parking: /парковк|гараж|parking|garage|garaje|aparcamiento/iu,
+  garden: /(?<![\p{L}])сад(?:ом|а|у|е|ы)?(?![\p{L}])|garden|jard[ií]n/iu,
+};
+
+const featuresOf = (filter) => (Array.isArray(filter.features) ? filter.features : []);
+
+function recordHasFeature(record, key) {
+  if (key === 'sea') {
+    const distance = Number(record.distanceSea);
+    if (distance > 0 && distance <= SEA_NEAR_METRES) return true;
+  }
+  const pattern = FEATURE_PATTERNS[key];
+  if (!pattern) return false;
+  const text = ['ru', 'en', 'es'].map((code) => localizedExact(record.title, code, 300) + ' ' + localizedExact(record.description, code, 3000)).join(' ');
+  return pattern.test(text);
+}
 const CATALOG_INLINE_LOCATION_LIMIT = 4;
 const CATALOG_LOCATION_PAGE_SIZE = 6;
 
@@ -511,6 +536,8 @@ function normalizedCatalogFilter(value) {
     maxPrice: Number.isFinite(maxPrice) && maxPrice > 0 && maxPrice <= 1000000000 ? Math.round(maxPrice) : 0,
     sort: ['asc', 'desc'].includes(filter.sort) ? filter.sort : '',
   };
+  const features = Array.isArray(filter.features) ? CATALOG_FEATURES.filter((key) => featuresOf(filter).includes(key)) : [];
+  if (features.length) normalized.features = features;
   // Corrupted or manually edited stored data must never produce an impossible
   // range. The established upper budget is kept and the invalid lower bound
   // is discarded; normal client input is validated before it reaches here.
@@ -519,7 +546,7 @@ function normalizedCatalogFilter(value) {
 }
 
 function catalogFilterActive(filter) {
-  return Boolean(filter.deal || filter.type || filter.bedrooms || filter.city || filter.district || filter.minPrice || filter.maxPrice || filter.sort);
+  return Boolean(filter.deal || filter.type || filter.bedrooms || filter.city || filter.district || filter.minPrice || filter.maxPrice || featuresOf(filter).length || filter.sort);
 }
 
 // Sorting changes only presentation, not which properties belong to a saved
@@ -531,7 +558,7 @@ function catalogSearchFilter(value) {
 
 function catalogSearchActive(value) {
   const filter = catalogSearchFilter(value);
-  return Boolean(filter.deal || filter.type || filter.bedrooms || filter.city || filter.district || filter.minPrice || filter.maxPrice);
+  return Boolean(filter.deal || filter.type || filter.bedrooms || filter.city || filter.district || filter.minPrice || filter.maxPrice || featuresOf(filter).length);
 }
 
 function normalizedSavedSearch(value) {
@@ -625,6 +652,9 @@ function catalogFacetFilter(value, facet, choice, records, language) {
     if (!filter.city || !validDistricts.some((district) => sameCity(district, filter.district))) filter.district = '';
   }
   if (facet === 'district') filter.district = cleanText(choice, 160);
+  if (facet === 'feature' && CATALOG_FEATURES.includes(choice)) {
+    filter.features = featuresOf(filter).includes(choice) ? featuresOf(filter).filter((key) => key !== choice) : CATALOG_FEATURES.filter((key) => key === choice || featuresOf(filter).includes(key));
+  }
   if (facet === 'priceRange') {
     filter.minPrice = 0;
     filter.maxPrice = 0;
@@ -740,7 +770,8 @@ function applyCatalogFilter(records, value, language = 'ru') {
     && (!filter.city || sameCity(recordCity(record, language), filter.city))
     && (!filter.district || sameCity(recordDistrict(record, language), filter.district))
     && (!filter.minPrice || (Number(record.priceValue) > 0 && Number(record.priceValue) >= filter.minPrice))
-    && (!filter.maxPrice || (Number(record.priceValue) > 0 && Number(record.priceValue) <= filter.maxPrice)));
+    && (!filter.maxPrice || (Number(record.priceValue) > 0 && Number(record.priceValue) <= filter.maxPrice))
+    && featuresOf(filter).every((key) => recordHasFeature(record, key)));
   if (!filter.sort) return filtered;
   const direction = filter.sort === 'desc' ? -1 : 1;
   return filtered
@@ -750,6 +781,10 @@ function applyCatalogFilter(records, value, language = 'ru') {
       return (a.price - b.price) * direction || a.index - b.index;
     })
     .map((item) => item.record);
+}
+
+function featureLabel(copy, key) {
+  return copy['feature' + key.charAt(0).toUpperCase() + key.slice(1)] || key;
 }
 
 function catalogFilterSummary(value, language) {
@@ -764,6 +799,7 @@ function catalogFilterSummary(value, language) {
     filter.bedrooms ? filter.bedrooms + '+ ' + copy.bedrooms : '',
     filter.minPrice ? copy.from + ' ' + formattedPriceLimit(filter.minPrice, language) : '',
     filter.maxPrice ? copy.upTo + ' ' + formattedPriceLimit(filter.maxPrice, language) : '',
+    ...featuresOf(filter).map((key) => featureLabel(copy, key).replace(/^\P{L}+/u, '')),
     filter.sort === 'asc' ? copy.sortAsc : filter.sort === 'desc' ? copy.sortDesc : '',
   ].filter(Boolean).join(', ');
 }
@@ -1806,6 +1842,12 @@ function catalogFilterExtraScreen(user, language) {
     { text: mark(filter.sort === 'asc', copy.sortAsc), callback_data: 'cfilter:sort:' + (filter.sort === 'asc' ? 'none' : 'asc') },
     { text: mark(filter.sort === 'desc', copy.sortDesc), callback_data: 'cfilter:sort:' + (filter.sort === 'desc' ? 'none' : 'desc') },
   ]);
+  // Признаки: показываем те, что есть хотя бы у одного объекта (или уже выбраны); по два в ряд, галочка — выбран.
+  const published = publishedCatalog(user);
+  const featureButtons = CATALOG_FEATURES
+    .filter((key) => featuresOf(filter).includes(key) || published.some((record) => recordHasFeature(record, key)))
+    .map((key) => ({ text: (featuresOf(filter).includes(key) ? '✓ ' : '') + featureLabel(copy, key), callback_data: 'cfilter:feat:' + key }));
+  for (let index = 0; index < featureButtons.length; index += 2) rows.push(featureButtons.slice(index, index + 2));
   if (catalogSearchActive(filter)) {
     rows.push([{
       text: sameSavedSearch(user.savedSearch, filter) ? savedCopy.open : user.savedSearch ? savedCopy.update : savedCopy.save,
@@ -1963,7 +2005,12 @@ async function handleCatalogFilterCallback(query, token) {
   // Бюджет задан до выбора сделки: в смешанном каталоге это пороги продажи, и «Продажа» ставится сама.
   if ((action === 'price' || action === 'minprice') && (filter.maxPrice || filter.minPrice) && !filter.deal) filter.deal = catalogPriceDeal(filter, publishedCatalog(user));
   if (action === 'sort') filter.sort = ['asc', 'desc'].includes(value) ? value : '';
-  if (['deal', 'type', 'bed', 'city', 'district', 'price', 'minprice', 'sort'].includes(action)) {
+  if (action === 'feat') {
+    const toggled = catalogFacetFilter(filter, 'feature', value, [], user.preferredLanguage).features;
+    if (toggled && toggled.length) filter.features = toggled;
+    else delete filter.features;
+  }
+  if (['deal', 'type', 'bed', 'city', 'district', 'price', 'minprice', 'sort', 'feat'].includes(action)) {
     user.catalogFilter = catalogFilterActive(filter) ? filter : null;
     scheduleSave();
   }
@@ -2094,6 +2141,7 @@ export {
   numericText,
   objectCaption,
   marketComparison,
+  recordHasFeature,
   objectCaptionHtml,
   objectPriceText,
   openPendingStartPayload,

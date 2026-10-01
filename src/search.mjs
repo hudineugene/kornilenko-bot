@@ -21,6 +21,21 @@ const TYPE_TERMS = {
 };
 // «3 bed villa» — так пишут чаще, чем «3 bedroom»: короткие «bed»/«beds» тоже спальни.
 const BEDROOM_WORDS = ['спальня', 'спальню', 'спальней', 'спальни', 'спален', 'спальнями', 'спальне', 'habitacion', 'habitaciones', 'bedroom', 'bedrooms', 'beds', 'bed', 'dormitorio', 'dormitorios', 'habitacion', 'habitaciones'];
+// Признаки словами: «у моря», «с бассейном». Названия мест эти фразы не заменяют (см. NEUTRAL_PLACE_PHRASES).
+const FEATURE_TERMS = {
+  pool: ['с бассейном', 'бассейном', 'бассейн', 'бассейна', 'swimming pool', 'with pool', 'with a pool', 'pool', 'con piscina', 'piscina'],
+  terrace: ['с террасой', 'террасой', 'терраса', 'террасу', 'terrace', 'with terrace', 'with a terrace', 'terraza', 'con terraza'],
+  parking: ['с парковкой', 'парковкой', 'парковка', 'парковку', 'с гаражом', 'гаражом', 'гараж', 'parking', 'garage', 'garaje', 'aparcamiento', 'con garaje'],
+  garden: ['с садом', 'садом', 'сад', 'garden', 'with garden', 'with a garden', 'jardin', 'con jardin'],
+};
+
+function parseFeatures(message) {
+  const features = [];
+  if (phraseIncluded(message, NEUTRAL_PLACE_PHRASES)) features.push('sea');
+  for (const key of ['pool', 'terrace', 'parking', 'garden']) if (phraseIncluded(message, FEATURE_TERMS[key])) features.push(key);
+  return features;
+}
+
 const LOCATION_PREPOSITIONS = ['в', 'около', 'рядом с', 'in', 'near', 'around', 'en', 'cerca de'];
 
 // «Рядом с морем», «near the beach» — пожелание, а не название места: раньше «рядом с» / «near»
@@ -238,8 +253,9 @@ function naturalCatalogFilter(message, records, language) {
     }
   }
 
-  const filter = { deal, type, bedrooms, city, district, minPrice, maxPrice, sort: '' };
-  const count = [deal, type, bedrooms, city, district, minPrice, maxPrice].filter(Boolean).length;
+  const features = parseFeatures(message);
+  const filter = { deal, type, bedrooms, city, district, minPrice, maxPrice, ...(features.length ? { features } : {}), sort: '' };
+  const count = [deal, type, bedrooms, city, district, minPrice, maxPrice].filter(Boolean).length + (features.length ? 1 : 0);
   const mentionsUnknownLocation = !city && !district && phraseIncluded(withoutNeutralPlaces(message), LOCATION_PREPOSITIONS);
   const looksLikeQuestion = /[?？]/u.test(message)
     || phraseIncluded(message, ['есть ли', 'можно ли', 'сколько', 'какая цена', 'is there', 'are there', 'how much', 'what price', 'hay', 'cuánto', 'cuanto', 'qué precio', 'que precio']);
@@ -250,6 +266,8 @@ function naturalCatalogFilter(message, records, language) {
   // «apartment for rent», «снять квартиру»: сделка и тип без города и цены — тоже ясная
   // просьба, если фраза короткая и не задаёт незнакомого места.
   if (count === 2 && deal && type && normalized.split(' ').length <= 6 && !mentionsUnknownLocation) return filter;
+  if (count === 2 && features.length && (type || deal) && normalized.split(' ').length <= 7 && !mentionsUnknownLocation) return filter;
+  if (count === 1 && features.length && normalized.split(' ').length <= 4) return filter;
   if (count === 1 && city && normalized.split(' ').length <= 3) return filter;
   if (count === 1 && type && TYPE_TERMS[type].some((term) => normalized === placeKey(term))) return filter;
   return null;
@@ -268,7 +286,7 @@ function searchSignalCount(text, user) {
   const place = mentionedPlaces(message, records, language, 'city').length > 0 || mentionedPlaces(message, records, language, 'district').length > 0;
   const range = parsePriceRange(message);
   const price = Boolean(range || parseMinPrice(message) || parseMaxPrice(message));
-  return [deal, type, place, price, parseBedrooms(message) > 0].filter(Boolean).length;
+  return [deal, type, place, price, parseBedrooms(message) > 0, parseFeatures(message).length > 0].filter(Boolean).length;
 }
 
 // What the message asks for:
@@ -294,7 +312,7 @@ function catalogRequest(text, user) {
 
   const filter = naturalCatalogFilter(message, records, language);
   if (!filter) return null;
-  const criteria = [filter.deal, filter.type, filter.bedrooms, filter.city, filter.district, filter.minPrice, filter.maxPrice].filter(Boolean).length;
+  const criteria = [filter.deal, filter.type, filter.bedrooms, filter.city, filter.district, filter.minPrice, filter.maxPrice].filter(Boolean).length + ((filter.features || []).length ? 1 : 0);
   if (criteria === 1 && filter.city && !filter.district) return { kind: 'city', city: filter.city };
   return { kind: 'filter', filter };
 }
@@ -303,6 +321,7 @@ export {
   catalogRequest,
   naturalCatalogFilter,
   parseBedrooms,
+  parseFeatures,
   parseMinPrice,
   parseMaxPrice,
   parsePriceRange,

@@ -212,7 +212,7 @@ test('the notification about a photo is a reply to the copied photo', async () =
 
 test('a direct message from the client card is stored in the unified conversation', async () => {
   const client = createChat({ firstName: 'Елена' });
-  await client.say('Ищу квартиру рядом с морем');
+  await client.say('Ищу квартиру для семьи, нужна помощь с выбором');
   const inquiry = client.inquiries[0];
   const data = bot.getData();
   const password = bot.hashPassword('correct-password');

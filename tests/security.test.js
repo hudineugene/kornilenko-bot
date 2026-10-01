@@ -152,11 +152,11 @@ test('notifications sent before the upgrade still route, using the last marker',
 test('messages in a row are merged into one inquiry', async () => {
   const data = resetData((next) => knownUser(next, 103));
   await bot.processUpdates([textMessage(103, 'Добрый день')], TOKEN);
-  await bot.processUpdates([textMessage(103, 'Интересует вилла у моря')], TOKEN);
+  await bot.processUpdates([textMessage(103, 'Уточните, пожалуйста, условия оплаты')], TOKEN);
   await settle();
   const inquiries = data.inquiries.filter((item) => item.userId === '103');
   assert.equal(inquiries.length, 1);
-  assert.equal(inquiries[0].text, 'Добрый день\n\nИнтересует вилла у моря');
+  assert.equal(inquiries[0].text, 'Добрый день\n\nУточните, пожалуйста, условия оплаты');
 });
 
 test('a flood from one user keeps other clients\' inquiries and mutes admin notifications', async () => {

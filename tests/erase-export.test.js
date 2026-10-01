@@ -27,7 +27,7 @@ test.after(cleanup);
 async function clientEverywhere() {
   const chat = createChat();
   await chat.say('/start');
-  await chat.say('Здравствуйте, интересует квартира у моря');
+  await chat.say('Здравствуйте, подскажите про документы');
   const data = bot.getData();
   const group = data.groups[0];
   group.messages.push({ messageId: 501, userId: String(chat.id), name: 'Анна', username: 'анна', text: 'Привет всем', kind: 'text', fromBot: false, date: new Date().toISOString() });
