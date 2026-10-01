@@ -137,7 +137,7 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     // на просмотр не записывают, у него остаётся только «Связаться».
     const askPrice = priceOnRequest(record, language);
     const canVisit = record.status === 'active';
-    if (askPrice) first.push({ text: mobileButtonText('💰', action.askPrice), callback_data: 'property:price:' + record.id });
+    if (askPrice) first.push({ text: mobileButtonText('💰', action.askPriceShort || action.askPrice), callback_data: 'property:price:' + record.id });
     else if (canVisit) first.push({ text: mobileButtonText('📅', action.viewingShort || action.viewing), callback_data: 'property:viewing:' + record.id });
     first.push({ text: mobileButtonText('💬', action.contact), callback_data: 'property:manager:' + record.id });
     rows.push(first);
@@ -146,11 +146,20 @@ function contentButtons(record, language, user, kind = 'promotion', catalog = nu
     // частый следующий шаг и стоил двух нажатий.
     const photos = recordImages(record, language);
     const second = [];
-    // Цену спросили в первом ряду — запись на просмотр не теряется, а стоит тут.
-    if (askPrice && canVisit) second.push({ text: mobileButtonText('📅', action.viewingShort || action.viewing), callback_data: 'property:viewing:' + record.id });
-    if (photos.length > 1) second.push({ text: '📷 ' + action.photos + ' · ' + photos.length, callback_data: 'property:gallery:' + record.id });
-    second.push({ text: mobileButtonText('ℹ️', action.details), callback_data: 'property:details:' + record.id });
-    rows.push(second);
+    const galleryButton = photos.length > 1 ? { text: '📷 ' + action.photos + ' · ' + photos.length, callback_data: 'property:gallery:' + record.id } : null;
+    const detailsButton = { text: mobileButtonText('ℹ️', action.details), callback_data: 'property:details:' + record.id };
+    if (askPrice && canVisit) {
+      // Цену спросили в первом ряду — запись на просмотр не теряется, а стоит тут. Больше двух кнопок в ряду не бывает:
+      // «Подробнее» с фото — отдельным рядом.
+      second.push({ text: mobileButtonText('📅', action.viewingShort || action.viewing), callback_data: 'property:viewing:' + record.id });
+      second.push(galleryButton || detailsButton);
+      rows.push(second);
+      if (galleryButton) rows.push([detailsButton]);
+    } else {
+      if (galleryButton) second.push(galleryButton);
+      second.push(detailsButton);
+      rows.push(second);
+    }
 
     // Ряд значков: избранное, сравнение и переход между объектами. Подписи тут
     // не нужны — значки понятны, а место на телефоне дорого.
@@ -1796,6 +1805,11 @@ function catalogFilterPanel(user) {
     ? [[{ text: markedFilterLabel(catalogPriceLabel(filter, language), Boolean(filter.minPrice || filter.maxPrice)), callback_data: 'cfilter:prices:0' }]]
     : [];
 
+  // Город и цена — один ряд, когда обе подписи короткие (по две кнопки в ряду — до 15 знаков): так фильтр остаётся в шести рядах.
+  if (locationRows.length === 1 && locationRow.length === 1 && priceRows.length === 1 && [locationRow[0], priceRows[0][0]].every((button) => Array.from(button.text).length <= 15)) {
+    locationRow.push(priceRows[0][0]);
+    priceRows.length = 0;
+  }
   // «Показать» и «Ещё» — одним рядом: экран фильтра не длиннее шести рядов.
   const tail = [
     [{ text: copy.show + ' ' + found, callback_data: 'cfilter:show' }, { text: '⋯ ' + copy.moreOptions, callback_data: 'cfilter:more' }],

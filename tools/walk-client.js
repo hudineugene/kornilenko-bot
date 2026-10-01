@@ -78,6 +78,8 @@ function report(title, from, chatId) {
     const shown = String(b.text || b.caption || (b.media && b.media.caption) || '');
     const rows = phoneLines(shown);
     out.push('  ' + kind + ' ' + shown.replace(/\n/g, '\n     ').slice(0, 1500) + buttons(b.reply_markup) + '\n   ↳ строк на телефоне: ' + rows);
+    // Карточка объекта под фото: в каталоге до 10 строк телефона, в избранном, сравнении и «Похожих» — до 12.
+    if (call.method === 'sendPhoto' && call.body.caption && rows > 12) notes.push(title + ' — карточка в ' + rows + ' строк (правило: до 12)');
     if (rows > 30) notes.push(title + ' — ответ в ' + rows + ' строк (больше экрана)');
     // Жирный заголовок — у каждого экрана с кнопками (правило этапов 45 и 49): первая строка — «значок Название».
     if (['sendMessage', 'editMessageText'].includes(call.method) && b.reply_markup && b.reply_markup.inline_keyboard && !(Array.isArray(b.entities) && b.entities.some((item) => item.type === 'bold' && item.offset === 0)) && !(b.parse_mode === 'HTML' && String(b.text || '').startsWith('<b>'))) {
@@ -121,7 +123,8 @@ function client(id, name, lang) {
         if (String(call.body.chat_id) !== String(id) || !['sendMessage', 'sendPhoto', 'editMessageText', 'editMessageMedia', 'editMessageCaption'].includes(call.method)) continue;
         const withPhoto = call.method === 'sendPhoto' || call.method === 'editMessageMedia' || call.method === 'editMessageCaption';
         const caption = call.body.caption || (call.body.media && call.body.media.caption) || '';
-        const base = { message_id: api.lastMessageId(), date: now(), chat };
+        // Клавиатура приходит вместе с сообщением, как в Telegram: по ней бот видит, какое сердечко сейчас нарисовано (🤍 или ❤️).
+        const base = { message_id: api.lastMessageId(), date: now(), chat, ...(call.body.reply_markup ? { reply_markup: call.body.reply_markup } : {}) };
         return withPhoto ? { ...base, photo: [{ file_id: 'walk-photo', file_unique_id: 'walk', width: 800, height: 600 }], caption } : { ...base, text: call.body.text || '' };
       }
       return { message_id: 1, date: now(), chat, text: '' };

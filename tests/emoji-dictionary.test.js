@@ -32,3 +32,32 @@ test('🔖 отмечает объект, а не что-то ещё', () => {
   const uses = linesWith('🔖');
   assert.ok(uses.length >= 10, 'маркер объекта на месте');
 });
+
+// Этап 49: остальные знаки словаря — тоже один знак, одно значение.
+const where = (glyph, allowed) => linesWith(glyph).filter(({ where: place, line }) => !allowed.test(place + ' ' + line)).map((item) => item.where);
+
+test('👀 — «показать результат» (мастер и фильтр) и реакция бота; «Пока смотрю» — 🧭', () => {
+  assert.deepEqual(where('👀', /wizardShow|show: |showNearby|реакци|emoji: '👀'|inquiries\.mjs/), []);
+});
+
+test('🔎 — фильтр и поиск по параметрам; «можно рассмотреть» — 💡, «Подобрать объект» — ✨', () => {
+  assert.deepEqual(linesWith('🔎').filter(({ line }) => /tierConsider|selection:/.test(line)).map((item) => item.where), []);
+});
+
+test('🔑 — только «про аренду»; состояние объекта — 🛠', () => {
+  assert.deepEqual(where('🔑', /goal\.mjs/), []);
+});
+
+test('🆕 — только состояние заявки («получена», «ждёт ответа»); новые объекты — 🏘', () => {
+  assert.deepEqual(where('🆕', /statusNew|inquiries\.mjs/), []);
+});
+
+test('🔄 — только «Обновить»; «начать заново» — ↺', () => {
+  assert.deepEqual(where('🔄', /update: |Обновить|Update|Actualizar/), []);
+});
+
+test('«Ещё»: выбранный вариант — ✓, а ✅ — только переключатели и «готово»', () => {
+  const source = fs.readFileSync(path.join(SRC, 'catalog.mjs'), 'utf8');
+  const extra = source.slice(source.indexOf('function catalogFilterExtraScreen'), source.indexOf('function catalogFilterExtraScreen') + 2400);
+  assert.ok(!extra.includes("'✅ '"), 'на экране «Ещё» выбранный вариант отмечен ✓');
+});

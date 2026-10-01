@@ -447,7 +447,7 @@ test.describe('my requests', () => {
     const more = await chat.say(bot.text.menu.ru.more);
     assert.ok(callbacksOf(more.last.markup).includes('myreq:list'));
     const step = await chat.press('myreq:list');
-    assert.match(step.last.text, /^У вас пока нет заявок/);
+    assert.match(step.last.text, /^📨 Ваши заявки\nУ вас пока нет заявок/);
   });
 
   test('a client cancels a viewing after a second tap, and the admin is told', async () => {
