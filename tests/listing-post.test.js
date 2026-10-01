@@ -92,37 +92,47 @@ function setGroups(groups) {
   });
 }
 
-test('пост собран целиком: название, цена «от», место, характеристики цитатой, описание с заголовками, ссылки, хештеги', () => {
+test('пост устроен как карточка в боте: фото с подписью, отдельно характеристики, ниже описание с заголовками', () => {
   const built = bot.buildListing(objectById(), 'ru', { source: 'group' });
-  assert.match(built.caption, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>/, 'название жирным, знаки < и & не ломают разметку');
-  assert.match(built.caption, /💶 <b>от\s147\s312\s€/);
-  assert.match(built.caption, /📍 Финестрат, Эль Мускарет/);
+  // Подпись под альбомом — как карточка каталога: название, тип и сделка, цена, место, строка значков.
+  assert.match(built.caption, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>\n💶 <b>от\s147\s312\s€/, 'название жирным, знаки < и & не ломают разметку');
+  assert.match(built.caption, /📍 Финестрат, Эль Мускарет\n🛏 2 · 🚿 1 · 📐 53 м²/, 'строка значков как у карточки в боте');
   assert.ok(built.caption.length <= 1024, 'подпись к фото — не длиннее 1024 знаков');
 
   const text = built.text;
-  assert.match(text, /<blockquote>🛏[^<]*\n🚿[^<]*\n📐[^<]*53[^<]*<\/blockquote>/, 'характеристики — цитатой');
-  assert.match(text, /🛠 Состояние: Новое/);
-  assert.match(text, /🏷 № объекта: RIV-1/);
-  assert.match(text, /• 14 апартаментов на двух этажах\n• Бассейн и парковка/, 'маркеры списка сохранены');
-  assert.match(text, /<b>Как купить:<\/b> резервирование/, 'заголовок абзаца выделен');
-  assert.ok(!/<b>Новый комплекс/.test(text), 'вступление не выделяется');
+  assert.ok(!/Riviera/.test(text), 'есть фотографии — название уже в подписи альбома, второй раз не повторяем');
+  assert.match(text, /^💶 <b>от\s147\s312\s€[^\n]*\n📍 Финестрат, Эль Мускарет\n\n🧾 <b>Характеристики<\/b>\n<blockquote>🛏 Спальни: <b>2<\/b>\n🚿 Санузлы: <b>1<\/b>\n📐 Площадь: <b>53 м²<\/b>/, 'сначала цена и место, затем блок «Характеристики» цитатой, значения жирным');
+  assert.match(text, /🛠 Состояние: <b>Новое<\/b>/);
+  assert.match(text, /🏷 № объекта: <b>RIV-1<\/b><\/blockquote>/);
+  assert.ok(text.indexOf('🧾') < text.indexOf('📝 <b>Описание</b>'), 'характеристики выше описания');
+  assert.match(text, /📝 <b>Описание<\/b>\nНовый комплекс из 14 апартаментов в Финестрате\./, 'вступление — под заголовком, без выделения');
+  assert.match(text, /▫️ 14 апартаментов на двух этажах\n▫️ Бассейн и парковка/, 'маркеры списка — одного вида');
+  assert.match(text, /<b>💳 Как купить<\/b>\nРезервирование, затем договор\./, 'метка абзаца — заголовком со значком, текст под ним с большой буквы');
+  assert.match(text, /<b>⏳ Сроки<\/b>\nСтройка/);
   assert.match(text, /🗺 <a href="https:\/\/maps\.google\.com\/\?q=Finestrat">Карта<\/a>/);
   assert.match(text, /🎥 <a href="https:\/\/youtu\.be\/tour123">Видео-тур<\/a>/);
   assert.match(text, /#продажа #квартира #Финестрат #ЭльМускарет/, 'хештеги из сделки, типа, города и района');
   assert.equal(built.buttonUrl, 'https://t.me/kornilenko_bot?start=property_listing-object-1__src_group');
   assert.equal(built.images.length, 3);
   assert.equal(built.truncated, false);
+
+  // Без фотографий подписи альбома нет — название и тип уходят в текст.
+  const bare = bot.buildListing(listingObject({ imagesByLanguage: { ru: [], en: [], es: [] } }), 'ru');
+  assert.match(bare.text, /^🏡 <b>Riviera &lt;1&gt; &amp; Co<\/b>\n<i>Квартира · Продажа<\/i>/);
+  assert.equal(bare.images.length, 0);
 });
 
 test('на английском — свой текст и свои подписи; нет перевода — русский с честной пометкой', () => {
   const en = bot.buildListing(objectById(), 'en');
-  assert.match(en.text, /For sale/);
-  assert.match(en.text, /<b>How to buy:<\/b> reservation\./);
+  assert.match(en.caption, /For sale/);
+  assert.match(en.text, /🧾 <b>Key details<\/b>/);
+  assert.match(en.text, /📝 <b>About the property<\/b>\nEnglish text\./);
+  assert.match(en.text, /<b>💳 How to buy<\/b>\nReservation\./);
   assert.match(en.text, /#forsale/);
   assert.equal(en.buttonText, '🤖 View in the bot');
 
   const es = bot.buildListing(objectById(), 'es');
-  assert.match(es.text, /Novedad|Venta/);
+  assert.match(es.caption, /Venta/);
   assert.match(es.text, /Texto en ruso/, 'испанского описания нет — русский текст с пометкой');
   assert.match(es.text, /Как купить/);
 });

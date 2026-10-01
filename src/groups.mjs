@@ -533,7 +533,7 @@ async function sendListing(group, post, token = data.config.botToken) {
   const markup = built.markup;
   const threadId = postThreadId(group, post);
   const threadOptions = threadId ? { threadId } : {};
-  const photos = built.images.filter((image) => !imageHasTransparency(image)).slice(0, 10);
+  const photos = built.images;
   let albumIds = [];
   if (photos.length >= 2) {
     const album = await sendPhotoAlbum(group.id, photos, built.caption, token, { parseMode: 'HTML', ...threadOptions });

@@ -237,6 +237,11 @@ function listingKind(group) {
   return group.type === "channel" ? "канал" : group.isForum ? "группа с темами" : "группа";
 }
 
+// В Telegram цитата — блок: перенос строки до и после неё не даёт пустой строки. В предпросмотре (pre-wrap) он её давал.
+function quoteBreaks(html) {
+  return String(html || "").replace(/\n(<blockquote>)/g, "$1").replace(/(<\/blockquote>)\n/g, "$1");
+}
+
 function openChannelPost(id) {
   var record = (state.objects || []).find(function (item) { return String(item.id) === String(id); });
   if (!record) return;
@@ -321,7 +326,7 @@ function openChannelPost(id) {
           }).join("") + "</div>" : "";
           box.querySelector("#listingPreview").innerHTML =
             (album || preview.caption ? '<div class="tg-bubble">' + album + (preview.caption ? '<div class="tg-text">' + preview.caption + "</div>" : "") + "</div>" : "") +
-            '<div class="tg-bubble"><div class="tg-text">' + preview.html + "</div></div>" +
+            '<div class="tg-bubble"><div class="tg-text">' + quoteBreaks(preview.html) + "</div></div>" +
             (preview.hasButton ? '<div class="tg-buttons"><div class="tg-button">' + esc(preview.buttonText) + "</div></div>" : '<div class="tg-note warn-text">Кнопки «Смотреть в боте» не будет: у бота нет публичного имени.</div>');
           var notes = [];
           if (!shots.length) notes.push("У объекта нет фотографий — уйдёт только текст.");

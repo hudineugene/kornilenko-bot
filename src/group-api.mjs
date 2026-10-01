@@ -7,7 +7,7 @@ import { MAX_RUBRICS, normalizePublishing } from './data-format.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { telegramRequest } from './telegram.mjs';
-import { imageHasTransparency, persistImage } from './media.mjs';
+import { persistImage } from './media.mjs';
 import { json, parseUploadedImage, readJson, requireAuth } from './admin-http.mjs';
 import { objectCaption, propertyDeepLink, recordImages } from './catalog.mjs';
 import {
@@ -332,7 +332,7 @@ async function handleGroupApi(req, res, url) {
         language,
         caption: message.caption,
         html: message.html,
-        photoCount: message.images.filter((image) => !imageHasTransparency(image)).length,
+        photoCount: message.images.length,
         buttonText: message.buttonText,
         hasButton: Boolean(message.markup),
         truncated: message.truncated,
