@@ -882,7 +882,8 @@ function understoodLine(user, language, count) {
   if (!summary) return '';
   const wizard = SELECTION_FORM_TEXT[language] || SELECTION_FORM_TEXT.ru;
   const found = (count === 1 && wizard.wizardFoundOne ? wizard.wizardFoundOne : wizard.wizardFound).replace('{count}', () => String(count));
-  return '🔎 ' + shortenedText(summary.replace(/, /g, ' · '), 70) + ' — ' + found;
+  // Не длиннее двух строк телефона (≈72 знака): условия сокращаются, число подходящих остаётся.
+  return '🔎 ' + shortenedText(summary.replace(/, /g, ' · '), Math.max(20, 70 - Array.from(found).length - 3)) + ' — ' + found;
 }
 
 function catalogHeading(mode, language, user = null, count = 0) {
@@ -994,7 +995,9 @@ function propertyCardCaption(user, record, language, catalog) {
   // room while the Details button still exposes the full property text.
   const recommendationLength = recommendation.replace(/<[^>]*>/g, '').length;
   const maximum = recommendation ? Math.max(300, 950 - heading.length - position.length - recommendationLength) : 900;
-  return [context, recommendation, objectCaptionHtml(record, language, { maximum })].filter(Boolean).join('\n\n');
+  // Строка «что понял бот» в каталоге стоит вплотную к карточке, без пустой строки: так карточка с условиями не длиннее 12 строк.
+  const separator = catalog && catalog.mode === 'all' && plainHeading.startsWith('🔎 ') && !recommendation ? '\n' : '\n\n';
+  return [context, recommendation, objectCaptionHtml(record, language, { maximum })].filter(Boolean).join(separator);
 }
 
 function catalogRecords(user, mode = 'all') {

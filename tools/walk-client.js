@@ -76,10 +76,14 @@ function report(title, from, chatId) {
     toClient += 1;
     const kind = call.method === 'sendPhoto' ? '🖼' : call.method === 'sendMediaGroup' ? '🖼🖼 альбом' : call.method.startsWith('edit') ? '✏️' : '🤖';
     const shown = String(b.text || b.caption || (b.media && b.media.caption) || '');
-    const rows = phoneLines(shown);
+    // Сворачиваемая цитата Telegram (expandable_blockquote) показывает три строки, остальное — по нажатию.
+    const quote = (Array.isArray(b.entities) ? b.entities : []).find((item) => item.type === 'expandable_blockquote');
+    const rows = quote ? phoneLines(shown.slice(0, quote.offset)) + 3 : phoneLines(shown);
     out.push('  ' + kind + ' ' + shown.replace(/\n/g, '\n     ').slice(0, 1500) + buttons(b.reply_markup) + '\n   ↳ строк на телефоне: ' + rows);
     // Карточка объекта под фото: в каталоге до 10 строк телефона, в избранном, сравнении и «Похожих» — до 12.
-    if (call.method === 'sendPhoto' && call.body.caption && rows > 12) notes.push(title + ' — карточка в ' + rows + ' строк (правило: до 12)');
+    // Над карточкой каталога с условиями — строка «что понял бот» (до двух строк), поэтому там до 13.
+    const limit = String(call.body.caption || '').startsWith('<i>🔎 ') ? 13 : 12;
+    if (call.method === 'sendPhoto' && call.body.caption && rows > limit) notes.push(title + ' — карточка в ' + rows + ' строк (правило: до ' + limit + ')');
     if (rows > 30) notes.push(title + ' — ответ в ' + rows + ' строк (больше экрана)');
     // Жирный заголовок — у каждого экрана с кнопками (правило этапов 45 и 49): первая строка — «значок Название».
     if (['sendMessage', 'editMessageText'].includes(call.method) && b.reply_markup && b.reply_markup.inline_keyboard && !(Array.isArray(b.entities) && b.entities.some((item) => item.type === 'bold' && item.offset === 0)) && !(b.parse_mode === 'HTML' && String(b.text || '').startsWith('<b>'))) {

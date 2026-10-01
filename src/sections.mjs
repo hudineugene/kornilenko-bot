@@ -1,6 +1,6 @@
 // Акции, контакты, «О компании», помощь и обработка их кнопок.
 
-import { cleanText, displayPhone, fillTemplate, managerNameFor } from './util.mjs';
+import { cleanText, collapsedTail, displayPhone, fillTemplate, managerNameFor } from './util.mjs';
 import { defaultData, normalizeGuidePages } from './data-format.mjs';
 import { imageExists } from './media.mjs';
 import { COMPARISON_TEXT, EMPTY_STATE_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, LEAD_FORM_TEXT, LANGUAGE_SELECTED, MANAGER_CONTACT_TEXT, MENU_LABELS, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT } from './texts.mjs';
@@ -198,7 +198,9 @@ async function sendAbout(chatId, user, token, full = false) {
   if (!full && text.length < source.length) rows.push([{ text: '📖 ' + navigation.readMore, callback_data: 'about:full' }]);
   rows.push([{ text: (MENU_LABELS[language] || MENU_LABELS.ru).contacts, callback_data: 'about:contact' }]);
   rows.push([{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }]);
-  await sendUiMessage(chatId, user, text, token, { reply_markup: { inline_keyboard: rows } });
+  // Полный текст: заголовок и первый абзац видны, остальное сворачивается — «О компании» не вытягивается на три экрана.
+  const collapsed = full ? collapsedTail(text, 2) : { text };
+  await sendUiMessage(chatId, user, collapsed.text, token, { reply_markup: { inline_keyboard: rows }, ...(collapsed.entities ? { entities: collapsed.entities } : {}) });
 }
 
 // «Как купить в Испании»: пять коротких экранов, которые листаются кнопками.

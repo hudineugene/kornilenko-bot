@@ -159,7 +159,21 @@ function backButtonText(label) {
   return '⬅️ ' + String(label || '').replace(/^\p{Extended_Pictographic}️?\s*/u, '');
 }
 
+// Длинный текст экрана: заголовок и первый абзац видны сразу, остальное — сворачиваемая цитата Telegram («Показать полностью»).
+// Возвращает { text, entities } или { text } для короткого текста. Смещения — в единицах UTF-16, как их считает Telegram.
+function collapsedTail(text, visibleParagraphs = 2) {
+  const value = String(text || '');
+  const parts = value.split('\n\n');
+  if (value.length < 500 || parts.length <= visibleParagraphs) return { text: value };
+  const head = parts.slice(0, visibleParagraphs).join('\n\n');
+  const tail = parts.slice(visibleParagraphs).join('\n\n');
+  if (!tail.trim()) return { text: value };
+  const offset = head.length + 2;
+  return { text: head + '\n\n' + tail, entities: [{ type: 'expandable_blockquote', offset, length: tail.length }] };
+}
+
 export {
+  collapsedTail,
   backButtonText,
   displayPhone,
   formatMoney,

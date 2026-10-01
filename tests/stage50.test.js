@@ -142,3 +142,18 @@ test('пустой результат: рядом со сбросом есть �
   assert.ok(callbacks.includes('cfilter:open') && callbacks.includes('cfilter:reset'), callbacks.join(' | '));
   assert.match(step.last.text, /Без типа «Участок» — найдено: \d/, step.last.text);
 });
+
+test('длинные тексты: политика и «О компании» — первый абзац виден, остальное сворачиваемой цитатой', async () => {
+  const long = Array.from({ length: 8 }, (_, index) => 'Абзац ' + (index + 1) + '. ' + 'Текст о том, как мы работаем. '.repeat(8)).join('\n\n');
+  bot.getData().config.menu.ru.about = long;
+  const chat = createChat();
+  const about = await chat.press('about:full');
+  const message = [...about.calls].reverse().find((call) => ['sendMessage', 'editMessageText'].includes(call.method) && call.body.reply_markup);
+  const quote = (message.body.entities || []).find((item) => item.type === 'expandable_blockquote');
+  assert.ok(quote, 'есть сворачиваемая цитата: ' + JSON.stringify(message.body.entities));
+  assert.ok(String(message.body.text).slice(0, quote.offset).includes('Абзац 1'), 'начало видно сразу');
+  assert.ok(!String(message.body.text).slice(0, quote.offset).includes('Абзац 8'), 'конец — под цитатой');
+  assert.equal(quote.offset + quote.length, String(message.body.text).length, 'цитата доходит до конца текста');
+  const bold = (message.body.entities || []).find((item) => item.type === 'bold' && item.offset === 0);
+  assert.ok(bold, 'заголовок экрана по-прежнему жирный');
+});

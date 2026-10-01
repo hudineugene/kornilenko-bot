@@ -1,7 +1,7 @@
 // Права клиента на свои данные: что бот о нём хранит, как мы с этим обращаемся
 // и кнопка «удалить всё». Клиент не должен просить об этом менеджера.
 
-import { backButtonText, cleanText, localDayKey } from './util.mjs';
+import { backButtonText, cleanText, collapsedTail, localDayKey } from './util.mjs';
 import { PRIVACY_TEXT, MY_AREA_TEXT } from './texts.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { eraseUserData, normalizeUser } from './users.mjs';
@@ -96,7 +96,14 @@ async function sendPrivacyCentre(chatId, user, token) {
 // Политика бывает длинной: отправляем частями, чтобы Telegram не обрезал.
 async function sendPrivacyPolicy(chatId, user, token) {
   const copy = copyFor(user);
-  const parts = splitTelegramText([copy.policyTitle, '', copy.policy].join('\n'));
+  const whole = [copy.policyTitle, '', copy.policy].join('\n');
+  // Политика — первый абзац сразу, остальное сворачиваемой цитатой; очень длинная (больше одного сообщения) идёт частями, как раньше.
+  if (whole.length <= 3800) {
+    const collapsed = collapsedTail(whole, 3);
+    await sendMessage(chatId, collapsed.text, token, { reply_markup: policyMarkup(user), ...(collapsed.entities ? { entities: collapsed.entities } : {}) });
+    return true;
+  }
+  const parts = splitTelegramText(whole);
   for (let index = 0; index < parts.length; index += 1) {
     const last = index === parts.length - 1;
     await sendMessage(chatId, parts[index], token, last ? { reply_markup: policyMarkup(user) } : {});
