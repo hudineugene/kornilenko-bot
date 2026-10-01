@@ -579,7 +579,8 @@ async function sendListing(group, post, token = data.config.botToken) {
   if (threadId) rememberTopic(group, threadId, { at: group.lastPostAt });
   // Что и куда уже опубликовано — для предупреждения «это объявление здесь уже было».
   record.publications = [
-    { groupId: group.id, title: cleanText(group.title, 200), language: built.language, at: group.lastPostAt, messageId: messageId || 0, threadId, link: messageLink(group, messageId || albumIds[0] || 0, threadId) },
+    // messageIds — все сообщения поста (альбом и текст): по ним пост удаляется из группы целиком.
+    { groupId: group.id, title: cleanText(group.title, 200), language: built.language, at: group.lastPostAt, messageId: messageId || 0, messageIds: [...new Set([...albumIds, messageId].filter(Boolean))], threadId, link: messageLink(group, messageId || albumIds[0] || 0, threadId) },
     ...(Array.isArray(record.publications) ? record.publications : []),
   ].slice(0, 30);
   group.listingLanguage = built.language;

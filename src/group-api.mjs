@@ -172,11 +172,55 @@ async function publishListing(res, record, body) {
   return json(res, 200, { ok: results.some((row) => row.ok), results, publications: record.publications || [] });
 }
 
+// Удаление опубликованного объявления из группы: все его сообщения (альбом и текст). Запись об этом посте на объекте
+// снимается, только когда удалено всё. Сообщение, которого уже нет, считается удалённым. Если Telegram не даёт удалить
+// (прошло много времени, нет права), запись остаётся и панель предлагает убрать её из списка вручную (forget).
+function deleteFailureText(message) {
+  if (/not enough rights|CHAT_ADMIN_REQUIRED|can_delete/i.test(message)) return 'У бота нет права удалять сообщения в этой группе. Включите его в Telegram: «Администраторы» → бот → «Удаление сообщений».';
+  if (/can't be deleted|cannot be deleted|too old/i.test(message)) return 'Telegram не разрешил удалить этот пост (так бывает, если прошло больше 48 часов). Удалите его в Telegram вручную, а здесь нажмите «Убрать из списка».';
+  return 'Не удалось удалить пост: ' + message;
+}
+
+async function unpublishListing(res, record, body) {
+  const groupId = cleanText(body.groupId, 40);
+  const messageId = Math.floor(Number(body.messageId)) || 0;
+  const list = Array.isArray(record.publications) ? record.publications : [];
+  const entry = list.find((item) => item.groupId === groupId && item.messageId === messageId);
+  if (!entry) return json(res, 404, { error: 'Такой публикации в списке нет — возможно, её уже удалили' });
+  const group = groupById(groupId);
+  const ids = entry.messageIds && entry.messageIds.length ? entry.messageIds : [entry.messageId].filter(Boolean);
+  const remaining = [];
+  let failure = '';
+  if (body.forget !== true && group) {
+    for (const id of ids) {
+      try {
+        await telegramRequest(token(), 'deleteMessage', { chat_id: group.id, message_id: id });
+      } catch (error) {
+        if (!/message to delete not found|MESSAGE_ID_INVALID|message identifier is not specified/i.test(error.message)) {
+          remaining.push(id);
+          failure = error.message;
+          continue;
+        }
+      }
+      forgetGroupMessage(group, id);
+    }
+  }
+  if (remaining.length) {
+    entry.messageIds = remaining;
+    saveDataNow();
+    recordError('Удаление объявления из группы', new Error(failure));
+    return json(res, 409, { error: deleteFailureText(failure), canForget: true });
+  }
+  record.publications = list.filter((item) => item !== entry);
+  saveDataNow();
+  return json(res, 200, { ok: true, publications: record.publications });
+}
+
 // Every route here is /api/groups/... and needs an authenticated session.
 async function handleGroupApi(req, res, url) {
   // Публикация объекта в канал живёт здесь же: ей нужны и канал, и отправка
   // поста, которые описаны в этом файле.
-  const objectChannelPost = /^\/api\/objects\/[^/]+\/(channel-post|listing-preview|listing-publish)$/.test(url.pathname);
+  const objectChannelPost = /^\/api\/objects\/[^/]+\/(channel-post|listing-preview|listing-publish|listing-unpublish)$/.test(url.pathname);
   if (!url.pathname.startsWith('/api/groups') && !url.pathname.startsWith('/api/group-posts') && url.pathname !== '/api/publishing' && !objectChannelPost) return false;
   // Чтение (GET) защитного кода не требует — панель его в такие запросы не кладёт; любое изменение — требует.
   const session = requireAuth(req, res, req.method !== 'GET');
@@ -322,7 +366,7 @@ async function handleGroupApi(req, res, url) {
   }
 
   // Объявление об объекте в несколько групп сразу: предпросмотр и публикация.
-  const listingMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/listing-(preview|publish)$/);
+  const listingMatch = url.pathname.match(/^\/api\/objects\/([^/]+)\/listing-(preview|publish|unpublish)$/);
   if (listingMatch) {
     const record = (data.objects || []).find((item) => item.id === decodeURIComponent(listingMatch[1]));
     if (!record) return json(res, 404, { error: 'Объект не найден' }), true;
@@ -345,6 +389,9 @@ async function handleGroupApi(req, res, url) {
     }
     if (listingMatch[2] === 'publish' && req.method === 'POST') {
       return publishListing(res, record, await readJson(req)), true;
+    }
+    if (listingMatch[2] === 'unpublish' && req.method === 'POST') {
+      return unpublishListing(res, record, await readJson(req)), true;
     }
     return json(res, 405, { error: 'Неверный метод' }), true;
   }

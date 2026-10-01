@@ -224,8 +224,10 @@ function openObjectExtras(id) {
   });
 }
 
-// Объявление об объекте в группы и каналы. Список — только те, где бот администратор; у каждой группы свой язык поста
-// и (в форуме) своя тема. Справа — предпросмотр ровно того, что получат подписчики: альбом, подпись, полный текст и кнопка.
+// Объявление об объекте в группы и каналы. Список — только те, где бот администратор; у каждой группы свой язык поста.
+// В группе с разделами (форум) отмечаются нужные разделы — можно несколько сразу; раздел, которого в списке нет,
+// добавляется ссылкой на него. Справа — предпросмотр ровно того, что получат подписчики: альбом, подпись, текст и кнопка.
+// У уже опубликованного поста — «Удалить из группы».
 var LISTING_ADMIN = ["administrator", "creator"];
 
 function listingBlocker(group) {
@@ -234,12 +236,31 @@ function listingBlocker(group) {
 }
 
 function listingKind(group) {
-  return group.type === "channel" ? "канал" : group.isForum ? "группа с темами" : "группа";
+  return group.type === "channel" ? "канал" : group.isForum ? "группа с разделами" : "группа";
 }
 
 // В Telegram цитата — блок: перенос строки до и после неё не даёт пустой строки. В предпросмотре (pre-wrap) он её давал.
 function quoteBreaks(html) {
   return String(html || "").replace(/<blockquote expandable>/g, '<blockquote class="expandable">').replace(/\n(<blockquote)/g, "$1").replace(/(<\/blockquote>)\n/g, "$1");
+}
+
+// Название раздела: «Общий раздел» — это сама группа без выбора раздела; у остальных — имя, которое знает бот, или номер.
+function listingTopicName(group, threadId) {
+  if (!threadId || threadId === 1) return "Общий раздел";
+  var found = (group.topics || []).find(function (topic) { return topic.id === Number(threadId); });
+  return (found && found.name) || "Раздел №" + threadId;
+}
+
+function listingTopicRow(group, topic, checked) {
+  return '<label class="listing-topic"><input type="checkbox" data-pick data-thread="' + topic.id + '"' + (checked ? " checked" : "") + '><span>' + esc(topic.name || "Раздел №" + topic.id) +
+    (topic.closed ? ' <span class="small muted">закрыт для участников</span>' : "") + "</span></label>";
+}
+
+function listingPublicationRow(group, item) {
+  var topic = group.isForum ? " · " + esc(listingTopicName(group, item.threadId)) : "";
+  return '<div class="listing-done small" data-pub="' + esc(String(item.messageId)) + '">Опубликовано ' + dateTime(item.at) + topic + " · " + String(item.language || "ru").toUpperCase() +
+    (item.link ? ' · <a href="' + esc(item.link) + '" target="_blank" rel="noopener">открыть пост</a>' : "") +
+    ' · <button class="btn ghost small" type="button" data-unpublish="' + esc(String(item.messageId)) + '">Удалить из группы</button></div>';
 }
 
 function openChannelPost(id) {
@@ -259,25 +280,28 @@ function openChannelPost(id) {
       },
     });
   }
-  function previousOf(group) {
-    return (record.publications || []).filter(function (item) { return item.groupId === group.id; })[0];
-  }
   var rows = groups.map(function (group) {
     var blocker = listingBlocker(group);
-    var last = previousOf(group);
     var language = group.listingLanguage || "ru";
-    var topics = group.isForum ? (group.topics || []).filter(function (topic) { return topic.id > 1 && !topic.closed; }) : [];
-    return '<div class="listing-target' + (blocker ? " is-blocked" : "") + '" data-group="' + esc(group.id) + '">' +
-      '<label class="listing-pick"><input type="checkbox" data-pick' + (blocker ? " disabled" : "") + '><span><b>' + esc(group.title || group.id) + '</b>' +
-      '<span class="small muted">' + listingKind(group) + (group.memberCount ? " · " + counted(group.memberCount, "участник", "участника", "участников") : "") + "</span></span></label>" +
-      (blocker ? '<div class="small bad-text">' + esc(blocker) + "</div>" : '<div class="listing-opts"><select data-lang aria-label="Язык поста">' + LANGUAGES.map(function (item) {
-        return '<option value="' + item[0] + '"' + (item[0] === language ? " selected" : "") + ">" + item[1] + "</option>";
-      }).join("") + "</select>" +
-      (group.isForum ? '<select data-topic aria-label="Тема"><option value="0">Общая тема</option>' + topics.map(function (topic) {
-        return '<option value="' + topic.id + '">' + esc(topic.name || "Тема №" + topic.id) + "</option>";
-      }).join("") + "</select>" : "") + "</div>") +
-      (last ? '<div class="small muted listing-done">Уже публиковали ' + dateTime(last.at) + (last.link ? ' · <a href="' + esc(last.link) + '" target="_blank" rel="noopener">открыть пост</a>' : "") + "</div>" : "") +
-      "</div>";
+    var languageSelect = '<select data-lang aria-label="Язык поста">' + LANGUAGES.map(function (item) {
+      return '<option value="' + item[0] + '"' + (item[0] === language ? " selected" : "") + ">" + item[1] + "</option>";
+    }).join("") + "</select>";
+    var published = (record.publications || []).filter(function (item) { return item.groupId === group.id; }).map(function (item) { return listingPublicationRow(group, item); }).join("");
+    var head = '<span><b data-title>' + esc(group.title || group.id) + '</b><span class="small muted">' + listingKind(group) + (group.memberCount ? " · " + counted(group.memberCount, "участник", "участника", "участников") : "") + "</span></span>";
+    if (blocker) {
+      return '<div class="listing-target is-blocked" data-group="' + esc(group.id) + '"><div class="listing-pick">' + head + '</div><div class="small bad-text">' + esc(blocker) + "</div>" + published + "</div>";
+    }
+    if (!group.isForum) {
+      return '<div class="listing-target" data-group="' + esc(group.id) + '"><label class="listing-pick"><input type="checkbox" data-pick data-thread="0">' + head + "</label>" +
+        '<div class="listing-opts">' + languageSelect + "</div>" + published + "</div>";
+    }
+    var topics = (group.topics || []).filter(function (topic) { return topic.id > 1; });
+    return '<div class="listing-target is-forum" data-group="' + esc(group.id) + '"><div class="listing-pick">' + head + '</div><div class="listing-opts">' + languageSelect + "</div>" +
+      '<div class="listing-topics"><label class="listing-topic"><input type="checkbox" data-pick data-thread="0"><span>Общий раздел <span class="small muted">без выбора раздела</span></span></label>' +
+      topics.map(function (topic) { return listingTopicRow(group, topic, false); }).join("") + "</div>" +
+      '<details class="listing-add"><summary>＋ Добавить раздел</summary><div class="stack"><div class="hint">Telegram не отдаёт боту список разделов: бот запоминает те, где кто-то писал. Остальные добавьте сами: откройте раздел в Telegram → нажмите на его название → «Копировать ссылку» и вставьте сюда.</div>' +
+      '<div class="grid cols-2"><div class="field"><label>Ссылка на раздел</label><input data-topic-link placeholder="https://t.me/c/1234567890/12"></div><div class="field"><label>Название (для вас)</label><input data-topic-name placeholder="Например, «Сегодня в продаже»"></div></div>' +
+      '<div class="row"><button class="btn secondary small" type="button" data-topic-add>Добавить раздел</button></div></div></details>' + published + "</div>";
   }).join("");
   var dialog = openDialog({
     title: "Опубликовать в группы",
@@ -302,16 +326,16 @@ function openChannelPost(id) {
       var previewLanguage = "ru";
       var previewSerial = 0;
       var send_ = box.querySelector("#listingSend");
+      // Отмеченное: каждый флажок — одно место назначения (группа и раздел).
       function picked() {
-        return Array.prototype.slice.call(box.querySelectorAll(".listing-target")).filter(function (row) {
-          return row.querySelector("[data-pick]").checked;
-        });
+        return Array.prototype.slice.call(box.querySelectorAll("input[data-pick]")).filter(function (box_) { return box_.checked; });
       }
+      function rowOf(input) { return input.closest(".listing-target"); }
       function refreshButton() {
         var count = picked().length;
         send_.disabled = !count;
         var when = box.querySelector("#listingWhen").value;
-        send_.textContent = count ? (when ? "Запланировать · " : "Опубликовать · ") + counted(count, "группа", "группы", "групп") : "Опубликовать";
+        send_.textContent = count ? (when ? "Запланировать · " : "Опубликовать · ") + counted(count, "место", "места", "мест") : "Опубликовать";
       }
       function layoutValue() { return box.querySelector('input[name="listingLayout"]:checked').value; }
       async function drawPreview() {
@@ -345,45 +369,97 @@ function openChannelPost(id) {
           if (ticket === previewSerial) box.querySelector("#listingPreview").innerHTML = '<span class="tg-note warn-text">Не удалось собрать предпросмотр: ' + esc(error.message) + "</span>";
         }
       }
+      // Флажки и язык: общий обработчик на окне — разделы, добавленные позже, работают так же.
+      box.addEventListener("change", function (event) {
+        var target = event.target;
+        if (target.matches && target.matches("input[data-pick]") && target.checked) {
+          // Предпросмотр — на языке выбранной группы: так видно, что туда уйдёт.
+          var lang = rowOf(target).querySelector("[data-lang]");
+          if (lang && lang.value !== previewLanguage) { previewLanguage = lang.value; drawPreview(); }
+        }
+        if (target.matches && target.matches("[data-lang]")) {
+          var row = rowOf(target);
+          if (!row.querySelector("input[data-pick]:checked")) { var first = row.querySelector("input[data-pick]"); if (first && !first.disabled && !row.classList.contains("is-forum")) first.checked = true; }
+          previewLanguage = target.value;
+          drawPreview();
+        }
+        refreshButton();
+      });
       box.querySelectorAll("[data-preview-lang]").forEach(function (button) {
         button.onclick = function () { previewLanguage = button.dataset.previewLang; drawPreview(); };
       });
       box.querySelector("#listingSignature").onchange = drawPreview;
       box.querySelectorAll('input[name="listingLayout"]').forEach(function (radio) { radio.onchange = drawPreview; });
       box.querySelector("#listingWhen").oninput = refreshButton;
-      box.querySelectorAll(".listing-target").forEach(function (row) {
-        row.querySelector("[data-pick]").onchange = function () {
-          // Предпросмотр — на языке выбранной группы: так видно, что туда уйдёт.
-          var lang = row.querySelector("[data-lang]");
-          if (this.checked && lang && lang.value !== previewLanguage) { previewLanguage = lang.value; drawPreview(); }
-          refreshButton();
-        };
-        var language = row.querySelector("[data-lang]");
-        if (language) language.onchange = function () {
-          row.querySelector("[data-pick]").checked = true;
-          previewLanguage = language.value;
-          drawPreview();
-          refreshButton();
+
+      // Раздел по ссылке: бот запоминает его, и он появляется в списке уже отмеченным.
+      box.querySelectorAll("[data-topic-add]").forEach(function (button) {
+        button.onclick = async function () {
+          var row = rowOf(button);
+          var groupId = row.dataset.group;
+          var link = row.querySelector("[data-topic-link]"), name = row.querySelector("[data-topic-name]");
+          if (!link.value.trim()) { toast("Вставьте ссылку на раздел или его номер", true); return; }
+          try {
+            var added = await send("/api/groups/" + encodeURIComponent(groupId) + "/topics/add", "POST", { link: link.value, name: name.value });
+            var group = groups.find(function (item) { return item.id === groupId; });
+            var topic = added.topic;
+            if (!row.querySelector('input[data-pick][data-thread="' + topic.id + '"]')) {
+              row.querySelector(".listing-topics").insertAdjacentHTML("beforeend", listingTopicRow(group, topic, true));
+            } else row.querySelector('input[data-pick][data-thread="' + topic.id + '"]').checked = true;
+            link.value = ""; name.value = "";
+            row.querySelector("details").open = false;
+            toast("Раздел добавлен");
+            refreshButton();
+            reload();
+          } catch (error) { fail(error); }
         };
       });
+
+      // Удалить опубликованный пост из группы: все его сообщения. Не удалось — предлагаем убрать запись из списка.
+      box.addEventListener("click", async function (event) {
+        var button = event.target.closest ? event.target.closest("[data-unpublish]") : null;
+        if (!button) return;
+        var row = rowOf(button);
+        var line = button.closest("[data-pub]");
+        var forget = button.dataset.forget === "1";
+        if (!(await confirmDialog(forget ? "Убрать запись из списка?" : "Удалить пост из группы?", forget ? "Сам пост в Telegram останется — запись о нём исчезнет только здесь." : "Пост (фотографии и текст) исчезнет у всех подписчиков группы. Это нельзя отменить.", forget ? "Убрать" : "Удалить", true))) return;
+        button.disabled = true;
+        try {
+          await send("/api/objects/" + encodeURIComponent(id) + "/listing-unpublish", "POST", { groupId: row.dataset.group, messageId: Number(button.dataset.unpublish), forget: forget });
+          line.remove();
+          toast(forget ? "Запись убрана" : "Пост удалён из группы");
+          reload();
+        } catch (error) {
+          button.disabled = false;
+          fail(error);
+          if (error.status === 409) { button.textContent = "Убрать из списка"; button.dataset.forget = "1"; }
+        }
+      });
+
       drawPreview();
       send_.onclick = async function () {
         var chosen = picked();
         if (!chosen.length) return;
         var when = box.querySelector("#listingWhen").value;
-        var names = chosen.map(function (row) { return row.querySelector("b").textContent; });
+        var names = chosen.map(function (input) {
+          var row = rowOf(input);
+          var group = groups.find(function (item) { return item.id === row.dataset.group; });
+          var thread = Number(input.dataset.thread) || 0;
+          return row.querySelector("[data-title]").textContent + (group && group.isForum ? " (" + listingTopicName(group, thread) + ")" : "");
+        });
         if (!(await confirmDialog(
           when ? "Запланировать публикацию?" : "Опубликовать объявление?",
-          title + " → " + names.join(", ") + ". " + (when ? "Отправим " + dateTime(zonedDateTimeToIso(when)) + "." : "Пост уйдёт сразу.") + " Изменить опубликованное нельзя, только удалить в Telegram.",
+          title + " → " + names.join(", ") + ". " + (when ? "Отправим " + dateTime(zonedDateTimeToIso(when)) + "." : "Пост уйдёт сразу.") + " Изменить опубликованное нельзя, только удалить.",
           when ? "Запланировать" : "Опубликовать"
         ))) return;
         send_.disabled = true;
         send_.textContent = "Публикуем…";
         try {
           var result = await send("/api/objects/" + encodeURIComponent(id) + "/listing-publish", "POST", {
-            targets: chosen.map(function (row) {
-              var lang = row.querySelector("[data-lang]"), topic = row.querySelector("[data-topic]");
-              return { groupId: row.dataset.group, language: lang ? lang.value : "ru", threadId: topic ? Number(topic.value) || 0 : 0 };
+            targets: chosen.map(function (input) {
+              var row = rowOf(input);
+              var lang = row.querySelector("[data-lang]");
+              return { groupId: row.dataset.group, language: lang ? lang.value : "ru", threadId: Number(input.dataset.thread) || 0 };
             }),
             layout: box.querySelector('input[name="listingLayout"]:checked').value,
             withoutSignature: !box.querySelector("#listingSignature").checked,
@@ -394,7 +470,8 @@ function openChannelPost(id) {
           box.querySelector(".dialog-body").innerHTML = '<div class="stack"><div><b>' + (good === result.results.length ? "Готово" : good ? "Опубликовано частично" : "Не получилось") + "</b>" +
             '<div class="small muted">' + (when ? "Запланировано: " : "Опубликовано: ") + good + " из " + result.results.length + "</div></div>" +
             result.results.map(function (row) {
-              return '<div class="listing-result ' + (row.ok ? "ok" : "bad") + '"><b>' + (row.ok ? "✓ " : "✕ ") + esc(row.title) + "</b>" +
+              var place = row.threadId ? " · " + esc(listingTopicName(groups.find(function (item) { return item.id === row.groupId; }) || {}, row.threadId)) : "";
+              return '<div class="listing-result ' + (row.ok ? "ok" : "bad") + '"><b>' + (row.ok ? "✓ " : "✕ ") + esc(row.title) + place + "</b>" +
                 (row.ok ? (row.scheduled ? '<span class="small muted"> · ждёт своего времени</span>' : row.link ? ' <a href="' + esc(row.link) + '" target="_blank" rel="noopener">открыть пост</a>' : "") : '<div class="small bad-text">' + esc(row.error) + "</div>") + "</div>";
             }).join("") + "</div>";
           box.querySelector(".dialog-foot").innerHTML = '<button class="btn" data-close="1" type="button">Закрыть</button>';

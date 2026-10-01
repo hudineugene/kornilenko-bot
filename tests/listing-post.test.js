@@ -338,3 +338,90 @@ test('панель: диалог предлагает только группы,
   assert.match(source, /row\.ok \? "✓ " : "✕ "/, 'в итоге — строка на каждую группу с причиной отказа');
   assert.ok(!/Опубликовать в канал/.test(source), 'прежней кнопки «в канал» нет: публикация теперь — в группы и каналы');
 });
+
+test('несколько разделов одной группы с темами: один пост в каждый выбранный раздел, в закрытый тоже; номер раздела уходит в Telegram', async () => {
+  setGroups([admin('-1003934963994', 'Стройка без фильтров', {
+    isForum: true,
+    topics: [
+      { id: 47, name: 'Сегодня в продаже', closed: true, manual: false, lastMessageAt: '' },
+      { id: 52, name: 'Новостройки', closed: false, manual: true, lastMessageAt: '' },
+    ],
+  })]);
+  telegram.calls = [];
+  const response = await post('/api/objects/listing-object-1/listing-publish', {
+    targets: [
+      { groupId: '-1003934963994', threadId: 47, language: 'ru' },
+      { groupId: '-1003934963994', threadId: 52, language: 'ru' },
+      { groupId: '-1003934963994', threadId: 0, language: 'ru' },
+      { groupId: '-1003934963994', threadId: 47, language: 'ru' },
+    ],
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.deepEqual(body.results.map((row) => [row.threadId, row.ok]), [[47, true], [52, true], [0, true]], 'повтор того же раздела отброшен, закрытый раздел не запрещён');
+  const threads = sentCalls().map((call) => String(call.body.message_thread_id || ''));
+  assert.deepEqual(threads, ['47', '52', ''], 'в Общий раздел — без номера');
+  assert.match(body.results[0].link, /^https:\/\/t\.me\/c\/3934963994\/47\/\d+$/);
+  const mine = objectById().publications.filter((item) => item.groupId === '-1003934963994');
+  assert.deepEqual(mine.map((item) => item.threadId).sort((a, b) => a - b), [0, 47, 52]);
+});
+
+test('удаление поста из группы: все сообщения поста, запись снимается; нет такого сообщения — тоже удалено', async () => {
+  setGroups([admin('-1001000000021', 'Группа для удаления', { rights: {} })]);
+  const publish = await (await post('/api/objects/listing-object-1/listing-publish', { layout: 'split', targets: [{ groupId: '-1001000000021', language: 'ru' }] })).json();
+  assert.equal(publish.ok, true);
+  const entry = objectById().publications.find((item) => item.groupId === '-1001000000021');
+  assert.equal(entry.messageIds.length, 2, 'альбом и текст: запомнены оба сообщения');
+  const group = bot.getData().groups.find((item) => item.id === '-1001000000021');
+  assert.ok(group.messages.some((message) => message.messageId === entry.messageId), 'пост виден в ленте группы');
+
+  telegram.calls = [];
+  const response = await post('/api/objects/listing-object-1/listing-unpublish', { groupId: '-1001000000021', messageId: entry.messageId });
+  assert.equal(response.status, 200, JSON.stringify(await response.json()));
+  const deleted = telegram.calls.filter((call) => call.method === 'deleteMessage').map((call) => call.body.message_id).sort();
+  assert.deepEqual(deleted, [...entry.messageIds].sort(), 'удалены и альбом, и текст');
+  assert.ok(!objectById().publications.some((item) => item.messageId === entry.messageId), 'запись о посте снята');
+  assert.ok(!group.messages.some((message) => message.messageId === entry.messageId), 'и из ленты группы пропал');
+
+  // Повторное удаление: записи уже нет — понятный ответ, а не молчание.
+  assert.equal((await post('/api/objects/listing-object-1/listing-unpublish', { groupId: '-1001000000021', messageId: entry.messageId })).status, 404);
+});
+
+test('если Telegram удалить не дал — запись остаётся и просит убрать её вручную; «убрать из списка» снимает запись без обращения к Telegram', async () => {
+  setGroups([admin('-1001000000022', 'Старый пост', { rights: {} })]);
+  await post('/api/objects/listing-object-1/listing-publish', { targets: [{ groupId: '-1001000000022', language: 'ru' }] });
+  const entry = objectById().publications.find((item) => item.groupId === '-1001000000022');
+
+  const refusing = global.fetch;
+  global.fetch = (url, init) => {
+    if (String(url).endsWith('/deleteMessage')) return Promise.resolve(new Response(JSON.stringify({ ok: false, error_code: 400, description: "Bad Request: message can't be deleted" }), { status: 400, headers: { 'content-type': 'application/json' } }));
+    return refusing(url, init);
+  };
+  try {
+    const failed = await post('/api/objects/listing-object-1/listing-unpublish', { groupId: '-1001000000022', messageId: entry.messageId });
+    const body = await failed.json();
+    assert.equal(failed.status, 409);
+    assert.equal(body.canForget, true);
+    assert.match(body.error, /48 часов/);
+    assert.ok(objectById().publications.some((item) => item.messageId === entry.messageId), 'запись осталась');
+  } finally {
+    global.fetch = refusing;
+  }
+
+  telegram.calls = [];
+  const forgotten = await post('/api/objects/listing-object-1/listing-unpublish', { groupId: '-1001000000022', messageId: entry.messageId, forget: true });
+  assert.equal(forgotten.status, 200);
+  assert.equal(telegram.calls.filter((call) => call.method === 'deleteMessage').length, 0, 'в Telegram ничего не отправлялось');
+  assert.ok(!objectById().publications.some((item) => item.messageId === entry.messageId));
+});
+
+test('панель: в группе с разделами — флажки разделов и «Добавить раздел» по ссылке; у опубликованного поста — «Удалить из группы»', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'panel', 'view-catalog.mjs'), 'utf8');
+  assert.match(source, /data-pick data-thread=/, 'каждый раздел — свой флажок');
+  assert.match(source, /\/topics\/add/, 'раздел добавляется ссылкой — Telegram список разделов боту не отдаёт');
+  assert.match(source, /data-unpublish=/);
+  assert.match(source, /\/listing-unpublish/);
+  assert.match(source, /Убрать из списка/, 'если Telegram не дал удалить — запись можно убрать вручную');
+});

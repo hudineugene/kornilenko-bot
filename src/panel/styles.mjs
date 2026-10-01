@@ -685,6 +685,12 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .listing-opts{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
 .listing-opts select{width:auto;min-width:0;max-width:100%}
 .listing-done{flex:1 1 100%}
+.listing-target.is-forum .listing-pick{cursor:default}
+.listing-topics{flex:1 1 100%;display:flex;flex-direction:column;gap:var(--sp-1);padding-left:var(--sp-3);border-left:var(--edge) solid var(--line)}
+.listing-topic{display:flex;align-items:center;gap:var(--sp-2);min-height:28px;cursor:pointer}
+.listing-add{flex:1 1 100%}
+.listing-add>summary{cursor:pointer;color:var(--brand);font-size:var(--fs-sm)}
+.listing-add[open]>summary{margin-bottom:var(--sp-2)}
 .listing-preview-col{position:sticky;top:0;min-width:0}
 .listing-seg{display:inline-flex;gap:var(--sp-1)}
 .listing-seg .btn.active{border-color:var(--brand);background:var(--brand-soft);color:var(--brand-dark)}
