@@ -480,6 +480,20 @@ function viewingIsUpcoming(inquiry, now = new Date()) {
   return !date || date >= localDayKey(now);
 }
 
+// Клиент выбрал другое время: прежняя запись закрывается без отдельного уведомления — менеджер получит одну карточку
+// новой записи со строкой «перенос» (её собирает форма, см. viewingMoveLine).
+function closeMovedViewing(inquiry) {
+  inquiry.viewing = normalizeViewing(inquiry.viewing || {});
+  inquiry.viewing.cancelledAt = new Date().toISOString();
+  inquiry.status = 'closed';
+  inquiry.updatedAt = new Date().toISOString();
+}
+
+function viewingMoveLine(inquiry) {
+  const when = viewingWhen(inquiry, 'ru');
+  return '📆 Перенос: прежний просмотр (' + [when.date, when.time].filter(Boolean).join(', ') + ') отменён';
+}
+
 async function cancelViewing(inquiry, user) {
   inquiry.viewing = normalizeViewing(inquiry.viewing || {});
   inquiry.viewing.cancelledAt = new Date().toISOString();
@@ -531,6 +545,7 @@ async function sendViewingReminder(inquiry, user, token) {
   const map = property && !(inquiry.viewing && inquiry.viewing.online) ? validHttpUrl(property.mapUrl) : '';
   if (map) rows.push([{ text: copy.openMap, url: map }]);
   rows.push(...calendarRow(inquiry, language));
+  if (inquiry.propertyId) rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).moveViewing, callback_data: 'myreq:move:' + inquiry.id }]);
   rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).cancelViewing, callback_data: 'myreq:cancel:' + inquiry.id }]);
   await sendMessage(user.chatId, viewingDetailsText(inquiry, property, language, copy.reminder, copy.reminderFooter), token, { reply_markup: { inline_keyboard: rows } });
 }
@@ -765,6 +780,7 @@ export {
   VIEWING_FEEDBACK_HOUR,
   VIEWING_REMINDER_HOUR,
   cancelViewing,
+  closeMovedViewing,
   confirmViewing,
   handleViewingCalendarCallback,
   handleViewingConfirmCallback,
@@ -778,6 +794,7 @@ export {
   viewingDayForOption,
   viewingFeedbackDue,
   viewingIsUpcoming,
+  viewingMoveLine,
   viewingReminderDue,
   viewingWhen,
   viewingsOverview,

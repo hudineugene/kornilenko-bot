@@ -6,6 +6,7 @@ import { data } from './store.mjs';
 import { normalizeUser } from './users.mjs';
 import { localized, localizedExact, sendUiMessage, shortenedText } from './catalog.mjs';
 import { acknowledgeCallback } from './sections.mjs';
+import { startViewingForm } from './forms.mjs';
 import { cancelViewing, viewingIsUpcoming, viewingWhen } from './viewings.mjs';
 import { backButtonText, formatDayMonth } from './util.mjs';
 import { planHelpSteps } from './plan.mjs';
@@ -76,6 +77,7 @@ function myRequestsView(user) {
         : '';
     }
     if (inquiry.type === 'viewing' && viewingIsUpcoming(inquiry)) {
+      if (inquiry.propertyId) rows.push([{ text: shortenedText(copy.moveViewing + (title ? ' · ' + title : ''), 31), callback_data: 'myreq:move:' + inquiry.id }]);
       rows.push([{ text: shortenedText(copy.cancelViewing + (title ? ' · ' + title : ''), 31), callback_data: 'myreq:cancel:' + inquiry.id }]);
     }
     return [heading, [details, requestStatusLabel(inquiry, copy)].filter(Boolean).join(' — ')].join('\n');
@@ -104,6 +106,16 @@ async function handleMyRequestsCallback(query, token) {
   // A client can only cancel their own viewing, and only one still ahead.
   if (!inquiry || inquiry.userId !== String(user.id) || !viewingIsUpcoming(inquiry)) {
     await acknowledgeCallback(query, token, (INTERACTION_TEXT[language] || INTERACTION_TEXT.ru).stale);
+    return;
+  }
+  if (action === 'move') {
+    const record = inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) : null;
+    if (!record || record.status !== 'active') {
+      await acknowledgeCallback(query, token, copy.moveGone);
+      return;
+    }
+    await acknowledgeCallback(query, token);
+    await startViewingForm(user, record, token, { replaces: inquiry.id, note: copy.moveNote });
     return;
   }
   if (action === 'cancel') {

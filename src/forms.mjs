@@ -13,7 +13,7 @@ import { localizedExact, publishedCatalog, sendCatalogPage, sendUiMessage, showC
 import { currentSelectionRanking } from './alerts.mjs';
 import { temporaryDeliveryError } from './broadcasts.mjs';
 import { propertyRequestText } from './sections.mjs';
-import { parseViewingDate, sendViewingConfirmation, viewingDayForOption } from './viewings.mjs';
+import { closeMovedViewing, parseViewingDate, sendViewingConfirmation, viewingDayForOption, viewingIsUpcoming, viewingMoveLine } from './viewings.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { availableSlotDays, bookedViewings, freeTimes, slotFree, slotSettings, slotsEnabled } from './slots.mjs';
 
@@ -615,16 +615,16 @@ function newViewingData(language) {
   return slotsEnabled() && availableSlotDays(language).length ? { slotMode: true } : {};
 }
 
-async function startViewingForm(user, record, token) {
+async function startViewingForm(user, record, token, options = {}) {
   const language = user.preferredLanguage || 'ru';
   const copy = VIEWING_FORM_TEXT[language] || VIEWING_FORM_TEXT.ru;
-  const pending = { type: 'viewing_form', propertyId: record.id, step: 'date', data: newViewingData(language), createdAt: new Date().toISOString() };
+  const pending = { type: 'viewing_form', propertyId: record.id, step: 'date', data: newViewingData(language), createdAt: new Date().toISOString(), ...(options.replaces ? { replaces: String(options.replaces) } : {}) };
   user.pendingAction = pending;
   scheduleSave();
   const title = localizedExact(record.title, language) || record.reference || '';
   // Первый вопрос — кнопками под сообщением, а не сменой всей клавиатуры чата:
   // день, время и итог потом меняют это же сообщение.
-  const sent = await sendMessage(user.chatId, [title ? '🔖 ' + title : '', copy.askDate].filter(Boolean).join('\n\n'), token, { reply_markup: { inline_keyboard: viewingInlineRows(language, 'date', pending) } });
+  const sent = await sendMessage(user.chatId, [options.note || '', title ? '🔖 ' + title : '', copy.askDate].filter(Boolean).join('\n\n'), token, { reply_markup: { inline_keyboard: viewingInlineRows(language, 'date', pending) } });
   if (sent && sent.message_id) {
     pending.inlineMessageId = Number(sent.message_id);
     scheduleSave();
@@ -961,12 +961,15 @@ async function handleViewingFormMessage(message, user, token, context = null) {
       await say(taken ? copy.slotTaken : copy.slotGone, 'date');
       return true;
     }
+    // Перенос: прежний ещё не прошедший просмотр этого клиента закроется вместе с созданием новой записи.
+    const replaced = pending.replaces ? data.inquiries.find((item) => item.id === pending.replaces && item.userId === String(user.id) && viewingIsUpcoming(item)) : null;
     const details = [
       propertyRequestText(property, 'ru', 'viewing'),
       VIEWING_FORM_TEXT.ru.reviewLabels[1] + ': ' + cleanText(pending.data.date, 160),
       VIEWING_FORM_TEXT.ru.reviewLabels[2] + ': ' + cleanText(pending.data.time, 160),
       // Формат показа менеджеру важен: на видеосвязь он не едет.
       ...(pending.data.online === true ? ['📹 ' + VIEWING_FORM_TEXT.ru.onlineLabel] : []),
+      ...(replaced ? ['', viewingMoveLine(replaced)] : []),
       ...(slotBooking ? ['', '✅ Время из свободных окон — просмотр подтверждён автоматически'] : []),
     ].join('\n');
     const viewing = { date: pending.data.day, dateText: pending.data.date, timeText: pending.data.time, online: pending.data.online === true };
@@ -980,6 +983,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
       viewing,
       status: slotBooking ? 'in_progress' : 'new',
     });
+    if (replaced) closeMovedViewing(replaced);
     recordPropertyEvent(property.id, 'viewings');
     saveDataNow();
     if (slotBooking) {

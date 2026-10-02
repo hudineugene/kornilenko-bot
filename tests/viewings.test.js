@@ -439,7 +439,7 @@ test.describe('my requests', () => {
     assert.ok(lines.includes('📅 Просмотр · Вилла в Марбелье'));
     assert.ok(lines.some((line) => line.endsWith('— ✅ подтверждён')));
     assert.ok(lines.some((line) => /^отправлена \d\d\.\d\d — 🆕 получена/.test(line)));
-    assert.deepEqual(callbacksOf(step.last.markup), ['myreq:cancel:' + inquiry.id, 'nav:my']);
+    assert.deepEqual(callbacksOf(step.last.markup), ['myreq:move:' + inquiry.id, 'myreq:cancel:' + inquiry.id, 'nav:my']);
   });
 
   test('"My space" leads to the list; without requests it explains what will appear', async () => {
@@ -611,6 +611,49 @@ test.describe('reminder, feedback and the day\'s list', () => {
     ahead.pipelineStage = 'won';
     await aheadChat.press('vfb:liked:' + ahead.id);
     assert.equal(ahead.pipelineStage, 'won', 'выигранное дело не откатывается');
+  });
+
+  test('«Перенести просмотр»: новая запись создаётся, прежняя закрывается без отдельного «отменил», менеджер видит строку про перенос', async () => {
+    const chat = createChat();
+    const old = await requestViewing(chat, 2, 0);
+    old.viewing.confirmedAt = new Date().toISOString();
+    old.viewing.confirmedDate = dayKey(daysFromNow(3));
+    old.viewing.confirmedTime = '11:00';
+    old.status = 'in_progress';
+
+    telegram.calls = [];
+    await chat.press('myreq:move:' + old.id);
+    const asked = sentTo(chat).find((call) => /Перенос просмотра/.test(call.body.text));
+    assert.ok(asked, 'клиент видит пометку о переносе и вопрос про день');
+    assert.equal(chat.user.pendingAction.replaces, old.id);
+    assert.equal(old.viewing.cancelledAt, '', 'пока клиент не выбрал новое время, прежний просмотр в силе');
+
+    await chat.say(ru.dateOptions[3]);
+    await chat.say(ru.timeOptions[1]);
+    telegram.calls = [];
+    await chat.say(ru.confirm);
+    const fresh = chat.inquiries[0];
+    assert.notEqual(fresh.id, old.id);
+    assert.ok(old.viewing.cancelledAt, 'прежний просмотр закрыт');
+    assert.equal(old.status, 'closed');
+    assert.match(fresh.text, /📆 Перенос: прежний просмотр \(.+\) отменён/);
+    const adminTexts = adminMessages().map((message) => message.text).join(' | ');
+    assert.ok(!/Клиент отменил просмотр/.test(adminTexts), 'отдельного «отменил» нет');
+  });
+
+  test('перенос чужого или прошедшего просмотра не работает; кнопка есть и в напоминании', async () => {
+    const chat = createChat();
+    const inquiry = await confirmedViewing(chat);
+    const stranger = createChat();
+    telegram.calls = [];
+    const refused = await stranger.press('myreq:move:' + inquiry.id);
+    assert.equal(refused.popups.length, 1);
+    assert.ok(!stranger.user.pendingAction, 'форма чужому не открылась');
+    inquiry.viewing.remindedAt = '';
+    telegram.calls = [];
+    await bot.runViewingNotices(at(inquiry.viewing.confirmedDate, -1, 19));
+    const reminder = sentTo(chat)[0];
+    assert.ok(callbacksOf(reminder.body.reply_markup).includes('myreq:move:' + inquiry.id), 'в напоминании есть «Перенести»');
   });
 
   test('only the client who was asked can answer', async () => {
