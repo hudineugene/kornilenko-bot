@@ -12,7 +12,7 @@ import { sourceDisplay } from './source-title.mjs';
 import { recordActivity, recordDaily, recordError } from './analytics.mjs';
 import { markUnavailable, normalizeUser, userByChatId, userById } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
-import { localized } from './catalog.mjs';
+import { localized, whatsappContactUrl } from './catalog.mjs';
 import { PLACES } from './places.mjs';
 import { acknowledgeCallback, propertyRequestText } from './sections.mjs';
 import { recordBroadcastResponse, userUnavailableError } from './broadcasts.mjs';
@@ -423,6 +423,13 @@ function inquiryStatusMarkup(inquiry) {
   rows.push(row);
   const planned = inquiry.followUpDate && !inquiry.followUpNotifiedAt ? ' (' + inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + ')' : '';
   rows.push([{ text: planned ? '📌 Напомню' + planned : '📌 Напомнить завтра', callback_data: 'inq:follow:' + inquiry.id }]);
+  // Быстрые действия: ответить готовым шаблоном и написать клиенту в WhatsApp (телефон из карточки Telegram и так набирается касанием).
+  const quick = [];
+  if (Array.isArray(data.replyTemplates) && data.replyTemplates.length) quick.push({ text: '📝 Шаблон', callback_data: 'inq:tpl:' + inquiry.id });
+  const client = userById(inquiry.userId);
+  const whatsapp = client && client.phone ? whatsappContactUrl('', client.phone) : '';
+  if (whatsapp) quick.push({ text: '💬 WhatsApp', url: whatsapp });
+  if (quick.length) rows.push(quick);
   if (panel) rows.push(panel);
   return { inline_keyboard: rows };
 }

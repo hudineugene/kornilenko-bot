@@ -26,6 +26,7 @@ import { catalogRequest, searchSignalCount } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleSharedListCallback, handleContactCallback, handleGuideCallback, sendGuidePage, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
 import { handleAlertsCallback } from './alerts.mjs';
+import { handleQuickReplyCallback } from './quick-reply.mjs';
 import { handleViewingCalendarCallback, handleViewingConfirmCallback, handleViewingFeedbackCallback } from './viewings.mjs';
 import { handleMyRequestsCallback, sendMyRequests } from './requests.mjs';
 import { handleSubscriptionCallback } from './subscriptions.mjs';
@@ -163,6 +164,11 @@ async function handleUpdate(update, token) {
   // Публикация в группы командой /post: кнопки экрана «куда публикуем».
   if (update.callback_query && String(update.callback_query.data || '').startsWith('post:')) {
     await handlePostCallback(update.callback_query, token);
+    return;
+  }
+  // Ответ шаблоном из Telegram: кнопка на карточке и экраны выбора.
+  if (update.callback_query && /^(inq:tpl:|tpl:)/.test(String(update.callback_query.data || ''))) {
+    await handleQuickReplyCallback(update.callback_query, token);
     return;
   }
   if (update.callback_query && String(update.callback_query.data || '').startsWith('inq:show:')) {
