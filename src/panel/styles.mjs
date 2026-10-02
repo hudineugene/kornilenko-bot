@@ -74,6 +74,8 @@ a:hover{text-decoration:underline}
 .app-brand .brand-short{display:none}
 .head-nav{display:flex;align-items:center;gap:2px;min-width:0;flex:1 1 0;overflow-x:auto;scrollbar-width:none}
 .head-nav::-webkit-scrollbar{display:none}
+/* Меню не помещается и листается вбок: правый край гаснет — видно, что дальше есть пункты (класс ставит панель). */
+.head-nav.more-right{-webkit-mask-image:linear-gradient(to right,var(--text) calc(100% - 32px),transparent);mask-image:linear-gradient(to right,var(--text) calc(100% - 32px),transparent)}
 .nav-item{flex:none}
 /* Общий поиск: одно поле в шапке. */
 .global-search{position:relative;flex:0 1 220px;min-width:140px}
@@ -607,6 +609,8 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 /* --- Календарь просмотров -------------------------------------------------- */
 .viewing-kpis{margin-bottom:var(--sp-3)}
 .viewing-toolbar{display:flex;align-items:center;gap:var(--sp-3);justify-content:space-between;margin-bottom:var(--sp-3)}
+.tabs button>span{display:inline-flex;min-width:18px;justify-content:center;margin-left:var(--sp-1);padding:0 var(--sp-1);border-radius:var(--radius-pill);background:var(--surface-soft);color:var(--muted);font-size:var(--fs-xs)}
+.tabs button.active>span{background:var(--brand-soft);color:var(--brand-dark)}
 .viewing-toolbar .tabs button span{display:inline-flex;min-width:18px;justify-content:center;margin-left:var(--sp-1);padding:0 var(--sp-1);border-radius:var(--radius-pill);background:var(--warn-soft);color:var(--warn);font-size:var(--fs-xs)}
 .viewing-calendar-card{overflow:hidden}
 .viewing-calendar-card>header>div:first-child{display:flex;flex-direction:column;gap:2px}
@@ -1048,8 +1052,7 @@ dialog::backdrop{background:var(--overlay)}
 /* Значки пунктов меню — только на широком экране (и в нижней панели телефона). */
 @media(max-width:1960px) and (min-width:861px){.head-nav .nav-item .ico{display:none}}
 @media(max-width:1180px) and (min-width:861px){
-  .app-brand .brand-full,.app-brand .brand-sub{display:none}
-  .app-brand .brand-short{display:inline}
+  .app-brand .brand-full,.app-brand .brand-sub,.app-brand .brand-short{display:none}
   .app-head{gap:var(--sp-2);padding-left:var(--sp-3);padding-right:var(--sp-3)}
   .nav-item{padding-left:var(--sp-1);padding-right:var(--sp-1)}
   .nav-item .ico{display:none}

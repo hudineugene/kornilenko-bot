@@ -971,6 +971,13 @@ function awaitsReply(inquiry) {
   return Boolean(inquiry && inquiry.awaitsReply);
 }
 
+// Правый край меню гаснет, пока пункты не помещаются и их можно листать вбок (861–1180 px).
+function updateNavFade() {
+  var nav = document.querySelector(".head-nav");
+  if (!nav) return;
+  nav.classList.toggle("more-right", nav.scrollWidth - nav.clientWidth - nav.scrollLeft > 4);
+}
+
 function renderNav() {
   // Нажатие на раздел открывает раздел. Подвкладки живут полосой на самой
   // странице: раньше они были выведены дважды — и в меню, и на странице, — а
@@ -987,6 +994,7 @@ function renderNav() {
     };
   });
   renderTabBar();
+  updateNavFade();
 }
 
 // На телефоне разделы — внизу, под большим пальцем: четыре главных и «Ещё».
@@ -1796,6 +1804,8 @@ async function startApp() {
 
 function bindShell() {
   window.addEventListener("hashchange", handleHashChange);
+  window.addEventListener("resize", updateNavFade);
+  if (el("nav")) el("nav").addEventListener("scroll", updateNavFade);
   // Вернулись во вкладку: в скрытой вкладке обновление не идёт, и ждать до 45
   // секунд незачем — спрашиваем данные сразу.
   document.addEventListener("visibilitychange", function () {

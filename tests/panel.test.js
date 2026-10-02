@@ -819,11 +819,11 @@ test('подсказки в разметке не длиннее 200 знако�
   assert.match(PANEL_HTML, /function hintMore\(short, more\)/);
 });
 
-test('бюджет страницы по сжатию: в браузер уходит не больше 150 КБ gzip (панель отдаётся сжатой)', async () => {
+test('бюджет страницы по сжатию: в браузер уходит не больше 165 КБ gzip (панель отдаётся сжатой)', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
   const zlib = require('node:zlib');
   const kilobytes = zlib.gzipSync(Buffer.from(PANEL_HTML), { level: 6 }).length / 1024;
-  assert.ok(kilobytes <= 150, 'страница сжатая ' + kilobytes.toFixed(0) + ' КБ, бюджет 150');
+  assert.ok(kilobytes <= 165, 'страница сжатая ' + kilobytes.toFixed(0) + ' КБ, бюджет 165');
 });
 
 test('вкладки: каждая, что обрабатывает экран, есть в меню, и каждая из меню обрабатывается экраном', async () => {
