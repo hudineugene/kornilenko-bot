@@ -593,6 +593,26 @@ test.describe('reminder, feedback and the day\'s list', () => {
     assert.ok(callbacksOf(toClient[0].body.reply_markup).some((data) => data.startsWith('saved:similar:')), 'кнопка «Сообщить, когда появится»');
   });
 
+  test('«Понравилось» двигает этап к «Переговорам» только вперёд; другие ответы и закрытое дело этап не трогают', async () => {
+    const likedChat = createChat();
+    const liked = await confirmedViewing(likedChat);
+    assert.equal(liked.pipelineStage, 'viewing');
+    await likedChat.press('vfb:liked:' + liked.id);
+    assert.equal(liked.pipelineStage, 'negotiation');
+    assert.equal(liked.viewing.feedback, 'liked');
+
+    const askingChat = createChat();
+    const asking = await confirmedViewing(askingChat);
+    await askingChat.press('vfb:questions:' + asking.id);
+    assert.equal(asking.pipelineStage, 'viewing', 'вопросы этап не двигают');
+
+    const aheadChat = createChat();
+    const ahead = await confirmedViewing(aheadChat);
+    ahead.pipelineStage = 'won';
+    await aheadChat.press('vfb:liked:' + ahead.id);
+    assert.equal(ahead.pipelineStage, 'won', 'выигранное дело не откатывается');
+  });
+
   test('only the client who was asked can answer', async () => {
     const inquiry = await confirmedViewing(createChat());
     await createChat().press('vfb:liked:' + inquiry.id);

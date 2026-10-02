@@ -194,6 +194,57 @@ test('свежие посты: после смены цены уже опубл�
   assert.match(telegram.calls.find((call) => call.method === 'editMessageCaption').body.caption, /🔴 Продан/);
 });
 
+test('цена снижена: правило включено — в места публикации ставится НОВЫЙ отложенный пост с пометкой и зачёркнутой прежней ценой, не чаще раза в три дня; выключено или цена выросла — ничего', async () => {
+  const record = newObject('auto-drop-obj-01', 'Вилла со скидкой');
+  record.status = 'active';
+  record.priceValue = 250000;
+  bot.getData().objects.push(record);
+  const published = await (await realFetch(base + '/api/objects/auto-drop-obj-01/listing-publish', { method: 'POST', headers, body: JSON.stringify({ targets: [{ groupId: '-1001000000061', language: 'ru' }] }) })).json();
+  assert.equal(published.ok, true, JSON.stringify(published));
+
+  // Правило выключено — снижение новых постов не создаёт.
+  let before = { ...record };
+  record.priceValue = 240000;
+  bot.queuePropertyAlerts(record, before);
+  await settle();
+  assert.deepEqual(bot.getData().groupPosts, []);
+
+  await put({ newObjects: { enabled: false, targets: [] }, keepFresh: false, priceDrop: true });
+  // Цена выросла — не снижение.
+  before = { ...record };
+  record.priceValue = 245000;
+  bot.queuePropertyAlerts(record, before);
+  assert.deepEqual(bot.getData().groupPosts, [], 'рост цены поста не даёт');
+
+  before = { ...record };
+  record.priceValue = 199000;
+  telegram.calls = [];
+  const asked = Date.now();
+  bot.queuePropertyAlerts(record, before);
+  await settle();
+  const queued = bot.getData().groupPosts.filter((item) => item.status === 'scheduled');
+  assert.equal(queued.length, 1);
+  assert.deepEqual([queued[0].groupId, queued[0].listing.language, queued[0].listing.layout, queued[0].listing.priceDrop], ['-1001000000061', 'ru', 'single', true]);
+  const delay = Date.parse(queued[0].sendAt) - asked;
+  assert.ok(delay > 14 * 60e3 && delay < 16 * 60e3, 'через ~15 минут: ' + delay);
+  assert.match(adminTexts(), /🔻 Цена снижена — «Вилла со скидкой»: новый пост поставлен в очередь \(Канал застройщика\)/);
+
+  // Ещё одно снижение сразу после первого — второго поста нет.
+  before = { ...record };
+  record.priceValue = 190000;
+  bot.queuePropertyAlerts(record, before);
+  assert.equal(bot.getData().groupPosts.filter((item) => item.status === 'scheduled').length, 1);
+
+  // В своё время пост уходит обычной отправкой: пометка сверху, прежняя цена зачёркнута.
+  telegram.calls = [];
+  await bot.runDueGroupPosts(new Date(Date.now() + 16 * 60e3));
+  const sent = telegram.calls.find((call) => ['sendPhoto', 'sendMediaGroup'].includes(call.method));
+  assert.ok(sent, 'пост ушёл в группу');
+  const caption = sent.body.caption || (Array.isArray(sent.body.media) ? sent.body.media[0].caption : '');
+  assert.match(caption, /^🔻 <b>Цена снижена<\/b>\n🏡/, 'пометка первой строкой');
+  assert.match(caption, /<s>[^<]*199\s000[^<]*<\/s>/, 'зачёркнута цена перед последним снижением');
+});
+
 test('панель: «🚀 Автопубликация» на экране «Каналы и группы», окно с местами, паузой, видом поста и правилом свежих постов', () => {
   const fs = require('node:fs');
   const path = require('node:path');

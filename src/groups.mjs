@@ -529,7 +529,7 @@ function messageLink(group, messageId, threadId = 0) {
 function listingMessage(record, language, options = {}) {
   const publishing = normalizePublishing(data.config.publishing);
   const signature = options.withoutSignature ? { html: '', plain: '' } : formatLinks(signatureBlock(publishing));
-  const built = buildListing(record, language, { reserve: signature.plain.length + 4, source: options.source, layout: options.layout, noPhotos: options.noPhotos });
+  const built = buildListing(record, language, { reserve: signature.plain.length + 4, source: options.source, layout: options.layout, noPhotos: options.noPhotos, priceDrop: options.priceDrop });
   const quote = signature.html && publishing.signatureQuote;
   const signed = (body) => body + (signature.html ? '\n\n' + (quote ? '<blockquote>' + signature.html + '</blockquote>' : signature.html) : '');
   const oneCaption = built.layout === 'single' && built.images.length > 0;
@@ -544,7 +544,7 @@ async function sendListing(group, post, token = data.config.botToken) {
   const record = (Array.isArray(data.objects) ? data.objects : []).find((item) => item.id === (post.listing && post.listing.objectId));
   if (!record) throw new Error('Объекта уже нет в каталоге');
   const threadId = postThreadId(group, post);
-  const built = listingMessage(record, post.listing.language, { layout: post.listing.layout, withoutSignature: post.withoutSignature, source: groupSourceLabel(group, threadId) });
+  const built = listingMessage(record, post.listing.language, { layout: post.listing.layout, withoutSignature: post.withoutSignature, source: groupSourceLabel(group, threadId), priceDrop: post.listing.priceDrop });
   const html = built.html;
   const markup = built.markup;
   const threadOptions = threadId ? { threadId } : {};
@@ -788,7 +788,7 @@ function newGroupPost(fields) {
     pin: Boolean(fields.pin),
     notify: fields.notify !== false,
     // Объявление об объекте: текст и фотографии собираются в момент отправки, поэтому хранится только «что» и «на каком языке».
-    listing: fields.listing && fields.listing.objectId ? { objectId: cleanText(fields.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(fields.listing.language) ? fields.listing.language : 'ru', layout: fields.listing.layout === 'split' ? 'split' : 'single' } : null,
+    listing: fields.listing && fields.listing.objectId ? { objectId: cleanText(fields.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(fields.listing.language) ? fields.listing.language : 'ru', layout: fields.listing.layout === 'split' ? 'split' : 'single', ...(fields.listing.priceDrop === true ? { priceDrop: true } : {}) } : null,
     status: 'scheduled',
     sendAt: fields.sendAt,
     createdAt: new Date().toISOString(),

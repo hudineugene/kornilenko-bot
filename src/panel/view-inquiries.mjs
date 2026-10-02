@@ -201,6 +201,12 @@ function selectionMatchingPanel(item) {
 }
 // Просмотр — не обычное сообщение: у него есть дата, время и одно действие,
 // которого от менеджера ждут. Показываем его карточкой прямо в переписке.
+// Что клиент ответил на вопрос «Как прошёл просмотр?»: видно прямо в карточке просмотра.
+function viewingFeedbackChip(viewing) {
+  var words = { liked: ["ok", "Понравилось"], questions: ["warn", "Остались вопросы"], disliked: ["bad", "Не подошло"] };
+  var found = words[viewing.feedback];
+  return found ? '<span class="chip ' + found[0] + '" title="Ответ клиента после просмотра">' + found[1] + "</span>" : "";
+}
 function viewingCardHtml(item, property) {
   var viewing = item && item.viewing;
   if (!viewing) return "";
@@ -212,7 +218,7 @@ function viewingCardHtml(item, property) {
       ? { text: "Подтверждён", chip: "ok" }
       : { text: "Ждёт подтверждения", chip: "warn" };
   return '<div class="viewing-card' + (viewing.confirmedAt ? " confirmed" : "") + '">' +
-    '<div class="viewing-card-head"><b>' + iconSpan("calendar") + ' Запись на просмотр</b><span class="chip ' + state.chip + '">' + state.text + "</span></div>" +
+    '<div class="viewing-card-head"><b>' + iconSpan("calendar") + ' Запись на просмотр</b><span class="chip ' + state.chip + '">' + state.text + "</span>" + viewingFeedbackChip(viewing) + "</div>" +
     '<div class="viewing-card-when">' + esc(when) + "</div>" +
     (property ? '<div class="small muted">' + iconSpan("home") + ' ' + esc(localized(property.title, "ru") || property.reference || property.id) + "</div>" : "") +
     (viewing.cancelledAt ? "" : '<button class="btn secondary small" id="confirmViewingInline" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + "</button>") +

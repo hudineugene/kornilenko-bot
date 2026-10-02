@@ -722,6 +722,9 @@ async function handleViewingFeedbackCallback(query, token) {
   }
   inquiry.viewing.feedback = kind;
   inquiry.viewing.feedbackAt = new Date().toISOString();
+  // «Понравилось» двигает воронку к «Переговорам» (только вперёд): менеджеру не нужно помнить про этап. Закрытое дело не трогаем.
+  if (kind === 'liked' && inquiry.status !== 'closed' && PIPELINE_STAGES.indexOf(inquiry.pipelineStage) < PIPELINE_STAGES.indexOf('negotiation')) inquiry.pipelineStage = 'negotiation';
+  inquiry.updatedAt = inquiry.viewing.feedbackAt;
   scheduleSave();
   await acknowledgeCallback(query, token);
   if (query.message && query.message.message_id) {

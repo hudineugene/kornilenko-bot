@@ -533,11 +533,11 @@ function openChannelPost(id) {
   });
 }
 
-// Автопубликация: два правила, оба по умолчанию выключены. 1) Новый объект — в выбранные группы и разделы ставится ОТЛОЖЕННЫЙ
+// Автопубликация: три правила, все по умолчанию выключены. 1) Новый объект — в выбранные группы и разделы ставится ОТЛОЖЕННЫЙ
 // пост (по умолчанию через 30 минут: можно поправить или отменить в «Очереди и истории»). 2) Свежие посты — при смене цены, статуса
 // или описания уже опубликованные посты правятся на месте.
 function openAutoPublish() {
-  var config = (state.config && state.config.autoPublish) || { newObjects: { enabled: false, targets: [], layout: "single", delayMinutes: 30 }, keepFresh: false };
+  var config = (state.config && state.config.autoPublish) || { newObjects: { enabled: false, targets: [], layout: "single", delayMinutes: 30 }, keepFresh: false, priceDrop: false };
   var news = config.newObjects || {};
   var groups = (state.groups || []).filter(function (group) { return LISTING_ADMIN.indexOf(group.status) >= 0 && !listingBlocker(group); });
   function chosen(groupId, threadId) {
@@ -560,7 +560,7 @@ function openAutoPublish() {
     drawer: true,
     protectChanges: true,
     body: '<div class="stack">' +
-      '<div class="msg">Включено — бот сам публикует в группы. Оба правила по умолчанию выключены; всё, что уходит в группы, берётся из карточки объекта, как при ручной публикации.</div>' +
+      '<div class="msg">Включено — бот сам публикует в группы. Все правила по умолчанию выключены; всё, что уходит в группы, берётся из карточки объекта, как при ручной публикации.</div>' +
       '<label class="check"><input type="checkbox" id="apNew"' + (news.enabled ? " checked" : "") + '> <span><b>Новые объекты</b> — когда объект появился в каталоге у клиентов, поставить пост в очередь</span></label>' +
       '<div class="stack" id="apNewBody">' +
         (groups.length ? '<div class="listing-targets">' + rows + "</div>" : '<div class="small muted">Нет групп, куда бот может публиковать: сделайте его администратором.</div>') +
@@ -568,6 +568,7 @@ function openAutoPublish() {
         '<div class="field"><label>Вид поста</label><label class="check"><input type="radio" name="apLayout" value="single"' + (news.layout === "split" ? "" : " checked") + '> Один пост</label><label class="check"><input type="radio" name="apLayout" value="split"' + (news.layout === "split" ? " checked" : "") + "> Фото и отдельное сообщение</label></div></div>" +
       "</div>" +
       '<label class="check"><input type="checkbox" id="apFresh"' + (config.keepFresh ? " checked" : "") + '> <span><b>Свежие посты</b> — когда меняются цена, статус или описание объекта, исправить уже опубликованные посты на месте</span></label>' +
+      '<label class="check"><input type="checkbox" id="apDrop"' + (config.priceDrop ? " checked" : "") + '> <span><b>Цена снижена</b> — когда цена объекта падает, поставить в очередь новый пост с пометкой «🔻 Цена снижена» туда, где он уже опубликован (через 15 минут, не чаще раза в три дня)</span></label>' +
       '<div class="hint">Проданный объект получит в посте пометку «🔴 Продан», ссылка и кнопка на бота исчезнут. Про каждое автоматическое действие бот напишет вам в Telegram.</div>' +
       "</div>",
     footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="apSave" type="button">Сохранить</button>',
@@ -589,6 +590,7 @@ function openAutoPublish() {
           await send("/api/auto-publish", "PUT", {
             newObjects: { enabled: dialog.querySelector("#apNew").checked, targets: targets(), layout: layout ? layout.value : "single", delayMinutes: Number(dialog.querySelector("#apDelay").value) || 0 },
             keepFresh: dialog.querySelector("#apFresh").checked,
+            priceDrop: dialog.querySelector("#apDrop").checked,
           });
           dialog.closeClean();
           toast("Автопубликация сохранена");

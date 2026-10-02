@@ -11,13 +11,16 @@ import { cleanText } from './util.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { groupById, newGroupPost, publishBlocker, updateListingPost } from './groups.mjs';
 import { LISTING_LANGUAGES, MAX_SCHEDULED_POSTS, requestedThread } from './listing-publish.mjs';
-import { propertyReadyForLanguage } from './catalog.mjs';
+import { priceDropVisible, propertyReadyForLanguage } from './catalog.mjs';
 import { recordError } from './analytics.mjs';
 import { tellAdminProblem } from './notify-plan.mjs';
 
 const MAX_AUTO_TARGETS = 10;
 const MAX_DELAY_MINUTES = 24 * 60;
 const VISIBLE = ['active', 'reserved'];
+// Пост о снижении цены уходит через 15 минут (можно отменить в очереди) и не чаще раза в три дня для одного объекта.
+const PRICE_DROP_DELAY_MINUTES = 15;
+const PRICE_DROP_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
 
 // Настройки хранятся в config.autoPublish (появляется при первом сохранении, формат файла не меняется) и читаются через
 // эту функцию: любой мусор в файле превращается в безопасные значения «выключено».
@@ -44,12 +47,13 @@ function autoPublishConfig() {
       delayMinutes: Number.isFinite(delay) ? Math.min(MAX_DELAY_MINUTES, Math.max(0, delay)) : 30,
     },
     keepFresh: raw.keepFresh === true,
+    priceDrop: raw.priceDrop === true,
   };
 }
 
 // Сохранить настройки из панели: всё, что не годится, отбрасывается при чтении (autoPublishConfig).
 function saveAutoPublishConfig(body) {
-  data.config.autoPublish = { newObjects: { ...(body && body.newObjects) }, keepFresh: Boolean(body && body.keepFresh) };
+  data.config.autoPublish = { newObjects: { ...(body && body.newObjects) }, keepFresh: Boolean(body && body.keepFresh), priceDrop: Boolean(body && body.priceDrop) };
   data.config.autoPublish = autoPublishConfig();
   scheduleSave();
   return data.config.autoPublish;
@@ -106,6 +110,53 @@ function autoPublishAfterSave(record, before) {
     const posted = (Array.isArray(record.publications) ? record.publications : []).filter((entry) => entry.layout);
     if (posted.length) void refreshPosts(record, posted);
   }
+
+  // 3. Цена снизилась — новый пост «Цена снижена» туда, где объект уже опубликован.
+  if (config.priceDrop && visible && Number(before && before.priceValue) > Number(record.priceValue) && priceDropVisible(record) && Array.isArray(record.publications) && record.publications.length) {
+    queuePriceDropPosts(record);
+  }
+}
+
+// 3. Цена снизилась — в те же места, где объект уже опубликован, ставится НОВЫЙ отложенный пост с пометкой «Цена снижена».
+// Старые посты остаются (правило «свежие посты» поправит в них цену отдельно). Новая публикация видна в ленте группы заново.
+function queuePriceDropPosts(record) {
+  if (Date.now() - (Date.parse(record.priceDropPostedAt || '') || 0) < PRICE_DROP_COOLDOWN_MS) return;
+  const places = new Map();
+  for (const entry of Array.isArray(record.publications) ? record.publications : []) {
+    const key = entry.groupId + ':' + (entry.threadId || 0);
+    if (!places.has(key)) places.set(key, entry);
+  }
+  const queued = [];
+  const skipped = [];
+  const sendAt = new Date(Date.now() + PRICE_DROP_DELAY_MINUTES * 60 * 1000).toISOString();
+  for (const entry of places.values()) {
+    const group = groupById(entry.groupId);
+    const label = (entry.title || entry.groupId) + (entry.threadId ? ' · раздел ' + entry.threadId : '');
+    if (!group) { skipped.push(label + ' — группа больше не подключена'); continue; }
+    const blocker = publishBlocker(group);
+    if (blocker) { skipped.push(label + ' — ' + blocker); continue; }
+    const language = LISTING_LANGUAGES.includes(entry.language) ? entry.language : 'ru';
+    if (!propertyReadyForLanguage(record, language)) { skipped.push(label + ' — карточка не заполнена на языке ' + language.toUpperCase()); continue; }
+    const waiting = (data.groupPosts || []).filter((item) => item.status === 'scheduled');
+    if (waiting.some((item) => item.listing && item.listing.objectId === record.id && item.groupId === group.id && Number(item.threadId || 0) === Number(entry.threadId || 0))) continue;
+    if (waiting.length >= MAX_SCHEDULED_POSTS) { skipped.push(label + ' — слишком много отложенных постов'); continue; }
+    data.groupPosts = [...(data.groupPosts || []), newGroupPost({
+      groupId: group.id,
+      threadId: requestedThread(group, entry.threadId),
+      listing: { objectId: record.id, language, layout: entry.layout === 'split' ? 'split' : 'single', priceDrop: true },
+      withoutSignature: Boolean(entry.withoutSignature),
+      sendAt,
+    })];
+    queued.push(label);
+  }
+  if (!queued.length && !skipped.length) return;
+  if (queued.length) record.priceDropPostedAt = new Date().toISOString();
+  scheduleSave();
+  const title = cleanText((record.title && (record.title.ru || record.title.en || record.title.es)) || record.reference, 100);
+  void tellAdminProblem('autopub-drop-' + record.id + '-' + Date.now(), [
+    '🔻 Цена снижена — «' + title + '»: ' + (queued.length ? 'новый пост поставлен в очередь (' + queued.join(', ') + ') — уйдёт через ' + PRICE_DROP_DELAY_MINUTES + ' мин. Отменить — «Публикации → Очередь и история».' : 'новый пост не поставлен.'),
+    ...(skipped.length ? ['Не поставлено: ' + skipped.join('; ') + '.'] : []),
+  ].join('\n'));
 }
 
 async function refreshPosts(record, posted) {

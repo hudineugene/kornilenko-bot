@@ -30,9 +30,9 @@ const CAPTION_LIMIT = 1024;
 const SAFETY = 40;
 
 const LISTING_TEXT = {
-  ru: { sold: 'Продан', openBot: '🤖 Смотреть в боте', map: 'Карта', video: 'Видео', website: 'Сайт', truncated: 'Описание сокращено — полностью и с фото в боте ↓', tagDeal: { sale: 'продажа', rent: 'аренда' } },
-  en: { sold: 'Sold', openBot: '🤖 View in the bot', map: 'Map', video: 'Video', website: 'Website', truncated: 'Description shortened — see the full listing with photos in the bot ↓', tagDeal: { sale: 'forsale', rent: 'forrent' } },
-  es: { sold: 'Vendido', openBot: '🤖 Ver en el bot', map: 'Mapa', video: 'Vídeo', website: 'Web', truncated: 'Descripción abreviada: ficha completa con fotos en el bot ↓', tagDeal: { sale: 'venta', rent: 'alquiler' } },
+  ru: { priceDrop: 'Цена снижена', sold: 'Продан', openBot: '🤖 Смотреть в боте', map: 'Карта', video: 'Видео', website: 'Сайт', truncated: 'Описание сокращено — полностью и с фото в боте ↓', tagDeal: { sale: 'продажа', rent: 'аренда' } },
+  en: { priceDrop: 'Price reduced', sold: 'Sold', openBot: '🤖 View in the bot', map: 'Map', video: 'Video', website: 'Website', truncated: 'Description shortened — see the full listing with photos in the bot ↓', tagDeal: { sale: 'forsale', rent: 'forrent' } },
+  es: { priceDrop: 'Precio rebajado', sold: 'Vendido', openBot: '🤖 Ver en el bot', map: 'Mapa', video: 'Vídeo', website: 'Web', truncated: 'Descripción abreviada: ficha completa con fotos en el bot ↓', tagDeal: { sale: 'venta', rent: 'alquiler' } },
 };
 
 // Значок перед заголовком абзаца описания — по смыслу заголовка; нет подходящего — маркер «▸».
@@ -173,7 +173,9 @@ function buildListing(record, language, options = {}) {
   const locationLine = place || mapUrl
     ? '📍 ' + [escapeTelegramHtml(place), mapUrl ? '🗺 <a href="' + escapeTelegramHtml(mapUrl) + '">' + text.map + '</a>' : ''].filter(Boolean).join(' · ')
     : '';
-  const lead = [header, price, locationLine].filter(Boolean).join('\n');
+  // Пост о снижении цены: сверху крупная пометка, ниже зачёркнутая прежняя цена (её рисует priceLines).
+  const dropNote = options.priceDrop && priceDropVisible(record) ? '🔻 <b>' + escapeTelegramHtml(text.priceDrop) + '</b>' : '';
+  const lead = [dropNote, header, price, locationLine].filter(Boolean).join('\n');
 
   // Характеристики — отдельным блоком-цитатой с заголовком.
   const facts = propertySpecRows(record, lang, { compact: false });

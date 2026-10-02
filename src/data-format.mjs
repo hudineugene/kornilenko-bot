@@ -842,7 +842,7 @@ function normalizeGroupPosts(value) {
     withoutSignature: Boolean(item.withoutSignature),
     pin: Boolean(item.pin),
     notify: item.notify !== false,
-    listing: item.listing && item.listing.objectId ? { objectId: cleanText(item.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(item.listing.language) ? item.listing.language : 'ru', layout: item.listing.layout === 'split' ? 'split' : 'single' } : null,
+    listing: item.listing && item.listing.objectId ? { objectId: cleanText(item.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(item.listing.language) ? item.listing.language : 'ru', layout: item.listing.layout === 'split' ? 'split' : 'single', ...(item.listing.priceDrop === true ? { priceDrop: true } : {}) } : null,
     status: ['scheduled', 'sent', 'failed', 'cancelled'].includes(item.status) ? item.status : 'scheduled',
     sendAt: cleanText(item.sendAt, 40),
     sentAt: cleanText(item.sentAt, 40),
