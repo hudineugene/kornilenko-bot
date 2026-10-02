@@ -235,7 +235,7 @@ function viewingCalendarFile(inquiry, language) {
   const online = Boolean(viewing.online);
   const description = online ? [copy.calendarOnline] : meetingLines(language, copy);
   const content = buildIcs({
-    uid: 'viewing-' + inquiry.id + '@kornilenko',
+    uid: viewing.calendarUid || 'viewing-' + inquiry.id + '@kornilenko',
     sequence: Math.floor(Date.parse(viewing.confirmedAt) / 1000),
     start,
     minutes: VIEWING_MINUTES,

@@ -262,7 +262,7 @@ function userDataExport(user) {
     groupMessages: traces.groupMessages.map(clone),
     groupJoinRequests: traces.joinRequests.map(clone),
     adminNotifications: traces.notificationKeys.map((key) => clone({ key, ...(data.adminNotificationStates[key] || {}) })),
-    sharedLists: Object.entries(data.sharedLists || {}).filter(([, list]) => String(list.owner) === String(user.id)).map(([code, list]) => clone({ code, ...list })),
+    sharedLists: Object.entries(data.sharedLists || {}).filter(([, list]) => [String(user.id), 'offer:' + String(user.id)].includes(String(list.owner))).map(([code, list]) => clone({ code, ...list })),
   };
 }
 
@@ -276,7 +276,7 @@ function eraseUserData(user) {
   const chatId = traces.chatId;
   delete data.users[id];
   for (const [code, list] of Object.entries(data.sharedLists || {})) {
-    if (String(list.owner) === id) delete data.sharedLists[code];
+    if (String(list.owner) === id || String(list.owner) === 'offer:' + id) delete data.sharedLists[code];
   }
   usersByChatId.delete(chatId);
   inquiryTimes.delete(id);

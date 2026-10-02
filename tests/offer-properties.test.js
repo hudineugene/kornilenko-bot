@@ -66,11 +66,25 @@ test('подборка уходит с кнопкой «Смотреть под�
   assert.ok(code, 'список назначен клиенту текущим');
   assert.deepEqual(bot.getData().sharedLists[code].ids, ['villa-a-01', 'villa-b-02']);
 
+  assert.equal(bot.getData().sharedLists[code].owner, 'offer:' + chat.user.id, 'хозяин подборки менеджера — отдельный, ссылки клиента из избранного она не вытесняет');
+
   // Кнопка открывает карточки в чате.
   telegram.calls = [];
   await chat.press('catalog:shared:0');
   const shown = telegram.calls.map((call) => String(call.body.caption || call.body.text || '')).join('\n');
   assert.match(shown, /Вилла Альфа/);
+});
+
+test('подборки менеджера не вытесняют ссылку, которой клиент поделился из избранного, даже когда их больше пяти', async () => {
+  const { chat, inquiry } = await clientWithInquiry();
+  const data = bot.getData();
+  data.sharedLists = { ownshare1: { ids: ['villa-a-01'], owner: String(chat.user.id), createdAt: new Date().toISOString(), opens: 0 } };
+  for (let index = 0; index < 7; index += 1) {
+    const response = await reply(inquiry, { text: 'Вариант ' + index, offerIds: ['villa-a-01', 'villa-b-02'] });
+    assert.equal(response.status, 200);
+  }
+  assert.ok(data.sharedLists.ownshare1, 'ссылка клиента из избранного на месте');
+  assert.equal(Object.values(data.sharedLists).filter((list) => list.owner === 'offer:' + chat.user.id).length, 5, 'подборок менеджера не больше пяти');
 });
 
 test('свой текст и кнопка-ссылка идут вместе с подборкой; без текста, файла и объектов — отказ; только скрытые — отказ', async () => {

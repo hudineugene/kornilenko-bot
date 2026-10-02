@@ -243,6 +243,8 @@ test('цена снижена: правило включено — в места
   const caption = sent.body.caption || (Array.isArray(sent.body.media) ? sent.body.media[0].caption : '');
   assert.match(caption, /^🔻 <b>Цена снижена<\/b>\n🏡/, 'пометка первой строкой');
   assert.match(caption, /<s>[^<]*199\s000[^<]*<\/s>/, 'зачёркнута цена перед последним снижением');
+  assert.equal(record.publications[0].priceDrop, true, 'публикация помнит, что это пост о снижении: при правке на месте пометка остаётся');
+  assert.equal(bot.getData().objects.find((item) => item.id === record.id).publications[0].priceDrop, true);
 });
 
 test('панель: «🚀 Автопубликация» на экране «Каналы и группы», окно с местами, паузой, видом поста и правилом свежих постов', () => {

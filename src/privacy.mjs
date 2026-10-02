@@ -52,6 +52,7 @@ function storedSummary(user) {
   if (comparison) rows.push('• ' + words.comparison + ': ' + comparison);
   if (user.savedSearch) rows.push('• ' + words.saved);
   const shared = Object.values(data.sharedLists || {}).filter((list) => String(list.owner) === String(user.id)).length;
+  // Подборки от менеджера клиенту присланы, а не созданы им: в строке «списки, которыми вы поделились» их нет.
   if (shared) rows.push('• ' + words.sharedLists + ': ' + shared);
   const recent = Array.isArray(user.recentlyViewed) ? user.recentlyViewed.length : 0;
   if (recent) rows.push('• ' + words.recent + ': ' + recent);

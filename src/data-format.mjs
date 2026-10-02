@@ -823,6 +823,7 @@ function normalizePublications(value) {
     textId: Math.max(0, Math.floor(Number(item && item.textId)) || 0),
     layout: item && item.layout === 'split' ? 'split' : item && item.layout === 'single' ? 'single' : '',
     withoutSignature: Boolean(item && item.withoutSignature),
+    ...(item && item.priceDrop === true ? { priceDrop: true } : {}),
     updatedAt: cleanText(item && item.updatedAt, 40),
     link: cleanText(item && item.link, 300),
   })).filter((item) => item.groupId);
@@ -1173,6 +1174,8 @@ function normalizeViewing(value) {
     feedbackAskedAt: cleanText(value.feedbackAskedAt, 40),
     feedback: ['liked', 'questions', 'disliked'].includes(value.feedback) ? value.feedback : '',
     feedbackAt: cleanText(value.feedbackAt, 40),
+    // Идентификатор встречи в календаре клиента (после переноса — прежний).
+    ...(value.calendarUid ? { calendarUid: cleanText(value.calendarUid, 80) } : {}),
   };
 }
 

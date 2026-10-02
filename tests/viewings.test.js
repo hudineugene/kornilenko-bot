@@ -636,6 +636,7 @@ test.describe('reminder, feedback and the day\'s list', () => {
     assert.notEqual(fresh.id, old.id);
     assert.ok(old.viewing.cancelledAt, 'прежний просмотр закрыт');
     assert.equal(old.status, 'closed');
+    assert.equal(fresh.viewing.calendarUid, 'viewing-' + old.id + '@kornilenko', 'встреча в календаре клиента продолжает прежнюю');
     assert.match(fresh.text, /📆 Перенос: прежний просмотр \(.+\) отменён/);
     const adminTexts = adminMessages().map((message) => message.text).join(' | ');
     assert.ok(!/Клиент отменил просмотр/.test(adminTexts), 'отдельного «отменил» нет');

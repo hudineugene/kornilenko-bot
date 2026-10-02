@@ -165,7 +165,8 @@ async function handleQuickReplyCallback(query, token) {
     // Один раз: пока отправка идёт или уже прошла, список закрыт.
     picks.delete(pickKey(query));
     await acknowledgeCallback(query, token);
-    const before = (inquiry.replies || []).length;
+    const lastReplyId = () => { const replies = inquiry.replies || []; return replies.length ? replies[replies.length - 1].id : ''; };
+    const before = lastReplyId();
     await handleAdministratorReply({
       chat: query.message.chat,
       message_id: pick.cardMessageId,
@@ -173,7 +174,7 @@ async function handleQuickReplyCallback(query, token) {
       reply_to_message: { message_id: pick.cardMessageId, from: data.bot && data.bot.id ? { id: data.bot.id } : undefined },
     }, token);
     // Ответ записан в заявку только после того, как Telegram принял сообщение клиенту.
-    const delivered = (inquiry.replies || []).length > before || (inquiry.replies || []).length === 50;
+    const delivered = lastReplyId() !== before;
     await editPick(query, token, delivered ? '✅ Отправлено: ' + cleanText(template.title, 80) : '⚠️ Не получилось отправить — ответьте на карточку вручную.');
     return;
   }

@@ -592,7 +592,7 @@ async function sendListing(group, post, token = data.config.botToken) {
     // messageIds — все сообщения поста (альбом и текст): по ним пост удаляется из группы целиком.
     { groupId: group.id, title: cleanText(group.title, 200), language: built.language, at: group.lastPostAt, messageId: messageId || 0, messageIds: [...new Set([...albumIds, messageId].filter(Boolean))], threadId,
       // Из чего состоит пост — по этому он обновляется на месте: сообщение с фото (подпись) и отдельное текстовое.
-      captionId: albumIds[0] || 0, textId: html ? messageId || 0 : 0, layout: built.layout, withoutSignature: Boolean(post.withoutSignature), updatedAt: '',
+      captionId: albumIds[0] || 0, textId: html ? messageId || 0 : 0, layout: built.layout, withoutSignature: Boolean(post.withoutSignature), ...(post.listing.priceDrop ? { priceDrop: true } : {}), updatedAt: '',
       link: messageLink(group, messageId || albumIds[0] || 0, threadId) },
     ...(Array.isArray(record.publications) ? record.publications : []),
   ].slice(0, 30);
@@ -606,7 +606,7 @@ async function sendListing(group, post, token = data.config.botToken) {
 async function updateListingPost(group, record, entry, token = data.config.botToken) {
   if (!entry.layout || !(entry.captionId || entry.textId)) throw new Error('Этот пост опубликован прежней версией бота — обновить его нельзя. Удалите его и опубликуйте заново.');
   const hadPhotos = Boolean(entry.captionId);
-  const built = listingMessage(record, entry.language, { layout: entry.layout, withoutSignature: entry.withoutSignature, source: groupSourceLabel(group, entry.threadId), noPhotos: !hadPhotos });
+  const built = listingMessage(record, entry.language, { layout: entry.layout, withoutSignature: entry.withoutSignature, source: groupSourceLabel(group, entry.threadId), noPhotos: !hadPhotos, priceDrop: entry.priceDrop });
   if (hadPhotos && !built.images.length) throw new Error('У объекта больше нет фотографий — пост с фото обновить нельзя. Удалите его и опубликуйте заново.');
   // Кнопка «Смотреть в боте» — у одного фото и у текста; у проданного объекта её нет: ссылка вела бы в никуда.
   const noButtons = { inline_keyboard: [] };

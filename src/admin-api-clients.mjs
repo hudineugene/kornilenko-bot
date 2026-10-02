@@ -831,13 +831,12 @@ async function handleClientsApi(req, res, url) {
         ? { message_id: targetMessageId, allow_sending_without_reply: true }
         : null;
       // С кнопкой-ссылкой уходит inline-клавиатура, без неё — обычное меню.
-      const offerList = offered.length ? createOfferList(user, offered.map((record) => record.id)) : null;
       const buttonRows = [
-        ...(offerList ? [[{ text: offerCopy.button + ' · ' + offerList.count, callback_data: 'catalog:shared:0' }]] : []),
+        ...(offered.length ? [[{ text: offerCopy.button + ' · ' + offered.length, callback_data: 'catalog:shared:0' }]] : []),
         ...(buttonText && buttonUrl ? [[{ text: buttonText, url: buttonUrl }]] : []),
       ];
       const keyboard = buttonRows.length ? { inline_keyboard: buttonRows } : menuKeyboard(language);
-      const bodyText = text || (offerList ? offerCopy.message : '');
+      const bodyText = text || (offered.length ? offerCopy.message : '');
       const outgoingText = header + (bodyText ? '\n\n' + bodyText : '');
       let sentMessage;
       if (attachmentKind === 'photo') {
@@ -850,6 +849,8 @@ async function handleClientsApi(req, res, url) {
           ...(replyParameters ? { reply_parameters: replyParameters } : {}),
         });
       }
+      // Список появляется у клиента только после того, как Telegram принял сообщение: неудачная отправка его не оставляет.
+      if (offered.length) createOfferList(user, offered.map((record) => record.id));
       let fileId = '';
       if (attachmentKind === 'photo' && sentMessage && Array.isArray(sentMessage.photo) && sentMessage.photo.length) fileId = cleanText(sentMessage.photo[sentMessage.photo.length - 1].file_id, 512);
       if (attachmentKind === 'document' && sentMessage && sentMessage.document) fileId = cleanText(sentMessage.document.file_id, 512);

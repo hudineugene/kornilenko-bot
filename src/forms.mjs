@@ -974,6 +974,8 @@ async function handleViewingFormMessage(message, user, token, context = null) {
       ...(slotBooking ? ['', '✅ Время из свободных окон — просмотр подтверждён автоматически'] : []),
     ].join('\n');
     const viewing = { date: pending.data.day, dateText: pending.data.date, timeText: pending.data.time, online: pending.data.online === true };
+    // Перенос: новая встреча в календаре клиента продолжает прежнюю (тот же UID), а не добавляется второй.
+    if (replaced && replaced.viewing) viewing.calendarUid = replaced.viewing.calendarUid || 'viewing-' + replaced.id + '@kornilenko';
     if (slotBooking) Object.assign(viewing, { confirmedDate: pending.data.day, confirmedTime: pending.data.time, confirmedAt: new Date().toISOString() });
     user.pendingAction = null;
     const inquiry = createInquiry(user, details, {
@@ -984,7 +986,8 @@ async function handleViewingFormMessage(message, user, token, context = null) {
       viewing,
       status: slotBooking ? 'in_progress' : 'new',
     });
-    if (replaced) closeMovedViewing(replaced);
+    // Лимит заявок может вернуть ту же самую заявку вместо новой: тогда закрывать нечего — это была бы и новая запись.
+    if (replaced && inquiry !== replaced) closeMovedViewing(replaced);
     recordPropertyEvent(property.id, 'viewings');
     saveDataNow();
     if (slotBooking) {

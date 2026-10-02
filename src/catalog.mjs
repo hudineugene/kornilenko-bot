@@ -2213,7 +2213,8 @@ function createSharedList(user) {
   return { code, count: ids.length, link: 'https://t.me/' + username + '?start=list_' + code };
 }
 
-// Подборка от менеджера: объекты выбраны в панели, хозяин списка — сам клиент (у одного клиента не больше пяти списков),
+// Подборка от менеджера: объекты выбраны в панели, хозяин списка — «offer:<клиент>» (свои пять подборок у клиента; ссылки, которыми он
+// делился из избранного, они не вытесняют),
 // а сам список сразу назначен ему текущим: кнопка «Смотреть подборку» в чате открывает именно его.
 function createOfferList(user, ids) {
   const clean = [...new Set((Array.isArray(ids) ? ids : []).map((id) => cleanText(id, 100)).filter(Boolean))].slice(0, SHARED_LIST_MAX_IDS);
@@ -2221,7 +2222,7 @@ function createOfferList(user, ids) {
   if (!data.sharedLists) data.sharedLists = {};
   pruneSharedLists();
   const code = crypto.randomBytes(8).toString('base64url');
-  data.sharedLists[code] = { ids: clean, owner: String(user.id), createdAt: new Date().toISOString(), opens: 0 };
+  data.sharedLists[code] = { ids: clean, owner: 'offer:' + String(user.id), createdAt: new Date().toISOString(), opens: 0 };
   pruneSharedLists();
   user.sharedListCode = code;
   scheduleSave();
