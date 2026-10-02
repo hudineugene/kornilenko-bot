@@ -2,7 +2,7 @@
 
 import { PENDING_ACTION_TTL_MS } from './config.mjs';
 import { cleanText, formatDayMonth } from './util.mjs';
-import { CATALOG_FILTER_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, PRIVACY_TEXT, MANAGER_CONTACT_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
+import { CATALOG_FILTER_TEXT, INTERACTION_TEXT, LEAD_FORM_TEXT, PRIVACY_TEXT, MANAGER_CONTACT_TEXT, MY_REQUESTS_TEXT, NAVIGATION_TEXT, PROPERTY_ACTION_TEXT, SELECTION_FORM_TEXT, VIEWING_FORM_TEXT } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordPropertyEvent } from './analytics.mjs';
 import { markUnavailable, normalizeUser } from './users.mjs';
@@ -773,7 +773,8 @@ async function handleViewingFormMessage(message, user, token, context = null) {
   if (text === copy.cancel) {
     user.pendingAction = null;
     scheduleSave();
-    await finish(copy.cancelled);
+    // При переносе «отмена» значит «оставить прежний просмотр» — так и отвечаем, чтобы клиент не решил, что отменил просмотр.
+    await finish(pending.replaces ? (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).kept : copy.cancelled);
     return true;
   }
   pending.data = pending.data && typeof pending.data === 'object' ? pending.data : {};

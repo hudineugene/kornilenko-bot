@@ -641,6 +641,21 @@ test.describe('reminder, feedback and the day\'s list', () => {
     assert.ok(!/Клиент отменил просмотр/.test(adminTexts), 'отдельного «отменил» нет');
   });
 
+  test('перенос: «отмена» на вопросе значит «оставить прежний» и отвечает так; кнопки списка без обрезанного названия, пока просмотр один', async () => {
+    const chat = createChat();
+    const inquiry = await confirmedViewing(chat);
+    const list = await chat.say('/requests');
+    const labels = list.last.markup.inline_keyboard.flat().map((button) => button.text);
+    assert.ok(labels.includes('📆 Перенести просмотр') && labels.includes('✕ Отменить просмотр'), 'один просмотр — без названия объекта в кнопках: ' + labels.join(' | '));
+
+    await chat.press('myreq:move:' + inquiry.id);
+    telegram.calls = [];
+    const stopped = await chat.say(ru.cancel);
+    assert.match(stopped.text, /Хорошо, просмотр остаётся в силе\./);
+    assert.equal(inquiry.viewing.cancelledAt, '', 'прежний просмотр цел');
+    assert.ok(!chat.user.pendingAction);
+  });
+
   test('перенос чужого или прошедшего просмотра не работает; кнопка есть и в напоминании', async () => {
     const chat = createChat();
     const inquiry = await confirmedViewing(chat);

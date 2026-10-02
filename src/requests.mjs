@@ -63,6 +63,8 @@ function myRequestsView(user) {
     rows.push([{ text: backButtonText(myArea), callback_data: 'nav:my' }]);
     return { text: copy.none, markup: { inline_keyboard: rows } };
   }
+  // Название объекта в кнопках нужно, только когда будущих просмотров несколько: с одним оно лишь обрезается («· Villa…»).
+  const upcomingViewings = requests.filter((item) => item.type === 'viewing' && viewingIsUpcoming(item)).length;
   const blocks = requests.map((inquiry) => {
     const title = requestTitle(inquiry, language);
     const heading = requestTypeLabel(inquiry, copy, language) + (title && !(inquiry.type === 'question' && planHelpSteps(inquiry.text).length) ? ' · ' + title : '');
@@ -77,8 +79,8 @@ function myRequestsView(user) {
         : '';
     }
     if (inquiry.type === 'viewing' && viewingIsUpcoming(inquiry)) {
-      if (inquiry.propertyId) rows.push([{ text: shortenedText(copy.moveViewing + (title ? ' · ' + title : ''), 31), callback_data: 'myreq:move:' + inquiry.id }]);
-      rows.push([{ text: shortenedText(copy.cancelViewing + (title ? ' · ' + title : ''), 31), callback_data: 'myreq:cancel:' + inquiry.id }]);
+      if (inquiry.propertyId) rows.push([{ text: shortenedText(copy.moveViewing + (title && upcomingViewings > 1 ? ' · ' + title : ''), 31), callback_data: 'myreq:move:' + inquiry.id }]);
+      rows.push([{ text: shortenedText(copy.cancelViewing + (title && upcomingViewings > 1 ? ' · ' + title : ''), 31), callback_data: 'myreq:cancel:' + inquiry.id }]);
     }
     return [heading, [details, requestStatusLabel(inquiry, copy)].filter(Boolean).join(' — ')].join('\n');
   });
