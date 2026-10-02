@@ -356,7 +356,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-item.batch-picked{background:var(--brand-soft)}
 .conversation-preview{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
 .conversation-item-meta{display:flex;align-items:center;gap:var(--sp-2);min-width:0;color:var(--muted);font-size:var(--fs-xs)}
-.conversation-item-meta>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conversation-item-meta>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto}
 .conversation-state{margin-left:auto;white-space:nowrap}
 .conversation-state.ok{color:var(--ok)}.conversation-state.warn{color:var(--warn)}.conversation-state.bad{color:var(--bad)}
 /* Дольше суток — самое яркое: жирнее и с точкой-маркером, чтобы отличалось не только цветом. */
@@ -404,7 +404,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-side-inner{padding:var(--sp-3)}
 .conversation-side .conversation-save{display:flex;flex-direction:column;gap:var(--sp-2);align-items:stretch}
 @media (max-width:1180px){.conversation-split{grid-template-columns:minmax(0,1fr)}.conversation-side{position:static}}
-@media(min-width:1181px){
+@media(min-width:861px){
   .conversation-card{display:flex;flex-direction:column;height:calc(100vh - var(--header) - 140px);min-height:520px}
   .conversation-card>.conversation-split{flex:1 1 auto;min-height:0;align-items:stretch}
   .conversation-card .conversation-main{min-height:0;overflow:auto}
@@ -463,6 +463,15 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
   .conversation-head .status-in-head{display:none}
 }
 .conversation-side-toggle,.side-close,.side-backdrop{display:none}
+/* Ноутбук и планшет (861–1180): окно диалога — по высоте экрана, поле ответа всегда видно; статус и заметка — справа выезжающей панелью, как на телефоне. */
+@media(min-width:861px) and (max-width:1180px){
+  .conversation-card .conversation-side-toggle{display:inline-flex}
+  .conversation-card .conversation-side{position:fixed;top:var(--header);right:0;bottom:0;z-index:calc(var(--z-popup) + 1);width:min(92vw,400px);margin:0;padding:var(--sp-3);overflow:auto;background:var(--surface);box-shadow:var(--shadow-lg);transform:translateX(105%);transition:transform .2s ease}
+  .conversation-card.side-open .conversation-side{transform:none}
+  .conversation-card .side-close{display:inline-flex;margin-bottom:var(--sp-2)}
+  .conversation-card .side-backdrop{position:fixed;inset:0;z-index:var(--z-popup);background:var(--overlay)}
+  .conversation-card.side-open .side-backdrop{display:block}
+}
 .conversation-thread{display:flex;flex-direction:column;gap:var(--sp-2);min-height:300px;max-height:min(54vh,620px);overflow:auto;padding:var(--sp-3);border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--surface-soft);overscroll-behavior:contain}
 .conversation-line{display:flex;justify-content:flex-start}
 .conversation-line.out{justify-content:flex-end}

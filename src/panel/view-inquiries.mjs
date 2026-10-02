@@ -619,7 +619,7 @@ function renderInquiryList(host) {
       '<span class="conversation-avatar">' + esc(initials(user.firstName)) + (group.unread ? '<i></i>' : '') + '</span>' +
       '<span class="conversation-item-body"><span class="conversation-item-top"><b>' + esc(userName(user)) + '</b>' + languageChip(user, item) + '<time>' + ago(item.clientMessageAt || item.updatedAt || item.createdAt) + '</time></span>' +
       '<span class="conversation-preview">' + esc(String(preview || "Вложение").replace(/\s+/g, " ").slice(0, 100)) + '</span>' +
-      '<span class="conversation-item-meta"><span>' + esc(inquiryTypeName(item)) + (group.inquiries.length > 1 ? " · " + group.inquiries.length + " заявки" : "") + '</span><span class="conversation-state ' + stateClass + '">' + stateText + '</span>' +
+      '<span class="conversation-item-meta"><span>' + esc(inquiryTypeName(item)) + (group.inquiries.length > 1 ? " · " + group.inquiries.length + " заявки" : "") + '</span><span class="conversation-state ' + stateClass + '" title="' + esc(stateText) + '">' + esc(stateText.replace(/^Ждёт ответа/, "Ждёт").replace("меньше минуты", "только что")) + '</span>' +
       (group.unread ? '<span class="unread-count">' + group.unread + '</span>' : '') + '</span></span></button>';
   }).join("");
   host.innerHTML =
