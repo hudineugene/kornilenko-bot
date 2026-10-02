@@ -130,7 +130,7 @@ function renderObjects(host) {
       return '<tr class="clickable" data-id="' + esc(record.id) + '">' +
         "<td>" + (images.length ? '<img class="thumb" loading="lazy" decoding="async" src="' + imageUrl("objects", record.id, images[0], "ru") + '" alt="">' : '<span class="thumb"></span>') + "</td>" +
         '<td class="clickable" data-edit="1"><b>' + esc(localized(record.title, "ru") || "Без названия") + "</b>" +
-          (record.reference ? ' <span class="small muted">' + esc(record.reference) + "</span>" : "") +
+          (record.reference ? ' <span class="small muted nowrap">' + esc(record.reference) + "</span>" : "") +
           (missingLanguages(record).length ? '<br><span class="chip warn" title="' + esc(publicationSummary(record)) + '">не готово: ' + esc(missingLanguages(record).join(", ")) + "</span>" : "") + "</td>" +
         "<td>" + esc((PROPERTY_TYPES.find(function (type) { return type[0] === record.propertyType; }) || ["", "—"])[1]) + '<br><span class="small muted">' + (record.dealType === "rent" ? "аренда" : "продажа") + "</span></td>" +
         "<td>" + esc(localized(record.city, "ru") || "—") + "</td>" +

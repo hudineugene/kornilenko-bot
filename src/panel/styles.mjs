@@ -299,7 +299,9 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 /* Пока миниатюра не загрузилась (или фото нет) — значок дома вместо пустого серого квадрата. */
 .thumb{width:40px;height:30px;border-radius:var(--radius-sm);object-fit:cover;flex:none;background:var(--surface-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23525d70' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z'/%3E%3C/svg%3E") center/55% no-repeat}
 .avatar{width:26px;height:26px;border-radius:50%;background:var(--brand-soft);color:var(--brand-dark);display:inline-flex;align-items:center;justify-content:center;font-weight:700;flex:none}
-.bar-row{display:grid;grid-template-columns:minmax(90px,1fr) 46px;align-items:center;gap:var(--sp-2);padding:var(--sp-1) 0}
+.bar-row{display:grid;grid-template-columns:minmax(90px,1fr) minmax(46px,auto);align-items:center;gap:var(--sp-2);padding:var(--sp-1) 0}
+.bar-row>b.right{white-space:nowrap;font-variant-numeric:tabular-nums}
+.bar-row>b.right>.muted{margin-left:var(--sp-1)}
 .bar{height:7px;border-radius:var(--radius-sm);background:var(--brand-soft);overflow:hidden}
 .bar>span{display:block;height:100%;background:var(--brand);border-radius:var(--radius-sm)}
 /* График с осями: наибольшее значение и ноль слева, даты снизу, числа над столбцами. */

@@ -107,24 +107,24 @@ function renderPublications(host) {
   pageAction("✉ Рассылка клиентам", function () { openCampaignEditor(null); });
   pageAction("➤ Пост в канал", openChannelComposer, "secondary");
   host.innerHTML =
-    '<div class="card gap-bottom"><header><h3>Очередь</h3><div class="actions"><span class="small muted">черновики и запланированное</span></div></header><div class="table-wrap"><table class="table-stack"><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th></th></tr></thead><tbody>' +
-    (queue.length ? queue.map(function (row) {
+    '<div class="card gap-bottom"><header><h3>Очередь</h3><div class="actions"><span class="small muted">черновики и запланированное</span></div></header>' +
+    (!queue.length ? '<div class="empty"><b>Очередь пуста</b>Запланированные рассылки и посты появятся здесь</div>' : '<div class="table-wrap"><table class="table-stack"><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th></th></tr></thead><tbody>' + queue.map(function (row) {
       return '<tr data-kind="' + row.kind + '" data-id="' + esc(row.id) + '">' +
         '<td class="nowrap">' + (row.status === "draft" ? "черновик" : dateTime(row.at)) + "</td>" +
         "<td>" + esc(row.where) + "</td>" +
         '<td class="clickable" data-open="1">' + esc(row.text || "без текста") + "</td>" +
         '<td class="right"><button class="btn ghost small" data-drop="1" title="Убрать из очереди">✕</button></td></tr>';
-    }).join("") : '<tr><td colspan="4"><div class="empty"><b>Очередь пуста</b>Запланированные рассылки и посты появятся здесь</div></td></tr>') +
-    "</tbody></table></div></div>" +
-    '<div class="card"><header><h3>История</h3><div class="actions"><span class="small muted">отправлено · отклики · отписки</span></div></header><div class="table-wrap"><table class="table-stack"><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' +
-    (history.length ? history.map(function (row) {
+    }).join("") + "</tbody></table></div>") +
+    "</div>" +
+    '<div class="card"><header><h3>История</h3><div class="actions"><span class="small muted">отправлено · отклики · отписки</span></div></header>' +
+    (!history.length ? '<div class="empty"><b>Публикаций ещё не было</b>Здесь появятся отправленные рассылки и посты</div>' : '<div class="table-wrap"><table class="table-stack"><thead><tr><th>Когда</th><th>Куда</th><th>Текст</th><th class="right">Отправлено</th><th class="right">Отклики</th><th class="right">Отписки</th><th>Статус</th></tr></thead><tbody>' + history.map(function (row) {
       return "<tr><td class=\"nowrap\">" + dateShort(row.at) + "</td><td class=\"small\">" + esc(row.where) + "</td><td>" + esc(row.text || "без текста") + "</td>" +
         '<td class="right">' + (row.kind === "broadcast" ? num(row.sent) : "—") + "</td>" +
         '<td class="right">' + (row.kind === "broadcast" ? num(row.responses) : "—") + "</td>" +
         '<td class="right">' + (row.kind === "broadcast" ? num(row.unsubscribes) : "—") + "</td>" +
         "<td>" + publicationStatusChip(row) + "</td></tr>";
-    }).join("") : '<tr><td colspan="7"><div class="empty"><b>Публикаций ещё не было</b>Здесь появятся отправленные рассылки и посты</div></td></tr>') +
-    "</tbody></table></div></div>";
+    }).join("") + "</tbody></table></div>") +
+    "</div>";
 
   host.querySelectorAll("tr[data-id]").forEach(function (row) {
     var id = row.dataset.id;
