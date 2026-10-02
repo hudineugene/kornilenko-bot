@@ -1078,6 +1078,13 @@ const VIEWING_NOTICE_TEXT = {
   },
 };
 
+// Подборка, которую менеджер предлагает клиенту из панели: сообщение по умолчанию и кнопка, открывающая карточки в чате.
+const OFFER_TEXT = {
+  ru: { message: 'Мы подобрали для вас объекты — откройте список и листайте карточки.', button: '🏘 Смотреть список' },
+  en: { message: 'We picked some properties for you — open the list and browse the cards.', button: '🏘 View the list' },
+  es: { message: 'Hemos elegido inmuebles para ti: abre la lista y recorre las fichas.', button: '🏘 Ver la lista' },
+};
+
 // Every phrase below is shown to a bot user. The administrator can override it
 // without changing this file; these values remain the safe multilingual defaults.
 const CATALOG_FILTER_TEXT = {
@@ -1446,6 +1453,7 @@ export {
   SELECTION_FORM_TEXT,
   SUBSCRIPTION_TEXT,
   VIEWING_FORM_TEXT,
+  OFFER_TEXT,
   VIEWING_NOTICE_TEXT,
   applyInterfaceText,
   normalizedInterfaceText,

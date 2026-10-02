@@ -465,6 +465,10 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
   .conversation-head .status-in-head{display:none}
 }
 .conversation-side-toggle,.side-close,.side-backdrop{display:none}
+.offer-list{display:flex;flex-direction:column;max-height:min(50vh,420px);overflow:auto;border:1px solid var(--line-soft);border-radius:var(--radius)}
+.offer-row{display:flex;align-items:flex-start;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--line-soft)}
+.offer-row>span{display:flex;flex-direction:column;min-width:0}
+.offer-row:last-child{border-bottom:0}
 /* Ноутбук и планшет (861–1180): окно диалога — по высоте экрана, поле ответа всегда видно; статус и заметка — справа выезжающей панелью, как на телефоне. */
 @media(min-width:861px) and (max-width:1180px){
   .conversation-card .conversation-side-toggle{display:inline-flex}

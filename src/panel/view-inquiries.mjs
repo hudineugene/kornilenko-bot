@@ -201,6 +201,47 @@ function selectionMatchingPanel(item) {
 }
 // Просмотр — не обычное сообщение: у него есть дата, время и одно действие,
 // которого от менеджера ждут. Показываем его карточкой прямо в переписке.
+// Окно «Предложить объекты»: отметить до 12 объектов, которые клиент сейчас видит в каталоге.
+function openOfferPicker(chosen, done) {
+  var records = (state.objects || []).filter(function (record) { return record.status === "active" || record.status === "reserved"; });
+  var picked = chosen.slice();
+  function rowHtml(record) {
+    var price = record.priceValue ? (record.priceFrom ? "от " : "") + money(record.priceValue, record.currency) : "";
+    var place = [localized(record.city, "ru"), price].filter(Boolean).join(" · ");
+    return '<label class="check offer-row" data-offer-row="' + esc(record.id) + '" data-search="' + esc((localized(record.title, "ru") + " " + localized(record.city, "ru") + " " + (record.reference || "")).toLowerCase()) + '">' +
+      '<input type="checkbox" value="' + esc(record.id) + '"' + (picked.indexOf(record.id) >= 0 ? " checked" : "") + "> <span><b>" + esc(localized(record.title, "ru") || record.reference || record.id) + '</b><span class="small muted">' + esc(place) + "</span></span></label>";
+  }
+  openDialog({
+    title: "Предложить объекты",
+    body: '<div class="stack">' +
+      '<div class="field"><label for="offerSearch">Поиск</label><input id="offerSearch" type="search" placeholder="Название, город или номер"></div>' +
+      '<div class="offer-list" id="offerList">' + (records.length ? records.map(rowHtml).join("") : '<div class="empty"><b>Нет объектов, видимых клиентам</b></div>') + "</div>" +
+      '<div class="hint" id="offerCount"></div>' +
+      '<div class="hint">Клиент получит ваше сообщение и кнопку «Смотреть список»: карточки откроются в чате. Объект, не заполненный на языке клиента, не отправится.</div></div>',
+    footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="offerDone" type="button">Готово</button>',
+    ready: function (dialog) {
+      var counter = dialog.querySelector("#offerCount");
+      function refresh() {
+        picked = [];
+        dialog.querySelectorAll("#offerList input:checked").forEach(function (box) { picked.push(box.value); });
+        counter.textContent = "Выбрано: " + picked.length + " из 12";
+      }
+      dialog.querySelectorAll("#offerList input").forEach(function (box) {
+        box.onchange = function () {
+          refresh();
+          if (picked.length > 12) { box.checked = false; refresh(); toast("В подборке не больше 12 объектов", true); }
+        };
+      });
+      dialog.querySelector("#offerSearch").oninput = function (event) {
+        var needle = String(event.target.value || "").trim().toLowerCase();
+        dialog.querySelectorAll("[data-offer-row]").forEach(function (row) { row.classList.toggle("hidden", Boolean(needle) && row.dataset.search.indexOf(needle) < 0); });
+      };
+      dialog.querySelector("#offerDone").onclick = function () { refresh(); dialog.closeClean(); done(picked); };
+      refresh();
+    },
+  });
+}
+
 // Что клиент ответил на вопрос «Как прошёл просмотр?»: видно прямо в карточке просмотра.
 function viewingFeedbackChip(viewing) {
   var words = { liked: ["ok", "Понравилось"], questions: ["warn", "Остались вопросы"], disliked: ["bad", "Не подошло"] };
@@ -1281,7 +1322,8 @@ function renderInquiryCard(host) {
       }).join("") + "</div>" : "") +
       '<div class="reply-quote hidden" id="replyQuote"><div><span>Ответ на сообщение клиента</span><b id="replyQuoteText"></b></div><button class="reply-quote-remove" id="clearReplyQuote" type="button" aria-label="Убрать цитату">×</button></div>' +
       '<textarea id="replyText" maxlength="3800" placeholder="Напишите сообщение клиенту…"></textarea>' +
-      '<div class="reply-attachments"><input class="hidden" id="replyFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,application/pdf,text/plain"><label class="btn secondary small" for="replyFile">📎 Добавить файл</label><span class="reply-file-name muted" id="replyFileName">Фотография до 5 МБ или документ до 10 МБ</span><button class="btn ghost small hidden" id="clearReplyFile" type="button">Убрать</button></div>' +
+      '<div class="reply-attachments"><input class="hidden" id="replyFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,application/pdf,text/plain"><label class="btn secondary small" for="replyFile">📎 Добавить файл</label><span class="reply-file-name muted" id="replyFileName">Фотография до 5 МБ или документ до 10 МБ</span><button class="btn ghost small hidden" id="clearReplyFile" type="button">Убрать</button>' +
+        '<button class="btn secondary small" id="offerPick" type="button" title="Выбрать объекты: клиент получит кнопку «Смотреть список» и откроет карточки прямо в чате">🏘 Предложить объекты</button><span class="small muted hidden" id="offerChosen"></span></div>' +
       '<details class="editor-section"><summary><b>Кнопка-ссылка</b><span>клиент увидит её под сообщением</span></summary><div class="editor-section-body"><div class="grid cols-2"><div class="field"><label for="replyButtonText">Текст кнопки</label><input id="replyButtonText" placeholder="Посмотреть объект"></div><div class="field"><label for="replyButtonUrl">Ссылка</label><input id="replyButtonUrl" placeholder="https://…"></div></div></div></details>' +
       '<div class="reply-delivery hidden" id="replyDelivery" aria-live="polite"><span id="replyDeliveryText"></span><button class="btn ghost small hidden" id="retryReply" type="button">Повторить отправку</button></div>' +
       '<div class="reply-actions"><button class="btn" id="sendReply" type="button">Отправить сообщение</button><span class="small muted">После ответа заявка станет «Отвечено». Закрыть её можно справа.</span></div></div>' +
@@ -1362,6 +1404,7 @@ function renderInquiryCard(host) {
 
   var replyTarget = null;
   var replyAttachment = null;
+  var offerIds = [];
   var replyRequestId = "";
   var replyText = host.querySelector("#replyText");
   var replyFile = host.querySelector("#replyFile");
@@ -1415,9 +1458,21 @@ function renderInquiryCard(host) {
     reader.onerror = function () { replyFile.value = ""; toast("Не удалось прочитать файл", true); };
     reader.readAsDataURL(file);
   };
+  // Подборка: выбранные объекты уйдут вместе с ответом кнопкой «Смотреть список»; без текста уйдёт стандартная фраза.
+  function showOffers() {
+    var chip = host.querySelector("#offerChosen");
+    chip.classList.toggle("hidden", !offerIds.length);
+    chip.textContent = offerIds.length ? "Объектов в подборке: " + offerIds.length : "";
+    host.querySelector("#offerPick").textContent = offerIds.length ? "🏘 Изменить подборку" : "🏘 Предложить объекты";
+    freshRequest();
+  }
+  host.querySelector("#offerPick").onclick = function () {
+    openOfferPicker(offerIds, function (ids) { offerIds = ids; showOffers(); });
+  };
   async function sendReply() {
     var text = replyText.value.trim();
-    if (!text && !replyAttachment) return toast("Введите сообщение или добавьте файл", true);
+    if (!text && !replyAttachment && !offerIds.length) return toast("Введите сообщение, добавьте файл или выберите объекты", true);
+    if (replyAttachment && offerIds.length) return toast("Подборку и файл отправьте по отдельности", true);
     if (replyAttachment && text.length > 800) return toast("С вложением подпись должна быть не длиннее 800 знаков", true);
     var button = host.querySelector("#sendReply");
     var payload = {
@@ -1426,6 +1481,7 @@ function renderInquiryCard(host) {
       buttonText: host.querySelector("#replyButtonText").value,
       buttonUrl: host.querySelector("#replyButtonUrl").value,
     };
+    if (offerIds.length) payload.offerIds = offerIds;
     if (replyTarget) payload.replyToMessageId = replyTarget.telegramMessageId;
     if (replyAttachment && replyAttachment.kind === "image") { payload.imageDataUrl = replyAttachment.dataUrl; payload.imageName = replyAttachment.name; }
     if (replyAttachment && replyAttachment.kind === "document") { payload.documentDataUrl = replyAttachment.dataUrl; payload.documentName = replyAttachment.name; }
@@ -1439,7 +1495,8 @@ function renderInquiryCard(host) {
       forgetConversation(item.userId);
       replyDelivery.classList.add("ok");
       replyDeliveryText.textContent = result.duplicate ? "Сообщение уже было доставлено" : "Доставлено в Telegram";
-      toast(result.duplicate ? "Сообщение уже было доставлено" : "Ответ доставлен");
+      toast(result.duplicate ? "Сообщение уже было доставлено" : result.skipped ? "Ответ доставлен. Объектов не отправлено (не видны клиенту): " + result.skipped : "Ответ доставлен");
+      offerIds = [];
       // Остаёмся в той же беседе и на том же месте страницы.
       await reload();
     } catch (error) {

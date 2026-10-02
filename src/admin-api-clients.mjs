@@ -4,14 +4,14 @@ import { markMessageNotificationsRead } from './admin-notifications.mjs';
 import crypto from 'node:crypto';
 import { cleanText, localDayKey } from './util.mjs';
 import { CLIENT_NOTE_LIMIT, CLOCK_TIME_PATTERN, DAY_KEY_PATTERN, MAX_REPLY_TEMPLATES, PIPELINE_STAGES, normalizeViewing } from './data-format.mjs';
-import { MANAGER_CONTACT_TEXT } from './texts.mjs';
+import { MANAGER_CONTACT_TEXT, OFFER_TEXT } from './texts.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { eraseUserData, markUnavailable, normalizeUser, userByChatId, userById, userDataExport } from './users.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
 import { appendInquiryMessage, awaitingReply, inquiryChats, inquiryTimelineMessage, refreshInquiryCards, trimInquiries } from './inquiries.mjs';
-import { validHttpUrl } from './catalog.mjs';
+import { createOfferList, localized, propertyReadyForLanguage, validHttpUrl } from './catalog.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
 import { json, panelUserView, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
 import { replyTemplateInput } from './admin-input.mjs';
@@ -793,7 +793,8 @@ async function handleClientsApi(req, res, url) {
     } catch (error) {
       return json(res, 400, { error: error.message });
     }
-    if (!text && !attachment) return json(res, 400, { error: 'Введите сообщение или добавьте файл' });
+    const offerIds = Array.isArray(body.offerIds) ? [...new Set(body.offerIds.map((id) => cleanText(id, 100)).filter(Boolean))].slice(0, 12) : [];
+    if (!text && !attachment && !offerIds.length) return json(res, 400, { error: 'Введите сообщение или добавьте файл' });
     if (attachment && text.length > 800) return json(res, 400, { error: 'С вложением отправьте подпись до 800 знаков' });
     // Кнопка-ссылка: раньше она была только в карточке клиента, из-за чего
     // менеджер писал одно и то же сообщение дважды в разных местах.
@@ -814,18 +815,30 @@ async function handleClientsApi(req, res, url) {
       }
       if (!replyTarget) return json(res, 400, { error: 'Сообщение для ответа не найдено в этом диалоге' });
     }
+    // Подборка объектов: только те, что клиент сейчас увидит на своём языке; остальные отбрасываются и называются в ответе.
+    const offerLanguage = user.preferredLanguage || inquiry.language || 'ru';
+    const offered = offerIds.map((id) => data.objects.find((record) => record.id === id)).filter((record) => record && ['active', 'reserved'].includes(record.status) && propertyReadyForLanguage(record, offerLanguage));
+    if (offerIds.length && !offered.length) return json(res, 400, { error: 'Выбранные объекты сейчас не видны клиентам на его языке (' + offerLanguage.toUpperCase() + ') — предлагать нечего' });
+    if (offered.length && attachment) return json(res, 400, { error: 'Подборку и файл отправьте по отдельности' });
     try {
       const language = user.preferredLanguage || inquiry.language || 'ru';
       const header = (MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru).replyHeader;
+      const offerCopy = OFFER_TEXT[language] || OFFER_TEXT.ru;
+      const offerTitles = offered.map((record) => localized(record.title, language) || localized(record.title, 'ru') || record.reference || record.id);
+      const recordedText = [text, offered.length ? '🏘 Подборка (' + offered.length + '): ' + offerTitles.join(', ') : ''].filter(Boolean).join('\n');
       const targetMessageId = replyTarget ? requestedReplyTo : Number(inquiry.sourceMessageId);
       const replyParameters = Number.isFinite(targetMessageId)
         ? { message_id: targetMessageId, allow_sending_without_reply: true }
         : null;
       // С кнопкой-ссылкой уходит inline-клавиатура, без неё — обычное меню.
-      const keyboard = buttonText && buttonUrl
-        ? { inline_keyboard: [[{ text: buttonText, url: buttonUrl }]] }
-        : menuKeyboard(language);
-      const outgoingText = header + (text ? '\n\n' + text : '');
+      const offerList = offered.length ? createOfferList(user, offered.map((record) => record.id)) : null;
+      const buttonRows = [
+        ...(offerList ? [[{ text: offerCopy.button + ' · ' + offerList.count, callback_data: 'catalog:shared:0' }]] : []),
+        ...(buttonText && buttonUrl ? [[{ text: buttonText, url: buttonUrl }]] : []),
+      ];
+      const keyboard = buttonRows.length ? { inline_keyboard: buttonRows } : menuKeyboard(language);
+      const bodyText = text || (offerList ? offerCopy.message : '');
+      const outgoingText = header + (bodyText ? '\n\n' + bodyText : '');
       let sentMessage;
       if (attachmentKind === 'photo') {
         sentMessage = await sendPhotoMessage(user.chatId, attachment, outgoingText, data.config.botToken, keyboard, { replyParameters });
@@ -844,7 +857,7 @@ async function handleClientsApi(req, res, url) {
       const createdAt = new Date().toISOString();
       inquiry.replies.push({
         id: crypto.randomUUID(),
-        text: [text || (attachment ? attachment.name : ''), buttonText ? '🔗 ' + buttonText : ''].filter(Boolean).join('\n'),
+        text: [recordedText || (attachment ? attachment.name : ''), buttonText ? '🔗 ' + buttonText : ''].filter(Boolean).join('\n'),
         source: 'panel',
         by: cleanText(data.config.adminName, 60) || 'Администратор',
         createdAt,
@@ -857,7 +870,7 @@ async function handleClientsApi(req, res, url) {
       inquiry.replies = inquiry.replies.slice(-50);
       appendInquiryMessage(inquiry, inquiryTimelineMessage(null, 'out', {
         kind: attachmentKind || 'text',
-        text,
+        text: recordedText,
         fileId,
         fileName: attachment ? attachment.name : '',
         mimeType: attachment ? attachment.mimeType : '',
@@ -880,7 +893,7 @@ async function handleClientsApi(req, res, url) {
       inquiry.updatedAt = createdAt;
       saveDataNow();
       void refreshInquiryCards(inquiry);
-      return json(res, 200, { ok: true, deliveredAt: createdAt, messageId: sentMessage && sentMessage.message_id ? Number(sentMessage.message_id) : null });
+      return json(res, 200, { ok: true, deliveredAt: createdAt, messageId: sentMessage && sentMessage.message_id ? Number(sentMessage.message_id) : null, offered: offered.length, skipped: offerIds.length - offered.length });
     } catch (error) {
       if (userUnavailableError(error)) markUnavailable(user);
       recordError('Ответ на заявку', error);

@@ -2213,6 +2213,21 @@ function createSharedList(user) {
   return { code, count: ids.length, link: 'https://t.me/' + username + '?start=list_' + code };
 }
 
+// Подборка от менеджера: объекты выбраны в панели, хозяин списка — сам клиент (у одного клиента не больше пяти списков),
+// а сам список сразу назначен ему текущим: кнопка «Смотреть подборку» в чате открывает именно его.
+function createOfferList(user, ids) {
+  const clean = [...new Set((Array.isArray(ids) ? ids : []).map((id) => cleanText(id, 100)).filter(Boolean))].slice(0, SHARED_LIST_MAX_IDS);
+  if (!user || !clean.length) return null;
+  if (!data.sharedLists) data.sharedLists = {};
+  pruneSharedLists();
+  const code = crypto.randomBytes(8).toString('base64url');
+  data.sharedLists[code] = { ids: clean, owner: String(user.id), createdAt: new Date().toISOString(), opens: 0 };
+  pruneSharedLists();
+  user.sharedListCode = code;
+  scheduleSave();
+  return { code, count: clean.length };
+}
+
 function sharedListCodeFromStartPayload(payload) {
   const match = cleanText(payload, 140).match(/^list_([A-Za-z0-9_-]{6,32})$/);
   return match ? match[1] : '';
@@ -2348,6 +2363,7 @@ export {
   openPendingStartPayload,
   createSharedList,
   notifySharedListOwner,
+  createOfferList,
   sharedListCodeFromStartPayload,
   sharedListByCode,
   priceOnRequest,
