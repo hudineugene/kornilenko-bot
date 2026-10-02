@@ -915,3 +915,10 @@ test('неразрывный пробел между числом и едини�
   assert.match(PANEL_HTML, /function tightenSpaces\(root\)/);
   assert.match(PANEL_HTML, /iconifyButtons\(document\.body\); tightenSpaces\(document\.body\)/, 'проход по тексту идёт после каждой перерисовки');
 });
+
+test('правило «прятать мелкую подпись» в карточке просмотра не трогает кнопки: у кнопки тот же класс small, и «Подтвердить и уведомить» исчезала', async () => {
+  const { PANEL_HTML } = await import('../src/panel/index.mjs');
+  const rules = [...PANEL_HTML.matchAll(/\.viewing-card>\.small([^{,]*)\{display:none\}/g)];
+  assert.ok(rules.length >= 2, 'правила на месте (ноутбук и телефон)');
+  for (const rule of rules) assert.match(rule[1], /:not\(\.btn\)/, 'без :not(.btn) прячется и кнопка: ' + rule[0]);
+});

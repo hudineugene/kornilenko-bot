@@ -216,6 +216,8 @@ function viewingCardHtml(item, property) {
     '<div class="viewing-card-when">' + esc(when) + "</div>" +
     (property ? '<div class="small muted">' + iconSpan("home") + ' ' + esc(localized(property.title, "ru") || property.reference || property.id) + "</div>" : "") +
     (viewing.cancelledAt ? "" : '<button class="btn secondary small" id="confirmViewingInline" type="button">' + (viewing.confirmedAt ? "Перенести просмотр" : "Подтвердить и уведомить") + "</button>") +
+    // Файл календаря — у подтверждённого просмотра с точным временем.
+    (viewing.confirmedAt && !viewing.cancelledAt && viewing.confirmedDate && viewing.confirmedTime ? '<a class="btn ghost small" href="/api/inquiries/' + encodeURIComponent(item.id) + '/viewing.ics" download title="Добавить в календарь" aria-label="Добавить в календарь">' + iconSpan("calendar") + "</a>" : "") +
     "</div>";
 }
 

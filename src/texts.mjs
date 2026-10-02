@@ -1014,6 +1014,11 @@ const VIEWING_NOTICE_TEXT = {
     phone: '☎️ Телефон: ',
     bringId: '🪪 Возьмите с собой документ, удостоверяющий личность.',
     runningLate: '⏳ Задерживаетесь? Позвоните или напишите в этот чат — предупредите нас заранее.',
+    calendar: '📅 В календарь',
+    calendarCaption: '📅 Откройте файл — встреча появится в вашем календаре с напоминанием за 2 часа.',
+    calendarSummary: 'Просмотр: ',
+    calendarOnline: 'Онлайн-показ по видеосвязи',
+    calendarGone: 'Просмотр отменён или не подтверждён — добавлять в календарь нечего.',
   },
   en: {
     confirmed: '✅ Your viewing is confirmed',
@@ -1037,6 +1042,11 @@ const VIEWING_NOTICE_TEXT = {
     phone: '☎️ Phone: ',
     bringId: '🪪 Bring a photo ID with you.',
     runningLate: '⏳ Running late? Call us or message this chat so we know in advance.',
+    calendar: '📅 Add to calendar',
+    calendarCaption: '📅 Open the file and the meeting appears in your calendar with a reminder 2 hours before.',
+    calendarSummary: 'Viewing: ',
+    calendarOnline: 'Online viewing by video call',
+    calendarGone: 'The viewing is cancelled or not confirmed — nothing to add to a calendar.',
   },
   es: {
     confirmed: '✅ Visita confirmada',
@@ -1060,6 +1070,11 @@ const VIEWING_NOTICE_TEXT = {
     phone: '☎️ Teléfono: ',
     bringId: '🪪 Lleva un documento de identidad.',
     runningLate: '⏳ ¿Llegas tarde? Llámanos o escribe en este chat para avisarnos.',
+    calendar: '📅 Al calendario',
+    calendarCaption: '📅 Abre el archivo y la cita aparecerá en tu calendario con un aviso 2 horas antes.',
+    calendarSummary: 'Visita: ',
+    calendarOnline: 'Visita online por videollamada',
+    calendarGone: 'La visita está cancelada o sin confirmar: no hay nada que añadir al calendario.',
   },
 };
 

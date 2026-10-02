@@ -416,7 +416,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
   .conversation-card .conversation-context .field-label{display:none}
   .conversation-card .conversation-context-title{margin-top:0}
   .conversation-card .conversation-context .property-link{min-width:0;padding:var(--sp-1) var(--sp-2)}
-  .conversation-card .viewing-card>.small{display:none}
+  .conversation-card .viewing-card>.small:not(.btn){display:none}
   .conversation-card .reply-box-head{display:none}
   .conversation-card .reply-box{position:sticky;bottom:0}
   .conversation-card .reply-actions>.small{display:none}
@@ -1010,7 +1010,7 @@ dialog::backdrop{background:var(--overlay)}
   .phone-chat .conversation-context .property-link{width:auto;flex:none;min-height:0;min-width:0;max-width:40%;padding:var(--sp-1) var(--sp-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .phone-chat .conversation-context .property-link>span:last-child{display:none}
   .phone-chat .conversation-main .viewing-card{padding:var(--sp-1) var(--sp-2);gap:var(--sp-1) var(--sp-2)}
-  .phone-chat .viewing-card>.small{display:none}
+  .phone-chat .viewing-card>.small:not(.btn){display:none}
   .phone-chat .viewing-card-when{flex:1 1 100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .phone-chat .conversation-thread{padding:var(--sp-2);gap:var(--sp-1)}
   .phone-chat .reply-box{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-2)}

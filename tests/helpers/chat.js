@@ -32,6 +32,9 @@ global.fetch = async (url, init) => {
   else if (init && init.body instanceof FormData) {
     // Photos are uploaded as multipart; keep the text fields, parse the markup.
     for (const [key, value] of init.body.entries()) if (typeof value === 'string') body[key] = value;
+    // Загруженный файл (не картинка) запоминаем целиком: тесты читают, что именно ушло клиенту.
+    const documents = [...init.body.entries()].filter(([, value]) => value && typeof value === 'object' && typeof value.text === 'function' && /^text\//.test(value.type));
+    for (const [key, value] of documents) telegram.uploaded = { key, name: value.name, type: value.type, text: await value.text() };
     if (body.reply_markup) body.reply_markup = JSON.parse(body.reply_markup);
     if (body.reply_parameters) body.reply_parameters = JSON.parse(body.reply_parameters);
   }

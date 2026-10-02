@@ -21,7 +21,7 @@ import { handleUpdate, processUpdates } from './updates.mjs';
 import { broadcastUsers, deliverBroadcast, runBroadcast } from './broadcasts.mjs';
 import { morningBriefText, runDailyDigest, runFollowUpReminders, runMorningBrief, runInquiryReminders, runWeeklyReport, weeklyReport, weeklyReportData } from './notices.mjs';
 import { budgetLimit, currentSelectionRanking, deliverPropertyAlerts, locationMatches, propertyAlertDeliveries, queuePropertyAlerts, selectionEvaluation, selectionMatches } from './alerts.mjs';
-import { confirmViewing, parseViewingDate, runViewingNotices, viewingAgenda } from './viewings.mjs';
+import { confirmViewing, parseViewingDate, runViewingNotices, viewingAgenda, viewingCalendarFile } from './viewings.mjs';
 import { myRequestsView } from './requests.mjs';
 import { subscriptionPanel } from './subscriptions.mjs';
 import { savedSearchMatches, savedSearchResults, savedSearchText } from './saved-search.mjs';
@@ -98,6 +98,7 @@ export {
   clearRunMarker,
   configureBotCommands,
   confirmViewing,
+  viewingCalendarFile,
   contentButtons,
   contentAddressImages,
   currentWindowsUser,

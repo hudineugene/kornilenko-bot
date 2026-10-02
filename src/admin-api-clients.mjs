@@ -16,7 +16,7 @@ import { userUnavailableError } from './broadcasts.mjs';
 import { json, panelUserView, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
 import { replyTemplateInput } from './admin-input.mjs';
 import { CLIENT_EXPORT_COLUMNS, INQUIRY_EXPORT_COLUMNS, clientExportRows, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
-import { confirmViewing } from './viewings.mjs';
+import { confirmViewing, viewingCalendarFile } from './viewings.mjs';
 import { sendInquiryToAdministrator, weeklyReportData, weeklyReportText } from './notices.mjs';
 
 // Сколько бесед вернуть в ответ на поиск: больше в списке всё равно не читают,
@@ -721,6 +721,24 @@ async function handleClientsApi(req, res, url) {
     saveDataNow();
     void refreshInquiryCards(inquiry);
     return json(res, 200, { ok: true });
+  }
+
+  // Файл календаря для менеджера: подтверждённый просмотр одним касанием в его календарь.
+  const viewingFileMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/viewing\.ics$/);
+  if (viewingFileMatch && req.method === 'GET') {
+    const session = requireAuth(req, res);
+    if (!session) return;
+    const inquiry = data.inquiries.find((item) => item.id === decodeURIComponent(viewingFileMatch[1]));
+    if (!inquiry) return json(res, 404, { error: 'Заявка не найдена' });
+    const file = viewingCalendarFile(inquiry, 'ru');
+    if (!file) return json(res, 409, { error: 'Файл есть только у подтверждённого просмотра с точным временем' });
+    securityHeaders(res);
+    res.writeHead(200, {
+      'content-type': 'text/calendar; charset=utf-8',
+      'content-length': Buffer.byteLength(file.content),
+      'content-disposition': 'attachment; filename="' + file.fileName + '"',
+    });
+    return res.end(file.content);
   }
 
   const inquiryViewingMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/viewing$/);

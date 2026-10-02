@@ -26,7 +26,7 @@ import { catalogRequest, searchSignalCount } from './search.mjs';
 import { acknowledgeCallback, handleAboutCallback, handleCatalogCallback, handleSharedListCallback, handleContactCallback, handleGuideCallback, sendGuidePage, handleLanguageCallback, handleNavigationCallback, handlePromotionCallback, handlePropertyCallback, handleSelectionCallback, propertyRequestText, sendAbout, sendContacts, sendHelp, sendPromotions } from './sections.mjs';
 import { recordBroadcastResponse, runDueBroadcasts } from './broadcasts.mjs';
 import { handleAlertsCallback } from './alerts.mjs';
-import { handleViewingConfirmCallback, handleViewingFeedbackCallback } from './viewings.mjs';
+import { handleViewingCalendarCallback, handleViewingConfirmCallback, handleViewingFeedbackCallback } from './viewings.mjs';
 import { handleMyRequestsCallback, sendMyRequests } from './requests.mjs';
 import { handleSubscriptionCallback } from './subscriptions.mjs';
 import { withOffHoursNote } from './hours.mjs';
@@ -223,6 +223,7 @@ async function handleUpdate(update, token) {
       else if (callbackData.startsWith('cfilter:')) await handleCatalogFilterCallback(update.callback_query, token);
       else if (callbackData.startsWith('myreq:')) await handleMyRequestsCallback(update.callback_query, token);
       else if (callbackData.startsWith('vfb:')) await handleViewingFeedbackCallback(update.callback_query, token);
+      else if (callbackData.startsWith('vcal:')) await handleViewingCalendarCallback(update.callback_query, token);
       else if (callbackData.startsWith('subs:')) await handleSubscriptionCallback(update.callback_query, token);
       else if (callbackData.startsWith('calc:')) await handleCalculatorCallback(update.callback_query, token);
       else if (callbackData.startsWith('privacy:')) await handlePrivacyCallback(update.callback_query, token);

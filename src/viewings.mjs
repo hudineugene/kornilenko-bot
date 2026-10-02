@@ -8,7 +8,8 @@ import { INTERACTION_TEXT, MY_REQUESTS_TEXT, PROPERTY_ACTION_TEXT, VIEWING_FORM_
 import { data, saveDataNow, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { markUnavailable, normalizeUser, userByChatId, userById } from './users.mjs';
-import { sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
+import { sendMessage, sendPhotoMessage, telegramMultipartRequest, telegramRequest } from './telegram.mjs';
+import { buildIcs } from './calendar-file.mjs';
 import { imageExists } from './media.mjs';
 import { menuKeyboard } from './menus.mjs';
 import { adminCallbackAllowed, adminChatFor, createInquiry, inquiryStatusMarkup, notifyAdministratorAction, refreshInquiryCards } from './inquiries.mjs';
@@ -25,6 +26,8 @@ const CLIENT_QUIET_HOUR = 21;
 const VIEWING_AGENDA_HOUR = 8;
 const FEEDBACK_WINDOW_DAYS = 3;
 const VIEWING_NOTICES_PER_RUN = 20;
+const VIEWING_MINUTES = 60;
+const VIEWING_ALARM_MINUTES = 120;
 
 // --- Dates -------------------------------------------------------------------
 
@@ -166,8 +169,13 @@ function viewingWhen(inquiry, language) {
 function viewingPlaceLines(property, language, copy) {
   if (!property) return [];
   const title = localizedExact(property.title, language) || localized(property.title, language) || property.reference || '';
-  const address = [localizedExact(property.city, language, 160), localizedExact(property.district, language, 160), localizedExact(property.address, language, 500)].filter(Boolean).join(', ');
+  const address = viewingAddress(property, language);
   return [title ? '🔖 ' + title : '', address ? '📍 ' + copy.address + ': ' + address : ''].filter(Boolean);
+}
+
+function viewingAddress(property, language) {
+  if (!property) return '';
+  return [localizedExact(property.city, language, 160), localizedExact(property.district, language, 160), localizedExact(property.address, language, 500)].filter(Boolean).join(', ');
 }
 
 // Карточка встречи: кто встретит, по какому телефону связаться, что взять с собой
@@ -210,6 +218,78 @@ function viewingProperty(inquiry) {
   return inquiry.propertyId ? data.objects.find((item) => item.id === inquiry.propertyId) || null : null;
 }
 
+// --- Calendar file -----------------------------------------------------------
+
+// Файл календаря для подтверждённого просмотра с точным временем. Нет
+// подтверждения, времени «ЧЧ:ММ» или просмотр отменён — файла нет (null).
+function viewingCalendarFile(inquiry, language) {
+  const viewing = inquiry && inquiry.viewing;
+  if (!viewing || !viewing.confirmedAt || viewing.cancelledAt) return null;
+  if (!DAY_KEY_PATTERN.test(String(viewing.confirmedDate || '')) || !CLOCK_TIME_PATTERN.test(String(viewing.confirmedTime || ''))) return null;
+  const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
+  const [hour, minute] = viewing.confirmedTime.split(':').map(Number);
+  const start = dateFromDayKey(viewing.confirmedDate);
+  start.setHours(hour, minute, 0, 0);
+  const property = viewingProperty(inquiry);
+  const title = property ? localizedExact(property.title, language) || localized(property.title, language) || property.reference || '' : '';
+  const online = Boolean(viewing.online);
+  const description = online ? [copy.calendarOnline] : meetingLines(language, copy);
+  const content = buildIcs({
+    uid: 'viewing-' + inquiry.id + '@kornilenko',
+    sequence: Math.floor(Date.parse(viewing.confirmedAt) / 1000),
+    start,
+    minutes: VIEWING_MINUTES,
+    alarmMinutes: VIEWING_ALARM_MINUTES,
+    summary: copy.calendarSummary + (title || ''),
+    location: online ? copy.calendarOnline : viewingAddress(property, language),
+    description: description.join('\n'),
+    url: property && !online ? validHttpUrl(property.mapUrl) : '',
+  });
+  return { fileName: 'viewing-' + viewing.confirmedDate + '.ics', content };
+}
+
+async function sendViewingCalendar(chatId, inquiry, language, token) {
+  const file = viewingCalendarFile(inquiry, language);
+  if (!file) return false;
+  const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
+  await telegramMultipartRequest(token, 'sendDocument', {
+    chat_id: chatId,
+    caption: copy.calendarCaption,
+    document: { upload: new Blob([file.content], { type: 'text/calendar' }), fileName: file.fileName },
+  });
+  return true;
+}
+
+// Кнопка «В календарь» — только когда файл можно собрать.
+function calendarRow(inquiry, language) {
+  if (!viewingCalendarFile(inquiry, language)) return [];
+  const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
+  return [[{ text: copy.calendar, callback_data: 'vcal:' + inquiry.id }]];
+}
+
+async function handleViewingCalendarCallback(query, token) {
+  const chatId = query.message && query.message.chat ? query.message.chat.id : query.from.id;
+  const user = normalizeUser(query.from, chatId, false);
+  const language = user.preferredLanguage || 'ru';
+  const copy = VIEWING_NOTICE_TEXT[language] || VIEWING_NOTICE_TEXT.ru;
+  const inquiry = data.inquiries.find((item) => item.id === String(query.data || '').split(':').slice(1).join(':'));
+  // Файл получает только тот клиент, чей это просмотр.
+  if (!inquiry || inquiry.type !== 'viewing' || inquiry.userId !== String(user.id)) {
+    await acknowledgeCallback(query, token, (INTERACTION_TEXT[language] || INTERACTION_TEXT.ru).stale);
+    return;
+  }
+  if (!viewingCalendarFile(inquiry, language)) {
+    await acknowledgeCallback(query, token, copy.calendarGone);
+    return;
+  }
+  await acknowledgeCallback(query, token);
+  try {
+    await sendViewingCalendar(chatId, inquiry, language, token);
+  } catch (error) {
+    recordError('Файл календаря для просмотра', error);
+  }
+}
+
 // --- Confirmation ------------------------------------------------------------
 
 // The client's message: property, date, time, address, a map and a way to
@@ -240,6 +320,7 @@ async function sendViewingConfirmation(inquiry, user, token = data.config.botTok
   if (options.editMessageId) {
     const rows = [];
     if (map) rows.push([{ text: copy.openMap, url: map }]);
+    rows.push(...calendarRow(inquiry, language));
     rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton, callback_data: 'myreq:list' }]);
     try {
       await telegramRequest(token, 'editMessageText', { chat_id: user.chatId, message_id: options.editMessageId, text, reply_markup: { inline_keyboard: rows } });
@@ -252,10 +333,18 @@ async function sendViewingConfirmation(inquiry, user, token = data.config.botTok
   // кнопки: карта уходит ссылкой в текст, «Мои заявки» названы в подписи.
   if (options.keyboard) {
     const withMap = map ? [text, copy.openMap + ': ' + map].join('\n\n') : text;
-    return sendMessage(user.chatId, withMap, token, { reply_markup: options.keyboard });
+    const sent = await sendMessage(user.chatId, withMap, token, { reply_markup: options.keyboard });
+    // К клавиатуре меню инлайн-кнопку не приложить: файл календаря идёт следом сам.
+    try {
+      await sendViewingCalendar(user.chatId, inquiry, language, token);
+    } catch (error) {
+      recordError('Файл календаря для просмотра', error);
+    }
+    return sent;
   }
   const rows = [];
   if (map) rows.push([{ text: copy.openMap, url: map }]);
+  rows.push(...calendarRow(inquiry, language));
   rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).menuButton, callback_data: 'myreq:list' }]);
   return sendMessage(user.chatId, text, token, { reply_markup: { inline_keyboard: rows } });
 }
@@ -441,6 +530,7 @@ async function sendViewingReminder(inquiry, user, token) {
   const rows = [];
   const map = property && !(inquiry.viewing && inquiry.viewing.online) ? validHttpUrl(property.mapUrl) : '';
   if (map) rows.push([{ text: copy.openMap, url: map }]);
+  rows.push(...calendarRow(inquiry, language));
   rows.push([{ text: (MY_REQUESTS_TEXT[language] || MY_REQUESTS_TEXT.ru).cancelViewing, callback_data: 'myreq:cancel:' + inquiry.id }]);
   await sendMessage(user.chatId, viewingDetailsText(inquiry, property, language, copy.reminder, copy.reminderFooter), token, { reply_markup: { inline_keyboard: rows } });
 }
@@ -673,12 +763,14 @@ export {
   VIEWING_REMINDER_HOUR,
   cancelViewing,
   confirmViewing,
+  handleViewingCalendarCallback,
   handleViewingConfirmCallback,
   handleViewingFeedbackCallback,
   parseViewingDate,
   runViewingNotices,
   sendViewingConfirmation,
   viewingAgenda,
+  viewingCalendarFile,
   viewingDateLabel,
   viewingDayForOption,
   viewingFeedbackDue,
