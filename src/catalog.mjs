@@ -301,6 +301,23 @@ function locationText(parts, address) {
   return parts.filter((part) => part && !(address && lower.includes(part.toLowerCase()))).concat(address ? [address] : []).join(', ');
 }
 
+// От 1000 м расстояние читается километрами: «6 км», «1,5 км», а не «6 000 м».
+function distanceText(value, language = 'ru') {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return '';
+  if (number >= 1000) return formatNumber(Math.round(number / 100) / 10, language, 1) + ' ' + (language === 'ru' ? 'км' : 'km');
+  return formatNumber(number, language, 2) + ' ' + (language === 'ru' ? 'м' : 'm');
+}
+
+// У комплекса из нескольких вариантов («1–2 спальни», «37–60 м²») верхняя граница хранится рядом с обычным значением;
+// диапазон рисуется, только когда она больше нижней.
+function rangeText(low, high, language, allowZero = false) {
+  const from = numericText(low, language, allowZero);
+  const upper = Number(high);
+  if (!from || !(upper > Number(low))) return from;
+  return from + '–' + numericText(upper, language, allowZero);
+}
+
 // compact — для карточки в каталоге: значок и число одной строкой. Подписи
 // («Спальни: 2») занимали три строки из шести, а значки понятны без слов.
 // Полная карточка («Подробнее») по-прежнему с подписями.
@@ -309,11 +326,11 @@ function propertySpecRows(record, language, options = {}) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
   const metre = language === 'ru' ? 'м' : 'm';
   const facts = [];
-  const bedrooms = numericText(record.bedrooms, language, true);
+  const bedrooms = rangeText(record.bedrooms, record.bedroomsMax, language, true);
   const bathrooms = numericText(record.bathrooms, language);
-  const area = numericText(record.area, language);
+  const area = rangeText(record.area, record.areaMax, language);
   const plotArea = numericText(record.plotArea, language);
-  const distanceSea = numericText(record.distanceSea, language);
+  const distanceSea = distanceText(record.distanceSea, language);
   const fact = (icon, label, value) => (compact ? icon + ' ' + value : icon + ' ' + shortenedText(label, 22) + ': ' + value);
   // Спальни, санузлы и этаж — у жилья; у участка и коммерции их нет, даже если в карточке стоит 0.
   const residential = RESIDENTIAL_PROPERTY_TYPES.has(cleanText(record.propertyType, 40));
@@ -325,7 +342,7 @@ function propertySpecRows(record, language, options = {}) {
     const floorValue = [cleanText(record.floor, 20), cleanText(record.floors, 20)].filter(Boolean).join('/');
     facts.push(fact('🏢', copy.floor, floorValue));
   }
-  if (distanceSea) facts.push(fact('🌊', copy.distanceSeaLabel, distanceSea + ' ' + metre));
+  if (distanceSea) facts.push(fact('🌊', copy.distanceSeaLabel, distanceSea));
   if (compact) {
     // Одна длинная строка переносилась на экране телефона («🌊 150 м» оставалась сиротой): собираем строки до 30 знаков.
     const lines = [];
@@ -795,7 +812,7 @@ function applyCatalogFilter(records, value, language = 'ru') {
   const filter = normalizedCatalogFilter(value);
   const filtered = records.filter((record) => (!filter.deal || record.dealType === filter.deal)
     && (!filter.type || record.propertyType === filter.type)
-    && (!filter.bedrooms || Number(record.bedrooms) >= filter.bedrooms)
+    && (!filter.bedrooms || Math.max(Number(record.bedrooms) || 0, Number(record.bedroomsMax) || 0) >= filter.bedrooms)
     && (!filter.city || sameCity(recordCity(record, language), filter.city))
     && (!filter.district || sameCity(recordDistrict(record, language), filter.district))
     && (!filter.minPrice || (Number(record.priceValue) > 0 && Number(record.priceValue) >= filter.minPrice))
@@ -2391,5 +2408,7 @@ export {
   sameSavedSearch,
   translateCatalogFilterCity,
   validHttpUrl,
+  distanceText,
+  rangeText,
   whatsappContactUrl,
 };

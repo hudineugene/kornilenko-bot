@@ -195,7 +195,7 @@ test.describe('callback request form', () => {
     await chat.press('lead:call');
     const step = await chat.say(ru.cancel);
     assert.equal(step.last.text, ru.cancelled);
-    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.guide }, { text: MENU.ru.more }], [{ text: MENU.ru.contacts }]] }));
+    assert.deepEqual(step.last.buttons, buttonsOf({ keyboard: [[{ text: MENU.ru.objects }, { text: MENU.ru.selection }], [{ text: MENU.ru.guide }, { text: MENU.ru.more }], [{ text: MENU.ru.contacts }, { text: MENU.ru.about }]] }));
     assert.equal(chat.user.pendingAction, null);
     assert.equal(chat.inquiries.length, 0);
   });
@@ -826,12 +826,12 @@ test.describe('property card', () => {
     assert.ok(!callbacks.some((value) => value.startsWith('property:viewing:')));
   });
 
-  test('the main menu is five buttons at most and still understands the old ones', async () => {
+  test('the main menu is six buttons at most and still understands the old ones', async () => {
     const chat = createChat();
     const step = await chat.say('/menu');
-    // Без акций — пять кнопок: объекты, подбор, связаться, «Как купить», «Моё».
-    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 2, 1], '2-2-1: «Связаться» полным рядом внизу, а не одинокой кнопкой посередине');
-    assert.deepEqual(step.last.buttons, [MENU.ru.objects, MENU.ru.selection, MENU.ru.guide, MENU.ru.more, MENU.ru.contacts]);
+    // Без акций — шесть кнопок: объекты, подбор, «Как купить», «Моё», связаться, «О компании».
+    assert.deepEqual(step.last.markup.keyboard.map((row) => row.length), [2, 2, 2], '2-2-2: «Связаться» и «О компании» рядом внизу, а не одинокая кнопка посередине');
+    assert.deepEqual(step.last.buttons, [MENU.ru.objects, MENU.ru.selection, MENU.ru.guide, MENU.ru.more, MENU.ru.contacts, MENU.ru.about]);
     assert.ok(!step.last.buttons.includes(MENU.ru.promotions), 'пустой раздел акций в меню не висит');
     assert.ok(!step.last.buttons.includes(MENU.ru.favorites), 'избранное живёт в «Моё»');
 

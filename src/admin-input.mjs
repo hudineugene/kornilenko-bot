@@ -211,6 +211,9 @@ function parseContentRecord(body, kind, existing = {}) {
       city: translatedInput(body.city, 160),
       district: translatedInput(body.district, 160),
       bedrooms: optionalNumber(body.bedrooms, 'спальни', 100),
+      // Комплекс из нескольких вариантов: верхняя граница спален и площади (0 — не указана).
+      bedroomsMax: optionalNumber(body.bedroomsMax, 'спальни до', 100) || 0,
+      areaMax: optionalNumber(body.areaMax, 'площадь до', 1000000) || 0,
       bathrooms: optionalNumber(body.bathrooms, 'санузлы', 100),
       area: optionalNumber(body.area, 'площадь', 1000000),
       plotArea: optionalNumber(body.plotArea, 'площадь участка', 10000000),

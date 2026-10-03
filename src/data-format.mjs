@@ -1465,7 +1465,7 @@ function normalizeLoadedData(parsed) {
       },
       objects: Array.isArray(parsed.objects) ? parsed.objects.map((record) => {
         const imagesByLanguage = normalizePropertyImages(record);
-        const { image: legacyImage, images: legacyImages, ...propertyRecord } = record;
+        const { image: legacyImage, images: legacyImages, bedroomsMax: ignoredBedroomsMax, areaMax: ignoredAreaMax, ...propertyRecord } = record;
         return {
           ...propertyRecord,
           imagesByLanguage,
@@ -1479,6 +1479,9 @@ function normalizeLoadedData(parsed) {
           pricePeriod: ['total', 'month', 'week'].includes(record.pricePeriod) ? record.pricePeriod : 'total',
           // Цена «от»: у комплекса — цена самого дешёвого варианта.
           priceFrom: record.priceFrom === true,
+          // Комплекс из нескольких вариантов: верхняя граница спален и площади (больше нижней, иначе не хранится).
+          ...(Number(record.bedroomsMax) > Number(record.bedrooms) ? { bedroomsMax: Number(record.bedroomsMax) } : {}),
+          ...(Number(record.areaMax) > Number(record.area) ? { areaMax: Number(record.areaMax) } : {}),
           badges: Array.isArray(record.badges) ? record.badges.map((item) => cleanText(item, 30)).filter(Boolean).slice(0, 6) : [],
           // Видео или 3D-тур: ссылка на YouTube, Matterport и подобное.
           videoUrl: cleanText(record.videoUrl, 500),

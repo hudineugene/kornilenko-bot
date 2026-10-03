@@ -707,6 +707,8 @@ function openRecordEditor(kind, id) {
           '<div class="field"><label>Спальни <span class="required" data-required="bedrooms">*</span></label><input id="fBedrooms" type="number" min="0" value="' + esc(record && record.bedrooms != null ? record.bedrooms : "") + '"></div>' +
           '<div class="field"><label>Санузлы <span class="required" data-required="bathrooms">*</span></label><input id="fBathrooms" type="number" min="0" value="' + esc(record && record.bathrooms || "") + '"></div>' +
           '<div class="field"><label>Площадь, м² <span class="required" data-required="area">*</span></label><input id="fArea" type="number" min="0" value="' + esc(record && record.area || "") + '"></div>' +
+          '<div class="field"><label for="fBedroomsMax">Спален до</label><input id="fBedroomsMax" type="number" min="0" value="' + esc(record && record.bedroomsMax || "") + '"><div class="hint">Для комплекса: «1–2 спальни»</div></div>' +
+          '<div class="field"><label for="fAreaMax">Площадь до, м²</label><input id="fAreaMax" type="number" min="0" value="' + esc(record && record.areaMax || "") + '"><div class="hint">Для комплекса: «37–60 м²»</div></div>' +
           '<div class="field" data-field="plotArea"><label>Участок, м² <span class="required" data-required="plotArea">*</span></label><input id="fPlot" type="number" min="0" value="' + esc(record && record.plotArea || "") + '"></div>' +
           '<div class="field"><label>Этаж</label><input id="fFloor" value="' + esc(record && record.floor || "") + '"></div>' +
           '<div class="field"><label>Этажей в доме</label><input id="fFloors" value="' + esc(record && record.floors || "") + '"></div>' +
@@ -1064,6 +1066,8 @@ function openRecordEditor(kind, id) {
             bedrooms: dialog.querySelector("#fBedrooms").value,
             bathrooms: dialog.querySelector("#fBathrooms").value,
             area: dialog.querySelector("#fArea").value,
+            bedroomsMax: dialog.querySelector("#fBedroomsMax").value,
+            areaMax: dialog.querySelector("#fAreaMax").value,
             plotArea: dialog.querySelector("#fPlot").value,
             floor: dialog.querySelector("#fFloor").value,
             floors: dialog.querySelector("#fFloors").value,

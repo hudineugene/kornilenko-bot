@@ -32,7 +32,7 @@ function activePromotionCount(language) {
 function menuKeyboard(language) {
   const labels = MENU_LABELS[language] || MENU_LABELS.ru;
   const promotions = activePromotionCount(language);
-  // Без акций — 2-2-1: «Связаться» полным рядом внизу, а не одинокой кнопкой посередине. С акциями — три ряда
+  // Без акций — 2-2-2: внизу «Связаться» и «О компании» (покупатель новостройки прежде всего спрашивает, кто строит). Раньше «Связаться» стояла одна. С акциями — три ряда
   // по две. Гид «Как купить в Испании» — на виду, в главном меню: раньше он был седьмым рядом экрана
   // «Связаться», и покупатель его не находил.
   const rows = promotions
@@ -44,7 +44,7 @@ function menuKeyboard(language) {
     : [
       [{ text: labels.objects }, { text: labels.selection }],
       [{ text: labels.guide }, { text: labels.more }],
-      [{ text: labels.contacts }],
+      [{ text: labels.contacts }, { text: labels.about }],
     ];
   return {
     keyboard: rows,

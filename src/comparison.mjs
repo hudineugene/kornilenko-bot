@@ -17,6 +17,7 @@ import {
   catalogRecords,
   clearCatalogMessages,
   clearGalleryMessages,
+  distanceText,
   localizedExact,
   objectPriceText,
   sendUiMessage,
@@ -77,7 +78,6 @@ function recordValues(record, language) {
   const district = localizedExact(record.district, language, 160);
   const floor = [cleanText(record.floor, 20), cleanText(record.floors, 20)].filter(Boolean).join('/');
   const areaUnit = language === 'ru' ? 'м²' : 'm²';
-  const distanceUnit = language === 'ru' ? 'м' : 'm';
   return {
     price: objectPriceText(record, language),
     location: [city, district].filter(Boolean).join(', '),
@@ -88,7 +88,7 @@ function recordValues(record, language) {
     bathrooms: numberValue(record.bathrooms),
     condition: conditions[record.condition] || '',
     floor,
-    distanceSea: numberValue(record.distanceSea) ? numberValue(record.distanceSea) + ' ' + distanceUnit : '',
+    distanceSea: distanceText(record.distanceSea, language),
     status: record.status === 'reserved' ? '🟡 ' + action.reserved : '🟢 ' + action.available,
     reference: cleanText(record.reference, 80),
   };
