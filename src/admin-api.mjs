@@ -45,7 +45,7 @@ import {
   useDownloadTicket,
   writeBackupMedia,
 } from './admin-http.mjs';
-import { REMOTE_LOGIN_ANSWER_MS, REMOTE_LOGIN_CODE_ATTEMPTS, decoyRemoteLogin, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
+import { CLOUDFLARED_PATH, REMOTE_LOGIN_ANSWER_MS, REMOTE_LOGIN_CODE_ATTEMPTS, decoyRemoteLogin, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
 import { attemptKey, forgetLoginAttempts, loginAllowed, rememberFailedLogin, validateBackupStructure, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { handleGroupApi } from './group-api.mjs';
 import { openEventStream } from './panel-events.mjs';
@@ -232,7 +232,7 @@ async function handleApi(req, res, url) {
         return json(res, 400, { error: 'Сначала подключите и проверьте уведомления в Telegram: на этот чат будут приходить коды для входа из интернета.' });
       }
       if (!tunnelInstalled()) {
-        return json(res, 400, { error: 'Рядом с ботом нет cloudflared.exe — без него туннель не запустить.' });
+        return json(res, 400, { error: process.platform === 'win32' ? 'Рядом с ботом нет cloudflared.exe — без него туннель не запустить.' : 'Не найдена программа cloudflared (' + CLOUDFLARED_PATH + ') — без неё туннель не запустить.' });
       }
     }
     data.config.remoteAccess = enabled;

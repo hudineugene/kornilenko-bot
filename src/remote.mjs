@@ -21,7 +21,8 @@ const REMOTE_LOGIN_CODE_TTL_MS = 5 * 60 * 1000;
 const REMOTE_LOGIN_CODE_ATTEMPTS = 5;
 const TUNNEL_URL_PATTERN = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
 const TUNNEL_RESTART_DELAY_MS = 30 * 1000;
-const CLOUDFLARED_PATH = process.env.CLOUDFLARED_PATH || path.join(APP_DIRECTORY, 'cloudflared.exe');
+// На Windows программа лежит рядом с ботом (cloudflared.exe), на Linux путь задаёт служба (CLOUDFLARED_PATH).
+const CLOUDFLARED_PATH = process.env.CLOUDFLARED_PATH || path.join(APP_DIRECTORY, process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared');
 const pendingRemoteLogins = new Map();
 let tunnelProcess = null;
 let tunnelRestartTimer = null;
@@ -125,7 +126,7 @@ function startTunnel(spawnProcess = spawn) {
   if (tunnelProcess || !data.config.remoteAccess || shuttingDown) return;
   clearTimeout(tunnelRestartTimer);
   if (!tunnelInstalled()) {
-    runtime.tunnel = { status: 'missing', url: '', host: '', error: 'Рядом с ботом нет cloudflared.exe' };
+    runtime.tunnel = { status: 'missing', url: '', host: '', error: process.platform === 'win32' ? 'Рядом с ботом нет cloudflared.exe' : 'Не найдена программа cloudflared: ' + CLOUDFLARED_PATH };
     return;
   }
   runtime.tunnel = { status: 'starting', url: '', host: '', error: '' };

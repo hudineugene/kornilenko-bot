@@ -140,7 +140,7 @@ async function runReset() {
   console.log('\n  Готово. Пароль изменён.');
   console.log(endedSessions ? '  Все прежние входы в панель завершены: войти нужно заново.' : '  Сохранённых входов в панель не было.');
   console.log('  Копия прежних данных: ' + backup);
-  console.log('  Запустите бота (start-bot.ps1) и войдите с новым паролем.\n');
+  console.log(process.platform === 'win32' ? '  Запустите бота (start-bot.ps1) и войдите с новым паролем.\n' : '  Бот запустится сам; войдите в панель с новым паролем.\n');
 }
 
 async function resetPassword() {
