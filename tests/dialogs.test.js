@@ -271,7 +271,7 @@ test.describe('viewing form', () => {
     let step = await chat.say(ru.timeOptions[3]);
     assert.equal(step.last.text, ru.askCustomTime);
     step = await chat.say('ab');
-    assert.equal(step.last.text, ru.invalid);
+    assert.equal(step.last.text, ru.askTime.split('\n')[0] + '\n' + ru.invalid, 'переспрос с заголовком шага «🕒 Время»');
     step = await chat.say('после 16:00');
     assert.match(step.last.text, /Время: после 16:00/);
   });
@@ -302,7 +302,7 @@ test.describe('viewing form', () => {
     const chat = createChat();
     await chat.press('property:viewing:villa-marbella-01');
     const step = await chat.say('когда-нибудь');
-    assert.ok(step.last.text.startsWith(ru.invalid), 'the same request, now with the options');
+    assert.ok(step.last.text.startsWith(ru.askDate + '\n' + ru.invalid), 'the same request under the step title, now with the options');
     assert.ok(step.last.text.includes(ru.dateOptions[0]), 'the client sees what to choose from');
     assert.equal(chat.user.pendingAction.step, 'date');
   });

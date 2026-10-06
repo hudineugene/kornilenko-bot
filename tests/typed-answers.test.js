@@ -62,7 +62,7 @@ test.describe('запись на просмотр', () => {
     const chat = createChat();
     await chat.press('property:viewing:villa-typed-01');
     const step = await chat.say('ну когда-нибудь потом');
-    assert.ok(step.last.text.startsWith(VIEWING.invalid));
+    assert.ok(step.last.text.startsWith(VIEWING.askDate + '\n' + VIEWING.invalid), 'тот же вопрос с заголовком шага');
     for (const option of VIEWING.dateOptions) assert.ok(step.last.text.includes(option), 'в сообщении есть вариант: ' + option);
     assert.equal(chat.user.pendingAction.step, 'date', 'форма не закрылась');
   });

@@ -717,9 +717,17 @@ function optionFromText(text, options) {
 
 // Если ответ всё-таки не понят, показываем, из чего выбирать: повторять
 // «напишите ответ» в ответ на написанный ответ — издевательство.
-function invalidWithOptions(copy, options) {
+// title — заголовок шага («🕒 Время»): переспрос остаётся тем же экраном с жирной шапкой (этапы 45 и 49).
+function invalidWithOptions(copy, options, title = '') {
   const list = (Array.isArray(options) ? options : []).filter(Boolean);
-  return list.length ? copy.invalid + '\n\n' + list.join(' · ') : copy.invalid;
+  const body = list.length ? copy.invalid + '\n\n' + list.join(' · ') : copy.invalid;
+  return title ? title + '\n' + body : body;
+}
+
+// Заголовок шага записи на просмотр — первая строка его вопроса.
+function viewingStepTitle(copy, step) {
+  const question = step === 'time' || step === 'custom_time' ? copy.askTime : copy.askDate;
+  return String(question || '').split('\n')[0];
 }
 
 async function handleViewingFormMessage(message, user, token, context = null) {
@@ -823,7 +831,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
           await sendViewingReview(user, pending, property, token, language, say);
           return true;
         }
-        await say(invalidWithOptions(copy, days.map((item) => item.label).concat(copy.dateOptions[3])), 'date');
+        await say(invalidWithOptions(copy, days.map((item) => item.label).concat(copy.dateOptions[3]), viewingStepTitle(copy, 'date')), 'date');
         return true;
       }
       pending.data.day = day.key;
@@ -853,7 +861,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
           await sendViewingReview(user, pending, property, token, language, say);
           return true;
         }
-        await say(invalidWithOptions(copy, copy.dateOptions), 'date');
+        await say(invalidWithOptions(copy, copy.dateOptions, viewingStepTitle(copy, 'date')), 'date');
         return true;
       }
       pending.data.date = viewingDateValue(chosenDate, copy, language);
@@ -888,7 +896,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
         await sendViewingReview(user, pending, property, token, language, say);
         return true;
       }
-      await say(invalidWithOptions(copy, times.concat(pending.data.slotMode ? [copy.timeOptions[3]] : [])), 'time');
+      await say(invalidWithOptions(copy, times.concat(pending.data.slotMode ? [copy.timeOptions[3]] : []), viewingStepTitle(copy, 'time')), 'time');
       return true;
     }
     pending.data.time = chosenTime;
@@ -897,7 +905,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
   }
   if (pending.step === 'custom' || pending.step === 'custom_time') {
     if (text.length < 3) {
-      await say(copy.invalid, pending.step);
+      await say(invalidWithOptions(copy, [], viewingStepTitle(copy, pending.step)), pending.step);
       return true;
     }
     if (pending.step === 'custom') {
