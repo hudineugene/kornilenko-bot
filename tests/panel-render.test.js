@@ -3561,6 +3561,36 @@ test('сохранение — два способа: форма с полосо
   assert.ok(put, 'полоса сохраняет копию в Telegram');
   assert.equal(sandbox.isDirty(), false, 'после сохранения полоса убрана');
 
+  // Включение копии: сервер требует текущий пароль панели и повтор пароля копии —
+  // без них панель отвечала «Введите текущий пароль администратора», и включить копию было нельзя.
+  const askedFor = [];
+  sandbox.askPassword = async (title) => { askedFor.push(title); return 'пароль-панели'; };
+  data.querySelector('#tgBackupOn').checked = true;
+  data.querySelector('#tgBackupPass').value = 'пароль-копии-2026';
+  data.querySelector('#tgBackupPass2').value = 'пароль-копии-2026';
+  handlers.change({});
+  requests.length = 0;
+  await sandbox.saveDirty();
+  const enable = requests.find((request) => request.url === '/api/telegram-backup' && request.method === 'PUT');
+  assert.ok(enable, 'включение копии уходит на сервер');
+  assert.equal(enable.body.currentPassword, 'пароль-панели', 'текущий пароль панели спрошен и отправлен');
+  assert.equal(enable.body.passwordConfirm, 'пароль-копии-2026', 'повтор пароля копии отправлен');
+  assert.equal(askedFor.length, 1);
+
+  // Пароли копии не совпали — на сервер ничего не уходит, пароль панели не спрашиваем.
+  askedFor.length = 0;
+  data.querySelector('#tgBackupPass2').value = 'другой-пароль';
+  handlers.change({});
+  requests.length = 0;
+  await sandbox.saveDirty();
+  assert.ok(!requests.some((request) => request.url === '/api/telegram-backup'), 'несовпадающие пароли не отправляются');
+  assert.equal(askedFor.length, 0);
+  data.querySelector('#tgBackupOn').checked = false;
+  data.querySelector('#tgBackupPass').value = '';
+  data.querySelector('#tgBackupPass2').value = '';
+  handlers.change({});
+  await sandbox.saveDirty();
+
   // Шаблоны ответов: одна полоса на все, уходят только изменённые.
   const rules = fakeElement('main');
   const card = fakeElement();

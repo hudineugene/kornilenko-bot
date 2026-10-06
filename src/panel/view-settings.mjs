@@ -378,7 +378,8 @@ function renderData(host) {
     "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack"><div class="stack" id="tgBackupForm">' +
       '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> Присылать зашифрованную копию раз в неделю</label>" +
-      '<div class="field"><label for="tgBackupPass">Пароль шифрования</label><input id="tgBackupPass" type="password" placeholder="' + (backup.passwordSet ? "пароль сохранён" : "минимум 10 символов") + '"></div>' +
+      '<div class="field"><label for="tgBackupPass">Пароль шифрования</label><input id="tgBackupPass" type="password" autocomplete="new-password" placeholder="' + (backup.passwordSet ? "пароль сохранён" : "минимум 10 символов") + '"></div>' +
+      '<div class="field"><label for="tgBackupPass2">Повторите пароль шифрования</label><input id="tgBackupPass2" type="password" autocomplete="new-password" placeholder="' + (backup.passwordSet ? "только если меняете пароль" : "тот же пароль ещё раз") + '"></div>' +
       '</div><div class="row wrap"><button class="btn ghost small" id="sendTgBackup" type="button">Отправить сейчас</button></div>' +
       (backup.lastSentAt ? '<div class="small muted">Последняя копия: ' + dateTime(backup.lastSentAt) + "</div>" : "") +
       (backup.lastError ? '<div class="banner bad">' + esc(backup.lastError) + "</div>" : "") +
@@ -446,8 +447,23 @@ function renderData(host) {
     } catch (error) { fail(error); }
   };
   // Поля копии в Telegram — форма: правка попадает в полосу «Сохранить» внизу.
+  // Включение копии и смена её пароля отправляют все данные из бота: сервер требует
+  // текущий пароль панели и повтор пароля копии — без них сохранить было нельзя.
   watchForm(host.querySelector("#tgBackupForm"), async function () {
-    await send("/api/telegram-backup", "PUT", { enabled: host.querySelector("#tgBackupOn").checked, password: host.querySelector("#tgBackupPass").value });
+    var enabled = host.querySelector("#tgBackupOn").checked;
+    var pass = host.querySelector("#tgBackupPass").value;
+    var confirmField = host.querySelector("#tgBackupPass2");
+    if (pass && pass !== confirmField.value) {
+      fieldError(confirmField, "Пароли копии не совпадают");
+      throw new Error("Пароли копии не совпадают");
+    }
+    var payload = { enabled: enabled, password: pass, passwordConfirm: confirmField.value };
+    if (enabled || pass) {
+      var current = await askPassword("Копия в Telegram", "Копия отправляет из бота все данные: объекты, клиентов и заявки. Для этого нужен текущий пароль панели.");
+      if (!current) throw new Error("Сохранение отменено");
+      payload.currentPassword = current;
+    }
+    await send("/api/telegram-backup", "PUT", payload);
   }, "Настройки копии в Telegram изменены");
   host.querySelector("#sendTgBackup").onclick = async function () {
     try { await send("/api/telegram-backup/send", "POST", {}); toast("Копия отправлена в Telegram"); await reload(); } catch (error) { fail(error); }
