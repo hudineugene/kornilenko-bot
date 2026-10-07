@@ -271,7 +271,7 @@ test.describe('viewing form', () => {
     let step = await chat.say(ru.timeOptions[3]);
     assert.equal(step.last.text, ru.askCustomTime);
     step = await chat.say('ab');
-    assert.equal(step.last.text, ru.askTime.split('\n')[0] + '\n' + ru.invalid, 'переспрос с заголовком шага «🕒 Время»');
+    assert.equal(step.last.text, ru.askTime.split('\n')[0] + '\n' + ru.invalidTime, 'переспрос с заголовком «🕒 Время» и только про время — дата уже выбрана');
     step = await chat.say('после 16:00');
     assert.match(step.last.text, /Время: после 16:00/);
   });

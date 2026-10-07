@@ -718,16 +718,24 @@ function optionFromText(text, options) {
 // Если ответ всё-таки не понят, показываем, из чего выбирать: повторять
 // «напишите ответ» в ответ на написанный ответ — издевательство.
 // title — заголовок шага («🕒 Время»): переспрос остаётся тем же экраном с жирной шапкой (этапы 45 и 49).
-function invalidWithOptions(copy, options, title = '') {
+// text — сама просьба: на шаге времени дата уже выбрана, и просить «дату и время» нельзя.
+function invalidWithOptions(copy, options, title = '', text = copy.invalid) {
   const list = (Array.isArray(options) ? options : []).filter(Boolean);
-  const body = list.length ? copy.invalid + '\n\n' + list.join(' · ') : copy.invalid;
+  const body = list.length ? text + '\n\n' + list.join(' · ') : text;
   return title ? title + '\n' + body : body;
 }
 
+const isTimeStep = (step) => step === 'time' || step === 'custom_time';
+
 // Заголовок шага записи на просмотр — первая строка его вопроса.
 function viewingStepTitle(copy, step) {
-  const question = step === 'time' || step === 'custom_time' ? copy.askTime : copy.askDate;
+  const question = isTimeStep(step) ? copy.askTime : copy.askDate;
   return String(question || '').split('\n')[0];
+}
+
+// Переспрос шага: на шаге времени — только про время.
+function viewingInvalidText(copy, step) {
+  return isTimeStep(step) ? copy.invalidTime || copy.invalid : copy.invalid;
 }
 
 async function handleViewingFormMessage(message, user, token, context = null) {
@@ -896,7 +904,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
         await sendViewingReview(user, pending, property, token, language, say);
         return true;
       }
-      await say(invalidWithOptions(copy, times.concat(pending.data.slotMode ? [copy.timeOptions[3]] : []), viewingStepTitle(copy, 'time')), 'time');
+      await say(invalidWithOptions(copy, times.concat(pending.data.slotMode ? [copy.timeOptions[3]] : []), viewingStepTitle(copy, 'time'), viewingInvalidText(copy, 'time')), 'time');
       return true;
     }
     pending.data.time = chosenTime;
@@ -905,7 +913,7 @@ async function handleViewingFormMessage(message, user, token, context = null) {
   }
   if (pending.step === 'custom' || pending.step === 'custom_time') {
     if (text.length < 3) {
-      await say(invalidWithOptions(copy, [], viewingStepTitle(copy, pending.step)), pending.step);
+      await say(invalidWithOptions(copy, [], viewingStepTitle(copy, pending.step), viewingInvalidText(copy, pending.step)), pending.step);
       return true;
     }
     if (pending.step === 'custom') {
