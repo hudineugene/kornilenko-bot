@@ -479,19 +479,19 @@ function sourceLink(label) {
 
 function sourceTableCard() {
   var rows = (state.sources || []).slice().sort(function (a, b) { return (b.deals || 0) - (a.deals || 0) || (b.users || 0) - (a.users || 0); });
-  var total = { users: 0, opens: 0, inquiries: 0, viewings: 0, deals: 0 };
+  var total = { users: 0, opens: 0, inquiries: 0, viewings: 0, deals: 0, dealAmount: 0 };
   rows.forEach(function (row) {
-    total.users += row.users || 0; total.opens += row.opens || 0; total.inquiries += row.inquiries || 0; total.viewings += row.viewings || 0; total.deals += row.deals || 0;
+    total.users += row.users || 0; total.opens += row.opens || 0; total.inquiries += row.inquiries || 0; total.viewings += row.viewings || 0; total.deals += row.deals || 0; total.dealAmount += row.dealAmount || 0;
   });
   var username = (state.bot || {}).username || "";
   return '<div class="card gap-bottom" id="sourceCard"><header><h3>Откуда клиенты: реклама, группы и каналы</h3><div class="actions"><span class="small muted">по метке ссылки, за всё время</span></div></header>' +
     (rows.length ? '<div class="table-wrap"><table class="source-table table-stack"><thead><tr><th>Источник</th><th class="right" title="Сколько раз открыли бота по ссылке с этой меткой, в том числе уже знакомые клиенты">Открыли бота</th><th class="right">Новых клиентов</th><th class="right">Заявок</th><th class="right">Записались на просмотр</th><th class="right">Сделок</th><th></th></tr></thead><tbody>' +
       rows.map(function (row) {
         var label = row.source || "";
-        return "<tr><td><b>" + esc(row.title || label || "без метки") + "</b>" + (row.title ? ' <span class="small muted">' + esc(label) + "</span>" : "") + "</td><td class=\"right\">" + num(row.opens || 0) + "</td><td class=\"right\">" + num(row.users) + "</td><td class=\"right\">" + num(row.inquiries) + "</td><td class=\"right\">" + num(row.viewings) + "</td><td class=\"right\">" + (row.deals ? "<b>" + num(row.deals) + "</b>" : "0") + "</td>" +
+        return "<tr><td><b>" + esc(row.title || label || "без метки") + "</b>" + (row.title ? ' <span class="small muted">' + esc(label) + "</span>" : "") + "</td><td class=\"right\">" + num(row.opens || 0) + "</td><td class=\"right\">" + num(row.users) + "</td><td class=\"right\">" + num(row.inquiries) + "</td><td class=\"right\">" + num(row.viewings) + "</td><td class=\"right\">" + (row.deals ? "<b>" + num(row.deals) + (row.dealAmount ? ' <span class="small muted">· ' + money(row.dealAmount, "EUR") + "</span>" : "") + "</b>" : "0") + "</td>" +
           '<td class="right">' + (label && username ? '<button class="btn ghost small" type="button" title="Скопировать ссылку с этой меткой" data-copy-source="' + esc(label) + '">Ссылка</button>' : "") + "</td></tr>";
       }).join("") +
-      '<tr class="source-total"><td>Всего</td><td class="right">' + num(total.opens) + '</td><td class="right">' + num(total.users) + '</td><td class="right">' + num(total.inquiries) + '</td><td class="right">' + num(total.viewings) + '</td><td class="right">' + num(total.deals) + "</td><td></td></tr>" +
+      '<tr class="source-total"><td>Всего</td><td class="right">' + num(total.opens) + '</td><td class="right">' + num(total.users) + '</td><td class="right">' + num(total.inquiries) + '</td><td class="right">' + num(total.viewings) + '</td><td class="right">' + num(total.deals) + (total.dealAmount ? ' <span class="small muted">· ' + money(total.dealAmount, "EUR") + "</span>" : "") + "</td><td></td></tr>" +
     "</tbody></table></div>" : '<div class="empty"><b>Пока нет данных</b>Разместите ссылку с меткой ниже — здесь появится, сколько клиентов она привела</div>') +
     '<div class="card-body stack"><div class="week-subtitle">Ссылка с меткой источника</div>' +
     '<p class="small muted">Разместите такую ссылку в рекламе или соцсетях — в карточке клиента, уведомлениях и этой таблице будет видно, откуда он пришёл и что дал.</p>' +
@@ -594,7 +594,7 @@ function weeklyCard(payload) {
         weekTile("Новых клиентов", report.users.count, weekTrend(report.users.count, report.users.previous)) +
         weekTile("Заявок", report.inquiries.count, weekTrend(report.inquiries.count, report.inquiries.previous)) +
         weekTile("Записались на просмотр", report.viewings.booked, '<span class="delta">прошло ' + num(report.viewings.held) + "</span>") +
-        weekTile("Сделок", report.deals.count, weekTrend(report.deals.count, report.deals.previous)) +
+        weekTile("Сделок", report.deals.count, weekTrend(report.deals.count, report.deals.previous) + (report.deals.amount ? ' <span class="delta">на ' + money(report.deals.amount, "EUR") + "</span>" : "")) +
         (report.sharedLists && (report.sharedLists.shared || report.sharedLists.opened || report.sharedLists.previousOpened)
           ? weekTile("Открыли список", report.sharedLists.opened, '<span class="delta">поделились ' + num(report.sharedLists.shared) + "</span>") : "") +
         weekTile("Без ответа сейчас", report.waiting, report.waiting ? '<span class="delta down">ждут ответа</span>' : '<span class="delta up">все отвечены</span>') +

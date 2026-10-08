@@ -704,7 +704,10 @@ function sourceReport(now = Date.now()) {
     if (!row) continue;
     if (!inquiry.searchLead) row.inquiries += 1;
     if (inquiry.type === 'viewing') row.viewings += 1;
-    if (inquiry.pipelineStage === 'won') row.deals += 1;
+    if (inquiry.pipelineStage === 'won') {
+      row.deals += 1;
+      if (Number(inquiry.dealAmount) > 0) row.dealAmount = (row.dealAmount || 0) + Number(inquiry.dealAmount);
+    }
   }
   // Метки, по которым только открывали бота (клиенты уже были), — тоже строки таблицы.
   const opens = data.analytics && data.analytics.sourceOpens || {};

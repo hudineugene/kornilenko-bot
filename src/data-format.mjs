@@ -1378,7 +1378,8 @@ function normalizeLoadedData(parsed) {
       return entry;
     }) : [];
     const inquiries = Array.isArray(parsed.inquiries) ? parsed.inquiries.map((item) => ({
-      ...item,
+      // dealAmount переносится ниже, только если это сумма больше нуля.
+      ...Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'dealAmount')),
       id: String(item.id || crypto.randomUUID()),
       userId: String(item.userId || ''),
       chatId: item.chatId == null ? '' : String(item.chatId),
@@ -1431,6 +1432,8 @@ function normalizeLoadedData(parsed) {
         // по последней правке на момент обновления. Без неё отчёт считал их по
         // updatedAt, а любая правка заметки двигала сделку в другую неделю.
         || (storedVersion < 43 && normalizePipelineStage(item.pipelineStage, item) === 'won' ? cleanText(item.updatedAt || item.createdAt, 40) : ''),
+      // Сумма сделки, € (по желанию): вписывается, когда заявка стала сделкой; идёт в отчёты. Нет суммы — поля нет.
+      ...(Number(item.dealAmount) > 0 && Number(item.dealAmount) <= 1000000000 ? { dealAmount: Math.round(Number(item.dealAmount)) } : {}),
       // Who took the inquiry: the admin or one of the managers.
       assignee: cleanText(item.assignee, 60),
       createdAt: item.createdAt || new Date().toISOString(),

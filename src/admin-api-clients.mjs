@@ -684,6 +684,13 @@ async function handleClientsApi(req, res, url) {
     if (body.pipelineStage != null && !['', ...PIPELINE_STAGES].includes(body.pipelineStage)) {
       return json(res, 400, { error: 'Некорректный этап воронки' });
     }
+    // Сумма сделки: число (пробелы и запятая допустимы) или пусто — «не указана».
+    let dealAmount = null;
+    if (body.dealAmount != null) {
+      const raw = String(body.dealAmount).replace(/[\s\u00a0]/g, '').replace(',', '.');
+      dealAmount = raw === '' ? 0 : Number(raw);
+      if (!Number.isFinite(dealAmount) || dealAmount < 0 || dealAmount > 1000000000) return json(res, 400, { error: 'Сумма сделки — число от 0 до 1 000 000 000' });
+    }
     let assignee = null;
     if (body.assignee != null) {
       assignee = cleanText(body.assignee, 60);
@@ -734,6 +741,12 @@ async function handleClientsApi(req, res, url) {
     const keptWonAt = Number.isFinite(restoredWonAt) && restoredWonAt <= Date.now() ? new Date(restoredWonAt).toISOString() : '';
     if (inquiry.pipelineStage === 'won' && !wasWon) inquiry.wonAt = keptWonAt || inquiry.updatedAt;
     else if (inquiry.pipelineStage !== 'won') inquiry.wonAt = '';
+    // Сумма живёт только у сделки: вернули в работу — сумма снимается; её вернёт «Вернуть» (присылает прежнюю).
+    if (inquiry.pipelineStage !== 'won') delete inquiry.dealAmount;
+    else if (dealAmount != null) {
+      if (dealAmount > 0) inquiry.dealAmount = Math.round(dealAmount);
+      else delete inquiry.dealAmount;
+    }
     saveDataNow();
     void refreshInquiryCards(inquiry);
     return json(res, 200, { ok: true });

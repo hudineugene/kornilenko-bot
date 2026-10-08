@@ -1,7 +1,7 @@
 // Ежедневная сводка и напоминания администратору о заявках без ответа.
 
 import { sourceDisplay } from './source-title.mjs';
-import { cleanText, dayKey, localDayKey } from './util.mjs';
+import { cleanText, dayKey, formatMoney, localDayKey } from './util.mjs';
 import { PLACES } from './places.mjs';
 import { MENU_LABELS } from './texts.mjs';
 import { data, saveDataNow, scheduleSave } from './store.mjs';
@@ -435,8 +435,11 @@ function weeklyReportData(now = new Date(), which = 'last') {
   const viewings = data.inquiries.filter((inquiry) => inquiry.type === 'viewing' && inquiry.viewing && inquiry.viewing.confirmedAt && !inquiry.viewing.cancelledAt);
   const heldViewings = viewings.filter((inquiry) => inquiry.viewing.confirmedDate >= startKey && inquiry.viewing.confirmedDate <= endKey).length;
   const bookedViewings = week.inquiries.filter((inquiry) => inquiry.type === 'viewing').length;
-  const deals = data.inquiries.filter((inquiry) => dealWon(inquiry) && inWeek(dealTime(inquiry), start, end)).length;
-  const previousDeals = data.inquiries.filter((inquiry) => dealWon(inquiry) && inWeek(dealTime(inquiry), previousStart, previousEnd)).length;
+  const weekDeals = data.inquiries.filter((inquiry) => dealWon(inquiry) && inWeek(dealTime(inquiry), start, end));
+  const previousWeekDeals = data.inquiries.filter((inquiry) => dealWon(inquiry) && inWeek(dealTime(inquiry), previousStart, previousEnd));
+  const deals = weekDeals.length;
+  const previousDeals = previousWeekDeals.length;
+  const sumOf = (list) => list.reduce((total, inquiry) => total + (Number(inquiry.dealAmount) || 0), 0);
   const byProperty = new Map();
   for (const inquiry of week.inquiries) if (inquiry.propertyId) byProperty.set(inquiry.propertyId, (byProperty.get(inquiry.propertyId) || 0) + 1);
   const topProperties = Array.from(byProperty).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id, count]) => {
@@ -467,7 +470,8 @@ function weeklyReportData(now = new Date(), which = 'last') {
       byType: Array.from(byType).sort((a, b) => b[1] - a[1]),
     },
     viewings: { booked: bookedViewings, held: heldViewings },
-    deals: { count: deals, previous: previousDeals },
+    // Сумма — только если её вписывали у сделок недели.
+    deals: { count: deals, previous: previousDeals, ...(sumOf(weekDeals) ? { amount: sumOf(weekDeals) } : {}), ...(sumOf(previousWeekDeals) ? { previousAmount: sumOf(previousWeekDeals) } : {}) },
     // Клиентов, а не обращений: как на «Сегодня» и в «Клиентах» (у одного клиента их может быть несколько).
     waiting: waitingConversationCount(),
     topProperties,
@@ -520,7 +524,7 @@ function weeklyReportText(report) {
     '📅 Просмотров: записались ' + report.viewings.booked + ', прошло ' + report.viewings.held,
     // Строка про сделки появляется, когда они были на этой или прошлой неделе:
     // «Сделок: 0» каждую неделю только мозолит глаза.
-    ...(report.deals.count || report.deals.previous ? ['🤝 Сделок: ' + report.deals.count + comparison(report.deals.count, report.deals.previous)] : []),
+    ...(report.deals.count || report.deals.previous ? ['🤝 Сделок: ' + report.deals.count + comparison(report.deals.count, report.deals.previous) + (report.deals.amount ? ' на ' + formatMoney(report.deals.amount, '€', 'ru', 0) : '')] : []),
     ...(report.topProperties.length ? ['🔖 Больше всего заявок: ' + report.topProperties.slice(0, 2).map((item) => item.name + ' — ' + item.count).join(', ')] : []),
     ...(report.sources.length ? ['📣 Откуда пришли: ' + report.sources.slice(0, 3).map(([name, count]) => shortSource(name) + ' — ' + count).join(', ')] : []),
     ...funnelTextLines(report.funnel),

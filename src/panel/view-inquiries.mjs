@@ -334,13 +334,14 @@ function pipelineStageOf(item) {
 // Смена этапа с «Вернуть»: запоминаем статус и этап, какими они были, и кнопка в
 // уведомлении возвращает оба (закрытие сделки закрывает и заявку).
 function inquiryStateBefore(item) {
-  return { status: item.status, pipelineStage: item.pipelineStage || "", wonAt: item.wonAt || "" };
+  return { status: item.status, pipelineStage: item.pipelineStage || "", wonAt: item.wonAt || "", dealAmount: item.dealAmount || 0 };
 }
 
 async function restoreInquiryState(id, before) {
   try {
     var body = { status: before.status, pipelineStage: before.pipelineStage };
     if (before.wonAt) body.wonAt = before.wonAt;
+    if (before.dealAmount) body.dealAmount = before.dealAmount;
     await send("/api/inquiries/" + encodeURIComponent(id), "PATCH", body);
     toast("Возвращено");
     await reload();
@@ -779,6 +780,7 @@ async function closeBatch(host) {
 async function restoreInquiryStateQuiet(id, before) {
   var body = { status: before.status, pipelineStage: before.pipelineStage };
   if (before.wonAt) body.wonAt = before.wonAt;
+  if (before.dealAmount) body.dealAmount = before.dealAmount;
   await send("/api/inquiries/" + encodeURIComponent(id), "PATCH", body);
 }
 
@@ -1354,6 +1356,7 @@ function renderInquiryCard(host) {
             return '<option value="' + option[0] + '"' + ((item.status === "closed" ? "closed" : "open") === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
           }).join("") + '</select></div>' +
         '<div class="field"><label for="inqPipeline">Этап <span class="small muted">(по желанию)</span></label><select id="inqPipeline">' + pipelineStageOptions(pipelineStageOf(item), true) + '</select></div>' +
+        '<div class="field' + (pipelineStageOf(item) === "won" ? "" : " hidden") + '" id="dealAmountField"><label for="inqDealAmount">Сумма сделки, € <span class="small muted">(по желанию)</span></label><input id="inqDealAmount" type="number" min="0" step="1000" inputmode="numeric" value="' + esc(item.dealAmount || "") + '" placeholder="например, 147000"><div class="hint">Попадёт в отчёт: сколько принесли сделки и откуда пришли эти клиенты</div></div>' +
         '<div class="field"><label for="inqAssignee">Ответственный менеджер</label><div class="row"><select id="inqAssignee" class="grow"><option value="">Не назначен</option>' + managers.map(function (name) { return '<option value="' + esc(name) + '"' + (item.assignee === name ? " selected" : "") + '>' + esc(name) + "</option>"; }).join("") + '</select>' +
           (managers.length > 1 ? '<button class="btn secondary small" id="transferInq" type="button" title="Передать клиента другому менеджеру и сообщить ему в Telegram">Передать…</button>' : "") + '</div></div>' +
         '<div class="row followup-fields"><div class="field grow"><label for="followDate">Следующий шаг</label><input type="date" id="followDate" value="' + esc(item.followUpDate || "") + '"></div><div class="field followup-time"><label for="followTime">Время</label><input type="time" id="followTime" value="' + esc(item.followUpTime || "") + '"></div></div>' +
@@ -1558,10 +1561,16 @@ function renderInquiryCard(host) {
     if (wantClosed !== (item.status === "closed")) patch.status = wantClosed ? "closed" : "in_progress";
     var wantStage = host.querySelector("#inqPipeline").value;
     if (wantStage !== pipelineStageOf(item)) patch.pipelineStage = wantStage;
+    var amountNow = host.querySelector("#inqDealAmount").value;
+    if (wantStage === "won" && amountNow !== String(item.dealAmount || "")) patch.dealAmount = amountNow;
     await send("/api/inquiries/" + encodeURIComponent(item.id), "PATCH", patch);
     // Статус или этап менялись — их можно вернуть; правку заметки «возвращать» не предлагаем.
     return "status" in patch || "pipelineStage" in patch ? undoInquiryState(item.id, inquiryStateBefore(item)) : null;
   }
+  // Сумма сделки показывается, только когда выбран этап «Сделка».
+  host.querySelector("#inqPipeline").addEventListener("change", function () {
+    host.querySelector("#dealAmountField").classList.toggle("hidden", host.querySelector("#inqPipeline").value !== "won");
+  });
   var sidePanel = host.querySelector(".conversation-side");
   if (sidePanel) watchForm(sidePanel, async function () { await saveInquiryPanel(); }, "Есть несохранённые изменения по заявке и клиенту");
   host.querySelector("#saveInq").onclick = async function () {
