@@ -41,5 +41,5 @@ test('на английском и испанском то же: «Without “by
   const english = createChat({ language: 'en' });
   assert.match(shown(await english.say('apartment by the sea in Finestrat under 200k')), /Without “by the sea” — found: 1/);
   const spanish = createChat({ language: 'es' });
-  assert.match(shown(await spanish.say('apartamento cerca del mar en Finestrat hasta 200.000')), /Sin «cerca del mar»/i);
+  assert.match(shown(await spanish.say('apartamento cerca del mar en Finestrat hasta 200.000')), /Sin «al mar» — encontrados: 1/);
 });
