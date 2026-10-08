@@ -61,23 +61,53 @@ test('анкета звонка: имя и телефон один раз — в
   assert.match(card.text, /Способ связи: /);
 });
 
-test('три сообщения подряд: одна полная карточка и два коротких ответа на неё — без заголовка и кнопок', async () => {
+test('три сообщения подряд: полная карточка, первое повторное коротко ответом на неё, дальше оно дополняется списком — без новых уведомлений', async () => {
   const chat = createChat();
   telegram.calls = [];
   await chat.say('Здравствуйте, есть вилла у моря?');
   await chat.say('И бассейн нужен');
   await chat.say('Бюджет до 500 тысяч');
   const cards = adminCards();
-  assert.equal(cards.length, 3);
+  assert.equal(cards.length, 2, 'карточка и одно короткое сообщение, третье не плодит новых');
   assert.match(cards[0].text, /^📩 Новая заявка/);
   assert.ok(cards[0].reply_markup, 'у первой — кнопки');
-  for (const compact of cards.slice(1)) {
-    assert.match(compact.text, /^💬 Анна: /);
-    assert.doesNotMatch(compact.text, /Новое сообщение|↩️/);
-    assert.equal(compact.reply_markup, undefined, 'кнопок нет');
-    assert.ok(compact.reply_parameters && compact.reply_parameters.message_id, 'ответом на первую карточку');
+  assert.match(cards[1].text, /^💬 Анна: /);
+  assert.equal(cards[1].reply_markup, undefined, 'кнопок нет');
+  assert.ok(cards[1].reply_parameters && cards[1].reply_parameters.message_id, 'ответом на первую карточку');
+  const edits = telegram.calls.filter((call) => call.method === 'editMessageText' && String(call.body.chat_id) === ADMIN_CHAT);
+  assert.equal(edits.length, 1);
+  assert.match(edits[0].body.text, /^💬 Анна: 2 сообщения подряд[\s\S]*• .*бассейн нужен[\s\S]*• .*Бюджет до 500 тысяч$/);
+});
+
+test('семь вопросов подряд — два сообщения менеджеру (карточка и список), а не семь; список растёт на месте', async () => {
+  const chat = createChat();
+  telegram.calls = [];
+  for (const text of ['Сколько стоит?', 'Есть ли рассрочка?', 'Когда сдача?', 'Вы застройщик?', 'Какие гарантии?', 'Нужен ли NIE?', 'Пришлите планировку']) await chat.say(text);
+  assert.equal(adminCards().length, 2);
+  const edits = telegram.calls.filter((call) => call.method === 'editMessageText' && String(call.body.chat_id) === ADMIN_CHAT);
+  const last = edits[edits.length - 1].body.text;
+  assert.match(last, /^💬 Анна: 6 сообщений подряд/);
+  assert.match(last, /• Пришлите планировку$/);
+  assert.ok(!/Сколько стоит/.test(last), 'первое сообщение — в карточке, в списке только повторные');
+});
+
+test('ответ менеджера на сводное сообщение уходит клиенту; после паузы в десять минут сообщения снова приходят отдельно', async () => {
+  const chat = createChat();
+  await chat.say('Нужна консультация');
+  await chat.say('Первое уточнение');
+  await chat.say('Второе уточнение');
+  const targets = bot.getData().adminReplyTargets;
+  const burstKey = Object.keys(targets).filter((key) => !targets[key].card).pop();
+  assert.equal(String(targets[burstKey].chatId), String(chat.id), 'сводное сообщение связано с клиентом');
+  const realNow = Date.now;
+  Date.now = () => realNow() + 11 * 60 * 1000;
+  try {
+    telegram.calls = [];
+    await chat.say('Через полчаса вопрос');
+    assert.ok(adminCards().some((card) => /^💬 Анна: Через полчаса вопрос/.test(card.text)), 'после паузы — новое короткое сообщение');
+  } finally {
+    Date.now = realNow;
   }
-  assert.ok(cards.slice(1).every((body) => body.text.split('\n').length <= 3), 'коротко');
 });
 
 test('подсказка «Ответьте на это сообщение» — только на первой карточке: в напоминании её нет', async () => {

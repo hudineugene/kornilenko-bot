@@ -634,6 +634,39 @@ function inquiryCardMessageId(inquiry, chatId) {
   return Number.isFinite(id) ? id : null;
 }
 
+// Серия сообщений клиента подряд: первое повторное сообщение приходит как обычно (с звуком), а следующие в течение десяти минут
+// не плодят новых сообщений, а дописываются в него списком («💬 Мария: 4 сообщения подряд»). Менеджеру не приходит семь уведомлений
+// на семь вопросов, но ответ на это сообщение по-прежнему уходит клиенту.
+const BURST_WINDOW_MS = 10 * 60 * 1000;
+const BURST_SHOWN_LINES = 6;
+const bursts = new Map();
+
+function burstText(name, burst) {
+  if (burst.count === 1) return '💬 ' + name + ': ' + burst.lines[0];
+  const last = burst.count % 10;
+  const word = last === 1 && burst.count % 100 !== 11 ? 'сообщение' : [2, 3, 4].includes(last) && ![12, 13, 14].includes(burst.count % 100) ? 'сообщения' : 'сообщений';
+  const shown = burst.lines.slice(-BURST_SHOWN_LINES);
+  const hidden = burst.count - shown.length;
+  return ['💬 ' + name + ': ' + burst.count + ' ' + word + ' подряд', ...(hidden > 0 ? ['… и ещё ' + hidden + ' выше'] : []), ...shown.map((line) => '• ' + cleanText(line, 300).replace(/\s+/g, ' '))].join('\n').slice(0, 4000);
+}
+
+async function appendToBurst(chat, inquiry, name, text) {
+  const key = String(chat.chatId) + ':' + inquiry.id;
+  const burst = bursts.get(key);
+  if (!burst || Date.now() - burst.at > BURST_WINDOW_MS) return false;
+  burst.lines.push(text);
+  burst.count += 1;
+  burst.at = Date.now();
+  try {
+    await telegramRequest(data.config.botToken, 'editMessageText', { chat_id: chat.chatId, message_id: burst.messageId, text: burstText(name, burst) });
+    return true;
+  } catch {
+    // Сообщение удалено или слишком старое — дальше обычным путём, новым сообщением.
+    bursts.delete(key);
+    return false;
+  }
+}
+
 async function notifyAdministratorAction(user, title, details = '', inquiryId = '', sourceMessageId = null, options = {}) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
   if (!adminChatId || !data.config.botToken || !user || !user.chatId || adminChatFor(user.chatId)) return false;
@@ -663,8 +696,13 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   const chats = options.important ? inquiryChats() : inquiryChats().filter((chat) => chat.main);
   const shownText = inquiry && !compact ? cardWithState(text, inquiry) : text;
   let delivered = false;
+  const burstName = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Клиент';
   for (const chat of chats) {
     try {
+      if (compact && (await appendToBurst(chat, inquiry, burstName, cleanDetails))) {
+        delivered = true;
+        continue;
+      }
       const messageIds = [];
       const markup = compact ? null : inquiryStatusMarkup(inquiry);
       const replyTo = (options.replyTo instanceof Map ? options.replyTo.get(String(chat.chatId)) : null) || (compact ? inquiryCardMessageId(inquiry, chat.chatId) : null);
@@ -676,6 +714,7 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
         ...(replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {}),
       });
       rememberAdminReplyTarget(messageIds, { chatId: user.chatId, inquiryId, sourceMessageId, card: inquiry && !compact ? text : '' }, chat.chatId);
+      if (compact && messageIds.length) bursts.set(String(chat.chatId) + ':' + inquiry.id, { messageId: messageIds[0], lines: [cleanDetails], count: 1, at: Date.now() });
       delivered = true;
       markAdminChatVerified(chat, true);
     } catch (error) {
