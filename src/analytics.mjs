@@ -81,9 +81,22 @@ function markFunnel(user, step) {
   scheduleSave();
 }
 
+// Короткий технический код ошибки — по нему панель различает причины обрывов связи с Telegram:
+// TIMEOUT (Telegram не ответил за отведённое время), UND_ERR_CONNECT_TIMEOUT / ECONNRESET / EAI_AGAIN (сеть),
+// HTTP_502 / TG_429 (ответ самого Telegram). Текст ошибки остаётся прежним.
+function errorCode(error) {
+  if (!error || typeof error !== 'object') return '';
+  if (Number(error.telegramCode) >= 400) return 'TG_' + Number(error.telegramCode);
+  if (Number(error.status) >= 400) return 'HTTP_' + Number(error.status);
+  if (error.name === 'TimeoutError' || (error.cause && error.cause.name === 'TimeoutError')) return 'TIMEOUT';
+  const code = String(error.code || '');
+  return /^[A-Z][A-Z0-9_]{1,39}$/.test(code) ? code : '';
+}
+
 function recordError(area, error) {
   const message = cleanText(error && error.message ? error.message : error, 600) || 'Неизвестная ошибка';
-  data.errors.unshift({ id: crypto.randomUUID(), area: cleanText(area, 80), message, createdAt: new Date().toISOString() });
+  const code = errorCode(error);
+  data.errors.unshift({ id: crypto.randomUUID(), area: cleanText(area, 80), message, ...(code ? { code } : {}), createdAt: new Date().toISOString() });
   data.errors = data.errors.slice(0, 100);
   scheduleSave();
 }
@@ -129,6 +142,7 @@ export {
   propertyAnalytics,
   recordActivity,
   recordDaily,
+  errorCode,
   recordError,
   recordPropertyEvent,
 };
