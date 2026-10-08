@@ -15,6 +15,7 @@ import { createOfferList, localized, propertyReadyForLanguage, validHttpUrl } fr
 import { userUnavailableError } from './broadcasts.mjs';
 import { json, panelUserView, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
 import { replyTemplateInput } from './admin-input.mjs';
+import { STARTER_TEMPLATES } from './starter-templates.mjs';
 import { CLIENT_EXPORT_COLUMNS, INQUIRY_EXPORT_COLUMNS, clientExportRows, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { confirmViewing, viewingCalendarFile } from './viewings.mjs';
 import { sendInquiryToAdministrator, weeklyReportData, weeklyReportText } from './notices.mjs';
@@ -407,6 +408,21 @@ async function handleClientsApi(req, res, url) {
       'content-disposition': 'attachment; filename="clients-' + localDayKey() + '.xlsx"; filename*=UTF-8\'\'' + encodeURIComponent(name),
     });
     return res.end(file);
+  }
+
+  // Готовый набор шаблонов: добавляются только те, названий которых ещё нет; свои шаблоны не трогаются.
+  if (url.pathname === '/api/reply-templates/starter' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const have = new Set(data.replyTemplates.map((item) => item.title));
+    let added = 0;
+    for (const starter of STARTER_TEMPLATES) {
+      if (have.has(starter.title) || data.replyTemplates.length >= MAX_REPLY_TEMPLATES) continue;
+      data.replyTemplates.push({ id: crypto.randomUUID(), title: starter.title, text: { ...starter.text }, updatedAt: new Date().toISOString() });
+      added += 1;
+    }
+    if (added) saveDataNow();
+    return json(res, 200, { ok: true, added });
   }
 
   if (url.pathname === '/api/reply-templates' && req.method === 'POST') {

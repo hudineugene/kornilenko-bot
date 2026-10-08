@@ -537,7 +537,7 @@ function renderTasks(host) {
 // автоответами, потому что это одно и то же по смыслу.
 function templatesCardHtml() {
   var templates = state.replyTemplates || [];
-  return '<div class="card"><header><h3>Шаблоны ответов</h3><div class="actions"><button class="btn secondary small" id="addTemplate" type="button">＋ Шаблон</button></div></header>' +
+  return '<div class="card"><header><h3>Шаблоны ответов</h3><div class="actions">' + (templates.length < 3 ? '<button class="btn secondary small" id="starterTemplates" type="button" title="Десять нейтральных шаблонов на трёх языках: приветствие, цены, просмотр, документы и другие. Их можно править">Добавить готовый набор</button>' : "") + '<button class="btn secondary small" id="addTemplate" type="button">＋ Шаблон</button></div></header>' +
     '<div class="card-body"><span class="hint">В тексте можно писать {имя} и {объект}: подставятся имя клиента и название объекта. Нет текста на языке клиента — вставится русский, панель предупредит.</span></div>' +
     '<div class="card-body stack" id="templateList">' + (templates.length ? templates.map(function (template) {
       return '<div class="card flat"><div class="card-body stack" data-template="' + esc(template.id) + '">' +
@@ -588,6 +588,16 @@ function bindTemplatesCard(host, redraw) {
   }, "Шаблоны ответов изменены");
   remember();
   bindDrop();
+  var starter = host.querySelector("#starterTemplates");
+  if (starter) starter.onclick = async function () {
+    starter.disabled = true;
+    try {
+      var result = await send("/api/reply-templates/starter", "POST", {});
+      toast(result.added ? "Добавлено шаблонов: " + result.added + ". Проверьте тексты и поправьте под себя" : "Все готовые шаблоны уже есть");
+      await reload(false);
+      redraw();
+    } catch (error) { starter.disabled = false; fail(error); }
+  };
   host.querySelector("#addTemplate").onclick = function () {
     var empty = list.querySelector(".empty");
     if (empty) empty.remove();
