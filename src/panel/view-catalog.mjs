@@ -806,8 +806,25 @@ function openRecordEditor(kind, id) {
       function russianTextsReady() {
         return ["title", "description", "city"].every(function (name) { return Boolean(translatedValue(name, "ru")); });
       }
+      // Советы по карточке — не обязательные поля, а то, чего клиенту не хватает: поэтому они не мешают сохранить и не красят карточку жёлтым.
+      function qualityTips() {
+        if (!isObject) return [];
+        var tips = [];
+        var type = value("fType");
+        var photos = dialog.querySelectorAll('[data-images="ru"] .media-thumb').length;
+        if (photos > 0 && photos < 5) tips.push("Мало фотографий: " + photos + " (в хорошей карточке — от 5)");
+        if (!value("fVideo")) tips.push("Нет видео или 3D-тура");
+        if (!value("fUrl")) tips.push("Нет ссылки на сайт проекта");
+        if (!value("fMap")) tips.push("Нет ссылки на карту");
+        if (["apartment", "house", "villa", "townhouse", "newbuild"].indexOf(type) >= 0 && !(Number(value("fSea")) > 0)) tips.push("Не указано расстояние до моря: клиенты ищут «у моря»");
+        if (String(translatedValue("description", "ru") || "").length < 150) tips.push("Короткое описание (меньше 150 знаков)");
+        var priceFrom = dialog.querySelector("#fPriceFrom");
+        if (priceFrom && priceFrom.checked && !(Number(value("fBedroomsMax")) > 0) && !(Number(value("fAreaMax")) > 0)) tips.push("Цена «от»: укажите «Спален до» и «Площадь до», чтобы клиент видел варианты");
+        return tips;
+      }
       function renderPublicationCheck() {
         if (!isObject) return;
+        var tips = qualityTips();
         var rows = LANGUAGES.map(function (language) {
           return { code: language[0], name: language[1], issues: editorPublicationIssues(language[0]) };
         });
@@ -843,6 +860,7 @@ function openRecordEditor(kind, id) {
                 return '<div class="publication-row"><b>' + row.code.toUpperCase() + '</b><span class="grow">' + esc(row.name) + '</span><span class="' + (row.issues.length ? "warn-text" : "ok-text") + '">' + (row.issues.length ? esc(row.issues.join(", ")) : "готово") + "</span></div>";
               }).join("") + "</div></details>"
             : '<div class="publication-ready ok-text">Все поля заполнены на трёх языках</div>') +
+          (tips.length ? '<details class="publication-details"><summary class="small muted">Советы по карточке · ' + tips.length + '</summary><div class="publication-rows">' + tips.map(function (tip) { return '<div class="publication-row"><span class="grow">' + esc(tip) + "</span></div>"; }).join("") + "</div></details>" : "") +
           (copyable ? '<div class="publication-actions"><button class="btn secondary small" id="copyFromRu" type="button">Скопировать тексты из русского</button><span class="small muted">Пустые английские и испанские поля заполнятся русским текстом; клиент увидит пометку «на русском».</span></div>' : "") +
           // Состояние объекта на рынке: бронь и продажа — отдельные пометки, а не
           // поле «Статус», которое дублировало кнопку «Опубликовать».

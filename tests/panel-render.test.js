@@ -872,7 +872,10 @@ test('редактор объекта: «Готовность карточки»
 
   // Один список сверху, а не три одинаковых подряд.
   assert.match(check, /<summary class="warn-text">Не хватает: 3\s+поля \(номер объекта, площадь, название\)<\/summary>/, 'одна строка с числом и первыми названиями');
-  assert.equal((check.match(/<summary/g) || []).length, 1, 'общая строка одна, а не по строке на язык');
+  assert.equal((check.match(/<summary class="warn-text"/g) || []).length, 1, 'общая строка одна, а не по строке на язык');
+  assert.match(check, /Советы по карточке · \d/, 'мягкие советы — отдельным блоком, не среди обязательных полей');
+  assert.match(check, /Мало фотографий: 1/);
+  assert.match(check, /Короткое описание/);
   assert.ok(check.indexOf('<details') < check.indexOf('publication-rows'), 'разбор по языкам — внутри раскрывающегося блока');
   assert.match(check, /<b>EN<\/b>[\s\S]*?название, номер объекта, площадь/, 'у английского не хватает и названия');
 
