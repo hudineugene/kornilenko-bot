@@ -675,7 +675,7 @@ function matchingOptions(list, matches) {
 function mentionsTime(text) {
   // «3.11» — это дата, поэтому время с точкой («17.30») отдельно не ищем: только «17:30», «17 ч», «после 16», слова.
   // Границу слова ставим через (?<![\p{L}\p{N}]): \b в JavaScript знает только латиницу и «после 16» не находил.
-  return /\d{1,2}:\d{2}|(?<![\p{L}\p{N}])\d{1,2}\s?(?:h|ч|am|pm)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:после|до|около|after|before|at|around|despu[eé]s|antes|a las)\s+\d|(?<![\p{L}\p{N}])(?:в|at|a las)\s+\d{1,2}[.:]\d{2}|утр|вечер|днём|днем|обед|утром|morning|afternoon|evening|ma[nñ]ana por|tarde|noche/iu.test(String(text));
+  return /\d{1,2}:\d{2}|(?<![\p{L}\p{N}])\d{1,2}\s?(?:h|ч|am|pm)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:после|до|около|after|before|at|around|despu[eé]s|antes|a las)\s+\d|(?<![\p{L}\p{N}])(?:в|at|a las)\s+\d{1,2}[.:]\d{2}|(?<![\p{L}\p{N}])\d{1,2}\s?час|(?<![\p{L}\p{N}])(?:в|на|at|a las|a la)\s+(?:[01]?\d|2[0-3])(?![\p{L}\p{N}:.,]|\s*(?:числа|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|de\s))|утр|вечер|днём|днем|обед|утром|morning|afternoon|evening|ma[nñ]ana por|tarde|noche/iu.test(String(text));
 }
 
 function optionFromText(text, options) {

@@ -811,7 +811,8 @@ async function handleCatalogPriceInputMessage(message, user, token) {
 function applyCatalogFilter(records, value, language = 'ru') {
   const filter = normalizedCatalogFilter(value);
   const filtered = records.filter((record) => (!filter.deal || record.dealType === filter.deal)
-    && (!filter.type || record.propertyType === filter.type)
+    // «Новостройка» — это и объект с таким типом, и любой строящийся (у комплексов тип чаще «Квартира», состояние «Строится»).
+    && (!filter.type || record.propertyType === filter.type || (filter.type === 'newbuild' && record.condition === 'under_construction'))
     && (!filter.bedrooms || Math.max(Number(record.bedrooms) || 0, Number(record.bedroomsMax) || 0) >= filter.bedrooms)
     && (!filter.city || sameCity(recordCity(record, language), filter.city))
     && (!filter.district || sameCity(recordDistrict(record, language), filter.district))
@@ -1301,6 +1302,11 @@ function relaxedCatalogFilter(user) {
   // «change» — что именно смягчили: «Без условия „Дом“», а не голое «Сад» (как раньше выглядело «Ближайшие варианты: 1 — Сад»).
   const raised = Math.ceil((filter.maxPrice * 1.2) / 1000) * 1000;
   if (filter.maxPrice) steps.push({ filter: { ...filter, maxPrice: raised }, change: copy.changePrice.replace('{value}', () => formattedPriceLimit(raised, language)) });
+  // Признаки («у моря», «с бассейном») — пожелания: если из-за них пусто, предлагаем показать без них по одному, раньше места и типа.
+  for (const key of featuresOf(filter)) {
+    const label = String(copy['feature' + key.charAt(0).toUpperCase() + key.slice(1)] || key).replace(/^[^\p{L}]+/u, '');
+    steps.push({ filter: { ...filter, features: featuresOf(filter).filter((item) => item !== key) }, change: (copy.changeFeature || 'Без «{value}»').replace('{value}', () => label.toLowerCase()) });
+  }
   if (filter.district) steps.push({ filter: { ...filter, district: '' }, change: copy.changeDistrict.replace('{value}', () => filter.district) });
   if (filter.city) steps.push({ filter: { ...filter, city: '', district: '' }, change: copy.relaxCity.replace('{value}', () => filter.city) });
   if (filter.bedrooms > 1) steps.push({ filter: { ...filter, bedrooms: filter.bedrooms - 1 }, change: copy.changeBedrooms });

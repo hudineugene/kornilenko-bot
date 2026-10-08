@@ -95,3 +95,17 @@ test('время в самой фразе не переспрашивается:
     assert.equal(step, asksTime ? 'time' : 'confirm', '«' + phrase + '» → шаг ' + step);
   }
 });
+
+test('время, названное одним сообщением вместе с датой («в субботу в 11», «завтра в 11 часов»), принимается: вопрос про время не повторяется', async () => {
+  for (const [typed, expectsTimeQuestion] of [['в субботу в 11', false], ['завтра в 11 часов', false], ['в субботу на 17', false], ['в субботу', true], ['25 октября', true]]) {
+    const chat = createChat();
+    chat.user.phone = '+34600111222';
+    await chat.press('property:viewing:villa-marbella-01');
+    await chat.say(ru.dateOptions[3]);
+    const step = await chat.say(typed);
+    const askedTime = step.replies.some((reply) => reply.text.startsWith(ru.askTime));
+    const showedReview = step.replies.some((reply) => reply.text.startsWith(ru.review));
+    assert.equal(askedTime, expectsTimeQuestion, '«' + typed + '»: вопрос про время ' + (expectsTimeQuestion ? 'нужен' : 'не нужен'));
+    if (!expectsTimeQuestion) assert.ok(showedReview, '«' + typed + '»: сразу проверка записи');
+  }
+});
