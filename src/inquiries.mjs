@@ -536,6 +536,7 @@ async function handleInquiryStatusCallback(query, token) {
     if (status !== 'closed' && ['won', 'lost'].includes(inquiry.pipelineStage)) {
       inquiry.pipelineStage = status === 'new' ? 'new' : 'contact';
       inquiry.wonAt = '';
+      delete inquiry.dealAmount;
     }
   }
   inquiry.updatedAt = new Date().toISOString();
@@ -653,11 +654,19 @@ function burstText(name, burst) {
   return ['💬 ' + name + ': ' + burst.count + ' ' + word + ' подряд', ...(hidden > 0 ? ['… и ещё ' + hidden + ' выше'] : []), ...shown.map((line) => '• ' + cleanText(line, 300).replace(/\s+/g, ' '))].join('\n').slice(0, 4000);
 }
 
+// Менеджер ответил клиенту — серия закрыта: следующее сообщение клиента придёт новым сообщением со звуком, а не молча допишется выше ответа.
+function forgetBursts(inquiryId) {
+  for (const key of bursts.keys()) if (key.endsWith(':' + inquiryId)) bursts.delete(key);
+}
+
 async function appendToBurst(chat, inquiry, name, text) {
   const key = String(chat.chatId) + ':' + inquiry.id;
   const burst = bursts.get(key);
-  if (!burst || Date.now() - burst.at > BURST_WINDOW_MS) return false;
+  if (burst && Date.now() - burst.at > BURST_WINDOW_MS) bursts.delete(key);
+  if (!burst || !bursts.has(key)) return false;
   burst.lines.push(text);
+  // Показываются последние строки, остальное хранить незачем (счётчик ведётся отдельно).
+  if (burst.lines.length > BURST_SHOWN_LINES) burst.lines.splice(0, burst.lines.length - BURST_SHOWN_LINES);
   burst.count += 1;
   burst.at = Date.now();
   try {
@@ -1120,6 +1129,7 @@ async function handleAdministratorReply(message, token) {
           if (['won', 'lost'].includes(inquiry.pipelineStage)) {
             inquiry.pipelineStage = 'contact';
             inquiry.wonAt = '';
+            delete inquiry.dealAmount;
           }
         }
         // Ответ менеджера из Telegram тоже двигает воронку «Новая» → «Связались»,
@@ -1131,6 +1141,7 @@ async function handleAdministratorReply(message, token) {
         }
         inquiry.updatedAt = new Date().toISOString();
         answeredInquiry = inquiry;
+        forgetBursts(inquiry.id);
       }
     }
     saveDataNow();
@@ -1197,6 +1208,7 @@ export {
   createInquiry,
   detailsWorthShowing,
   handleAdministratorEdit,
+  forgetBursts,
   handleAdministratorReply,
   handleInquiryStatusCallback,
   handleMessageReaction,

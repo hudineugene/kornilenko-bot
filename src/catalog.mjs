@@ -1202,7 +1202,7 @@ function catalogListLine(record, language, number) {
   const type = (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[record.propertyType] || '';
   const city = localizedExact(record.city, language, 80);
   const price = objectPriceText(record, language);
-  const bedrooms = Number(record.bedrooms) > 0 ? record.bedrooms + ' ' + (language === 'ru' ? 'сп.' : language === 'es' ? 'dorm.' : 'bed') : '';
+  const bedrooms = Number(record.bedrooms) > 0 ? rangeText(record.bedrooms, record.bedroomsMax, language, true) + ' ' + (language === 'ru' ? 'сп.' : language === 'es' ? 'dorm.' : 'bed') : '';
   const area = Number(record.area) > 0 ? numericText(record.area, language) + ' ' + (language === 'ru' ? 'м' : 'm') + '²' : '';
   // «250 000 € · 2 сп. · 70 м² · Бенидорм»: то, чем объекты различаются, а не «Квартира · Бенидорм» пять раз подряд. Тип — только у
   // необычного (вилла, участок): квартира подразумевается. Строка не длиннее 38 знаков: длиннее — переносится, и восемь объектов

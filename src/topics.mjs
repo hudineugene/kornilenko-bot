@@ -8,7 +8,7 @@ const TOPICS = [
   { label: 'ипотека', words: ['ипотек', 'кредит', 'mortgage', 'loan', 'hipoteca', 'préstamo', 'prestamo'] },
   { label: 'налоги и расходы', words: ['налог', 'расходы', 'комисси', 'нотариус', 'itp', 'iva', 'tax', 'costs', 'notary', 'impuesto', 'gastos', 'notario'] },
   { label: 'просмотр', words: ['посмотреть', 'просмотр', 'показать', 'приехать', 'viewing', 'visit', 'see the', 'visita', 'ver el', 'ver la'] },
-  { label: 'документы', words: ['документ', 'nie', 'ние', 'паспорт', 'договор', 'юрист', 'адвокат', 'documents', 'contract', 'lawyer', 'documentos', 'contrato', 'abogado'] },
+  { label: 'документы', words: ['документ', 'nie', 'паспорт', 'договор', 'юрист', 'адвокат', 'documents', 'contract', 'lawyer', 'documentos', 'contrato', 'abogado'] },
   { label: 'планировка и фото', words: ['планировк', 'фото', 'видео', 'чертеж', 'чертёж', 'floor plan', 'floorplan', 'photos', 'video', 'planos', 'fotos', 'vídeo'] },
   { label: 'сроки сдачи', words: ['сдач', 'срок', 'когда будет готов', 'строительств', 'delivery', 'completion', 'when will it', 'entrega', 'finalización', 'finalizacion'] },
   { label: 'аренда и доход', words: ['аренд', 'доход', 'окупаем', 'инвест', 'rental', 'yield', 'investment', 'rentabilidad', 'alquiler', 'inversión', 'inversion'] },
@@ -16,6 +16,8 @@ const TOPICS = [
   { label: 'о компании', words: ['кто вы', 'застройщик', 'гарант', 'надёжн', 'надежн', 'who are you', 'developer', 'guarantee', 'quiénes sois', 'quienes sois', 'promotor', 'garantía', 'garantia'] },
   { label: 'контакты', words: ['телефон', 'позвонить', 'офис', 'ваш адрес', 'phone', 'call you', 'office', 'teléfono', 'telefono', 'oficina'] },
 ];
+
+import { mentions } from './words.mjs';
 
 const MAX_TOPICS = 3;
 const MAX_TEXT = 4000;
@@ -31,7 +33,7 @@ function topicsOf(text) {
   if (!message) return [];
   const found = [];
   for (const topic of TOPICS) {
-    if (topic.words.some((word) => message.includes(normalized(word)))) found.push(topic.label);
+    if (topic.words.some((word) => mentions(message, normalized(word)))) found.push(topic.label);
     if (found.length >= MAX_TOPICS) break;
   }
   return found;

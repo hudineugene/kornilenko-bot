@@ -1193,7 +1193,7 @@ function templateFor(template, item, user) {
   var body = own || String(texts.ru || texts.en || texts.es || "");
   var object = (state.objects || []).find(function (record) { return String(record.id) === String(item.propertyId || ""); });
   var name = String((user && (user.contactName || user.firstName)) || "");
-  body = body.replace(/\{(?:имя|name)\}/gi, name || "").replace(/\{(?:объект|property)\}/gi, object ? localized(object.title, own ? language : "ru") : "");
+  body = body.replace(/\{(?:имя|name)\}/gi, name || "").replace(/\{(?:объект|property)\}/gi, object ? localized(object.title, own ? language : "ru") : { ru: "этот объект", en: "this property", es: "este inmueble" }[own ? language : "ru"] || "этот объект");
   return { text: body, missing: language !== "ru" && !own && Boolean(body), language: language };
 }
 function insertTemplate(template, item, user, field) {

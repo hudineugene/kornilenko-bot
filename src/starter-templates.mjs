@@ -14,7 +14,7 @@ const STARTER_TEMPLATES = [
   {
     title: 'Цены и прайс',
     text: {
-      ru: '{имя}, цена по {объект} зависит от выбранного варианта. Пришлю актуальный прайс и свободные варианты. Подскажите, пожалуйста, сколько спален вам нужно и какой у вас бюджет?',
+      ru: '{имя}, цена на {объект} зависит от выбранного варианта. Пришлю актуальный прайс и свободные варианты. Подскажите, пожалуйста, сколько спален вам нужно и какой у вас бюджет?',
       en: '{name}, the price for {property} depends on the option you choose. I will send you the current price list and the available options. Could you tell me how many bedrooms you need and your budget?',
       es: '{name}, el precio de {property} depende de la opción elegida. Te enviaré la lista de precios actual y las opciones disponibles. ¿Cuántos dormitorios necesitas y cuál es tu presupuesto?',
     },
@@ -30,7 +30,7 @@ const STARTER_TEMPLATES = [
   {
     title: 'Условия оплаты',
     text: {
-      ru: '{имя}, по условиям оплаты и графику платежей по {объект} пришлю подробности в этом чате. Если удобнее, можем обсудить по телефону — напишите номер и удобное время.',
+      ru: '{имя}, по условиям оплаты и графику платежей на {объект} пришлю подробности в этом чате. Если удобнее, можем обсудить по телефону — напишите номер и удобное время.',
       en: '{name}, I will send you the payment terms and schedule for {property} in this chat. If you prefer, we can discuss it by phone — send me your number and a convenient time.',
       es: '{name}, te enviaré en este chat las condiciones y el calendario de pago de {property}. Si lo prefieres, lo hablamos por teléfono: dime tu número y una hora que te venga bien.',
     },
@@ -46,7 +46,7 @@ const STARTER_TEMPLATES = [
   {
     title: 'Планировки и материалы',
     text: {
-      ru: '{имя}, планировки и дополнительные материалы по {объект} пришлю в этот чат в ближайшее время.',
+      ru: '{имя}, планировки и дополнительные материалы на {объект} пришлю в этот чат в ближайшее время.',
       en: '{name}, I will send the floor plans and extra materials for {property} to this chat shortly.',
       es: '{name}, te enviaré a este chat los planos y más material de {property} en breve.',
     },
@@ -62,7 +62,7 @@ const STARTER_TEMPLATES = [
   {
     title: 'Напоминание о себе',
     text: {
-      ru: '{имя}, добрый день! Напоминаю о себе: удалось ли вам посмотреть материалы по {объект}? Если остались вопросы — отвечу.',
+      ru: '{имя}, добрый день! Напоминаю о себе: удалось ли вам посмотреть материалы на {объект}? Если остались вопросы — отвечу.',
       en: '{name}, good day! Just a reminder from us: did you have a chance to look at the materials for {property}? If you have any questions, I am here to answer.',
       es: '{name}, ¡buenas! Te escribimos para recordarte: ¿has podido ver el material de {property}? Si te quedan dudas, aquí estoy para resolverlas.',
     },

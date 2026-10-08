@@ -10,7 +10,7 @@ import { recordError } from './analytics.mjs';
 import { eraseUserData, markUnavailable, normalizeUser, userByChatId, userById, userDataExport } from './users.mjs';
 import { sendDocumentMessage, sendMessage, sendPhotoMessage, telegramRequest } from './telegram.mjs';
 import { menuKeyboard } from './menus.mjs';
-import { appendInquiryMessage, awaitingReply, inquiryChats, inquiryTimelineMessage, refreshInquiryCards, trimInquiries } from './inquiries.mjs';
+import { appendInquiryMessage, awaitingReply, forgetBursts, inquiryChats, inquiryTimelineMessage, refreshInquiryCards, trimInquiries } from './inquiries.mjs';
 import { createOfferList, localized, propertyReadyForLanguage, validHttpUrl } from './catalog.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
 import { json, panelUserView, parseUploadedDocument, parseUploadedImage, readJson, requireAuth, securityHeaders } from './admin-http.mjs';
@@ -916,6 +916,7 @@ async function handleClientsApi(req, res, url) {
       // Ответ не закрывает заявку: закрытие — отдельное решение человека.
       // Раньше галочка «оставить диалог в работе» решала это за менеджера, и
       // живые переписки закрывались сами собой.
+      forgetBursts(inquiry.id);
       inquiry.status = 'in_progress';
       // Первый ответ сдвигает воронку с «Новый» на «Контакт» сам.
       if (!inquiry.pipelineStage || inquiry.pipelineStage === 'new') inquiry.pipelineStage = 'contact';

@@ -161,7 +161,8 @@ function selectionEvaluation(inquiry, record) {
   }
 
   const wantedBedrooms = copy.bedroomOptions.indexOf(selection.bedrooms) + 1;
-  const bedrooms = Number(record.bedrooms);
+  // У комплекса «1–2 спальни» подходит и двухспальный запрос: берём верхнюю границу.
+  const bedrooms = Math.max(Number(record.bedrooms) || 0, Number(record.bedroomsMax) || 0);
   if (wantedBedrooms >= 1 && wantedBedrooms <= 4) {
     possible += 15;
     if (!(bedrooms > 0)) {

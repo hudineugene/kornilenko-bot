@@ -7,6 +7,7 @@
 import { data } from './store.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { GUIDE_COSTS_PAGE } from './goal.mjs';
+import { mentions } from './words.mjs';
 
 const COOLDOWN_MS = 30 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 200;
@@ -113,7 +114,7 @@ function intentOf(text, followUp = false) {
   if (!message || message.length > MAX_MESSAGE_LENGTH) return '';
   for (const intent of INTENTS) {
     if (followUp && !FOLLOW_UP_INTENTS.has(intent.key)) continue;
-    if (!Object.values(intent.words).some((list) => list.some((word) => message.includes(normalized(word))))) continue;
+    if (!Object.values(intent.words).some((list) => list.some((word) => mentions(message, normalized(word))))) continue;
     if (intent.needs && !intent.needs.some((word) => message.includes(word))) continue;
     if (intent.blocks && intent.blocks.some((word) => message.includes(word))) continue;
     return intent.key;
