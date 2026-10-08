@@ -37,6 +37,7 @@ import { handleComparisonCallback } from './comparison.mjs';
 import { handleSavedSearchCallback } from './saved-search.mjs';
 import { handleTrustCallback } from './trust.mjs';
 import { askGoal, handleGoalCallback } from './goal.mjs';
+import { faqHint } from './faq-hints.mjs';
 import { handleDigestCallback } from './digest.mjs';
 import { handlePlanCallback } from './plan.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
@@ -658,6 +659,12 @@ async function handleUpdate(update, token) {
           const inquiry = createInquiry(user, text, { type: 'general', sourceMessage: message });
           answer = mergedAnswer(inquiry) ? '' : fillTemplate(messages.fallback, user);
           inquiryAnswer = true;
+          // Частый вопрос («где офис», «какие налоги», «кто вы»): подсказка с кнопками на готовые экраны; менеджер получил сообщение как обычно.
+          const hint = faqHint(text, user.preferredLanguage || 'ru', user, { followUp: !answer });
+          if (hint) {
+            answer = [hint.text, answer].filter(Boolean).join('\n\n');
+            searchHint = hint.markup;
+          }
         }
       }
     }

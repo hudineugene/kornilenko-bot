@@ -162,4 +162,4 @@ async function handleGoalCallback(query, token) {
   await sendUiMessage(chatId, user, text, token, { reply_markup: markup });
 }
 
-export { GOALS, GOAL_TEXT, askGoal, goalCopy, goalLabelRu, goalMenuRow, handleGoalCallback };
+export { GOALS, GOAL_TEXT, GUIDE_COSTS_PAGE, askGoal, goalCopy, goalLabelRu, goalMenuRow, handleGoalCallback };

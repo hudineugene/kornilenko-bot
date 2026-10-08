@@ -158,6 +158,8 @@ async function handleContactCallback(query, token) {
   const language = user.preferredLanguage || 'ru';
   const copy = MANAGER_CONTACT_TEXT[language] || MANAGER_CONTACT_TEXT.ru;
   if (action !== 'cancel') await acknowledgeCallback(query, token, action === 'lead' ? leadCallbackToast(user, language) : '');
+  // «Контакты» по кнопке-подсказке к вопросу «где офис / какой телефон».
+  if (action === 'show') return sendContacts(chatId, user, token);
   if (action === 'lead') return startLeadForm(user, token);
   if (action === 'leadedit') return startLeadEdit(user, token);
   if (action === 'question') {
