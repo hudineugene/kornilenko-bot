@@ -1314,6 +1314,7 @@ function renderInquiryCard(host) {
       '<div class="conversation-main">' +
       '<div class="conversation-context">' +
         (related.length > 1 ? '<div class="field grow"><label for="activeInquiry">Текущая заявка</label><select id="activeInquiry">' + related.map(function (entry) { return '<option value="' + esc(entry.id) + '"' + (entry.id === item.id ? " selected" : "") + '>' + esc(inquiryTypeName(entry)) + " · " + dateShort(entry.createdAt) + " · " + inquiryState(entry).text + "</option>"; }).join("") + "</select></div>" : '<div><span class="field-label">Текущая заявка</span><div class="conversation-context-title">' + esc(inquiryTypeName(item)) + " · " + dateTime(item.createdAt) + "</div></div>") +
+        (Array.isArray(item.topics) && item.topics.length ? '<span class="conversation-topics" title="Тема по словам клиента">🏷 ' + esc(item.topics.join(", ")) + "</span>" : "") +
         (property ? '<button class="property-link" id="linkedProperty" type="button">' + iconSpan("home") + ' ' + esc(localized(property.title, "ru") || property.reference || property.id) + '<span>Открыть →</span></button>' : item.propertyId ? '<div class="chip bad">Объект удалён</div>' : "") +
       '</div>' +
       viewingCardHtml(item, property) +

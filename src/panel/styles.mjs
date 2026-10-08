@@ -465,6 +465,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
   .conversation-head .status-in-head{display:none}
 }
 .conversation-side-toggle,.side-close,.side-backdrop{display:none}
+.conversation-topics{color:var(--muted);font-size:var(--fs-xs);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .offer-list{display:flex;flex-direction:column;max-height:min(50vh,420px);overflow:auto;border:1px solid var(--line-soft);border-radius:var(--radius)}
 .offer-row{display:flex;align-items:flex-start;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--line-soft)}
 .offer-row>span{display:flex;flex-direction:column;min-width:0}

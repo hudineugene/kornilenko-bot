@@ -9,6 +9,7 @@ import { adminSendPlan } from './notify-plan.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
 import { data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { sourceDisplay } from './source-title.mjs';
+import { refreshTopics } from './topics.mjs';
 import { recordActivity, recordDaily, recordError } from './analytics.mjs';
 import { markUnavailable, normalizeUser, userByChatId, userById } from './users.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
@@ -197,6 +198,7 @@ function mergeIntoLatestInquiry(user, text, type, context) {
   // Past the limit the text is kept only while it fits; every message is
   // still in the user's activity history.
   if (combined.length <= 4000) latest.text = combined;
+  refreshTopics(latest);
   // A real message turns a search lead into a conversation that waits for an answer.
   if (!context.searchLead) latest.searchLead = false;
   latest.updatedAt = new Date().toISOString();
@@ -293,6 +295,7 @@ function createInquiry(user, text, context = {}) {
     updatedAt: now,
     clientMessageAt: now,
   };
+  refreshTopics(inquiry);
   data.inquiries.unshift(inquiry);
   trimInquiries();
   recordDaily('inquiry');
@@ -690,7 +693,7 @@ async function notifyAdministratorAction(user, title, details = '', inquiryId = 
   const compact = Boolean(options.compact && inquiry);
   let text;
   if (compact) text = '💬 ' + ([user.firstName, user.lastName].filter(Boolean).join(' ') || 'Клиент') + ': ' + cleanDetails;
-  else if (options.important) text = buildInquiryCard(user, inquiry, { heading: (options.icon || '📩') + ' ' + cleanText(title, 160), body: [cleanDetails], hint: Boolean(options.first) });
+  else if (options.important) text = buildInquiryCard(user, inquiry, { heading: (options.icon || '📩') + ' ' + cleanText(title, 160), body: [cleanDetails, inquiry && Array.isArray(inquiry.topics) && inquiry.topics.length ? '🏷 Тема: ' + inquiry.topics.join(', ') : ''], hint: Boolean(options.first) });
   else text = ['👀 ' + cleanText(title, 160), who, ...(detailsWorthShowing(title, cleanDetails) ? ['', cleanDetails] : [])].filter((line, index, lines) => !(line === '' && lines[index - 1] === '')).join('\n').trim();
   // Inquiries go to every manager; navigation only to the main admin.
   const chats = options.important ? inquiryChats() : inquiryChats().filter((chat) => chat.main);

@@ -1379,7 +1379,9 @@ function normalizeLoadedData(parsed) {
     }) : [];
     const inquiries = Array.isArray(parsed.inquiries) ? parsed.inquiries.map((item) => ({
       // dealAmount переносится ниже, только если это сумма больше нуля.
-      ...Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'dealAmount')),
+      ...Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'dealAmount' && key !== 'topics')),
+      // Тема обращения (метка по ключевым словам): до трёх коротких слов.
+      ...(Array.isArray(item.topics) && item.topics.length ? { topics: item.topics.map((topic) => cleanText(topic, 40)).filter(Boolean).slice(0, 3) } : {}),
       id: String(item.id || crypto.randomUUID()),
       userId: String(item.userId || ''),
       chatId: item.chatId == null ? '' : String(item.chatId),
