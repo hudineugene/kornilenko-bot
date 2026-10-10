@@ -4,6 +4,7 @@
 
 import http from 'node:http';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { cleanText } from '../util.mjs';
 import { data } from '../store.mjs';
 import { ADMIN_ALLOWED_HOSTS, ADMIN_ASSETS, FONT_ASSETS } from '../config.mjs';
@@ -19,6 +20,7 @@ import {
 import { userById } from '../users.mjs';
 import { APP_CSS, APP_HTML, APP_JS } from './assets.mjs';
 import { miniAppSettings } from './settings.mjs';
+import { privateAddress } from './network.mjs';
 
 const MAX_BODY = 16 * 1024;
 // Заявки (запись, звонок, вопрос) — строго; сердечки, сравнение и счётчики — свободнее: листая каталог, их ставят десятками.
@@ -47,8 +49,8 @@ function rateLimited(key, limit) {
 // последний адрес в цепочке: его дописал наш прокси, а начало цепочки клиент мог придумать сам.
 function clientAddress(req) {
   const remote = req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : '';
-  const loopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
-  if (!loopback) return remote;
+  // Прокси Caddy приходит из внутренней сети Docker: ему верим так же, как локальному.
+  if (!remote || !privateAddress(remote)) return remote;
   const cloudflare = String(req.headers['cf-connecting-ip'] || '').trim();
   const chain = String(req.headers['x-forwarded-for'] || '').split(',').map((item) => item.trim()).filter(Boolean);
   const forwarded = cloudflare || chain[chain.length - 1] || '';
@@ -228,6 +230,7 @@ async function handleMiniAppRequest(req, res) {
       res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8' });
       return res.end('Method not allowed');
     }
+    if (url.pathname === '/health') return sendJson(res, 200, { ok: true });
     if (url.pathname === '/' || url.pathname === '/index.html') return sendText(res, 200, 'text/html; charset=utf-8', APP_HTML, 'no-cache');
     if (url.pathname === '/app.css') return sendText(res, 200, 'text/css; charset=utf-8', APP_CSS, 'no-cache');
     if (url.pathname === '/app.js') return sendText(res, 200, 'text/javascript; charset=utf-8', APP_JS, 'no-cache');
@@ -280,38 +283,59 @@ function miniAppHostMatches(req) {
   }
 }
 
-let server = null;
+let servers = [];
+
+// Адреса, на которых слушает отдельный порт приложения. «docker» — мосты Docker этого сервера (docker0 и br-…): по ним к приложению
+// ходит прокси Caddy из своего контейнера. Наружу порт не виден: адреса мостов — внутренние. Список через запятую.
+function listenHosts() {
+  const wanted = String(process.env.MINIAPP_HOST || '127.0.0.1').split(',').map((item) => item.trim()).filter(Boolean);
+  const hosts = [];
+  for (const item of wanted) {
+    if (item !== 'docker') {
+      hosts.push(item);
+      continue;
+    }
+    hosts.push('127.0.0.1');
+    for (const [name, list] of Object.entries(os.networkInterfaces())) {
+      if (!/^(docker0|br-[0-9a-f]+)$/.test(name)) continue;
+      for (const entry of list || []) if (entry.family === 'IPv4' && !entry.internal) hosts.push(entry.address);
+    }
+  }
+  return [...new Set(hosts)];
+}
 
 function startMiniApp() {
-  if (server) return server;
+  if (servers.length) return servers[0];
   const port = Number(process.env.MINIAPP_PORT || 3001);
-  const host = process.env.MINIAPP_HOST || '127.0.0.1';
-  server = createMiniAppServer();
-  server.on('error', (error) => {
-    console.error('Mini App не запущен:', error.message);
-    server = null;
-  });
-  server.listen(port, host, () => console.log('  Mini App: http://' + host + ':' + port + ' (за обратным прокси с HTTPS)'));
-  return server;
+  for (const host of listenHosts()) {
+    const instance = createMiniAppServer();
+    instance.on('error', (error) => {
+      console.error('Mini App не слушает ' + host + ':' + port + ':', error.message);
+      servers = servers.filter((item) => item !== instance);
+    });
+    instance.listen(port, host, () => console.log('  Mini App: http://' + host + ':' + port + ' (за обратным прокси с HTTPS)'));
+    servers.push(instance);
+  }
+  return servers[0] || null;
 }
 
 function stopMiniApp() {
-  if (!server) return;
-  const closing = server;
-  server = null;
-  try {
-    closing.close();
-    closing.closeAllConnections && closing.closeAllConnections();
-  } catch {
-    // уже закрыт
+  const closing = servers;
+  servers = [];
+  for (const instance of closing) {
+    try {
+      instance.close();
+      instance.closeAllConnections && instance.closeAllConnections();
+    } catch {
+      // уже закрыт
+    }
   }
 }
 
-// Привести запущенный сервер в соответствие с настройками: включён и есть адрес — слушаем, иначе закрыт.
-// Отдельный порт нужен только если он задан явно (MINIAPP_PORT); обычно приложение отвечает на порту панели по своему адресу.
+// Отдельный порт нужен, когда его выдал администратор сервера (MINIAPP_PORT): тогда слушаем всегда, а «включено» в панели
+// отвечает только за кнопку у клиентов. Без порта приложение отвечает на порту панели по своему адресу.
 function syncMiniApp() {
-  const settings = miniAppSettings();
-  if (settings.enabled && process.env.MINIAPP_PORT) startMiniApp();
+  if (process.env.MINIAPP_PORT) startMiniApp();
   else stopMiniApp();
 }
 

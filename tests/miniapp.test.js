@@ -205,6 +205,7 @@ test('страница: заголовки защиты, нет опасных �
     assert.equal(file.status, 200, path);
   }
   assert.equal((await call('/api/app/health')).json.ok, true);
+  assert.equal((await call('/health')).json.ok, true, 'проверка живости для прокси сервера');
   assert.equal((await call('/panel-secret')).status, 404);
   const post = await call('/', { method: 'POST', body: {} });
   assert.equal(post.status, 405);
