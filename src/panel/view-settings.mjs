@@ -137,7 +137,7 @@ function renderConnection(host) {
 // «Подключение к Telegram» — вкладка «Подключение» в «Настройках»: токен бота, включение и
 // автозапуск нужны редко, и на рабочем экране «Настройки → Команда» им не место.
 function renderTelegramConnection(host) {
-  var config = state.config, bot = state.bot || {};
+  var config = state.config, bot = state.bot || {}, mini = config.miniApp || {};
   host.innerHTML = '<div class="grid cols-2"><div class="stack">' +
     '<div class="card"><header><h3>Бот</h3></header><div class="card-body stack">' +
       '<label class="switch"><input type="checkbox" id="setActive"' + (config.active ? " checked" : "") + '><span class="track"></span><span>Бот ' + (config.active ? "включён" : "выключен") + "</span></label>" +
@@ -154,6 +154,13 @@ function renderTelegramConnection(host) {
       '<div class="row"><span class="dot" id="autostartDot"></span><span class="grow" id="autostartText">Проверяем автозапуск…</span></div>' +
       '<div class="hint">Windows запустит bot.exe после входа в систему и повторит запуск, если программа завершится с ошибкой.</div>' +
       '<button class="btn secondary small" id="autostartButton" type="button" disabled>Настроить</button>' +
+    '</div></div>' +
+    '<div class="card"><header><h3>Приложение в Telegram</h3></header><div class="card-body stack">' +
+      '<label class="check"><input type="checkbox" id="appOn"' + (mini.enabled ? " checked" : "") + '> Показывать клиентам приложение: каталог, запись на просмотр, калькулятор</label>' +
+      '<div class="field"><label for="appUrl">Адрес приложения</label><input id="appUrl" value="' + esc(mini.url || "") + '" placeholder="https://app.example.com" autocomplete="off"></div>' +
+      '<div class="row wrap"><button class="btn secondary small" id="appCheck" type="button">Проверить адрес</button>' +
+        '<button class="btn secondary small" id="appSave" type="button">Сохранить</button><span id="appResult" class="small muted"></span></div>' +
+      '<div class="hint">Рядом с полем ввода в чате появится кнопка «Каталог». Адрес должен начинаться с https:// и вести на этот же сервер: как его завести — в инструкции «Приложение в Telegram».</div>' +
     '</div></div></div></div>';
 
   // Переключатель включает и выключает бота сразу, отдельной кнопки нет.
@@ -171,6 +178,27 @@ function renderTelegramConnection(host) {
       host.querySelector("#setToken").value = "";
       host.querySelector("#setTokenPass").value = "";
       toast("Токен изменён, бот переподключается");
+      await reload();
+    } catch (error) {
+      fail(error);
+    } finally {
+      button.disabled = false;
+    }
+  };
+  host.querySelector("#appCheck").onclick = async function () {
+    var result = host.querySelector("#appResult");
+    result.textContent = "Проверяем…";
+    try {
+      var answer = await send("/api/miniapp/check", "POST", { url: host.querySelector("#appUrl").value });
+      result.textContent = answer.ok ? "Адрес работает: приложение открывается" : answer.error;
+    } catch (error) { result.textContent = error.message; }
+  };
+  host.querySelector("#appSave").onclick = async function () {
+    var button = this;
+    button.disabled = true;
+    try {
+      var answer = await send("/api/miniapp", "PUT", { enabled: host.querySelector("#appOn").checked, url: host.querySelector("#appUrl").value });
+      toast(answer.buttonError ? "Сохранено, но кнопку в Telegram поставить не удалось: " + answer.buttonError : answer.miniApp.enabled ? "Приложение включено" : "Приложение выключено");
       await reload();
     } catch (error) {
       fail(error);

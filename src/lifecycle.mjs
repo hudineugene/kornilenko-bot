@@ -16,6 +16,9 @@ import { announceError, announceStart, rememberShutdown, sendStatusNotice, statu
 import { diskSpaceNotice, runSelfCheck, selfCheckLines, selfCheckNotice } from './selfcheck.mjs';
 import { startLogFile } from './logfile.mjs';
 import { adminSendPlan } from './notify-plan.mjs';
+import { miniAppSettings } from './miniapp/settings.mjs';
+import { stopMiniApp, syncMiniApp } from './miniapp/server.mjs';
+import { configureMiniAppButton } from './miniapp/menu-button.mjs';
 
 const RUN_MARKER_FILE = path.join(path.dirname(DATA_FILE), 'bot-running.json');
 const RUN_HEARTBEAT_MS = 60 * 1000;
@@ -180,6 +183,7 @@ function shutdown(signal) {
   try { saveDataNow(); } catch (error) { console.error('Не удалось сохранить данные:', error.message); }
   clearRunMarker();
   stopTunnel();
+  stopMiniApp();
   const notice = statusNoticesOn()
     ? Promise.race([sendStatusNotice(stopNoticeText(signal)), delay(WINDOW_CLOSED_NOTICE_TIMEOUT_MS)])
     : Promise.resolve();
@@ -244,6 +248,9 @@ function start() {
     // crash notice instead, which already says the bot is running again.
     if (!previousRun) announceStart();
     restartPolling();
+    // Приложение в Telegram: слушает только этот компьютер, наружу его выводит обратный прокси с HTTPS.
+    syncMiniApp();
+    if (miniAppSettings().enabled) void configureMiniAppButton(data.config.botToken).catch(() => {});
     if (previousRun) void reportAbruptStop(previousRun).catch(() => {});
     if (data.config.remoteAccess) startTunnel();
     runDailyBackupSafely();

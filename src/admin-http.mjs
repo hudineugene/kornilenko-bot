@@ -19,6 +19,7 @@ import { isContainerBackup, readBackupContainer } from './backup-file.mjs';
 import { userById } from './users.mjs';
 import { adminNotifications, attentionCounts, waitingConversationCount } from './admin-notifications.mjs';
 import { awaitingReply } from './inquiries.mjs';
+import { miniAppSettings } from './miniapp/settings.mjs';
 
 const SESSIONS_FILE = path.join(path.dirname(DATA_FILE), 'bot-sessions.json');
 const SESSION_PERSIST_STEP_MS = 10 * 60 * 1000;
@@ -844,6 +845,7 @@ function safeState(session) {
       workingHours: normalizeWorkingHours(data.config.workingHours),
       statusNotices: data.config.statusNotices !== false,
       calculator: normalizeCalculator(data.config.calculator),
+      miniApp: miniAppSettings(),
       viewingSlots: normalizeViewingSlots(data.config.viewingSlots),
       adminName: data.config.adminName || '',
       feedImport: data.config.feedImport && typeof data.config.feedImport === 'object' ? data.config.feedImport : {},

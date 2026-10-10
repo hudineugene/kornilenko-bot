@@ -196,6 +196,8 @@ function normalizeUser(from, chatId, countMessage = true) {
     // День (ГГГГ-ММ-ДД), когда клиенту последний раз показали блок «Что дальше» целиком.
     whatNextDay: cleanText(previous.whatNextDay, 10),
     sourceAt: cleanText(previous.sourceAt, 40),
+    // Какая кнопка приложения стоит у клиента в чате (язык и адрес): чтобы не ставить её заново при каждом приветствии.
+    menuButtonKey: cleanText(previous.menuButtonKey, 200),
     alertsSent: previous.alertsSent && typeof previous.alertsSent === 'object' && !Array.isArray(previous.alertsSent) ? previous.alertsSent : {},
     // The client turned broadcasts off (the "Unsubscribe" button or settings).
     broadcastsOptOut: Boolean(previous.broadcastsOptOut),

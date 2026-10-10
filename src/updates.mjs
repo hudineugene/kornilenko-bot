@@ -44,6 +44,7 @@ import { telegramContactLost, telegramContactRestored } from './status.mjs';
 import { ADMIN_CHAT_HINT, handleAdminChatMessage, handleInboxShowCallback } from './admin-commands.mjs';
 import { handlePostCallback } from './post-command.mjs';
 import { handleChatJoinRequest, handleMyChatMember, rememberGroupMessage } from './groups.mjs';
+import { refreshChatMenuButton } from './miniapp/menu-button.mjs';
 
 function findRule(text, language) {
   const input = text.toLocaleLowerCase('ru-RU').trim();
@@ -378,6 +379,7 @@ async function handleUpdate(update, token) {
 
   const messages = languageMessages(user.preferredLanguage);
   if (command === '/start' || command === '/menu') {
+    void refreshChatMenuButton(user, token);
     if (command === '/start' && !commandArgument && user.pendingAction) {
       const copy = INTERACTION_TEXT[user.preferredLanguage] || INTERACTION_TEXT.ru;
       void notifyAdministratorAction(user, 'Вернулся к незавершённой форме', summary);

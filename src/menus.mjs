@@ -12,6 +12,7 @@ import { sharedListByCode, catalogRecords, clearCatalogMessages, clearGalleryMes
 import { tunnelInstalled } from './remote.mjs';
 import { inquiryChats } from './inquiries.mjs';
 import { ADMIN_COMMAND_DESCRIPTIONS } from './admin-commands.mjs';
+import { refreshChatMenuButton } from './miniapp/menu-button.mjs';
 
 function languageMessages(language) {
   return data.config.messages[language] || data.config.messages.ru;
@@ -127,6 +128,7 @@ function withoutMenuCall(hint) {
 
 async function sendWelcome(chatId, user, token, options = {}) {
   const language = user.preferredLanguage || 'ru';
+  void refreshChatMenuButton(user, token);
   await clearUiMessages(chatId, user, token);
   await clearGalleryMessages(chatId, user, token);
   await clearCatalogMessages(chatId, user, token);

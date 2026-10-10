@@ -16,6 +16,11 @@ import { passwordAccepted } from './admin-http.mjs';
 import { loginAllowed, menuInput, messagesInput, rulesConflict } from './admin-input.mjs';
 import { announceActiveChange } from './status.mjs';
 import { MIN_BACKUP_PASSWORD_LENGTH, sendTelegramBackup, setBackupPassword, telegramBackupSettings } from './offsite.mjs';
+import { normalizeMiniAppUrl, miniAppSettings } from './miniapp/settings.mjs';
+import { syncMiniApp } from './miniapp/server.mjs';
+import { configureMiniAppButton, resetChatMenuButtons } from './miniapp/menu-button.mjs';
+import { ADMIN_ALLOWED_HOSTS } from './config.mjs';
+import { resolvesToPrivateAddress } from './miniapp/network.mjs';
 import { applyImport, feedSettings, fetchFeed, planImport, planSummary, readFeed } from './feed-import.mjs';
 
 // Каждая ветка сама отвечает клиенту и возвращает управление. Если не подошла
@@ -392,6 +397,56 @@ function refreshStaffCommands(previousChatIds = []) {
     data.config.viewingSlots = normalizeViewingSlots({ enabled: body.enabled === true, days, times, daysAhead, perSlot });
     saveDataNow();
     return json(res, 200, { ok: true, viewingSlots: data.config.viewingSlots });
+  }
+
+  // Приложение в Telegram (Mini App): включить и указать публичный адрес, по которому оно открывается.
+  if (url.pathname === '/api/miniapp' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const enabled = body.enabled === true;
+    const raw = cleanText(body.url, 300);
+    const address = normalizeMiniAppUrl(raw);
+    if (raw && !address) return json(res, 400, { error: 'Адрес должен начинаться с https:// и быть обычным именем сайта, например https://app.example.com' });
+    if (enabled && !address) return json(res, 400, { error: 'Чтобы включить приложение, укажите адрес' });
+    const panelHosts = new Set([...ADMIN_ALLOWED_HOSTS, String(data.config.tunnelHostname || '').trim().toLowerCase()].filter(Boolean));
+    if (address && panelHosts.has(new URL(address).hostname.toLowerCase())) {
+      return json(res, 400, { error: 'Адрес приложения должен отличаться от адреса панели: иначе клиентам откроется приложение вместо панели' });
+    }
+    const before = miniAppSettings();
+    data.config.miniApp = { enabled, url: address };
+    saveDataNow();
+    syncMiniApp();
+    let buttonError = '';
+    try {
+      await configureMiniAppButton(data.config.botToken);
+    } catch (error) {
+      buttonError = error && error.message ? error.message : 'не удалось поставить кнопку';
+    }
+    // У тех, кому уже поставлена своя кнопка (на старом адресе или при выключении), её снимаем: новая встанет при следующем /start.
+    const after = miniAppSettings();
+    if (before.enabled !== after.enabled || before.url !== after.url) void resetChatMenuButtons(data.config.botToken).catch(() => {});
+    return json(res, 200, { ok: true, miniApp: miniAppSettings(), buttonError });
+  }
+
+  // Проверка адреса: открывается ли приложение снаружи так, как увидит клиент.
+  if (url.pathname === '/api/miniapp/check' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const address = normalizeMiniAppUrl(cleanText(body.url, 300));
+    if (!address) return json(res, 400, { error: 'Адрес должен начинаться с https:// и быть обычным именем сайта' });
+    if (await resolvesToPrivateAddress(new URL(address).hostname)) {
+      return json(res, 200, { ok: false, error: 'Адрес ведёт во внутреннюю сеть: нужен публичный адрес в интернете' });
+    }
+    try {
+      const response = await fetch(address + '/api/app/health', { signal: AbortSignal.timeout(7000), redirect: 'error' });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload && payload.ok === true) return json(res, 200, { ok: true });
+      return json(res, 200, { ok: false, error: 'Адрес отвечает, но это не приложение бота (код ' + response.status + ')' });
+    } catch (error) {
+      return json(res, 200, { ok: false, error: 'Адрес не открывается: проверьте запись домена и что сервер запущен' });
+    }
   }
 
   if (url.pathname === '/api/calculator' && req.method === 'PUT') {

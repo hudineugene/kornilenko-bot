@@ -1,5 +1,6 @@
 // Панель: API и резервные копии.
 
+import { miniAppSettings } from './miniapp/settings.mjs';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, delay, hashPassword, localDayKey } from './util.mjs';
@@ -219,6 +220,9 @@ async function handleApi(req, res, url) {
       const hostname = cleanText(body.tunnelHostname, 253).toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
       if (hostname && !/^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(hostname)) {
         return json(res, 400, { error: 'Адрес панели должен быть доменным именем, например panel.example.com' });
+      }
+      if (hostname && miniAppSettings().url && new URL(miniAppSettings().url).hostname.toLowerCase() === hostname) {
+        return json(res, 400, { error: 'Этот адрес уже занят приложением в Telegram: выберите другой для панели' });
       }
       data.config.tunnelHostname = hostname;
     }

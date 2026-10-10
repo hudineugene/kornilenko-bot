@@ -7,10 +7,13 @@ import { runDueBroadcasts } from './broadcasts.mjs';
 import { binaryLoginAsset, hostAllowed, html, json, securityHeaders } from './admin-http.mjs';
 import { handleApi } from './admin-api.mjs';
 import { PANEL_HTML } from './panel/index.mjs';
+import { handleMiniAppRequest, miniAppHostMatches } from './miniapp/server.mjs';
 
 
 const server = http.createServer(async (req, res) => {
   try {
+    // Адрес приложения для клиентов: отвечает только Mini App, до проверок панели.
+    if (miniAppHostMatches(req)) return await handleMiniAppRequest(req, res);
     if (!hostAllowed(req)) {
       securityHeaders(res);
       res.writeHead(421, { 'content-type': 'text/plain; charset=utf-8' });
