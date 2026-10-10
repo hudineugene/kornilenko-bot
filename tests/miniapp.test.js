@@ -211,6 +211,23 @@ test('страница: заголовки защиты, нет опасных �
   assert.equal(post.status, 405);
 });
 
+test('фирменный редизайн использует логотип, цвета и реальные сценарии приложения', () => {
+  assert.match(APP_CSS, /--teal:#0aa5bd/);
+  assert.match(APP_CSS, /--coral:#e5486a/);
+  assert.match(APP_CSS, /--sun:#ffc629/);
+  assert.match(APP_CSS, /\.catalog-search/);
+  assert.match(APP_CSS, /\.booking-summary/);
+  assert.match(APP_CSS, /\.about-brand/);
+  assert.match(APP_JS, /src: '\/logo\.png', alt: company\.name/);
+  assert.match(APP_JS, /function searchKey\(value\)/);
+  assert.match(APP_JS, /function cardMatchesFilters\(card, f\)/);
+  assert.match(APP_JS, /class: 'card-price'/);
+  assert.match(APP_JS, /class: 'booking-confirmation'/);
+  assert.match(APP_JS, /class: 'about-brand'/);
+  assert.match(APP_JS, /tabButton\('home', t\('catalog'\)/);
+  assert.match(APP_JS, /tabButton\('cmp', t\('compare'\)/);
+});
+
 test('адрес приложения: только https и обычное имя сайта', () => {
   const { normalizeMiniAppUrl, miniAppSettings } = require('../src/miniapp/settings.mjs');
   assert.equal(normalizeMiniAppUrl('https://app.example.com/'), 'https://app.example.com');

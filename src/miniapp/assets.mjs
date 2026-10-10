@@ -232,7 +232,103 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 .viewer .close{position:absolute;right:16px;top:calc(var(--top) + 12px);z-index:2}
 .viewer .counter{position:absolute;left:0;right:0;bottom:calc(var(--bottom) + 18px);text-align:center;color:#fff;font-weight:700;font-size:14px}
 .skel{height:300px;border-radius:var(--r);background:linear-gradient(110deg,var(--card) 30%,var(--line) 50%,var(--card) 70%);background-size:200% 100%;animation:shimmer 1.3s linear infinite;margin-top:16px}
-@media (min-width:700px){#app{max-width:560px;margin:0 auto}.tabs,.cta{left:50%;right:auto;width:536px;transform:translateX(-50%)}.sheet{left:50%;right:auto;width:560px;transform:translateX(-50%);animation:none}}
+
+/* фирменный редизайн Mini App */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.28;background-image:linear-gradient(rgba(10,165,189,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(10,165,189,.045) 1px,transparent 1px);background-size:44px 44px;mask-image:linear-gradient(to bottom,black,transparent 48%)}
+#app{position:relative}
+.top{padding:calc(var(--top) + 8px) 18px 8px;background:color-mix(in srgb,var(--card) 94%,transparent);border-bottom:1px solid color-mix(in srgb,var(--line) 74%,transparent)}
+.top::after{height:2px;opacity:.72}
+.brand{gap:9px}
+.brand img{width:82px;height:50px;border-radius:0;background:transparent;box-shadow:none;object-fit:contain;flex:none}
+.brand-copy{min-width:0}
+.brand-copy b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand-copy span{font-size:11px;max-width:150px}
+.langs{border:1px solid var(--line);box-shadow:none;background:var(--soft)}
+.langs button.on{background:var(--teal);color:#fff}
+.page{padding-top:18px}
+.eyebrow{text-transform:uppercase;letter-spacing:.13em;color:var(--teal-dark);font-size:10px;font-weight:800;margin-bottom:4px}
+.catalog-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px}
+.catalog-count{font-size:12px;color:var(--muted);white-space:nowrap;padding-bottom:3px}
+.catalog-search{height:54px;display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:0 6px 0 16px;box-shadow:0 8px 24px rgba(17,24,38,.055);margin-bottom:14px;transition:border-color .2s,box-shadow .2s}
+.catalog-search:focus-within{border-color:var(--teal);box-shadow:0 0 0 4px color-mix(in srgb,var(--teal) 13%,transparent)}
+.catalog-search>svg{width:20px;height:20px;color:var(--muted);flex:none}
+.catalog-search input{min-width:0;flex:1;border:0;outline:0;background:transparent;font-size:14px}
+.catalog-search input::placeholder{color:color-mix(in srgb,var(--muted) 78%,transparent)}
+.search-filter{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;color:var(--teal-dark);background:var(--teal-soft);flex:none}
+.search-filter.on{background:var(--teal);color:#fff}
+.search-filter svg,.filter-chip svg{width:18px;height:18px}
+.filter-chip{display:inline-flex;align-items:center;gap:7px}
+.chips{margin-top:8px;margin-bottom:2px}
+.chip{height:36px;padding:0 14px;background:var(--card);box-shadow:0 1px 1px rgba(17,24,38,.02)}
+.chip.on{background:var(--teal);border-color:var(--teal);color:#fff;box-shadow:0 7px 16px color-mix(in srgb,var(--teal) 20%,transparent)}
+.btn.primary{background:var(--teal);box-shadow:0 10px 22px color-mix(in srgb,var(--teal) 25%,transparent)}
+.btn.primary:hover{background:var(--teal-dark)}
+.list{gap:16px;margin-top:18px}
+.card{border:1px solid var(--line);border-radius:20px;box-shadow:0 8px 26px rgba(17,24,38,.065)}
+.card .photo{aspect-ratio:16/10}
+.card .photo::after{height:26%;background:linear-gradient(0deg,rgba(8,12,20,.18),transparent)}
+.card .body{padding:15px 16px 17px}
+.card .body h3{font-size:18px}
+.card .place{margin-top:7px}
+.card-price{font-size:22px;font-weight:800;letter-spacing:-.025em;margin-top:11px;color:var(--ink)}
+.card-price s{font-size:13px;color:var(--muted);font-weight:600;margin-right:7px}
+.facts-row{gap:14px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.fact{height:auto;padding:0;background:transparent;border-radius:0;font-size:12px;color:var(--muted)}
+.fact svg{width:18px;height:18px;color:var(--teal-dark)}
+.badge{border-radius:9px;height:27px}
+.card .heart{background:rgba(255,255,255,.94);border:1px solid rgba(255,255,255,.75);box-shadow:0 7px 18px rgba(17,24,38,.16)}
+.gallery{overflow:hidden;border-radius:0 0 24px 24px;background:var(--card)}
+.slides{aspect-ratio:16/12}
+.sheet-head{margin-top:18px}
+.big-price{font-size:29px;margin-top:12px}
+.tiles{gap:9px}
+.tile{border:1px solid var(--line);box-shadow:none;border-radius:16px;padding:12px}
+.tile .ico{background:var(--teal-soft)}
+.ticks li{border:1px solid var(--line);box-shadow:none}
+.links .btn{height:46px;font-size:14px;border-radius:14px}
+.cta{background:color-mix(in srgb,var(--card) 95%,transparent);border-radius:22px;padding:8px;box-shadow:0 14px 38px rgba(17,24,38,.16)}
+.sheet{background:var(--bg);border:1px solid var(--line);padding-top:9px}
+.sheet-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}
+.sheet-close{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);color:var(--muted);flex:none}
+.sheet-close svg{width:20px;height:20px}
+.filter-block{margin-top:20px}
+.filter-block h3{font-size:14px;margin-bottom:9px}
+.filter-options{display:flex;gap:8px;flex-wrap:wrap}
+.filter-options .chip{flex:1 1 auto;min-width:72px}
+.filter-actions{display:grid;grid-template-columns:minmax(100px,.72fr) minmax(0,1.55fr);gap:10px;position:sticky;bottom:calc(-1 * var(--bottom));background:var(--bg);padding:18px 0 calc(var(--bottom) + 2px);margin-top:8px}
+.filter-actions .btn{padding:0 12px}
+.booking-summary{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:10px;margin-top:12px}
+.booking-summary img{width:88px;height:68px;object-fit:cover;border-radius:13px;flex:none}
+.booking-summary>div{min-width:0;display:grid;gap:3px}
+.booking-summary b,.booking-summary strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.booking-summary span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.booking-summary strong{font-size:15px}
+.booking-confirmation{display:flex;align-items:center;gap:12px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 15px;margin-top:18px}
+.booking-confirmation>svg{width:26px;height:26px;color:var(--teal);flex:none}
+.booking-confirmation div{display:grid;gap:3px}
+.booking-confirmation span{font-size:13px;color:var(--muted)}
+.success-actions{display:grid;gap:10px;margin-top:16px}
+.success .check{background:var(--teal-soft);color:var(--teal);position:relative}
+.success .check::before,.success .check::after{content:"";position:absolute;width:13px;height:13px;transform:rotate(45deg)}
+.success .check::before{background:var(--coral);left:-18px;top:22px}
+.success .check::after{background:var(--sun);right:-18px;bottom:20px}
+.cmp table{border:1px solid var(--line);box-shadow:0 8px 26px rgba(17,24,38,.055)}
+.cmp .best{color:#7b5a00;font-weight:800;background:var(--sun-soft)}
+.about-brand{display:flex;align-items:center;gap:14px;margin-top:16px;padding:16px;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 8px 26px rgba(17,24,38,.055);position:relative;overflow:hidden}
+.about-brand::after{content:"";position:absolute;right:-24px;bottom:-28px;width:92px;height:92px;border:18px solid var(--teal-soft);transform:rotate(45deg);opacity:.65}
+.about-brand img{width:100px;height:82px;object-fit:contain;flex:none;position:relative;z-index:1}
+.about-brand>div{min-width:0;position:relative;z-index:1}
+.about-brand h2{font-size:18px}
+.about-brand p{margin:7px 0 0}
+.about-hero{border:1px solid var(--line);box-shadow:none;border-radius:20px}
+.stat,.acc,.review,.contact-row{border:1px solid var(--line);box-shadow:none}
+.tabs{height:66px;border-radius:22px;padding:5px;background:color-mix(in srgb,var(--card) 96%,transparent);box-shadow:0 12px 34px rgba(17,24,38,.15)}
+.tab{border-radius:17px}
+.tab.on{color:var(--teal-dark);background:transparent}
+.tab.on::after{content:"";position:absolute;bottom:2px;width:18px;height:3px;border-radius:3px;background:var(--teal)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--teal) 35%,transparent);outline-offset:2px}
+@media (max-width:380px){.brand-copy{display:none}.brand img{width:92px}.langs button{min-width:31px}.fact{font-size:11px}.facts-row{gap:10px}}
+@media (min-width:700px){#app{max-width:560px;margin:0 auto;border-left:1px solid var(--line);border-right:1px solid var(--line);background:color-mix(in srgb,var(--bg) 96%,transparent);box-shadow:0 0 60px rgba(17,24,38,.08)}.tabs,.cta{left:50%;right:auto;width:536px;transform:translateX(-50%)}.sheet{left:50%;right:auto;width:560px;transform:translateX(-50%);animation:none}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 `;
 
@@ -249,6 +345,12 @@ const APP_JS = String.raw`
     en: { retry: 'Try again', pickDay: 'Choose a day', pickTime: 'Choose a time', questionShort: 'Please write your question', unavailable: 'This project is not available right now', tooMany: 'Too many actions in a row. Please try again in a few minutes.', allCities: 'All cities', catalog: 'Projects', favorites: 'Saved', compare: 'Compare', about: 'About', all: 'All', sale: 'For sale', rent: 'For rent', from: 'from', filters: 'Filters', price: 'Price', priceTo: 'Price up to', anyPrice: 'Any', bedrooms: 'Bedrooms', anyBeds: 'Any', apply: 'Show', reset: 'Reset', found: 'Found', none: 'Nothing found', noneHint: 'Change the filters or message an agent: we will find an option.', remove: 'Remove', book: 'Book a viewing', bookShort: 'Book viewing', contact: 'Contact', calc: 'Purchase and mortgage calculator', similar: 'Similar projects', description: 'About', facts: 'Details', location: 'Location', map: 'Map', video: 'Video', site: 'Project website', readMore: 'Read more', collapse: 'Show less', photos: 'Photos', day: 'Day', time: 'Time', morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', online: 'Online viewing by video call', name: 'Your name', phone: 'Phone', note: 'Comment (optional)', send: 'Send', bookTitle: 'Book a viewing', thanks: 'Request received', thanksText: 'An agent will contact you to confirm the time. The confirmation will arrive in your chat with the bot.', confirmed: 'Viewing confirmed', confirmedText: 'The time is yours. Details are in your chat with the bot.', close: 'Close', call: 'Call', whatsapp: 'WhatsApp', telegram: 'Message on Telegram', email: 'Send an e-mail', website: 'Company website', office: 'Office on the map', callMe: 'Request a call', callMeHint: 'Leave your number and we will call back', ask: 'Ask a question', askHint: 'We will answer in your chat with the bot', question: 'Your question', preferred: 'Convenient time for a call', compareEmpty: 'Add projects to compare', compareEmptyHint: 'Tap the scales icon on a project. Up to three at once.', favEmpty: 'Nothing here yet', favEmptyHint: 'Tap the heart on projects you like to come back to them later.', limit: 'You can compare up to three projects', guestHint: 'Open the app from Telegram to save and book', saved: 'Saved', removed: 'Removed', reservedNote: 'This property is reserved: message an agent', slotTaken: 'That time was just taken: choose another', phoneNeeded: 'Add a phone so an agent can confirm the time', noTimes: 'No free slots yet: leave a request and we will arrange a time', years: 'years', down: 'Down payment', term: 'Term', rate: 'Rate', hello: 'Hello', tagline: 'Projects by the sea', yearsOnMarket: 'years on the market', dealsDone: 'deals', guide: 'How to buy in Spain', reviews: 'Client reviews', allReviews: 'All reviews', manager: 'Your agent', share: 'Share', sea: 'to the sea', best: 'best', addCompare: 'Compare', inCompare: 'In comparison', error: 'Something went wrong. Please try again.', loading: 'Loading…', reg: 'Registration', addr: 'Office' },
     es: { retry: 'Reintentar', pickDay: 'Elige un día', pickTime: 'Elige una hora', questionShort: 'Escribe tu pregunta', unavailable: 'Este proyecto no está disponible ahora', tooMany: 'Demasiadas acciones seguidas. Inténtalo de nuevo en unos minutos.', allCities: 'Todas', catalog: 'Proyectos', favorites: 'Favoritos', compare: 'Comparar', about: 'Nosotros', all: 'Todos', sale: 'Venta', rent: 'Alquiler', from: 'desde', filters: 'Filtros', price: 'Precio', priceTo: 'Precio hasta', anyPrice: 'Cualquiera', bedrooms: 'Dormitorios', anyBeds: 'Cualquiera', apply: 'Mostrar', reset: 'Borrar', found: 'Encontrados', none: 'Sin resultados', noneHint: 'Cambia los filtros o escribe a un asesor: buscaremos una opción.', remove: 'Quitar', book: 'Reservar visita', bookShort: 'Reservar', contact: 'Contactar', calc: 'Calculadora de compra e hipoteca', similar: 'Proyectos similares', description: 'Descripción', facts: 'Características', location: 'Ubicación', map: 'Mapa', video: 'Vídeo', site: 'Web del proyecto', readMore: 'Leer más', collapse: 'Ver menos', photos: 'Fotos', day: 'Día', time: 'Hora', morning: 'Mañana', afternoon: 'Tarde', evening: 'Noche', online: 'Visita online por videollamada', name: 'Tu nombre', phone: 'Teléfono', note: 'Comentario (opcional)', send: 'Enviar', bookTitle: 'Reservar visita', thanks: 'Solicitud recibida', thanksText: 'Un asesor se pondrá en contacto para confirmar la hora. La confirmación llegará al chat con el bot.', confirmed: 'Visita confirmada', confirmedText: 'La hora es tuya. Los detalles están en el chat con el bot.', close: 'Cerrar', call: 'Llamar', whatsapp: 'WhatsApp', telegram: 'Escribir por Telegram', email: 'Enviar un correo', website: 'Web de la empresa', office: 'Oficina en el mapa', callMe: 'Pedir una llamada', callMeHint: 'Deja tu número y te llamaremos', ask: 'Hacer una pregunta', askHint: 'Responderemos en el chat con el bot', question: 'Tu pregunta', preferred: 'Hora cómoda para la llamada', compareEmpty: 'Añade proyectos para comparar', compareEmptyHint: 'Pulsa la balanza en un proyecto. Hasta tres a la vez.', favEmpty: 'Aquí aún no hay nada', favEmptyHint: 'Pulsa el corazón en los proyectos que te gusten para volver a ellos.', limit: 'Se pueden comparar hasta tres proyectos', guestHint: 'Abre la aplicación desde Telegram para guardar y reservar', saved: 'Guardado', removed: 'Quitado', reservedNote: 'Inmueble reservado: escribe a un asesor', slotTaken: 'Esa hora se acaba de ocupar: elige otra', phoneNeeded: 'Añade un teléfono para que un asesor confirme la hora', noTimes: 'Aún no hay huecos libres: deja una solicitud y buscaremos hora', years: 'años', down: 'Entrada', term: 'Plazo', rate: 'Tipo', hello: 'Hola', tagline: 'Proyectos junto al mar', yearsOnMarket: 'años en el mercado', dealsDone: 'operaciones', guide: 'Cómo comprar en España', reviews: 'Opiniones de clientes', allReviews: 'Todas las opiniones', manager: 'Tu asesor', share: 'Compartir', sea: 'al mar', best: 'mejor', addCompare: 'Comparar', inCompare: 'En comparación', error: 'No ha salido bien. Inténtalo de nuevo.', loading: 'Cargando…', reg: 'Registro', addr: 'Oficina' },
   };
+
+  // Тексты фирменного редизайна вынесены отдельно, чтобы старые установки
+  // сохранили весь словарь и получили одинаковую структуру интерфейса.
+  Object.assign(T.ru, { search: 'Город, район или объект', showResults: 'Показать', backProperty: 'Вернуться к объекту', writeManager: 'Написать менеджеру', catalog: 'Объекты', about: 'О компании', description: 'Об объекте', map: 'На карте', send: 'Отправить заявку', thanks: 'Заявка отправлена', thanksText: 'Менеджер свяжется с вами и подтвердит время в чате с ботом.' });
+  Object.assign(T.en, { search: 'City, area or property', showResults: 'Show', backProperty: 'Back to property', writeManager: 'Message a manager' });
+  Object.assign(T.es, { search: 'Ciudad, zona o inmueble', showResults: 'Mostrar', backProperty: 'Volver al inmueble', writeManager: 'Escribir al asesor' });
 
   var ICON = {
     grid: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
@@ -280,6 +382,7 @@ const APP_JS = String.raw`
     star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
     photos: '<path d="M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M8.5 9.5v.01"/>',
     sliders: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
     build: '<path d="M3 21h18M6 21V8l6-4 6 4v13M10 21v-5h4v5"/>',
   };
   function icon(name, extra) {
@@ -322,7 +425,7 @@ const APP_JS = String.raw`
     input.style.setProperty('--p', (max > min ? (value - min) / (max - min) * 100 : 0) + '%');
   }
   function nbsp(text) { return String(text == null ? '' : text); }
-  var S = { lang: 'ru', scrolls: { home: 0, fav: 0 }, loadSeq: 0, renderSeq: 0, boot: null, route: { name: 'home' }, filters: { type: '', city: '', deal: '', maxPrice: 0, beds: 0 }, detail: {}, sheets: [], scroll: 0 };
+  var S = { lang: 'ru', scrolls: { home: 0, fav: 0 }, loadSeq: 0, renderSeq: 0, boot: null, route: { name: 'home' }, filters: { query: '', type: '', city: '', deal: '', maxPrice: 0, beds: 0 }, detail: {}, sheets: [], scroll: 0 };
   function t(key) { return (T[S.lang] || T.ru)[key] || T.ru[key] || key; }
   function store(key, value) { try { if (value === undefined) return window.localStorage.getItem(key); window.localStorage.setItem(key, value); } catch (e) { return null; } return null; }
   function haptic(kind) { try { if (tg && tg.HapticFeedback) { if (kind === 'ok') tg.HapticFeedback.notificationOccurred('success'); else if (kind === 'err') tg.HapticFeedback.notificationOccurred('error'); else tg.HapticFeedback.impactOccurred('light'); } } catch (e) { return; } }
@@ -513,17 +616,17 @@ const APP_JS = String.raw`
     card.badges.slice(0, 2).forEach(function (label) { badges.appendChild(h('span', { class: 'badge', text: label })); });
     photo.appendChild(badges);
     photo.appendChild(heartButton(card));
-    var priceNode = h('div', { class: 'price-on-photo' }, [h('b', null, priceBlock(card.price))]);
-    photo.appendChild(priceNode);
     if (card.photoCount > 1) photo.appendChild(h('span', { class: 'count' }, [icon('photos'), String(card.photoCount)]));
     var body = h('div', { class: 'body' }, [
       h('h3', { text: card.title }),
       h('div', { class: 'place' }, [icon('pin'), card.typeLabel + (card.place ? ' · ' + card.place : '')]),
+      h('div', { class: 'card-price' }, priceBlock(card.price)),
       h('div', { class: 'facts-row' }, card.facts.slice(0, 4).map(factChip)),
     ]);
     var node = h('article', { class: 'card', role: 'button', tabindex: '0', style: false }, [photo, body]);
     node.style.animationDelay = Math.min(index || 0, 6) * 60 + 'ms';
     node.addEventListener('click', function () { go('property', card.id); });
+    node.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); go('property', card.id); } });
     return node;
   }
 
@@ -536,24 +639,30 @@ const APP_JS = String.raw`
       return h('button', { class: S.lang === code ? 'on' : '', text: code.toUpperCase(), onclick: function () { setLanguage(code); } });
     }));
     return h('header', { class: 'top' }, [h('div', { class: 'top-row' }, [
-      h('div', { class: 'brand' }, [h('img', { src: '/logo.png', alt: '' }), h('div', null, [h('b', { text: company.name }), h('span', { text: greeting })])]),
+      h('div', { class: 'brand' }, [h('img', { src: '/logo.png', alt: company.name }), h('div', { class: 'brand-copy' }, [h('b', { text: greeting }), h('span', { text: company.promise || t('tagline') })])]),
       langs,
     ])]);
   }
-  function filteredCards() {
-    var f = S.filters;
-    return S.boot.cards.filter(function (card) {
+  function searchKey(value) {
+    return String(value || '').toLocaleLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  }
+  function cardMatchesFilters(card, f) {
+      var query = searchKey(f.query);
+      if (query && searchKey([card.title, card.typeLabel, card.place, card.city, card.reference].filter(Boolean).join(' ')).indexOf(query) < 0) return false;
       if (f.type && card.type !== f.type) return false;
       if (f.city && card.city !== f.city) return false;
       if (f.deal && card.deal !== f.deal) return false;
       if (f.maxPrice && card.raw.price && card.raw.price > f.maxPrice) return false;
       if (f.beds && card.raw.bedroomsMax < f.beds) return false;
       return true;
-    });
+  }
+  function filteredCards(value) {
+    var f = value || S.filters;
+    return S.boot.cards.filter(function (card) { return cardMatchesFilters(card, f); });
   }
   function filtersActive() {
     var f = S.filters;
-    return Boolean(f.type || f.city || f.deal || f.maxPrice || f.beds);
+    return Boolean(f.query || f.type || f.city || f.deal || f.maxPrice || f.beds);
   }
   function chipRow(options, current, onPick) {
     return h('div', { class: 'chips' }, options.map(function (option) {
@@ -563,9 +672,11 @@ const APP_JS = String.raw`
   function renderHome(view) {
     var facets = S.boot.facets;
     var page = h('div', { class: 'page' });
-    var cards = filteredCards();
-    page.appendChild(h('h1', { text: t('catalog') }));
-    page.appendChild(h('div', { class: 'sub', text: S.boot.cards.length ? S.boot.company.promise || '' : '' }));
+    var count = h('span', { class: 'catalog-count' });
+    page.appendChild(h('div', { class: 'catalog-heading' }, [h('div', null, [h('div', { class: 'eyebrow', text: t('tagline') }), h('h1', { text: t('catalog') })]), count]));
+    var query = h('input', { type: 'search', value: S.filters.query || '', placeholder: t('search'), autocomplete: 'off', enterkeyhint: 'search', 'aria-label': t('search') });
+    var filterButton = h('button', { class: 'search-filter', 'aria-label': t('filters'), onclick: openFilters }, [icon('sliders')]);
+    page.appendChild(h('div', { class: 'catalog-search' }, [icon('search'), query, filterButton]));
     var typeOptions = [{ key: '', label: t('all') }].concat(facets.types.map(function (item) { return { key: item.key, label: item.label }; }));
     if (facets.types.length > 1) page.appendChild(h('div', { style: false }, [chipRow(typeOptions, S.filters.type, function (key) { S.filters.type = key; render(); })]));
     var second = [];
@@ -575,23 +686,46 @@ const APP_JS = String.raw`
     if (facets.cities.length > 1) second.forEach(function (option) {
       row.appendChild(h('button', { class: 'chip' + (option.key === S.filters.city ? ' on' : ''), text: option.label, onclick: function () { S.filters.city = option.key; render(); } }));
     });
-    row.appendChild(h('button', { class: 'chip' + (S.filters.maxPrice || S.filters.beds || S.filters.deal ? ' on' : ''), onclick: openFilters }, [t('filters')]));
+    row.appendChild(h('button', { class: 'chip filter-chip' + (filtersActive() ? ' on' : ''), onclick: openFilters }, [icon('sliders'), t('filters')]));
     page.appendChild(row);
     var list = h('div', { class: 'list' });
-    if (!cards.length) {
-      list.appendChild(h('div', { class: 'empty' }, [icon('grid'), h('h3', { text: t('none') }), h('div', { text: t('noneHint') }), h('div', { style: false }, [
-        h('button', { class: 'btn soft', style: false, onclick: function () { S.filters = { type: '', city: '', deal: '', maxPrice: 0, beds: 0 }; render(); } }, [t('reset')]),
-      ])]));
-    } else cards.forEach(function (card, index) { list.appendChild(cardEl(card, index)); });
+    function paintList() {
+      var cards = filteredCards();
+      clear(list);
+      count.textContent = t('found') + ': ' + cards.length;
+      filterButton.classList.toggle('on', filtersActive());
+      if (!cards.length) {
+        list.appendChild(h('div', { class: 'empty' }, [icon('grid'), h('h3', { text: t('none') }), h('div', { text: t('noneHint') }), h('div', { style: false }, [
+          h('button', { class: 'btn soft', style: false, onclick: function () { S.filters = { query: '', type: '', city: '', deal: '', maxPrice: 0, beds: 0 }; render(); } }, [t('reset')]),
+        ])]));
+      } else cards.forEach(function (card, index) { list.appendChild(cardEl(card, index)); });
+    }
+    query.addEventListener('input', function () { S.filters.query = query.value; paintList(); });
+    paintList();
     page.appendChild(list);
     view.appendChild(page);
   }
   function openFilters() {
     var facets = S.boot.facets;
-    var draft = { deal: S.filters.deal, maxPrice: S.filters.maxPrice, beds: S.filters.beds };
+    var draft = { query: S.filters.query, type: S.filters.type, city: S.filters.city, deal: S.filters.deal, maxPrice: S.filters.maxPrice, beds: S.filters.beds };
     openSheet(function (sheet, close) {
       var priceLabel = h('output');
       var range = h('input', { type: 'range' });
+      var applyButton = null;
+      function paintApply() {
+        if (applyButton) applyButton.textContent = t('showResults') + ' · ' + filteredCards(draft).length;
+      }
+      function choiceRow(options, field) {
+        var row = h('div', { class: 'filter-options' });
+        function repaint() {
+          clear(row);
+          options.forEach(function (option) {
+            row.appendChild(h('button', { class: 'chip' + (option.key === draft[field] ? ' on' : ''), text: option.label, onclick: function () { draft[field] = option.key; repaint(); paintApply(); } }));
+          });
+        }
+        repaint();
+        return row;
+      }
       var maxValue = facets.price ? facets.price.max : 0;
       var minValue = facets.price ? facets.price.min : 0;
       var step = maxValue > 500000 ? 25000 : 10000;
@@ -604,26 +738,27 @@ const APP_JS = String.raw`
         priceLabel.textContent = value >= Number(range.max) ? t('anyPrice') : '≤ ' + new Intl.NumberFormat(S.lang).format(value) + ' €';
       }
       paintRange(range);
-      range.addEventListener('input', function () { paintRange(range); draft.maxPrice = Number(range.value) >= Number(range.max) ? 0 : Number(range.value); paint(); });
+      range.addEventListener('input', function () { paintRange(range); draft.maxPrice = Number(range.value) >= Number(range.max) ? 0 : Number(range.value); paint(); paintApply(); });
       paint();
-      var dealChips = facets.deals.length > 1 ? chipRow([{ key: '', label: t('all') }, { key: 'sale', label: t('sale') }, { key: 'rent', label: t('rent') }], draft.deal, function (key) { draft.deal = key; rebuild(); }) : null;
+      var dealChips = facets.deals.length > 1 ? choiceRow([{ key: '', label: t('all') }, { key: 'sale', label: t('sale') }, { key: 'rent', label: t('rent') }], 'deal') : null;
+      var typeOptions = [{ key: '', label: t('all') }].concat(facets.types.map(function (item) { return { key: item.key, label: item.label }; }));
+      var typeChips = facets.types.length ? choiceRow(typeOptions, 'type') : null;
+      var cityOptions = [{ key: '', label: t('allCities') }].concat(facets.cities.map(function (city) { return { key: city, label: city }; }));
+      var cityChips = facets.cities.length > 1 ? choiceRow(cityOptions, 'city') : null;
       var bedOptions = [{ key: 0, label: t('anyBeds') }];
       for (var i = 1; i <= Math.min(4, facets.maxBedrooms); i += 1) bedOptions.push({ key: i, label: i + '+' });
-      var bedRow = h('div', { class: 'chips' });
-      function rebuild() {
-        clear(bedRow);
-        bedOptions.forEach(function (option) {
-          bedRow.appendChild(h('button', { class: 'chip' + (option.key === draft.beds ? ' on' : ''), text: option.label, onclick: function () { draft.beds = option.key; rebuild(); } }));
-        });
-      }
-      rebuild();
-      sheet.appendChild(h('h2', { text: t('filters') }));
-      if (dealChips) sheet.appendChild(h('div', { class: 'section' }, [dealChips]));
-      if (facets.price) sheet.appendChild(h('div', { class: 'slider' }, [h('label', null, [t('priceTo'), priceLabel]), range]));
-      if (facets.maxBedrooms > 0) sheet.appendChild(h('div', { class: 'section' }, [h('h3', { text: t('bedrooms') }), h('div', { style: false }, [bedRow])]));
-      sheet.appendChild(h('div', { class: 'section' }, [
-        h('button', { class: 'btn primary wide', onclick: function () { S.filters.deal = draft.deal; S.filters.maxPrice = draft.maxPrice; S.filters.beds = draft.beds; close(); render(); } }, [t('apply')]),
-        h('button', { class: 'btn soft wide', style: false, onclick: function () { S.filters = { type: '', city: '', deal: '', maxPrice: 0, beds: 0 }; close(); render(); } }, [t('reset')]),
+      var bedRow = facets.maxBedrooms > 0 ? choiceRow(bedOptions, 'beds') : null;
+      sheet.appendChild(h('div', { class: 'sheet-title' }, [h('h2', { text: t('filters') }), h('button', { class: 'sheet-close', 'aria-label': t('close'), onclick: close }, [icon('x')])]));
+      if (dealChips) sheet.appendChild(h('div', { class: 'filter-block' }, [h('h3', { text: t('sale') + ' / ' + t('rent') }), dealChips]));
+      if (typeChips) sheet.appendChild(h('div', { class: 'filter-block' }, [h('h3', { text: S.lang === 'ru' ? 'Тип объекта' : S.lang === 'es' ? 'Tipo de inmueble' : 'Property type' }), typeChips]));
+      if (cityChips) sheet.appendChild(h('div', { class: 'filter-block' }, [h('h3', { text: t('location') }), cityChips]));
+      if (facets.price) sheet.appendChild(h('div', { class: 'filter-block slider' }, [h('label', null, [t('priceTo'), priceLabel]), range]));
+      if (bedRow) sheet.appendChild(h('div', { class: 'filter-block' }, [h('h3', { text: t('bedrooms') }), bedRow]));
+      applyButton = h('button', { class: 'btn primary', onclick: function () { S.filters = draft; close(); render(); } }, [t('showResults')]);
+      paintApply();
+      sheet.appendChild(h('div', { class: 'filter-actions' }, [
+        h('button', { class: 'btn soft', onclick: function () { S.filters = { query: '', type: '', city: '', deal: '', maxPrice: 0, beds: 0 }; close(); render(); } }, [t('reset')]),
+        applyButton,
       ]));
     });
   }
@@ -802,8 +937,11 @@ const APP_JS = String.raw`
     openSheet(function (sheet, close) {
       var state = { day: '', time: '', online: false };
       var body = h('div');
-      sheet.appendChild(h('h2', { text: t('bookTitle') }));
-      sheet.appendChild(h('div', { class: 'sub', text: detail.title }));
+      sheet.appendChild(h('div', { class: 'sheet-title' }, [h('h2', { text: t('bookTitle') }), h('button', { class: 'sheet-close', 'aria-label': t('close'), onclick: close }, [icon('x')])]));
+      var summary = h('div', { class: 'booking-summary' }, []);
+      if (detail.cover) summary.appendChild(h('img', { src: detail.cover, alt: '' }));
+      summary.appendChild(h('div', null, [h('b', { text: detail.title }), h('span', { text: detail.place || detail.typeLabel }), h('strong', null, priceBlock(detail.price))]));
+      sheet.appendChild(summary);
       sheet.appendChild(body);
       body.appendChild(h('div', { class: 'skel' }));
       api('/viewing-options?lang=' + S.lang).then(function (options) {
@@ -841,13 +979,19 @@ const APP_JS = String.raw`
           submit.disabled = true;
           api('/viewing', 'POST', { propertyId: detail.id, day: state.day, time: state.time, online: state.online, name: name.value, phone: phone.value, note: note.value }).then(function (result) {
             haptic('ok');
+            var chosenDay = options.days.filter(function (item) { return item.key === state.day; })[0];
+            var chosenTime = state.time === 'morning' ? t('morning') : state.time === 'afternoon' ? t('afternoon') : state.time === 'evening' ? t('evening') : state.time;
             clear(sheet);
             sheet.appendChild(h('div', { class: 'grip' }));
             sheet.appendChild(h('div', { class: 'success' }, [
               h('div', { class: 'check' }, [icon('check')]),
               h('h2', { text: result.confirmed ? t('confirmed') : t('thanks') }),
               h('p', { class: 'sub', text: result.confirmed ? t('confirmedText') : t('thanksText') }),
-              h('button', { class: 'btn ink wide', style: false, onclick: close }, [t('close')]),
+              h('div', { class: 'booking-confirmation' }, [icon('cal'), h('div', null, [h('b', { text: detail.title }), h('span', { text: (chosenDay ? chosenDay.label : state.day) + ' · ' + chosenTime })])]),
+              h('div', { class: 'success-actions' }, [
+                h('button', { class: 'btn primary wide', onclick: close }, [t('backProperty')]),
+                h('button', { class: 'btn soft wide', onclick: function () { close(); openContact(detail); } }, [icon('chat'), t('writeManager')]),
+              ]),
             ]));
           }).catch(function (error) {
             submit.disabled = false;
@@ -1003,6 +1147,10 @@ const APP_JS = String.raw`
   function renderAbout(view) {
     var company = S.boot.company;
     var page = h('div', { class: 'page' }, [h('h1', { text: String(company.labels.about || t('about')).replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '') })]);
+    page.appendChild(h('div', { class: 'about-brand' }, [
+      h('img', { src: '/logo.png', alt: company.name }),
+      h('div', null, [h('h2', { text: company.name }), company.promise ? h('p', { class: 'sub', text: company.promise }) : null]),
+    ]));
     var hero = h('div', { class: 'about-hero' }, []);
     if (company.photo) hero.appendChild(h('img', { src: company.photo, alt: company.manager }));
     hero.appendChild(h('div', null, [h('small', { class: 'sub', text: t('manager') }), h('h3', { text: company.manager || company.name }), company.promise ? h('div', { class: 'sub', text: company.promise }) : null]));
@@ -1085,6 +1233,7 @@ const APP_JS = String.raw`
     store('lang', code);
     document.documentElement.setAttribute('lang', code);
     S.detail = {};
+    S.filters.query = '';
     S.filters.city = '';
     S.filters.type = '';
     load();
