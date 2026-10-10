@@ -1,0 +1,126 @@
+'use strict';
+
+// «Проекты из файла»: проекты (и по желанию контакты, «О компании») из файла каталога добавляются в работающего бота,
+// а клиенты, заявки, настройки и собственные проекты остаются как были.
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const realFetch = global.fetch;
+const { bot, dataFile, resetData, cleanup } = require('./helpers/chat');
+const telegramStub = global.fetch;
+global.fetch = (url, init) => (String(url).startsWith('http://127.0.0.1') ? realFetch(url, init) : telegramStub(url, init));
+
+const PASSWORD = 'admin-password-84';
+const mediaDirectory = path.join(path.dirname(dataFile), 'bot-media');
+const png = (mark) => Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('catalog transfer photo ' + mark)]);
+let base = '';
+let headers = {};
+
+test.before(async () => {
+  resetData((data) => {
+    data.config.active = false;
+    data.config.menu.ru = { ...data.config.menu.ru, about: 'Свой текст «О компании» на сервере' };
+    data.objects.push({
+      id: 'server-own', status: 'active', reference: 'OWN', dealType: 'sale', propertyType: 'apartment',
+      title: { ru: 'Свой проект', en: '', es: '' },
+    });
+    data.contacts = { ...data.contacts, phone: '+34 600 000 001', manager: 'Серверный менеджер' };
+    const password = bot.hashPassword(PASSWORD);
+    data.config.passwordSalt = password.salt;
+    data.config.passwordHash = password.hash;
+  });
+  bot.getData().users['4242'] = { id: '4242', chatId: 4242, firstName: 'Клиент', preferredLanguage: 'ru', activity: [] };
+  bot.saveDataNow();
+  await new Promise((resolve) => bot.server.listen(0, '127.0.0.1', resolve));
+  base = 'http://127.0.0.1:' + bot.server.address().port;
+  const login = await realFetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: PASSWORD }) });
+  headers = { cookie: login.headers.get('set-cookie').split(';')[0], 'x-csrf-token': (await login.json()).csrf };
+});
+test.after(async () => {
+  await new Promise((resolve) => bot.server.close(resolve));
+  cleanup();
+});
+
+async function catalogFile(objects, extra = {}) {
+  const { backupChunks } = await import('../src/backup-file.mjs');
+  const media = [];
+  for (const record of objects) {
+    for (const image of record.imagesByLanguage.ru) media.push({ name: image.storageFile, read: () => png(image.id) });
+  }
+  const payload = { version: 15, objects, ...extra };
+  return Buffer.concat([...backupChunks(payload, media)]);
+}
+
+function project(id, title, mark) {
+  return {
+    id, status: 'active', reference: id.toUpperCase(), dealType: 'sale', propertyType: 'villa', priceValue: 550000, currency: 'EUR',
+    title: { ru: title, en: title + ' EN', es: title + ' ES' },
+    description: { ru: 'Описание', en: 'Description', es: 'Descripción' },
+    city: { ru: 'Финестрат', en: 'Finestrat', es: 'Finestrat' },
+    imagesByLanguage: { ru: [{ id: mark, storageFile: mark + '.png', mimeType: 'image/png', size: png(mark).length }], en: [], es: [] },
+  };
+}
+
+function send(file, parts, password = PASSWORD) {
+  return realFetch(base + '/api/restore-parts?parts=' + parts, {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/octet-stream', 'x-current-password': Buffer.from(password).toString('base64') },
+    body: file,
+  });
+}
+
+test('проекты добавляются, всё остальное остаётся как было', async () => {
+  const file = await catalogFile([project('riviera-0001', 'Riviera 1', 'photo-a'), project('sierra-0002', 'Sierra Verde', 'photo-b')], {
+    contacts: { manager: 'Евгений', phone: '+34 611 000 000' },
+    config: { menu: { ru: { about: 'Текст из файла' } } },
+  });
+  const response = await send(file, 'objects');
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.equal(body.objectsAdded, 2);
+  assert.equal(body.objectsUpdated, 0);
+  const data = bot.getData();
+  assert.deepEqual(data.objects.map((item) => item.id).sort(), ['riviera-0001', 'server-own', 'sierra-0002']);
+  assert.equal(data.objects.find((item) => item.id === 'riviera-0001').title.en, 'Riviera 1 EN');
+  assert.ok(data.users['4242'], 'клиент на месте');
+  assert.equal(data.contacts.manager, 'Серверный менеджер', 'контакты не выбраны — не тронуты');
+  assert.equal(data.config.menu.ru.about, 'Свой текст «О компании» на сервере');
+  const stored = data.objects.find((item) => item.id === 'riviera-0001').imagesByLanguage.ru[0];
+  assert.ok(fs.existsSync(path.join(mediaDirectory, stored.storageFile)), 'фото записано на диск');
+  assert.ok(fs.readFileSync(path.join(mediaDirectory, stored.storageFile)).equals(png('photo-a')));
+});
+
+test('повторная загрузка обновляет по номеру, а не дублирует; контакты и «О компании» — по выбору', async () => {
+  const changed = project('riviera-0001', 'Riviera 1 (новая цена)', 'photo-a');
+  const file = await catalogFile([changed], {
+    contacts: { manager: 'Евгений', phone: '+34 611 000 000' },
+    config: { menu: { ru: { about: 'Текст из файла' } } },
+  });
+  const response = await send(file, 'objects,contacts,about');
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.equal(body.objectsAdded, 0);
+  assert.equal(body.objectsUpdated, 1);
+  const data = bot.getData();
+  assert.equal(data.objects.filter((item) => item.id === 'riviera-0001').length, 1);
+  assert.equal(data.objects.find((item) => item.id === 'riviera-0001').title.ru, 'Riviera 1 (новая цена)');
+  assert.equal(data.contacts.manager, 'Евгений');
+  assert.equal(data.config.menu.ru.about, 'Текст из файла');
+  // Языки, которых в файле нет, остаются со своим текстом.
+  assert.notEqual(data.config.menu.en.about, '');
+  assert.ok(data.config.passwordHash, 'вход в панель не затронут');
+  assert.ok(data.users['4242']);
+});
+
+test('нужен пароль панели и хотя бы один отмеченный раздел; чужой файл отклоняется', async () => {
+  const file = await catalogFile([project('x-0003', 'Не должен появиться', 'photo-c')]);
+  const wrong = await send(file, 'objects', 'не-тот-пароль');
+  assert.notEqual(wrong.status, 200);
+  const empty = await send(file, '');
+  assert.equal(empty.status, 400);
+  const garbage = await send(Buffer.from('это не копия'), 'objects');
+  assert.equal(garbage.status, 400);
+  assert.ok(!bot.getData().objects.some((item) => item.id === 'x-0003'));
+});

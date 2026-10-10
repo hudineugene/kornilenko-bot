@@ -404,6 +404,13 @@ function renderData(host) {
       '<label class="btn ghost clickable-area">⬆ Восстановить<input type="file" id="restoreFile" accept=".kbz,.json,.gz,.kbk,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
       '<div class="hint">Подходит любая копия, сделанная ботом: скачанная этой кнопкой, из папки <b>backups</b> рядом с ботом или присланная в Telegram (для неё понадобится пароль копии). Ежедневная копия создаётся сама. Перед восстановлением прежние данные бот складывает в ту же папку — вернуться будет куда.</div>' +
     "</div></div>" +
+    '<div class="card"><header><h3>Проекты из файла</h3></header><div class="card-body stack">' +
+      '<p class="small muted">Добавляет проекты из файла каталога или обновляет те, что уже есть. Клиенты, заявки, тексты и остальные проекты не меняются.</p>' +
+      '<label class="check"><input type="checkbox" id="partObjects" checked> Проекты и их фотографии</label>' +
+      '<label class="check"><input type="checkbox" id="partContacts"> Контакты и фото менеджера</label>' +
+      '<label class="check"><input type="checkbox" id="partAbout"> «О компании», цифры доверия и отзывы</label>' +
+      '<div class="row wrap"><label class="btn ghost clickable-area">⬆ Выбрать файл каталога<input type="file" id="partsFile" accept=".kbz,.json,.gz,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
+    "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack"><div class="stack" id="tgBackupForm">' +
       '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> Присылать зашифрованную копию раз в неделю</label>" +
       '<div class="field"><label for="tgBackupPass">Пароль шифрования</label><input id="tgBackupPass" type="password" autocomplete="new-password" placeholder="' + (backup.passwordSet ? "пароль сохранён" : "минимум 10 символов") + '"></div>' +
@@ -472,6 +479,35 @@ function renderData(host) {
       if (result && result.snapshot) parts.push("прежние данные сохранены: " + result.snapshot);
       toast(parts.join(". "));
       setTimeout(function () { location.reload(); }, 1200);
+    } catch (error) { fail(error); }
+  };
+  host.querySelector("#partsFile").onchange = async function (event) {
+    var input = event.target;
+    var file = input.files && input.files[0];
+    if (!file) return;
+    input.value = "";
+    var parts = [];
+    if (host.querySelector("#partObjects").checked) parts.push("objects");
+    if (host.querySelector("#partContacts").checked) parts.push("contacts");
+    if (host.querySelector("#partAbout").checked) parts.push("about");
+    if (!parts.length) return toast("Отметьте, что взять из файла", true);
+    if (!(await confirmDialog("Взять данные из файла?", "Из файла «" + file.name + "» будут добавлены или обновлены выбранные разделы. Остальное в боте не изменится.", "Взять", false))) return;
+    var current = await askPassword("Взять данные из файла", "Нужен текущий пароль панели.");
+    if (!current) return;
+    try {
+      var result = await api("/api/restore-parts?parts=" + parts.join(","), {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream", "x-current-password": btoa(unescape(encodeURIComponent(current))) },
+        body: file,
+      });
+      var done = [];
+      if (result.objectsAdded) done.push("добавлено проектов: " + result.objectsAdded);
+      if (result.objectsUpdated) done.push("обновлено проектов: " + result.objectsUpdated);
+      if (result.contacts) done.push("контакты обновлены");
+      if (result.about) done.push("«О компании» обновлено");
+      if (result.missingPhotos) done.push("не найдено фотографий: " + result.missingPhotos);
+      toast(done.length ? done.join(". ") : "В файле нечего было брать");
+      setTimeout(function () { location.reload(); }, 1500);
     } catch (error) { fail(error); }
   };
   // Поля копии в Telegram — форма: правка попадает в полосу «Сохранить» внизу.

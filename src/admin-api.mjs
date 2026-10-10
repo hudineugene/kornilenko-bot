@@ -47,7 +47,7 @@ import {
   writeBackupMedia,
 } from './admin-http.mjs';
 import { CLOUDFLARED_PATH, REMOTE_LOGIN_ANSWER_MS, REMOTE_LOGIN_CODE_ATTEMPTS, decoyRemoteLogin, pendingRemoteLogins, remoteLoginCodeHash, startRemoteLogin, startTunnel, stopTunnel, tunnelInstalled } from './remote.mjs';
-import { attemptKey, forgetLoginAttempts, loginAllowed, rememberFailedLogin, validateBackupStructure, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
+import { attemptKey, forgetLoginAttempts, loginAllowed, rememberFailedLogin, validateBackupStructure, validatePartsBackup, validatePartsPayload, menuInput, messagesInput, parseBroadcast, translatedInput, validateBackupPayload } from './admin-input.mjs';
 import { handleGroupApi } from './group-api.mjs';
 import { openEventStream } from './panel-events.mjs';
 import { autostartStatus, setAutostart } from './autostart.mjs';
@@ -393,6 +393,57 @@ async function handleApi(req, res, url) {
       });
     } catch (error) {
       return json(res, 400, { error: 'Не удалось восстановить копию: ' + error.message });
+    }
+  }
+
+  // «Взять из файла»: добавить или обновить проекты (и по желанию контакты, «О компании») из файла каталога. Клиенты, заявки,
+  // настройки и остальные проекты не меняются: в отличие от восстановления копии, ничего не заменяется целиком.
+  if (url.pathname === '/api/restore-parts' && req.method === 'POST') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    if (!(await passwordAccepted(req, res, headerPassword(req)))) return;
+    const parts = String(url.searchParams.get('parts') || '').split(',').filter((part, index, all) => ['objects', 'contacts', 'about'].includes(part) && all.indexOf(part) === index);
+    if (!parts.length) return json(res, 400, { error: 'Отметьте, что взять из файла' });
+    try {
+      const backup = await readBackup(req);
+      validatePartsBackup(backup);
+      // Фотографии пишем на диск только после проверки структуры; потери (чего нет ни в файле, ни на диске) отбрасываем.
+      const fromFile = writeBackupMedia(backup);
+      const missingPhotos = dropMissingImages(backup);
+      validatePartsPayload(backup);
+      const incoming = normalizeLoadedData({ version: backup.version, objects: backup.objects, contacts: backup.contacts, trust: backup.trust, config: { menu: backup.config && backup.config.menu } });
+      const snapshot = snapshotBeforeRestore();
+      const result = { objectsAdded: 0, objectsUpdated: 0, contacts: false, about: false };
+      if (parts.includes('objects')) {
+        for (const record of incoming.objects) {
+          const index = data.objects.findIndex((item) => item.id === record.id);
+          if (index >= 0) {
+            data.objects[index] = record;
+            result.objectsUpdated += 1;
+          } else {
+            data.objects.push(record);
+            result.objectsAdded += 1;
+          }
+        }
+      }
+      if (parts.includes('contacts') && backup.contacts) {
+        data.contacts = incoming.contacts;
+        result.contacts = true;
+      }
+      if (parts.includes('about')) {
+        if (backup.trust) data.trust = incoming.trust;
+        for (const language of ['ru', 'en', 'es']) {
+          // Берём только то, что в файле написано: нормализация подставила бы стандартный текст там, где его нет.
+          const raw = backup.config && backup.config.menu && backup.config.menu[language];
+          const about = raw && typeof raw.about === 'string' ? cleanText(raw.about, 4000) : '';
+          if (about) data.config.menu[language] = { ...data.config.menu[language], about };
+        }
+        result.about = true;
+      }
+      saveDataNow();
+      return json(res, 200, { ok: true, ...result, photos: fromFile, missingPhotos, snapshot: snapshot ? snapshot.split(/[\\/]/).pop() : '' });
+    } catch (error) {
+      return json(res, 400, { error: 'Не удалось взять данные из файла: ' + error.message });
     }
   }
 

@@ -90,6 +90,35 @@ function validateBackupStructure(backup) {
   }
 }
 
+// Файл каталога для «Взять из файла»: только проекты, контакты и «О компании». Настроек входа, клиентов и заявок в нём нет,
+// поэтому полная проверка копии ему не подходит; версию и форму разделов проверяем так же строго.
+function validatePartsBackup(backup) {
+  if (!backup || typeof backup !== 'object' || Array.isArray(backup)) throw new Error('Некорректная структура файла');
+  const backupVersion = Number(backup.version) || 0;
+  if (backupVersion > DATA_VERSION) {
+    throw new Error('Файл сделан более новой версией бота (' + backupVersion + ', программа понимает ' + DATA_VERSION + '). Обновите бота и повторите');
+  }
+  if (backup.objects != null && !Array.isArray(backup.objects)) throw new Error('Некорректный раздел: objects');
+  if (backup.contacts != null && (typeof backup.contacts !== 'object' || Array.isArray(backup.contacts))) throw new Error('Некорректный раздел: contacts');
+  if ((backup.objects || []).length > 500) throw new Error('Слишком много проектов в файле');
+}
+
+function validatePartsPayload(backup) {
+  validatePartsBackup(backup);
+  validateStoredImage(backup.contacts && backup.contacts.photo, 'фото менеджера');
+  for (const record of backup.objects || []) {
+    validateStoredImage(record && record.image, 'objects');
+    for (const image of (record && Array.isArray(record.images) ? record.images : [])) validateStoredImage(image, 'objects gallery');
+    if (record && record.imagesByLanguage && typeof record.imagesByLanguage === 'object') {
+      for (const language of ['ru', 'en', 'es']) {
+        for (const image of (Array.isArray(record.imagesByLanguage[language]) ? record.imagesByLanguage[language] : [])) {
+          validateStoredImage(image, 'objects ' + language + ' gallery');
+        }
+      }
+    }
+  }
+}
+
 function validateBackupPayload(backup) {
   validateBackupStructure(backup);
   for (const language of ['ru', 'en', 'es']) validateStoredImage(backup.welcomeImages && backup.welcomeImages[language], 'приветствие ' + language);
@@ -307,6 +336,8 @@ function parseBroadcast(body, existing = {}, options = {}) {
 }
 
 export {
+  validatePartsBackup,
+  validatePartsPayload,
   validateBackupStructure,
   LOGIN_LIMIT_PER_ADDRESS,
   expandIpv6,
