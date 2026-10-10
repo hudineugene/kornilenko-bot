@@ -405,10 +405,12 @@ function renderData(host) {
       '<div class="hint">Подходит любая копия, сделанная ботом: скачанная этой кнопкой, из папки <b>backups</b> рядом с ботом или присланная в Telegram (для неё понадобится пароль копии). Ежедневная копия создаётся сама. Перед восстановлением прежние данные бот складывает в ту же папку — вернуться будет куда.</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Проекты из файла</h3></header><div class="card-body stack">' +
-      '<p class="small muted">Добавляет проекты из файла каталога или обновляет те, что уже есть. Клиенты, заявки, тексты и остальные проекты не меняются.</p>' +
+      '<p class="small muted">Берёт из файла выбранное: проекты добавляются или обновляются по номеру, остальное заменяется целиком. Клиенты, заявки, пароль, токен и админ-чат не меняются.</p>' +
       '<label class="check"><input type="checkbox" id="partObjects" checked> Проекты и их фотографии</label>' +
       '<label class="check"><input type="checkbox" id="partContacts"> Контакты и фото менеджера</label>' +
       '<label class="check"><input type="checkbox" id="partAbout"> «О компании», цифры доверия и отзывы</label>' +
+      '<label class="check"><input type="checkbox" id="partTexts"> Тексты бота: приветствие и фото, меню, гид «Как купить», план покупки, автоответы, шаблоны</label>' +
+      '<label class="check"><input type="checkbox" id="partSettings"> Настройки: калькулятор, рабочее время, окна просмотров, часовой пояс</label>' +
       '<div class="row wrap"><label class="btn ghost clickable-area">⬆ Выбрать файл каталога<input type="file" id="partsFile" accept=".kbz,.json,.gz,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack"><div class="stack" id="tgBackupForm">' +
@@ -490,6 +492,8 @@ function renderData(host) {
     if (host.querySelector("#partObjects").checked) parts.push("objects");
     if (host.querySelector("#partContacts").checked) parts.push("contacts");
     if (host.querySelector("#partAbout").checked) parts.push("about");
+    if (host.querySelector("#partTexts").checked) parts.push("texts");
+    if (host.querySelector("#partSettings").checked) parts.push("settings");
     if (!parts.length) return toast("Отметьте, что взять из файла", true);
     if (!(await confirmDialog("Взять данные из файла?", "Из файла «" + file.name + "» будут добавлены или обновлены выбранные разделы. Остальное в боте не изменится.", "Взять", false))) return;
     var current = await askPassword("Взять данные из файла", "Нужен текущий пароль панели.");
@@ -505,6 +509,8 @@ function renderData(host) {
       if (result.objectsUpdated) done.push("обновлено проектов: " + result.objectsUpdated);
       if (result.contacts) done.push("контакты обновлены");
       if (result.about) done.push("«О компании» обновлено");
+      if (result.texts) done.push("обновлено текстов и фото: " + result.texts);
+      if (result.settings) done.push("обновлено настроек: " + result.settings);
       if (result.missingPhotos) done.push("не найдено фотографий: " + result.missingPhotos);
       toast(done.length ? done.join(". ") : "В файле нечего было брать");
       setTimeout(function () { location.reload(); }, 1500);

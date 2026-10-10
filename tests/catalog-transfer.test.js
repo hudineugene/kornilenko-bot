@@ -124,3 +124,35 @@ test('нужен пароль панели и хотя бы один отмеч�
   assert.equal(garbage.status, 400);
   assert.ok(!bot.getData().objects.some((item) => item.id === 'x-0003'));
 });
+
+test('тексты и настройки берутся целиком; пароль, токен, админ-чат и клиенты не меняются', async () => {
+  const file = await catalogFile([], {
+    config: {
+      messages: { ru: { greeting: 'Новое приветствие из файла', help: 'Справка', fallback: 'Не понял' } },
+      menu: { ru: { objects: '🏘 Проекты', contacts: '💬 Связь', promotions: '🔥 Акции', about: 'Текст из файла 2' } },
+      calculator: { enabled: true, interestPercent: 3.5, years: 20 },
+      workingHours: { enabled: true, from: '10:00', to: '18:00', days: [1, 2, 3, 4, 5] },
+      passwordHash: 'не-должен-попасть',
+      botToken: '999:НЕ_ДОЛЖЕН_ПОПАСТЬ',
+      adminChatId: '555',
+    },
+    guidePages: [{ id: 'nie', title: { ru: 'Шаг 1', en: 'Step 1', es: 'Paso 1' }, text: { ru: 'Текст', en: 'Text', es: 'Texto' } }],
+  });
+  const before = { hash: bot.getData().config.passwordHash, token: bot.getData().config.botToken, chat: bot.getData().config.adminChatId };
+  const response = await send(file, 'texts,settings');
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  const data = bot.getData();
+  assert.equal(data.config.messages.ru.greeting, 'Новое приветствие из файла');
+  assert.equal(data.config.menu.ru.objects, '🏘 Проекты');
+  assert.equal(data.config.calculator.enabled, true);
+  assert.equal(data.config.calculator.interestPercent, 3.5);
+  assert.equal(data.config.workingHours.from, '10:00');
+  assert.ok(Array.isArray(data.guidePages) && data.guidePages.some((page) => page.title && page.title.ru === 'Шаг 1'));
+  assert.equal(data.config.passwordHash, before.hash, 'пароль не тронут');
+  assert.equal(data.config.botToken, before.token, 'токен не тронут');
+  assert.equal(data.config.adminChatId, before.chat, 'админ-чат не тронут');
+  assert.ok(data.users['4242'], 'клиент на месте');
+  assert.ok(data.objects.some((item) => item.id === 'server-own'), 'свои проекты на месте');
+  assert.ok(body.texts >= 3 && body.settings >= 2);
+});

@@ -8,7 +8,7 @@ import { MAX_TRUST_REVIEWS, normalizeEngagement, normalizeLoadedData, normalizeT
 import { backupChunks } from './backup-file.mjs';
 import { dropMissingImages, storedMediaFiles } from './media.mjs';
 import { applyInterfaceText, normalizedInterfaceText } from './texts.mjs';
-import { configured, data, replaceData, restoreMissingMedia, runtime, saveDataNow, snapshotBeforeRestore, verifyPassword, verifyPasswordAsync } from './store.mjs';
+import { applyConfiguredTimeZone, configured, data, replaceData, restoreMissingMedia, runtime, saveDataNow, snapshotBeforeRestore, verifyPassword, verifyPasswordAsync } from './store.mjs';
 import { mediaReport, runSelfCheck } from './selfcheck.mjs';
 import { handleContentApi } from './admin-api-content.mjs';
 import { handleClientsApi } from './admin-api-clients.mjs';
@@ -402,7 +402,7 @@ async function handleApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     if (!(await passwordAccepted(req, res, headerPassword(req)))) return;
-    const parts = String(url.searchParams.get('parts') || '').split(',').filter((part, index, all) => ['objects', 'contacts', 'about'].includes(part) && all.indexOf(part) === index);
+    const parts = String(url.searchParams.get('parts') || '').split(',').filter((part, index, all) => ['objects', 'contacts', 'about', 'texts', 'settings'].includes(part) && all.indexOf(part) === index);
     if (!parts.length) return json(res, 400, { error: 'Отметьте, что взять из файла' });
     try {
       const backup = await readBackup(req);
@@ -411,9 +411,30 @@ async function handleApi(req, res, url) {
       const fromFile = writeBackupMedia(backup);
       const missingPhotos = dropMissingImages(backup);
       validatePartsPayload(backup);
-      const incoming = normalizeLoadedData({ version: backup.version, objects: backup.objects, contacts: backup.contacts, trust: backup.trust, config: { menu: backup.config && backup.config.menu } });
+      const sourceConfig = backup.config && typeof backup.config === 'object' ? backup.config : {};
+      const incoming = normalizeLoadedData({
+        version: backup.version,
+        objects: backup.objects,
+        contacts: backup.contacts,
+        trust: backup.trust,
+        guidePages: backup.guidePages,
+        buyPlan: backup.buyPlan,
+        welcomeImages: backup.welcomeImages,
+        rules: backup.rules,
+        replyTemplates: backup.replyTemplates,
+        interfaceText: backup.interfaceText,
+        config: {
+          menu: sourceConfig.menu,
+          messages: sourceConfig.messages,
+          calculator: sourceConfig.calculator,
+          workingHours: sourceConfig.workingHours,
+          viewingSlots: sourceConfig.viewingSlots,
+          timeZone: sourceConfig.timeZone,
+          reminderHours: sourceConfig.reminderHours,
+        },
+      });
       const snapshot = snapshotBeforeRestore();
-      const result = { objectsAdded: 0, objectsUpdated: 0, contacts: false, about: false };
+      const result = { objectsAdded: 0, objectsUpdated: 0, contacts: false, about: false, texts: 0, settings: 0 };
       if (parts.includes('objects')) {
         for (const record of incoming.objects) {
           const index = data.objects.findIndex((item) => item.id === record.id);
@@ -439,6 +460,35 @@ async function handleApi(req, res, url) {
           if (about) data.config.menu[language] = { ...data.config.menu[language], about };
         }
         result.about = true;
+      }
+      // Тексты бота: целиком то, что есть в файле; чего в файле нет — остаётся как на этом сервере.
+      if (parts.includes('texts')) {
+        if (sourceConfig.menu) { data.config.menu = incoming.config.menu; result.texts += 1; }
+        if (sourceConfig.messages) { data.config.messages = incoming.config.messages; result.texts += 1; }
+        if (Array.isArray(backup.guidePages)) { data.guidePages = incoming.guidePages; result.texts += 1; }
+        if (backup.buyPlan && typeof backup.buyPlan === 'object') { data.buyPlan = incoming.buyPlan; result.texts += 1; }
+        if (Array.isArray(backup.rules)) { data.rules = incoming.rules; result.texts += 1; }
+        if (Array.isArray(backup.replyTemplates)) { data.replyTemplates = incoming.replyTemplates; result.texts += 1; }
+        if (backup.interfaceText && typeof backup.interfaceText === 'object') {
+          data.interfaceText = applyInterfaceText(incoming.interfaceText);
+          result.texts += 1;
+        }
+        for (const language of ['ru', 'en', 'es']) {
+          if (backup.welcomeImages && backup.welcomeImages[language] && incoming.welcomeImages[language]) {
+            data.welcomeImages[language] = incoming.welcomeImages[language];
+            result.texts += 1;
+          }
+        }
+      }
+      // Настройки показа клиентам: калькулятор, рабочее время, окна просмотров, часовой пояс. Ничего про вход, токен и админ-чат.
+      if (parts.includes('settings')) {
+        for (const key of ['calculator', 'workingHours', 'viewingSlots', 'timeZone', 'reminderHours']) {
+          if (sourceConfig[key] != null) {
+            data.config[key] = incoming.config[key];
+            result.settings += 1;
+          }
+        }
+        if (result.settings) applyConfiguredTimeZone();
       }
       saveDataNow();
       return json(res, 200, { ok: true, ...result, photos: fromFile, missingPhotos, snapshot: snapshot ? snapshot.split(/[\\/]/).pop() : '' });

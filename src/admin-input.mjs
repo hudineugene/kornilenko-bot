@@ -101,11 +101,16 @@ function validatePartsBackup(backup) {
   if (backup.objects != null && !Array.isArray(backup.objects)) throw new Error('Некорректный раздел: objects');
   if (backup.contacts != null && (typeof backup.contacts !== 'object' || Array.isArray(backup.contacts))) throw new Error('Некорректный раздел: contacts');
   if ((backup.objects || []).length > 500) throw new Error('Слишком много проектов в файле');
+  for (const key of ['rules', 'replyTemplates', 'guidePages']) {
+    if (backup[key] != null && !Array.isArray(backup[key])) throw new Error('Некорректный раздел: ' + key);
+  }
+  if (backup.config != null && (typeof backup.config !== 'object' || Array.isArray(backup.config))) throw new Error('Некорректный раздел: config');
 }
 
 function validatePartsPayload(backup) {
   validatePartsBackup(backup);
   validateStoredImage(backup.contacts && backup.contacts.photo, 'фото менеджера');
+  for (const language of ['ru', 'en', 'es']) validateStoredImage(backup.welcomeImages && backup.welcomeImages[language], 'приветствие ' + language);
   for (const record of backup.objects || []) {
     validateStoredImage(record && record.image, 'objects');
     for (const image of (record && Array.isArray(record.images) ? record.images : [])) validateStoredImage(image, 'objects gallery');
