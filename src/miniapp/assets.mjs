@@ -1002,7 +1002,7 @@ const APP_JS = String.raw`
   }
   function renderAbout(view) {
     var company = S.boot.company;
-    var page = h('div', { class: 'page' }, [h('h1', { text: String(company.labels.about || t('about')).replace(/^[^\p{L}\p{N}]+/u, '') })]);
+    var page = h('div', { class: 'page' }, [h('h1', { text: String(company.labels.about || t('about')).replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '') })]);
     var hero = h('div', { class: 'about-hero' }, []);
     if (company.photo) hero.appendChild(h('img', { src: company.photo, alt: company.manager }));
     hero.appendChild(h('div', null, [h('small', { class: 'sub', text: t('manager') }), h('h3', { text: company.manager || company.name }), company.promise ? h('div', { class: 'sub', text: company.promise }) : null]));
