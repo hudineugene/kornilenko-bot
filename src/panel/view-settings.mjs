@@ -408,6 +408,7 @@ function renderData(host) {
     '<div class="card"><header><h3>Проекты из файла</h3></header><div class="card-body stack">' +
       '<p class="small muted">Берёт из файла выбранное: проекты добавляются или обновляются по номеру, остальное заменяется целиком. Клиенты, заявки, пароль, токен и админ-чат не меняются.</p>' +
       '<label class="check"><input type="checkbox" id="partObjects" checked> Проекты и их фотографии</label>' +
+      '<label class="check"><input type="checkbox" id="partPhotos"> Только фотографии: у проектов, которые уже есть, заменить фото, остальное не менять</label>' +
       '<label class="check"><input type="checkbox" id="partContacts"> Контакты и фото менеджера</label>' +
       '<label class="check"><input type="checkbox" id="partAbout"> «О компании», цифры доверия и отзывы</label>' +
       '<label class="check"><input type="checkbox" id="partTexts"> Тексты бота: приветствие и фото, меню, гид «Как купить», план покупки, автоответы, шаблоны</label>' +
@@ -484,6 +485,9 @@ function renderData(host) {
       setTimeout(function () { location.reload(); }, 1200);
     } catch (error) { fail(error); }
   };
+  // «Только фотографии» и «Проекты целиком» — разные режимы: отметка одного снимает другой.
+  host.querySelector("#partPhotos").onchange = function () { if (this.checked) host.querySelector("#partObjects").checked = false; };
+  host.querySelector("#partObjects").onchange = function () { if (this.checked) host.querySelector("#partPhotos").checked = false; };
   host.querySelector("#partsFile").onchange = async function (event) {
     var input = event.target;
     var file = input.files && input.files[0];
@@ -491,6 +495,7 @@ function renderData(host) {
     input.value = "";
     var parts = [];
     if (host.querySelector("#partObjects").checked) parts.push("objects");
+    if (host.querySelector("#partPhotos").checked) parts.push("photos");
     if (host.querySelector("#partContacts").checked) parts.push("contacts");
     if (host.querySelector("#partAbout").checked) parts.push("about");
     if (host.querySelector("#partTexts").checked) parts.push("texts");
@@ -508,6 +513,7 @@ function renderData(host) {
       var done = [];
       if (result.objectsAdded) done.push("добавлено проектов: " + result.objectsAdded);
       if (result.objectsUpdated) done.push("обновлено проектов: " + result.objectsUpdated);
+      if (result.photosUpdated) done.push("фотографии обновлены у проектов: " + result.photosUpdated);
       if (result.contacts) done.push("контакты обновлены");
       if (result.about) done.push("«О компании» обновлено");
       if (result.texts) done.push("обновлено текстов и фото: " + result.texts);

@@ -156,3 +156,26 @@ test('тексты и настройки берутся целиком; паро
   assert.ok(data.objects.some((item) => item.id === 'server-own'), 'свои проекты на месте');
   assert.ok(body.texts >= 3 && body.settings >= 2);
 });
+
+test('«Только фотографии»: фото существующего проекта заменяются, тексты и цена остаются', async () => {
+  const photo = project('photo-only-0004', 'Проект до фото', 'photo-d');
+  const created = await send(await catalogFile([photo]), 'objects');
+  assert.equal(created.status, 200);
+  const data = bot.getData();
+  const record = data.objects.find((item) => item.id === 'photo-only-0004');
+  record.priceValue = 777000;
+  record.title.ru = 'Название, которое владелец поправил в панели';
+  const withNewPhoto = project('photo-only-0004', 'Старое название из файла', 'photo-e');
+  withNewPhoto.priceValue = 1;
+  const response = await send(await catalogFile([withNewPhoto]), 'photos');
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.equal(body.photosUpdated, 1);
+  assert.equal(body.objectsUpdated, 0);
+  const after = bot.getData().objects.find((item) => item.id === 'photo-only-0004');
+  assert.equal(after.priceValue, 777000, 'цена не тронута');
+  assert.equal(after.title.ru, 'Название, которое владелец поправил в панели', 'название не тронуто');
+  assert.notEqual(after.imagesByLanguage.ru[0].storageFile, record.imagesByLanguage.ru[0].storageFile === undefined ? '' : 'x', 'фото записаны');
+  assert.equal(after.imagesByLanguage.ru.length, 1);
+  assert.ok(fs.existsSync(path.join(mediaDirectory, after.imagesByLanguage.ru[0].storageFile)), 'файл фото на диске');
+});
