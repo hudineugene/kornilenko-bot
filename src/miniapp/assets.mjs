@@ -59,6 +59,9 @@ img{display:block;max-width:100%}
 .hbtn:active{transform:scale(.92)}
 .hbtn svg{width:22px;height:22px}
 .hbtn.plain{background:transparent}
+.flag{width:30px;height:20px;border-radius:4px;box-shadow:0 0 0 1px rgba(23,33,43,.18);flex:none;display:block}
+.hbtn .flag{width:26px;height:17px}
+.menu-row>svg.flag{width:30px;height:20px;color:inherit}
 .hbtn .code{position:absolute;right:-2px;bottom:-2px;min-width:20px;height:16px;border-radius:8px;background:var(--cyan);color:#fff;font-size:9px;font-weight:800;display:grid;place-items:center;padding:0 3px;letter-spacing:.02em}
 
 /* нижняя навигация: четыре вкладки, активная красная */
@@ -466,6 +469,33 @@ const APP_JS = String.raw`
     if (extra) svg.setAttribute('class', extra);
     return svg;
   }
+  // Флаги нарисованы самим приложением, а не символами-эмодзи: на компьютерах с Windows эмодзи-флаги показываются буквами.
+  function flag(code) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 30 20');
+    svg.setAttribute('class', 'flag');
+    svg.setAttribute('aria-hidden', 'true');
+    function shape(tag, attrs) {
+      var node = document.createElementNS(ns, tag);
+      Object.keys(attrs).forEach(function (key) { node.setAttribute(key, attrs[key]); });
+      svg.appendChild(node);
+    }
+    function band(y, height, fill) { shape('rect', { x: '0', y: String(y), width: '30', height: String(height), fill: fill }); }
+    if (code === 'ru') { band(0, 6.67, '#ffffff'); band(6.67, 6.67, '#0039a6'); band(13.33, 6.67, '#d52b1e'); }
+    else if (code === 'uk') { band(0, 10, '#0057b7'); band(10, 10, '#ffd700'); }
+    else if (code === 'es') { band(0, 5, '#aa151b'); band(5, 10, '#f1bf00'); band(15, 5, '#aa151b'); }
+    else {
+      band(0, 20, '#012169');
+      shape('path', { d: 'M0 0L30 20M30 0L0 20', stroke: '#ffffff', 'stroke-width': '4' });
+      shape('path', { d: 'M0 0L30 20M30 0L0 20', stroke: '#c8102e', 'stroke-width': '1.6' });
+      shape('rect', { x: '12', y: '0', width: '6', height: '20', fill: '#ffffff' });
+      shape('rect', { x: '0', y: '7', width: '30', height: '6', fill: '#ffffff' });
+      shape('rect', { x: '13', y: '0', width: '4', height: '20', fill: '#c8102e' });
+      shape('rect', { x: '0', y: '8', width: '30', height: '4', fill: '#c8102e' });
+    }
+    return svg;
+  }
   var FACT_ICON = { bedrooms: 'bed', bathrooms: 'bath', area: 'area', plot: 'leaf', sea: 'wave', floor: 'floor', condition: 'building', reference: 'tag' };
 
   /* ---------- вспомогательное ---------- */
@@ -737,7 +767,7 @@ const APP_JS = String.raw`
       var list = h('div', { class: 'menu-rows' });
       ['ru', 'uk', 'en', 'es'].forEach(function (code) {
         list.appendChild(h('button', { class: 'menu-row cyan', onclick: function () { close(); setLanguage(code); } }, [
-          icon('language'), h('span', { class: 'grow' }, [h('b', { text: names[code] }), h('small', { text: code.toUpperCase() })]), S.lang === code ? icon('check') : null,
+          flag(code), h('span', { class: 'grow' }, [h('b', { text: names[code] }), h('small', { text: code.toUpperCase() })]), S.lang === code ? icon('check') : null,
         ]));
       });
       sheet.appendChild(list);
@@ -761,7 +791,7 @@ const APP_JS = String.raw`
   }
   function headerEl() {
     var company = S.boot.company;
-    var language = h('button', { class: 'hbtn', 'aria-label': t('language'), onclick: openLanguage }, [icon('language'), h('span', { class: 'code', text: S.lang.toUpperCase() })]);
+    var language = h('button', { class: 'hbtn', 'aria-label': t('language'), onclick: openLanguage }, [flag(S.lang), h('span', { class: 'code', text: S.lang.toUpperCase() })]);
     var profile = h('button', { class: 'hbtn', 'aria-label': t('navProfile'), onclick: function () { go('profile'); } }, [icon('profile')]);
     var menu = h('button', { class: 'hbtn plain', 'aria-label': t('menu'), onclick: openMenu }, [icon('menu')]);
     return h('header', { class: 'top' }, [h('div', { class: 'top-row' }, [

@@ -16,14 +16,17 @@ import { CALCULATOR_TEXT, MENU_LABELS } from '../texts.mjs';
 import { replyPromise } from '../hours.mjs';
 import { imageExists } from '../media.mjs';
 import { LANGUAGES, isCyrillic } from '../languages.mjs';
+import { telegramInterfaceLanguage } from '../users.mjs';
 
 const RESIDENTIAL = new Set(['apartment', 'house', 'villa', 'townhouse', 'newbuild']);
 
 function appLanguage(requested, user = null, telegramCode = '') {
   if (LANGUAGES.includes(requested)) return requested;
   if (user && LANGUAGES.includes(user.preferredLanguage)) return user.preferredLanguage;
-  const code = String(telegramCode || (user && user.languageCode) || '').slice(0, 2).toLowerCase();
-  return LANGUAGES.includes(code) ? code : 'ru';
+  // Тот же выбор, что у бота: язык Telegram, если он у нас есть; соседние языки — русский; остальное — английский.
+  const raw = String(telegramCode || (user && user.languageCode) || '').trim();
+  if (!raw) return 'ru';
+  return telegramInterfaceLanguage({ languageCode: raw });
 }
 
 function visibleRecords(language) {

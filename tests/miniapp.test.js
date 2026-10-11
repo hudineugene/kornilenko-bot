@@ -379,3 +379,15 @@ test('выключили приложение: у клиентов снимае�
   assert.equal(calls[0].body.menu_button.type, 'default');
   assert.equal(bot.userById(String(chat.id)).menuButtonKey, '');
 });
+
+test('язык приложения при первом открытии выбирается так же, как у бота', async () => {
+  const { appLanguage } = await import('../src/miniapp/data.mjs');
+  assert.equal(appLanguage('', null, 'uk'), 'uk');
+  assert.equal(appLanguage('', null, 'en-US'), 'en');
+  assert.equal(appLanguage('', null, 'es'), 'es');
+  assert.equal(appLanguage('', null, 'be'), 'ru', 'соседний язык — русский');
+  assert.equal(appLanguage('', null, 'de'), 'en', 'остальные — английский');
+  assert.equal(appLanguage('', null, ''), 'ru', 'язык Telegram неизвестен — русский');
+  assert.equal(appLanguage('', { preferredLanguage: 'es' }, 'uk'), 'es', 'выбор клиента важнее языка Telegram');
+  assert.equal(appLanguage('en', { preferredLanguage: 'es' }, 'uk'), 'en', 'явный запрос приложения — главный');
+});
