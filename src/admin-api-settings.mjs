@@ -414,7 +414,7 @@ function refreshStaffCommands(previousChatIds = []) {
       return json(res, 400, { error: 'Адрес приложения должен отличаться от адреса панели: иначе клиентам откроется приложение вместо панели' });
     }
     const before = miniAppSettings();
-    data.config.miniApp = { enabled, url: address };
+    data.config.miniApp = { enabled, url: address, appOnly: enabled && body.appOnly === true };
     saveDataNow();
     syncMiniApp();
     let buttonError = '';

@@ -198,6 +198,8 @@ function normalizeUser(from, chatId, countMessage = true) {
     sourceAt: cleanText(previous.sourceAt, 40),
     // Какая кнопка приложения стоит у клиента в чате (язык и адрес): чтобы не ставить её заново при каждом приветствии.
     menuButtonKey: cleanText(previous.menuButtonKey, 200),
+    // Когда клиенту в последний раз подсказывали открыть приложение (режим «только приложение»).
+    appNudgeAt: cleanText(previous.appNudgeAt, 40),
     alertsSent: previous.alertsSent && typeof previous.alertsSent === 'object' && !Array.isArray(previous.alertsSent) ? previous.alertsSent : {},
     // The client turned broadcasts off (the "Unsubscribe" button or settings).
     broadcastsOptOut: Boolean(previous.broadcastsOptOut),

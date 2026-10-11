@@ -45,6 +45,7 @@ import { ADMIN_CHAT_HINT, handleAdminChatMessage, handleInboxShowCallback } from
 import { handlePostCallback } from './post-command.mjs';
 import { handleChatJoinRequest, handleMyChatMember, rememberGroupMessage } from './groups.mjs';
 import { refreshChatMenuButton } from './miniapp/menu-button.mjs';
+import { appOnlyActive, appOnlyCallbackAllowed, handleAppOnlyMessage, sendAppNudge } from './miniapp/app-only.mjs';
 
 function findRule(text, language) {
   const input = text.toLocaleLowerCase('ru-RU').trim();
@@ -198,6 +199,13 @@ async function handleUpdate(update, token) {
     const callbackChatId = callbackChat ? callbackChat.id : update.callback_query.from.id;
     const callbackUser = normalizeUser(update.callback_query.from, callbackChatId, false);
     recordBroadcastResponse(callbackUser, callbackData === 'subs:news:off:bc' ? 'unsubscribe' : 'response');
+    // Режим «только приложение»: старые кнопки клиентам не отвечают разделами, а ведут в приложение.
+    if (appOnlyActive() && !adminChatFor(callbackChatId) && !appOnlyCallbackAllowed(callbackData)) {
+      await acknowledgeCallback(update.callback_query, token);
+      callbackUser.pendingAction = null;
+      await sendAppNudge(callbackChatId, callbackUser, token);
+      return;
+    }
     if (duplicateCallback(callbackUser, callbackData)) {
       const copy = INTERACTION_TEXT[callbackUser.preferredLanguage] || INTERACTION_TEXT.ru;
       await acknowledgeCallback(update.callback_query, token, copy.duplicate);
@@ -319,6 +327,12 @@ async function handleUpdate(update, token) {
   } else if (command === '/start' && commandArgument && !sourceLabel) {
     user.pendingStartPayload = commandArgument;
     scheduleSave();
+  }
+  // Режим «только приложение»: клиенту — подсказка и кнопка приложения; начатая клиентом форма доводится до конца.
+  if (appOnlyActive() && !adminOwnChat && command !== '/myid' && (command.startsWith('/') || !user.pendingAction)) {
+    void refreshChatMenuButton(user, token);
+    await handleAppOnlyMessage({ user, message, text, command, commandArgument, summary }, token);
+    return;
   }
   if (command === '/myid') {
     void notifyAdministratorAction(user, 'Запросил свой Telegram ID', 'Telegram-чат: ' + String(message.chat.id));

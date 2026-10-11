@@ -22,7 +22,9 @@ function normalizeMiniAppUrl(value) {
 function miniAppSettings() {
   const raw = data.config && data.config.miniApp && typeof data.config.miniApp === 'object' ? data.config.miniApp : {};
   const url = normalizeMiniAppUrl(raw.url);
-  return { enabled: raw.enabled === true && Boolean(url), url };
+  const enabled = raw.enabled === true && Boolean(url);
+  // «Только приложение»: бот перенаправляет клиентов в приложение. Имеет смысл, лишь когда приложение включено.
+  return { enabled, url, appOnly: enabled && raw.appOnly === true };
 }
 
 export { miniAppSettings, normalizeMiniAppUrl };

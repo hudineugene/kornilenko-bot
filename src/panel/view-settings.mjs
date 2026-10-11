@@ -157,6 +157,7 @@ function renderTelegramConnection(host) {
     '</div></div>' +
     '<div class="card"><header><h3>Приложение в Telegram</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="appOn"' + (mini.enabled ? " checked" : "") + '> Показывать клиентам приложение: каталог, запись на просмотр, калькулятор</label>' +
+      '<label class="check"><input type="checkbox" id="appOnly"' + (mini.appOnly ? " checked" : "") + '> Только приложение: бот отправляет клиентов в приложение, старые разделы не показывает</label>' +
       '<div class="field"><label for="appUrl">Адрес приложения</label><input id="appUrl" value="' + esc(mini.url || "") + '" placeholder="https://app.example.com" autocomplete="off"></div>' +
       '<div class="row wrap"><button class="btn secondary small" id="appCheck" type="button">Проверить адрес</button>' +
         '<button class="btn secondary small" id="appSave" type="button">Сохранить</button><span id="appResult" class="small muted"></span></div>' +
@@ -197,7 +198,7 @@ function renderTelegramConnection(host) {
     var button = this;
     button.disabled = true;
     try {
-      var answer = await send("/api/miniapp", "PUT", { enabled: host.querySelector("#appOn").checked, url: host.querySelector("#appUrl").value });
+      var answer = await send("/api/miniapp", "PUT", { enabled: host.querySelector("#appOn").checked, appOnly: host.querySelector("#appOnly").checked, url: host.querySelector("#appUrl").value });
       toast(answer.buttonError ? "Сохранено, но кнопку в Telegram поставить не удалось: " + answer.buttonError : answer.miniApp.enabled ? "Приложение включено" : "Приложение выключено");
       await reload();
     } catch (error) {
