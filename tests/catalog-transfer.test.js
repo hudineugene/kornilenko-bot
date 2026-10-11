@@ -204,3 +204,25 @@ test('«Только расстояние до пляжа»: меняется о
   assert.equal(after.imagesByLanguage.ru[0].storageFile, photoBefore, 'фото не тронуты');
   assert.ok(!bot.getData().objects.some((item) => item.id === 'sea-unknown-0006'), 'новые проекты не добавляются');
 });
+
+test('файл без фотографий не стирает фото проекта; файл «только расстояния» не принимается как проекты', async () => {
+  const created = await send(await catalogFile([project('guard-0007', 'Проект с фото', 'photo-i')]), 'objects');
+  assert.equal(created.status, 200);
+  const before = bot.getData().objects.find((item) => item.id === 'guard-0007').imagesByLanguage.ru[0].storageFile;
+  const noPhotos = project('guard-0007', 'Название из файла без фото', 'photo-j');
+  noPhotos.imagesByLanguage = { ru: [], uk: [], en: [], es: [] };
+  const replaced = await send(await catalogFile([noPhotos]), 'objects');
+  assert.equal(replaced.status, 200);
+  const after = bot.getData().objects.find((item) => item.id === 'guard-0007');
+  assert.equal(after.title.ru, 'Название из файла без фото', 'тексты заменены');
+  assert.equal(after.imagesByLanguage.ru[0].storageFile, before, 'фото остались');
+
+  const distances = await catalogFile([noPhotos], { onlyField: 'distanceSea' });
+  const refused = await send(distances, 'objects');
+  assert.equal(refused.status, 400);
+  assert.match((await refused.json()).error, /только расстояние до пляжа/);
+  const refusedMixed = await send(distances, 'sea,contacts');
+  assert.equal(refusedMixed.status, 400);
+  const accepted = await send(distances, 'sea');
+  assert.equal(accepted.status, 200);
+});

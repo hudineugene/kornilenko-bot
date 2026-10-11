@@ -54,6 +54,11 @@ import { autostartStatus, setAutostart } from './autostart.mjs';
 import { readAllAdminNotifications, updateAdminNotification } from './admin-notifications.mjs';
 import { LANGUAGES } from './languages.mjs';
 
+function hasGalleryImages(record) {
+  const byLanguage = record && record.imagesByLanguage;
+  return !!byLanguage && Object.values(byLanguage).some((list) => Array.isArray(list) && list.length > 0);
+}
+
 function portableBackupData() {
   const payload = clone(data);
   // The key of the Telegram copy stays on this computer: with it, anyone
@@ -408,6 +413,10 @@ async function handleApi(req, res, url) {
     try {
       const backup = await readBackup(req);
       validatePartsBackup(backup);
+      // Файл с одним полем (расстояние до пляжа) нельзя применять как полные проекты: они потеряли бы фото и тексты.
+      if (backup.onlyField === 'distanceSea' && parts.some((part) => part !== 'sea')) {
+        throw new Error('в этом файле только расстояние до пляжа. Отметьте единственный пункт «Только расстояние до пляжа»');
+      }
       // Фотографии пишем на диск только после проверки структуры; потери (чего нет ни в файле, ни на диске) отбрасываем.
       const fromFile = writeBackupMedia(backup);
       const missingPhotos = dropMissingImages(backup);
@@ -440,6 +449,8 @@ async function handleApi(req, res, url) {
         for (const record of incoming.objects) {
           const index = data.objects.findIndex((item) => item.id === record.id);
           if (index >= 0) {
+            // Файл без фотографий не стирает те, что уже есть у проекта.
+            if (!hasGalleryImages(record) && hasGalleryImages(data.objects[index])) record.imagesByLanguage = data.objects[index].imagesByLanguage;
             data.objects[index] = record;
             result.objectsUpdated += 1;
           } else {
