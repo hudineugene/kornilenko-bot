@@ -1124,6 +1124,27 @@ dialog::backdrop{background:var(--overlay)}
   .card>header:has(#answerQueue) .actions{display:contents}
   .card>header:has(#answerQueue) #feedTabs{grid-column:1/-1}
 }
+
+/* Меню и порядок на экранах (этап 53). Разделитель между рабочими разделами и настройкой; заголовки групп
+   на длинных страницах настроек; короткие названия вкладок на телефоне; режимы загрузки проектов. */
+.nav-sep{flex:none;align-self:center;width:1px;height:20px;margin:0 var(--sp-2) 0 auto;background:var(--line)}
+.group-title{grid-column:1/-1;margin:var(--sp-3) 0 0;font-size:var(--fs-sm);font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.group-title:first-child{margin-top:0}
+.stack>.group-title{margin-bottom:calc(var(--sp-1) * -1)}
+.tabs button>i{font-style:normal}
+.tab-short{display:none}
+.mode-row{align-items:flex-start;gap:var(--sp-2)}
+.mode-row>span{display:flex;flex-direction:column;gap:2px}
+.mode-row .hint{display:block}
+.card-body>p.small.muted{font-size:var(--fs-sm);max-width:80ch}
+@media(max-width:860px){
+  .tab-full{display:none}
+  .tab-short{display:inline}
+  .topbar .page-tabs button{padding:0 var(--sp-2)}
+  /* Название компании остаётся на любой ширине: ему уступает место значок звука (звук — в «Настройки → Команда и доступ»). */
+  .head-tools #soundToggle{display:none}
+  .group-title{margin-top:var(--sp-2)}
+}
 `;
 
 export { PANEL_CSS };

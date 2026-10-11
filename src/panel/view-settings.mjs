@@ -260,6 +260,7 @@ function renderWork(host) {
   var hours = state.config.workingHours || {}, slots = state.config.viewingSlots || {}, calculator = state.config.calculator || {};
   var engagement = state.engagement || {};
   host.innerHTML = '<div class="grid cols-2">' +
+    '<h2 class="group-title">Когда мы работаем</h2>' +
     '<div class="card"><header><h3>Рабочее время</h3></header><div class="card-body stack" id="hoursCard">' +
       '<label class="check"><input type="checkbox" id="hoursOn"' + (hours.enabled ? " checked" : "") + "> Предупреждать клиентов о нерабочем времени</label>" +
       '<div class="field"><label for="businessTimeZone">Часовой пояс компании</label><select id="businessTimeZone">' + TIME_ZONE_OPTIONS.map(function (option) {
@@ -285,19 +286,7 @@ function renderWork(host) {
       '<div class="row"><div class="field"><label for="slotDays">На сколько дней вперёд</label><input id="slotDays" type="number" min="1" max="30" value="' + esc(slots.daysAhead || 7) + '"></div>' +
       '<div class="field"><label for="slotPer">Записей на одно время</label><input id="slotPer" type="number" min="1" max="10" value="' + esc(slots.perSlot || 1) + '"></div></div>' +
     "</div></div>" +
-    '<div class="card"><header><h3>Калькулятор покупки</h3></header><div class="card-body stack">' +
-      '<label class="check"><input type="checkbox" id="calcOn"' + (calculator.enabled ? " checked" : "") + "> Показывать расчёт расходов в карточке</label>" +
-      // Ставки задаёт бухгалтер, меняются редко: под спойлером, чтобы не занимать экран.
-      '<details class="editor-section rates-details"><summary><b>Ставки налогов и сборов</b><span>ITP, IVA, гербовый сбор</span></summary><div class="editor-section-body stack">' +
-      '<div class="grid cols-2">' +
-        ["resaleTaxPercent:Налог, вторичка (ITP) %", "newBuildTaxPercent:Налог, новостройка (IVA) %", "businessTaxPercent:Налог, участок и коммерция (IVA) %", "stampDutyPercent:Гербовый сбор (AJD) %", "otherCostsPercent:Прочие расходы %", "downPaymentPercent:Первый взнос %", "interestPercent:Ставка ипотеки %", "years:Срок ипотеки, лет"].map(function (pair) {
-          var parts = pair.split(":");
-          return '<div class="field"><label>' + parts[1] + '</label><input data-calc="' + parts[0] + '" type="number" step="0.1" value="' + esc(calculator[parts[0]] != null ? calculator[parts[0]] : "") + '"></div>';
-        }).join("") +
-      "</div>" +
-      hintMore("Ставки перед включением калькулятора сверьте с гестором.", "Какую ставку бот применяет: квартира, дом или вилла со статусом «новостройка» либо «строится» — IVA и гербовый сбор; те же объекты в остальных состояниях (включая «новое») — ITP; участок и коммерция — IVA как при продаже от компании, о чём клиент видит приписку.") +
-      '</div></details>' +
-    "</div></div>" +
+    '<h2 class="group-title">Напоминания и сообщения клиентам</h2>' +
     '<div class="card"><header><h3>Напоминания</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="remindHours">Напомнить о заявке без ответа</label><select id="remindHours">' +
         [[0, "не напоминать"], [1, "через 1 час"], [2, "через 2 часа"], [4, "через 4 часа"], [8, "через 8 часов"], [24, "через сутки"]].map(function (option) {
@@ -316,7 +305,22 @@ function renderWork(host) {
       '<label class="check"><input type="checkbox" id="comebackOn"' + (engagement.comeback ? " checked" : "") + '> Напоминать тем, кто смотрел объекты и замолчал на 5–10 дней, если появилось подходящее</label>' +
       '<label class="check"><input type="checkbox" id="planReminderOn"' + (engagement.planReminder ? " checked" : "") + '> Напоминать о «Плане покупки» тем, кто его начал и замолчал на неделю (не чаще раза в две недели)</label>' +
       hintMore("Получат: " + num(engagement.audience || 0) + " — те, кто согласился на «Новости и акции». Объектов в продаже сейчас " + num(engagement.activeObjects || 0) + ". Включайте на живом каталоге.", "Пустое сообщение не отправляется, чаще раза в неделю дайджест не приходит, возврат — не чаще раза в три недели; каждое выключается одной кнопкой. На демо-объектах слать нечего.") +
-    "</div></div></div>";
+    "</div></div>" +
+    '<h2 class="group-title">Расчёт для клиента</h2>' +
+    '<div class="card"><header><h3>Калькулятор покупки</h3></header><div class="card-body stack">' +
+      '<label class="check"><input type="checkbox" id="calcOn"' + (calculator.enabled ? " checked" : "") + "> Показывать расчёт расходов в карточке</label>" +
+      // Ставки задаёт бухгалтер, меняются редко: под спойлером, чтобы не занимать экран.
+      '<details class="editor-section rates-details"><summary><b>Ставки налогов и сборов</b><span>ITP, IVA, гербовый сбор</span></summary><div class="editor-section-body stack">' +
+      '<div class="grid cols-2">' +
+        ["resaleTaxPercent:Налог, вторичка (ITP) %", "newBuildTaxPercent:Налог, новостройка (IVA) %", "businessTaxPercent:Налог, участок и коммерция (IVA) %", "stampDutyPercent:Гербовый сбор (AJD) %", "otherCostsPercent:Прочие расходы %", "downPaymentPercent:Первый взнос %", "interestPercent:Ставка ипотеки %", "years:Срок ипотеки, лет"].map(function (pair) {
+          var parts = pair.split(":");
+          return '<div class="field"><label>' + parts[1] + '</label><input data-calc="' + parts[0] + '" type="number" step="0.1" value="' + esc(calculator[parts[0]] != null ? calculator[parts[0]] : "") + '"></div>';
+        }).join("") +
+      "</div>" +
+      hintMore("Ставки перед включением калькулятора сверьте с гестором.", "Какую ставку бот применяет: квартира, дом или вилла со статусом «новостройка» либо «строится» — IVA и гербовый сбор; те же объекты в остальных состояниях (включая «новое») — ITP; участок и коммерция — IVA как при продаже от компании, о чём клиент видит приписку.") +
+      '</div></details>' +
+    "</div></div>" +
+    "</div>";
 
   bindLanguageTabs(host);
   // Одна полоса сохранения на весь экран: раньше под каждой карточкой была своя
@@ -554,23 +558,39 @@ function renderDataCheck(host) {
 
 // Карточка «Проекты из файла»: живёт на вкладке «Объекты → Загрузка».
 function renderFileImport(host) {
-  host.innerHTML = '<div class="grid cols-2">' +
-    '<div class="card"><header><h3>Проекты из файла</h3></header><div class="card-body stack">' +
-      '<p class="small muted">Берёт из файла выбранное: проекты добавляются или обновляются по номеру, остальное заменяется целиком. Клиенты, заявки, пароль, токен и админ-чат не меняются.</p>' +
-      '<label class="check"><input type="checkbox" id="partObjects" checked> Проекты и их фотографии</label>' +
-      '<label class="check"><input type="checkbox" id="partPhotos"> Только фотографии: у проектов, которые уже есть, заменить фото, остальное не менять</label>' +
-      '<label class="check"><input type="checkbox" id="partSea"> Только расстояние до пляжа: у проектов, которые уже есть, обновить это поле, остальное не менять</label>' +
-      '<label class="check"><input type="checkbox" id="partContacts"> Контакты и фото менеджера</label>' +
-      '<label class="check"><input type="checkbox" id="partAbout"> «О компании», цифры доверия и отзывы</label>' +
-      '<label class="check"><input type="checkbox" id="partTexts"> Тексты бота: приветствие и фото, меню, гид «Как купить», план покупки, автоответы, шаблоны</label>' +
-      '<label class="check"><input type="checkbox" id="partSettings"> Настройки: калькулятор, рабочее время, окна просмотров, часовой пояс</label>' +
+  var modeText = {
+    partObjects: "Проекты из файла заменят одноимённые на сервере целиком: тексты, цену, статус и фото. Если в файле у проекта нет фото, прежние останутся.",
+    partPhotos: "Изменятся только фотографии у проектов, которые уже есть. Новые проекты не добавляются, остальное не меняется.",
+    partSea: "Изменится только расстояние до пляжа у проектов, которые уже есть. Новые проекты не добавляются, остальное не меняется.",
+    partNone: "Проекты не изменятся: берётся только то, что отмечено ниже в «Дополнительно».",
+  };
+  function mode(id, title, hint, checked) {
+    return '<label class="check mode-row"><input type="radio" name="fileMode" id="' + id + '"' + (checked ? " checked" : "") + '><span><b>' + title + '</b><span class="hint">' + hint + "</span></span></label>";
+  }
+  host.innerHTML = '<div class="card"><header><h3>Проекты из файла</h3></header><div class="card-body stack">' +
+      '<p class="hint">Файл каталога: выберите, что с ним сделать, и загрузите. Клиенты, заявки, пароль, токен и админ-чат не меняются никогда.</p>' +
+      '<div class="field"><span class="field-label">Что сделать с проектами</span><div class="stack">' +
+        mode("partObjects", "Загрузить проекты целиком", "Новые добавятся, у существующих (по номеру) всё станет как в файле.", true) +
+        mode("partPhotos", "Обновить только фотографии", "У проектов, которые уже есть. Тексты, цена и статус останутся.", false) +
+        mode("partSea", "Обновить только расстояние до пляжа", "У проектов, которые уже есть. Всё остальное останется.", false) +
+        mode("partNone", "Проекты не трогать", "Взять из файла только дополнительное ниже.", false) +
+      "</div></div>" +
+      '<div class="field"><span class="field-label">Дополнительно из файла</span><div class="stack">' +
+        '<label class="check"><input type="checkbox" id="partContacts"> Контакты и фото менеджера</label>' +
+        '<label class="check"><input type="checkbox" id="partAbout"> «О компании», цифры доверия и отзывы</label>' +
+        '<label class="check"><input type="checkbox" id="partTexts"> Тексты бота: приветствие и фото, меню, гид «Как купить», план покупки, автоответы, шаблоны</label>' +
+        '<label class="check"><input type="checkbox" id="partSettings"> Настройки: калькулятор, рабочее время, окна просмотров, часовой пояс</label>' +
+      "</div></div>" +
+      '<div class="banner warn" id="partsWarn" role="note"></div>' +
       '<div class="row wrap"><label class="btn ghost clickable-area">⬆ Выбрать файл каталога<input type="file" id="partsFile" accept=".kbz,.json,.gz,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
-    "</div></div>" +
-    "</div>";
+    "</div></div>";
 
-  // «Только фотографии» и «Проекты целиком» — разные режимы: отметка одного снимает другой.
-  host.querySelector("#partPhotos").onchange = function () { if (this.checked) host.querySelector("#partObjects").checked = false; };
-  host.querySelector("#partObjects").onchange = function () { if (this.checked) host.querySelector("#partPhotos").checked = false; };
+  function showModeText() {
+    var picked = Object.keys(modeText).filter(function (id) { return host.querySelector("#" + id).checked; })[0] || "partObjects";
+    host.querySelector("#partsWarn").textContent = modeText[picked];
+  }
+  Object.keys(modeText).forEach(function (id) { host.querySelector("#" + id).onchange = showModeText; });
+  showModeText();
   host.querySelector("#partsFile").onchange = async function (event) {
     var input = event.target;
     var file = input.files && input.files[0];
@@ -585,7 +605,7 @@ function renderFileImport(host) {
     if (host.querySelector("#partTexts").checked) parts.push("texts");
     if (host.querySelector("#partSettings").checked) parts.push("settings");
     if (!parts.length) return toast("Отметьте, что взять из файла", true);
-    if (!(await confirmDialog("Взять данные из файла?", "Из файла «" + file.name + "» будут добавлены или обновлены выбранные разделы. Остальное в боте не изменится.", "Взять", false))) return;
+    if (!(await confirmDialog("Взять данные из файла?", "Из файла «" + file.name + "»: " + host.querySelector("#partsWarn").textContent, "Взять", false))) return;
     var current = await askPassword("Взять данные из файла", "Нужен текущий пароль панели.");
     if (!current) return;
     try {
@@ -672,7 +692,8 @@ function renderAccess(host) {
 
 // «Команда и доступ»: кто работает с ботом (менеджеры, админ-чат, звук) и как заходят в панель (пароль, интернет).
 function renderTeamAndAccess(host) {
-  host.innerHTML = '<div class="stack"><div id="teamPart"></div><div id="accessPart"></div></div>';
+  host.innerHTML = '<div class="stack"><h2 class="group-title">Кто получает заявки и работает с ботом</h2><div id="teamPart"></div>' +
+    '<h2 class="group-title">Вход в панель</h2><div id="accessPart"></div></div>';
   renderConnection(host.querySelector("#teamPart"));
   renderAccess(host.querySelector("#accessPart"));
 }

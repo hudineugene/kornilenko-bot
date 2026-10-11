@@ -43,7 +43,9 @@ test('названия разделов и вкладок', async () => {
 test('«Объекты → Загрузка»: проекты из файла и выгрузка с сайта на одном экране', async () => {
   const { text } = await open('objects', 'load');
   assert.match(text, /Проекты из файла/);
-  assert.match(text, /Только расстояние до пляжа/);
+  assert.match(text, /Обновить только расстояние до пляжа/);
+  assert.match(text, /Загрузить проекты целиком/);
+  assert.match(text, /Дополнительно из файла/);
   assert.match(text, /Выгрузка с сайта/);
 });
 
@@ -66,4 +68,27 @@ test('«Команда и доступ»: менеджеры и пароль —
 test('«Подписи бота»: сверху «Если раздел пуст», ниже все подписи', async () => {
   const { text } = await open('texts', 'interface');
   assert.match(text, /Если раздел пуст/);
+});
+
+test('на телефоне вкладки с короткими названиями; рабочие разделы отделены чертой от настройки', async () => {
+  const { harness, fixtures } = await modules();
+  const panel = await harness.makePanel(fixtures.richState());
+  await panel.go('settings', 'company');
+  await harness.settle(80);
+  const tabs = String(panel.doc.getElementById('pageTabs').innerHTML);
+  for (const [full, short] of [['Работа с клиентами', 'Работа'], ['Telegram и приложение', 'Бот'], ['Команда и доступ', 'Команда'], ['Проверка и журнал', 'Журнал']]) {
+    assert.ok(tabs.includes('<i class="tab-full">' + full + '</i><i class="tab-short" aria-hidden="true">' + short + '</i>'), full + ' → ' + short);
+  }
+  assert.ok(tabs.includes('aria-label="Работа с клиентами"'), 'для чтения с экрана — полное название');
+  const nav = String(panel.doc.getElementById('nav').innerHTML);
+  const separator = nav.indexOf('class="nav-sep"');
+  assert.ok(separator > nav.indexOf('data-view="reports"') && separator < nav.indexOf('data-view="texts"'), 'черта — между «Отчётом» и «Текстами и контактами»');
+});
+
+test('«Работа с клиентами» собрана в группы с заголовками', async () => {
+  const { text } = await open('settings', 'company');
+  const order = ['Когда мы работаем', 'Напоминания и сообщения клиентам', 'Расчёт для клиента'].map((title) => text.indexOf(title));
+  assert.ok(order.every((index) => index >= 0), 'заголовки групп на месте');
+  assert.deepEqual(order.slice().sort((a, b) => a - b), order, 'группы идут по порядку');
+  assert.ok(text.indexOf('Калькулятор покупки') > order[2], 'калькулятор — в своей группе');
 });

@@ -879,13 +879,13 @@ function navIcon(id) {
 function navItems() {
   return [
     { id: "today", icon: navIcon("today"), title: "Сегодня", count: deedCount(), hint: deedCount() + " " + plural(deedCount(), "дело", "дела", "дел") + " в списке" },
-    { id: "clients", icon: navIcon("clients"), title: "Клиенты", count: waitingClients(), late: overdueClients(), hint: waitingClients() + " " + plural(waitingClients(), "клиент ждёт", "клиента ждут", "клиентов ждут") + " ответа" + (overdueClients() ? ", из них " + overdueClients() + " дольше срока" : ""), tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
+    { id: "clients", icon: navIcon("clients"), title: "Клиенты", count: waitingClients(), late: overdueClients(), hint: waitingClients() + " " + plural(waitingClients(), "клиент ждёт", "клиента ждут", "клиентов ждут") + " ответа" + (overdueClients() ? ", из них " + overdueClients() + " дольше срока" : ""), tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги", "Шаги"], ["pipeline", "Воронка"], ["base", "База клиентов", "База"]] },
     { id: "viewings", icon: navIcon("viewings"), title: "Просмотры" },
     { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"], ["load", "Загрузка"]] },
-    { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"], ["channels", "Каналы и группы"]] },
+    { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история", "Очередь"], ["channel", "Пост в канал", "Пост"], ["channels", "Каналы и группы", "Каналы"]] },
     { id: "reports", icon: navIcon("reports"), title: "Отчёт" },
-    { id: "texts", icon: navIcon("texts"), title: "Тексты и контакты", tabs: [["welcome", "Приветствие"], ["contacts", "Контакты"], ["trust", "Почему мы"], ["plan", "План покупки"], ["rules", "Автоответы"], ["interface", "Подписи бота"]] },
-    { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Работа с клиентами"], ["telegram", "Telegram и приложение"], ["team", "Команда и доступ"], ["data", "Копии"], ["check", "Проверка и журнал"]] },
+    { id: "texts", icon: navIcon("texts"), title: "Тексты и контакты", tabs: [["welcome", "Приветствие"], ["contacts", "Контакты"], ["trust", "Почему мы"], ["plan", "План покупки", "План"], ["rules", "Автоответы"], ["interface", "Подписи бота", "Подписи"]] },
+    { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Работа с клиентами", "Работа"], ["telegram", "Telegram и приложение", "Бот"], ["team", "Команда и доступ", "Команда"], ["data", "Копии"], ["check", "Проверка и журнал", "Журнал"]] },
   ];
 }
 
@@ -985,7 +985,7 @@ function renderNav() {
   // нажатие на раздел только раскрывало список.
   el("nav").innerHTML = navItems().filter(function (item) { return !item.hidden; }).map(function (item) {
     var active = item.id === currentView;
-    return '<button class="nav-item' + (active ? " active" : "") + '" data-view="' + item.id + '" type="button"' + (item.hint ? ' title="' + esc(item.hint) + '" aria-label="' + esc(item.title + ": " + item.hint) + '"' : "") + '>' +
+    return (item.id === "texts" ? '<span class="nav-sep" aria-hidden="true"></span>' : "") + '<button class="nav-item' + (active ? " active" : "") + '" data-view="' + item.id + '" type="button"' + (item.hint ? ' title="' + esc(item.hint) + '" aria-label="' + esc(item.title + ": " + item.hint) + '"' : "") + '>' +
       '<span class="ico">' + item.icon + '</span><span>' + esc(item.title) + '</span>' +
       (item.count ? '<span class="count' + (item.late ? " late" : "") + '">' + num(item.count) + '</span>' : '') + '</button>';
   }).join("");
@@ -1709,7 +1709,9 @@ function renderView(options) {
   // Вкладки раздела — в одной строке с названием экрана, а не отдельным рядом под ним.
   var tabsBox = el("pageTabs");
   tabsBox.innerHTML = item && item.tabs ? item.tabs.map(function (tab) {
-    return '<button type="button" data-tab="' + tab[0] + '" class="' + (tab[0] === currentTab ? "active" : "") + '">' + esc(tab[1]) + "</button>";
+    // Третий элемент — короткое название для телефона; полное остаётся для чтения с экрана и для компьютера.
+    var label = tab[2] ? '<i class="tab-full">' + esc(tab[1]) + '</i><i class="tab-short" aria-hidden="true">' + esc(tab[2]) + "</i>" : esc(tab[1]);
+    return '<button type="button" data-tab="' + tab[0] + '" class="' + (tab[0] === currentTab ? "active" : "") + '"' + (tab[2] ? ' aria-label="' + esc(tab[1]) + '"' : "") + ">" + label + "</button>";
   }).join("") : "";
   tabsBox.classList.toggle("hidden", !(item && item.tabs));
   page.innerHTML = '<div id="viewBody"></div>';

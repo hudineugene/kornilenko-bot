@@ -1202,7 +1202,7 @@ function openOfferExtras(id) {
 function renderFeed(host) {
   var settings = state.config.feedImport || {};
   var last = settings.lastResult || null;
-  host.innerHTML = '<div class="grid cols-2"><div class="card"><header><h3>Выгрузка с сайта</h3></header><div class="card-body stack"><div class="stack" id="feedForm">' +
+  host.innerHTML = '<div class="stack"><div class="card"><header><h3>Выгрузка с сайта</h3></header><div class="card-body stack"><div class="stack" id="feedForm">' +
       '<div class="field"><label for="feedUrl">Ссылка на выгрузку объектов с вашего сайта</label><input id="feedUrl" value="' + esc(settings.url || "") + '" placeholder="https://сайт/feed.xml"></div>' +
       '<label class="check"><input type="checkbox" id="feedPublish"' + (settings.publishNew ? " checked" : "") + "> Новые объекты сразу показывать клиентам</label>" +
       '<label class="check"><input type="checkbox" id="feedDaily"' + (settings.daily ? " checked" : "") + "> Обновлять каждый день</label>" +
@@ -1243,7 +1243,7 @@ function renderFeed(host) {
 
 // «Объекты → Загрузка»: всё, чем проекты попадают в каталог пачкой — из файла и с сайта.
 function renderLoad(host) {
-  host.innerHTML = '<div class="stack"><div id="loadFile"></div><div id="loadFeed"></div></div>';
+  host.innerHTML = '<div class="grid cols-2"><div id="loadFile"></div><div id="loadFeed"></div></div>';
   renderFileImport(host.querySelector("#loadFile"));
   renderFeed(host.querySelector("#loadFeed"));
 }

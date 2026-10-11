@@ -26,7 +26,7 @@ test('инструкция «Что делать, если…» называет
   // Экран из инструкции есть в панели.
   const menu = read('src/panel/runtime.mjs');
   assert.match(menu, /\["data", "Копии"\]/);
-  assert.match(menu, /\["telegram", "Telegram и приложение"\]/);
+  assert.match(menu, /\["telegram", "Telegram и приложение"(, "[^"]+")?\]/);
 });
 
 test('start-bot.ps1: в комментарии правильный путь журнала', () => {

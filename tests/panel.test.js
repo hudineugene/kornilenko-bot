@@ -94,7 +94,7 @@ test('подписи бота названы по-человечески, а н�
   assert.match(PANEL_HTML, /\{next\} — ближайшее рабочее время/);
 
   // Экран живёт в «Обслуживании».
-  assert.match(PANEL_HTML, /\["interface", "Подписи бота"\]/);
+  assert.match(PANEL_HTML, /\["interface", "Подписи бота"(, "Подписи")?\]/);
 });
 
 test('автоответы и шаблоны ответов живут на одной вкладке', async () => {
@@ -166,7 +166,7 @@ test('«Публикации» — две кнопки, общая очеред�
   // Оформление — кнопкой из формы поста, отдельной вкладки больше нет.
   assert.match(PANEL_HTML, /id="openPostStyle"/);
   assert.match(PANEL_HTML, /function openPostStyleDialog\(\)/);
-  assert.match(PANEL_HTML, /\["broadcast", "Очередь и история"\], \["channel", "Пост в канал"\]/);
+  assert.match(PANEL_HTML, /\["broadcast", "Очередь и история"(, "Очередь")?\], \["channel", "Пост в канал"/);
   assert.ok(!/\["style", "Оформление"\]/.test(PANEL_HTML), 'вкладка «Оформление» убрана');
   assert.ok(!/во вкладке «Оформление постов»/.test(PANEL_HTML), 'подсказки больше не шлют во вкладку');
 });
@@ -559,7 +559,7 @@ test('воронка отделяет этап продажи от статус�
 
 test('рабочий список собирает контакты менеджера и быстрые действия', async () => {
   const { PANEL_HTML } = await import('../src/panel/index.mjs');
-  assert.match(PANEL_HTML, /\["tasks", "Следующие шаги"\]/);
+  assert.match(PANEL_HTML, /\["tasks", "Следующие шаги"(, "Шаги")?\]/);
   assert.match(PANEL_HTML, /function renderTasks\(host\)/);
   assert.match(PANEL_HTML, /К выполнению/);
   assert.match(PANEL_HTML, /Без даты/);
@@ -706,7 +706,7 @@ test('в подписях панели один словарь и нет тех�
 
   assert.match(screens, /Текущая заявка/);
   assert.match(screens, /Следующий шаг/);
-  assert.match(screens, /\["tasks", "Следующие шаги"\]/);
+  assert.match(screens, /\["tasks", "Следующие шаги"(, "Шаги")?\]/);
   assert.match(screens, /Видели в каталоге/);
   assert.match(screens, /Открыли карточку/);
   assert.match(screens, /function timeZoneName\(\)/);
@@ -772,9 +772,9 @@ test('в страницу не уходят комментарии кода; с�
   assert.deepEqual(commentLines.slice(0, 3), [], 'строк-комментариев в странице нет');
   // Ссылки с «//» внутри строк остались нетронутыми.
   assert.ok(script.includes('https://'), 'адреса внутри строк на месте');
-  // Бюджет: страница в браузер уходит не больше 660 КБ сырой (этап 51 поднял с 600, этап 55 — до 660: подбор объектов клиенту, календарь, цена снижена) (было 612 КБ с комментариями; этап 37 добавил формы и кнопки).
+  // Бюджет: страница в браузер уходит не больше 660 КБ сырой (этап 51 поднял с 600, этап 55 — до 660, этап 53 — до 670: режимы загрузки, группы меню и короткие названия вкладок; подбор объектов клиенту, календарь, цена снижена) (было 612 КБ с комментариями; этап 37 добавил формы и кнопки).
   const kilobytes = Buffer.byteLength(PANEL_HTML) / 1024;
-  assert.ok(kilobytes <= 660, 'размер страницы ' + kilobytes.toFixed(0) + ' КБ');
+  assert.ok(kilobytes <= 670, 'размер страницы ' + kilobytes.toFixed(0) + ' КБ');
 });
 
 test('словарь: одно слово — одна вещь (просрочено / показ / этап / диалог / «Вы:» у бота)', async () => {
