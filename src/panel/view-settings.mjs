@@ -409,6 +409,7 @@ function renderData(host) {
       '<p class="small muted">Берёт из файла выбранное: проекты добавляются или обновляются по номеру, остальное заменяется целиком. Клиенты, заявки, пароль, токен и админ-чат не меняются.</p>' +
       '<label class="check"><input type="checkbox" id="partObjects" checked> Проекты и их фотографии</label>' +
       '<label class="check"><input type="checkbox" id="partPhotos"> Только фотографии: у проектов, которые уже есть, заменить фото, остальное не менять</label>' +
+      '<label class="check"><input type="checkbox" id="partSea"> Только расстояние до пляжа: у проектов, которые уже есть, обновить это поле, остальное не менять</label>' +
       '<label class="check"><input type="checkbox" id="partContacts"> Контакты и фото менеджера</label>' +
       '<label class="check"><input type="checkbox" id="partAbout"> «О компании», цифры доверия и отзывы</label>' +
       '<label class="check"><input type="checkbox" id="partTexts"> Тексты бота: приветствие и фото, меню, гид «Как купить», план покупки, автоответы, шаблоны</label>' +
@@ -496,6 +497,7 @@ function renderData(host) {
     var parts = [];
     if (host.querySelector("#partObjects").checked) parts.push("objects");
     if (host.querySelector("#partPhotos").checked) parts.push("photos");
+    if (host.querySelector("#partSea").checked) parts.push("sea");
     if (host.querySelector("#partContacts").checked) parts.push("contacts");
     if (host.querySelector("#partAbout").checked) parts.push("about");
     if (host.querySelector("#partTexts").checked) parts.push("texts");
@@ -514,6 +516,7 @@ function renderData(host) {
       if (result.objectsAdded) done.push("добавлено проектов: " + result.objectsAdded);
       if (result.objectsUpdated) done.push("обновлено проектов: " + result.objectsUpdated);
       if (result.photosUpdated) done.push("фотографии обновлены у проектов: " + result.photosUpdated);
+      if (result.seaUpdated) done.push("расстояние до пляжа обновлено у проектов: " + result.seaUpdated);
       if (result.contacts) done.push("контакты обновлены");
       if (result.about) done.push("«О компании» обновлено");
       if (result.texts) done.push("обновлено текстов и фото: " + result.texts);

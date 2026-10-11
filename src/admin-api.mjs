@@ -403,7 +403,7 @@ async function handleApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     if (!(await passwordAccepted(req, res, headerPassword(req)))) return;
-    const parts = String(url.searchParams.get('parts') || '').split(',').filter((part, index, all) => ['objects', 'photos', 'contacts', 'about', 'texts', 'settings'].includes(part) && all.indexOf(part) === index);
+    const parts = String(url.searchParams.get('parts') || '').split(',').filter((part, index, all) => ['objects', 'photos', 'sea', 'contacts', 'about', 'texts', 'settings'].includes(part) && all.indexOf(part) === index);
     if (!parts.length) return json(res, 400, { error: 'Отметьте, что взять из файла' });
     try {
       const backup = await readBackup(req);
@@ -435,7 +435,7 @@ async function handleApi(req, res, url) {
         },
       });
       const snapshot = snapshotBeforeRestore();
-      const result = { objectsAdded: 0, objectsUpdated: 0, photosUpdated: 0, contacts: false, about: false, texts: 0, settings: 0 };
+      const result = { objectsAdded: 0, objectsUpdated: 0, photosUpdated: 0, seaUpdated: 0, contacts: false, about: false, texts: 0, settings: 0 };
       if (parts.includes('objects')) {
         for (const record of incoming.objects) {
           const index = data.objects.findIndex((item) => item.id === record.id);
@@ -456,6 +456,17 @@ async function handleApi(req, res, url) {
           existing.imagesByLanguage = record.imagesByLanguage;
           existing.updatedAt = new Date().toISOString();
           result.photosUpdated += 1;
+        }
+      }
+      // Только расстояние до пляжа: у проектов, которые уже есть (по номеру), меняется одно это поле.
+      if (parts.includes('sea') && !parts.includes('objects')) {
+        for (const record of incoming.objects) {
+          const existing = data.objects.find((item) => item.id === record.id);
+          const distance = Number(record.distanceSea);
+          if (!existing || !(distance > 0)) continue;
+          existing.distanceSea = distance;
+          existing.updatedAt = new Date().toISOString();
+          result.seaUpdated += 1;
         }
       }
       if (parts.includes('contacts') && backup.contacts) {

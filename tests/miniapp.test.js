@@ -391,3 +391,18 @@ test('язык приложения при первом открытии выб�
   assert.equal(appLanguage('', { preferredLanguage: 'es' }, 'uk'), 'es', 'выбор клиента важнее языка Telegram');
   assert.equal(appLanguage('en', { preferredLanguage: 'es' }, 'uk'), 'en', 'явный запрос приложения — главный');
 });
+
+test('«О компании» без логотипа, менеджера и контактов; контакты — на отдельной странице «Связаться с нами»', async () => {
+  const { APP_JS } = await import('../src/miniapp/assets.mjs');
+  const slice = (from, to) => APP_JS.slice(APP_JS.indexOf(from), APP_JS.indexOf(to));
+  const about = slice('function renderAbout(', 'function renderContacts(');
+  assert.ok(about.length > 100, 'нашли экран «О компании»');
+  assert.ok(!/logo\.png|about-brand|about-hero|contactRow\(|openLink\(|tel:/.test(about), 'в «О компании» нет логотипа и контактов');
+  const contacts = slice('function renderContacts(', '/* ---------- каркас');
+  assert.match(contacts, /contactRow\('wa'/);
+  assert.match(contacts, /contactRow\('call', 'phone'/);
+  assert.match(contacts, /about-hero/, 'на странице контактов есть менеджер');
+  assert.match(APP_JS, /parts\[0\] === 'contacts'/, 'у страницы есть адрес #/contacts');
+  assert.match(APP_JS, /contactUs: 'Связаться с нами'/);
+  assert.match(APP_JS, /contactUs: 'Зв’язатися з нами'/);
+});

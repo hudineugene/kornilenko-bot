@@ -179,3 +179,28 @@ test('«Только фотографии»: фото существующего
   assert.equal(after.imagesByLanguage.ru.length, 1);
   assert.ok(fs.existsSync(path.join(mediaDirectory, after.imagesByLanguage.ru[0].storageFile)), 'файл фото на диске');
 });
+
+test('«Только расстояние до пляжа»: меняется одно поле, остальное у проекта остаётся', async () => {
+  const created = await send(await catalogFile([project('sea-only-0005', 'Проект без расстояния', 'photo-f')]), 'objects');
+  assert.equal(created.status, 200);
+  const record = bot.getData().objects.find((item) => item.id === 'sea-only-0005');
+  record.priceValue = 640000;
+  record.title.ru = 'Название, которое владелец поправил в панели';
+  const photoBefore = record.imagesByLanguage.ru[0].storageFile;
+  const fromFile = project('sea-only-0005', 'Старое название из файла', 'photo-g');
+  fromFile.priceValue = 1;
+  fromFile.distanceSea = 4300;
+  const unknown = project('sea-unknown-0006', 'Нет такого проекта на сервере', 'photo-h');
+  unknown.distanceSea = 100;
+  const response = await send(await catalogFile([fromFile, unknown]), 'sea');
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.equal(body.seaUpdated, 1);
+  assert.equal(body.objectsAdded, 0);
+  const after = bot.getData().objects.find((item) => item.id === 'sea-only-0005');
+  assert.equal(after.distanceSea, 4300);
+  assert.equal(after.priceValue, 640000, 'цена не тронута');
+  assert.equal(after.title.ru, 'Название, которое владелец поправил в панели', 'название не тронуто');
+  assert.equal(after.imagesByLanguage.ru[0].storageFile, photoBefore, 'фото не тронуты');
+  assert.ok(!bot.getData().objects.some((item) => item.id === 'sea-unknown-0006'), 'новые проекты не добавляются');
+});
