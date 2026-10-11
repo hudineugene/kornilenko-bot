@@ -159,6 +159,13 @@ function labelledLinks(payload) {
 }
 
 async function telegramRequest(token, method, payload, signal) {
+  // Пустые кнопки (null, false) в запрос не кладём: «reply_markup»: null Telegram считает не объектом и отвечает
+  // «object expected as reply markup». Фото по file_id уходит JSON-запросом, поэтому ошибка появлялась только
+  // при повторной отправке уже загруженной картинки — например, в канал сразу после проверки себе.
+  if (payload && Object.prototype.hasOwnProperty.call(payload, 'reply_markup') && !payload.reply_markup) {
+    const { reply_markup: ignored, ...rest } = payload;
+    payload = rest;
+  }
   if (payload && (method === 'sendMessage' || method === 'editMessageText')) {
     const linked = labelledLinks(payload);
     if (linked) payload = { ...payload, ...linked };
