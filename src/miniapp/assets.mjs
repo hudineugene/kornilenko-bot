@@ -51,7 +51,9 @@ img{display:block;max-width:100%}
 .top{position:relative;padding:calc(var(--top) + 8px) 16px 6px;background:var(--card) url(/grid.svg) center top/520px auto;border-bottom:1px solid var(--line)}
 .top-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .logo{height:76px;width:auto;object-fit:contain;display:block;max-width:56vw;mix-blend-mode:multiply}
-[data-theme=dark] .logo{mix-blend-mode:normal;background:#fff;border-radius:12px;padding:4px}
+[data-theme=dark] .logo{mix-blend-mode:normal;background:#fff;border-radius:14px;padding:6px}
+[data-theme=dark] .top{background:var(--card)}
+[data-theme=dark] .hbtn.plain{color:var(--ink)}
 .top-actions{display:flex;align-items:center;gap:8px}
 .hbtn{position:relative;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--ink);background:var(--soft);transition:transform .15s}
 .hbtn:active{transform:scale(.92)}
@@ -114,9 +116,10 @@ h3{font-size:16px;font-weight:600}
 [data-theme=dark] .hero p{color:#c4ccd6}
 .hero .btn{margin-top:6px;min-height:44px;padding:8px 18px;font-size:14px}
 .actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:16px}
-.action{display:grid;justify-items:center;align-content:start;gap:8px;padding:12px 4px 10px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);text-align:center;font-size:11px;font-weight:600;line-height:1.25;min-height:104px;transition:transform .15s}
+.action{display:grid;justify-items:center;align-content:start;gap:8px;padding:12px 4px 10px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);text-align:center;font-size:10.5px;font-weight:600;line-height:1.25;min-height:104px;transition:transform .15s}
 .action:active{transform:scale(.96)}
 .action svg{width:30px;height:30px}
+.action span{min-width:0;max-width:100%;overflow-wrap:anywhere;hyphens:auto}
 .action .chev{width:14px;height:14px;color:var(--muted);align-self:end}
 .action.red svg:first-child{color:var(--red)}
 .action.yellow svg:first-child{color:var(--yellow-dark)}
