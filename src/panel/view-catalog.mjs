@@ -712,7 +712,7 @@ function openRecordEditor(kind, id) {
           '<div class="field" data-field="plotArea"><label>Участок, м² <span class="required" data-required="plotArea">*</span></label><input id="fPlot" type="number" min="0" value="' + esc(record && record.plotArea || "") + '"></div>' +
           '<div class="field"><label>Этаж</label><input id="fFloor" value="' + esc(record && record.floor || "") + '"></div>' +
           '<div class="field"><label>Этажей в доме</label><input id="fFloors" value="' + esc(record && record.floors || "") + '"></div>' +
-          '<div class="field"><label>До моря, м</label><input id="fSea" type="number" min="0" value="' + esc(record && record.distanceSea || "") + '"></div>' +
+          '<div class="field"><label>До пляжа, м</label><input id="fSea" type="number" min="0" value="' + esc(record && record.distanceSea || "") + '"></div>' +
           '<div class="field"><label>Состояние</label><select id="fCondition">' + CONDITIONS.map(function (item) {
             return '<option value="' + item[0] + '"' + (record && record.condition === item[0] ? " selected" : "") + ">" + item[1] + "</option>";
           }).join("") + "</select></div>" +
@@ -817,7 +817,7 @@ function openRecordEditor(kind, id) {
         if (!value("fVideo")) tips.push("Нет видео или 3D-тура");
         if (!value("fUrl")) tips.push("Нет ссылки на сайт проекта");
         if (!value("fMap")) tips.push("Нет ссылки на карту");
-        if (["apartment", "house", "villa", "townhouse", "newbuild"].indexOf(type) >= 0 && !(Number(value("fSea")) > 0)) tips.push("Не указано расстояние до моря: клиенты ищут «у моря»");
+        if (["apartment", "house", "villa", "townhouse", "newbuild"].indexOf(type) >= 0 && !(Number(value("fSea")) > 0)) tips.push("Не указано расстояние до пляжа: клиенты ищут «у моря»");
         if (String(translatedValue("description", "ru") || "").length < 150) tips.push("Короткое описание (меньше 150 знаков)");
         var priceFrom = dialog.querySelector("#fPriceFrom");
         if (priceFrom && priceFrom.checked && !(Number(value("fBedroomsMax")) > 0) && !(Number(value("fAreaMax")) > 0)) tips.push("Цена «от»: укажите «Спален до» и «Площадь до», чтобы клиент видел варианты");

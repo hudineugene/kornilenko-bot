@@ -44,15 +44,15 @@ test('мастер подбора: «Buying or renting?», «5 properties match�
   assert.equal(en.confirm, '✅ Send request');
 });
 
-test('приветствие и помощь по умолчанию — новые; расстояние до моря — «Sea»', () => {
+test('приветствие и помощь по умолчанию — новые; расстояние до пляжа — «Beach»', () => {
   const fresh = bot.normalizeLoadedData({ version: 48 });
   assert.match(fresh.config.messages.en.greeting, /Nice to meet you/);
   assert.ok(!/Glad to see you/.test(fresh.config.messages.en.greeting));
   assert.match(fresh.config.messages.en.help, /✨ Help me choose/);
   assert.match(fresh.config.messages.en.help, /👤 My account/);
   assert.match(fresh.config.messages.es.help, /✨ Buscar por mí/);
-  assert.equal(bot.text.propertyActions.en.distanceSeaLabel, 'Distance to sea');
-  assert.equal(bot.text.comparison.en.distanceSea, '🌊 Distance to sea');
+  assert.equal(bot.text.propertyActions.en.distanceSeaLabel, 'Distance to beach');
+  assert.equal(bot.text.comparison.en.distanceSea, '🌊 Distance to beach');
 });
 
 test('обновление с версии 47: нетронутые прежние тексты заменяются, правленые владельцем остаются', () => {

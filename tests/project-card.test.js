@@ -41,7 +41,7 @@ test('обычный объект без верхней границы пока�
   const text = details.calls.map((call) => String(call.body.caption || call.body.text || '')).join('\n');
   assert.match(text, /Спальни: 1–2/);
   assert.match(text, /Площадь: 37–60 м²/);
-  assert.match(text, /До моря: 6 км/);
+  assert.match(text, /До пляжа: 6 км/);
 });
 
 test('на английском и испанском — своё слово и формат числа: «6 km», «1,5 km»', async () => {

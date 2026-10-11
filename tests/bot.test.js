@@ -778,7 +778,7 @@ test('вычитка EN/ES: британское написание, «Beach», 
   assert.ok(!/\b[Ff]avorites\b/.test(english), 'в английских текстах «favourites», а не «favorites»');
   assert.ok(!/\bcatalog\b/.test(english), '«catalogue», а не «catalog»');
   assert.equal(texts.menuLabels.en.favorites, '❤️ Favourites');
-  assert.equal(texts.propertyActions.en.distanceSeaLabel, 'Distance to sea', 'расстояние до моря — «Distance to sea», а не «Beach»');
+  assert.equal(texts.propertyActions.en.distanceSeaLabel, 'Distance to beach', 'расстояние до пляжа — «Distance to beach»');
   assert.equal(texts.propertyActions.es.viewing, 'Pedir visita', 'в недвижимости «reservar» — внести резерв');
   assert.equal(texts.selectionForm.es.wizardNotify, '🔔 Avisarme de los nuevos');
   assert.equal(texts.selectionForm.es.wizardFound, '{count} inmuebles coinciden');

@@ -254,7 +254,7 @@ function parseContentRecord(body, kind, existing = {}) {
       plotArea: optionalNumber(body.plotArea, 'площадь участка', 10000000),
       floor: cleanText(body.floor, 20),
       floors: cleanText(body.floors, 20),
-      distanceSea: optionalNumber(body.distanceSea, 'расстояние до моря', 100000),
+      distanceSea: optionalNumber(body.distanceSea, 'расстояние до пляжа', 100000),
       condition: ['new', 'renovated', 'needs_renovation', 'under_construction', ''].includes(body.condition) ? body.condition : '',
       mapUrl,
       videoUrl,
