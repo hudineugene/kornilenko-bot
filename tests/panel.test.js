@@ -94,7 +94,7 @@ test('подписи бота названы по-человечески, а н�
   assert.match(PANEL_HTML, /\{next\} — ближайшее рабочее время/);
 
   // Экран живёт в «Обслуживании».
-  assert.match(PANEL_HTML, /Все подписи бота/);
+  assert.match(PANEL_HTML, /\["interface", "Подписи бота"\]/);
 });
 
 test('автоответы и шаблоны ответов живут на одной вкладке', async () => {
@@ -120,10 +120,11 @@ test('«Контакты и о компании» собраны в одном �
 
   // «Разделы» больше не повторяют контакты и «О компании».
   assert.match(PANEL_HTML, /var fields = \[\["objects", "Объекты"\], \["promotions", "Акции"\]\]/);
-  assert.match(PANEL_HTML, /\["sections", "Пустые разделы"\]/);
+  assert.match(PANEL_HTML, /function renderLabelsAndEmptySections\(host\)/, '«Если раздел пуст» — на вкладке «Подписи бота»');
+  assert.match(PANEL_HTML, /<h3>Если раздел пуст<\/h3>/);
 
   // В настройках вместо поля — ссылка, где его искать.
-  assert.match(PANEL_HTML, /во вкладке «Тексты бота» → «Контакты»/);
+  assert.match(PANEL_HTML, /во вкладке «Тексты и контакты» → «Контакты»/);
   assert.ok(!/data-tr="hoursNote"/.test(PANEL_HTML), 'второго поля для того же текста больше нет');
 });
 

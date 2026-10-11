@@ -354,7 +354,7 @@ test.describe('восстановление копии из панели', () =>
     resetData((data) => { data.config.active = true; });
     const { sandbox, requests } = await panelSandbox();
     const host = fakeElement('main');
-    await sandbox.renderData(host);
+    await sandbox.renderDataCopies(host);
     const input = host.querySelector('#restoreFile');
     assert.equal(typeof input.onchange, 'function', 'выбор файла подключён');
 
@@ -378,7 +378,7 @@ test.describe('восстановление копии из панели', () =>
     // экране и он не остаётся в истории браузера.
     sandbox.askPassword = async (title) => (/копии/i.test(title) ? 'пароль-копии' : 'пароль-панели');
     const host = fakeElement('main');
-    await sandbox.renderData(host);
+    await sandbox.renderDataCopies(host);
 
     requests.length = 0;
     await pickFile(sandbox, host, 'bot-backup.kbk', Buffer.from('KBK1зашифровано'));
@@ -395,7 +395,7 @@ test.describe('восстановление копии из панели', () =>
     const { sandbox, requests } = await panelSandbox();
     sandbox.askPassword = async (title) => (/копии/i.test(title) ? '' : 'пароль-панели');
     const host = fakeElement('main');
-    await sandbox.renderData(host);
+    await sandbox.renderDataCopies(host);
 
     requests.length = 0;
     await pickFile(sandbox, host, 'bot-backup.kbk', Buffer.from('KBK1зашифровано'));
@@ -1589,7 +1589,7 @@ test('нижняя панель: четыре главных раздела и �
   assert.match(bar, /data-tab-view="today"[^>]*aria-current="page"/, 'текущий раздел отмечен');
   assert.match(bar, /<b class="tab-count">2<\/b>/, 'на «Сегодня» число ждущих клиентов');
   const sheet = String(sandbox.document.getElementById('moreSheet').innerHTML);
-  for (const title of ['Публикации', 'Тексты бота', 'Настройки', 'Выйти']) assert.ok(sheet.includes(title), title + ' — в «Ещё»');
+  for (const title of ['Публикации', 'Тексты и контакты', 'Настройки', 'Выйти']) assert.ok(sheet.includes(title), title + ' — в «Ещё»');
   assert.ok(!sheet.includes('>Сегодня<'), 'главные разделы в «Ещё» не повторяются');
 
   // Раздел из «Ещё» подсвечивает саму кнопку «Ещё».
@@ -1944,10 +1944,10 @@ test('адреса: вкладки «Просмотров», разделы «О
   const open = (hash) => { sandbox.location.hash = hash; sandbox.applyRoute(); };
 
   // «Обслуживания» третьего уровня нет: его экраны — обычные вкладки со своими адресами.
-  open('#/settings/access');
-  assert.equal(sandbox.currentRouteHash, '#/settings/access');
+  open('#/settings/check');
+  assert.equal(sandbox.currentRouteHash, '#/settings/check');
   // Старые адреса приводят на те же экраны и переписываются в новые.
-  const moved = { '#/settings/service/access': '#/settings/access', '#/settings/service/data': '#/settings/data', '#/settings/service/telegram': '#/settings/telegram', '#/settings/service/feed': '#/settings/feed', '#/settings/service/channels': '#/posts/channels', '#/settings/service/interface': '#/texts/interface', '#/settings/service': '#/settings/data', '#/settings/telegram': '#/settings/telegram', '#/settings/connection': '#/settings/telegram', '#/catalog/feed': '#/settings/feed', '#/texts/interface': '#/texts/interface' };
+  const moved = { '#/settings/service/access': '#/settings/team', '#/settings/access': '#/settings/team', '#/texts/sections': '#/texts/interface', '#/settings/service/data': '#/settings/data', '#/settings/service/telegram': '#/settings/telegram', '#/settings/service/feed': '#/objects/load', '#/settings/feed': '#/objects/load', '#/settings/service/channels': '#/posts/channels', '#/settings/service/interface': '#/texts/interface', '#/settings/service': '#/settings/data', '#/settings/telegram': '#/settings/telegram', '#/settings/connection': '#/settings/telegram', '#/catalog/feed': '#/objects/load', '#/texts/interface': '#/texts/interface' };
   for (const [old, now] of Object.entries(moved)) {
     replaced.length = 0;
     open(old);
@@ -2027,7 +2027,8 @@ test('технику убрали с рабочих экранов: токен �
 
   // Подключение к Telegram — вкладка «Настроек»; каналы — во вкладке «Публикаций».
   const tabs = (id) => sandbox.navItems().find((item) => item.id === id).tabs.map((tab) => tab[0]);
-  assert.equal(tabs('settings').join(), 'company,team,telegram,data,access,feed');
+  assert.equal(tabs('settings').join(), 'company,telegram,team,data,check');
+  assert.ok(tabs('objects').includes('load'), 'загрузка проектов — во вкладке «Объектов»');
   assert.ok(tabs('posts').includes('channels'), 'каналы и группы — во вкладке «Публикаций»');
   assert.ok(tabs('texts').includes('interface'), 'все подписи бота — среди текстов бота');
   const body = fakeElement('main');
@@ -2843,7 +2844,7 @@ test('редактор объекта: внизу «Опубликовать» �
   assert.equal(saved.body.status, 'hidden');
 });
 
-test('«Настройки → Компания»: одна полоса сохранения вместо четырёх кнопок, ставки — под спойлером', async () => {
+test('«Настройки → Работа с клиентами»: одна полоса сохранения вместо четырёх кнопок, ставки — под спойлером', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, requests } = await panelSandbox();
   let captured = null;
@@ -2866,7 +2867,7 @@ test('«Настройки → Компания»: одна полоса сох�
   assert.deepEqual(paths, ['/api/working-hours', '/api/viewing-slots', '/api/calculator', '/api/settings', '/api/engagement']);
 });
 
-test('«Настройки → Компания»: «Сообщения клиентам сами» — дайджест и возврат выключены, видно, кто получит; сохраняются той же полосой', async () => {
+test('«Настройки → Работа с клиентами»: «Сообщения клиентам сами» — дайджест и возврат выключены, видно, кто получит; сохраняются той же полосой', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox, requests } = await panelSandbox();
   let captured = null;
@@ -3549,7 +3550,7 @@ test('сохранение — два способа: форма с полосо
   const form = data.querySelector('#tgBackupForm');
   const handlers = {};
   form.addEventListener = (type, handler) => { handlers[type] = handler; };
-  sandbox.renderData(data);
+  sandbox.renderDataCopies(data);
   assert.ok(!String(data.innerHTML).includes('saveTgBackup'), 'кнопки «Сохранить» у карточки нет');
   assert.match(String(data.innerHTML), /id="tgBackupForm"/);
   assert.match(String(data.innerHTML), /id="sendTgBackup"/, 'отправить сейчас — своё действие');
@@ -3816,7 +3817,7 @@ test('журнал ошибок: подряд идущие одинаковые 
 
   sandbox.state.errors = [error('Копия', 'Не удалось создать копию', 1), error('Копия', 'Не удалось создать копию', 5), error('Telegram', 'Таймаут', 12)];
   const host = fakeElement('main');
-  sandbox.renderData(host);
+  sandbox.renderDataCheck(host);
   const html = String(host.innerHTML);
   assert.match(html, /Копия<\/b> <span class="chip warn">×2<\/span>/, 'у сдвоенной строки — «×2»');
   assert.match(html, /последняя /);
@@ -3969,7 +3970,7 @@ test('пояснение к числу на «Сегодня» и в ворон�
   assert.match(PANEL_CSS, /@media\(max-width:860px\)\{\.today-numbers \.strip-hint\{display:block\}\}/);
 });
 
-test('чек-лист «Лицо агента»: если не хватает только срока ответа — кнопка ведёт в «Настройки → Компания», иначе на «Контакты»', async () => {
+test('чек-лист «Лицо агента»: если не хватает только срока ответа — кнопка ведёт в «Настройки → Работа с клиентами», иначе на «Контакты»', async () => {
   resetData((data) => { data.config.active = true; });
   const { sandbox } = await panelSandbox();
   const agent = () => sandbox.readinessItems({ checks: [] }).find((item) => item.id === 'agent');
@@ -3978,7 +3979,7 @@ test('чек-лист «Лицо агента»: если не хватает т
   let item = agent();
   assert.equal(item.ok, false);
   assert.equal(Array.from(item.route).join('/'), 'settings/company', 'нужен только срок — ведём туда, где он задаётся');
-  assert.match(item.detail, /срок ответа — в «Настройки → Компания»/);
+  assert.match(item.detail, /срок ответа — в «Настройки → Работа с клиентами»/);
   sandbox.state.contacts = { managerName: '', photo: null };
   item = agent();
   assert.equal(Array.from(item.route).join('/'), 'texts/contacts', 'не хватает имени и фото — на «Контакты»');
@@ -4629,7 +4630,7 @@ test('разметка каждого экрана панели закрыта: 
   const { sandbox } = await panelSandbox();
   const screens = [['today', ''], ['clients', 'inbox'], ['clients', 'tasks'], ['clients', 'pipeline'], ['clients', 'base'], ['viewings', ''], ['objects', 'list'], ['objects', 'offers'],
     ['posts', 'broadcast'], ['posts', 'channel'], ['posts', 'channels'], ['reports', ''], ['texts', 'welcome'], ['texts', 'contacts'], ['texts', 'trust'], ['texts', 'plan'],
-    ['texts', 'sections'], ['texts', 'rules'], ['texts', 'interface'], ['settings', 'company'], ['settings', 'team'], ['settings', 'telegram'], ['settings', 'data'], ['settings', 'access'], ['settings', 'feed']];
+    ['texts', 'rules'], ['texts', 'interface'], ['settings', 'company'], ['settings', 'team'], ['settings', 'telegram'], ['settings', 'data'], ['settings', 'check'], ['objects', 'load']];
   const broken = [];
   let rendered = 0;
   for (const [view, tab] of screens) {

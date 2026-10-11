@@ -315,7 +315,7 @@ function guardDoubleClicks() {
 function send(url, method, payload) { return api(url, { method: method, body: JSON.stringify(payload || {}) }); }
 
 // Тексты интерфейса весят больше половины общего пакета, поэтому грузятся
-// один раз и только там, где нужны: экран «Тексты бота» и предпросмотр карточки.
+// один раз и только там, где нужны: экран «Тексты и контакты» и предпросмотр карточки.
 var interfaceTextCache = null;
 var interfaceTextLoading = null;
 function interfaceTexts() { return interfaceTextCache || {}; }
@@ -881,11 +881,11 @@ function navItems() {
     { id: "today", icon: navIcon("today"), title: "Сегодня", count: deedCount(), hint: deedCount() + " " + plural(deedCount(), "дело", "дела", "дел") + " в списке" },
     { id: "clients", icon: navIcon("clients"), title: "Клиенты", count: waitingClients(), late: overdueClients(), hint: waitingClients() + " " + plural(waitingClients(), "клиент ждёт", "клиента ждут", "клиентов ждут") + " ответа" + (overdueClients() ? ", из них " + overdueClients() + " дольше срока" : ""), tabs: [["inbox", "Диалоги"], ["tasks", "Следующие шаги"], ["pipeline", "Воронка"], ["base", "База клиентов"]] },
     { id: "viewings", icon: navIcon("viewings"), title: "Просмотры" },
-    { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"]] },
+    { id: "objects", icon: navIcon("objects"), title: "Объекты", tabs: [["list", "Объекты"], ["offers", "Акции"], ["load", "Загрузка"]] },
     { id: "posts", icon: navIcon("posts"), title: "Публикации", tabs: [["broadcast", "Очередь и история"], ["channel", "Пост в канал"], ["channels", "Каналы и группы"]] },
     { id: "reports", icon: navIcon("reports"), title: "Отчёт" },
-    { id: "texts", icon: navIcon("texts"), title: "Тексты бота", tabs: [["welcome", "Приветствие"], ["contacts", "Контакты"], ["trust", "Почему мы"], ["plan", "План покупки"], ["sections", "Пустые разделы"], ["rules", "Автоответы"], ["interface", "Все подписи бота"]] },
-    { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Компания"], ["team", "Команда"], ["telegram", "Подключение"], ["data", "Данные и копии"], ["access", "Доступ"], ["feed", "Загрузка с сайта"]] },
+    { id: "texts", icon: navIcon("texts"), title: "Тексты и контакты", tabs: [["welcome", "Приветствие"], ["contacts", "Контакты"], ["trust", "Почему мы"], ["plan", "План покупки"], ["rules", "Автоответы"], ["interface", "Подписи бота"]] },
+    { id: "settings", icon: navIcon("settings"), title: "Настройки", tabs: [["company", "Работа с клиентами"], ["telegram", "Telegram и приложение"], ["team", "Команда и доступ"], ["data", "Копии"], ["check", "Проверка и журнал"]] },
   ];
 }
 
@@ -897,9 +897,10 @@ var LEGACY_ROUTES = {
   "notifications": ["today", ""],
   "stats": ["reports", ""],
   "inquiries": { "": ["clients", "inbox"], "inbox": ["clients", "inbox"], "tasks": ["clients", "tasks"], "pipeline": ["clients", "pipeline"], "viewings": ["viewings", ""], "clients": ["clients", "base"] },
-  "catalog": { "": ["objects", "list"], "objects": ["objects", "list"], "offers": ["objects", "offers"], "feed": ["settings", "feed"] },
+  "catalog": { "": ["objects", "list"], "objects": ["objects", "list"], "offers": ["objects", "offers"], "feed": ["objects", "load"] },
   "reach": { "": ["posts", "broadcast"], "campaigns": ["posts", "broadcast"], "group": ["posts", "channel"], "style": ["posts", "channel"] },
-  "settings": { "reports": ["reports", ""], "connection": ["settings", "telegram"], "work": ["settings", "company"], "service": ["settings", "data"] },
+  "settings": { "reports": ["reports", ""], "connection": ["settings", "telegram"], "work": ["settings", "company"], "service": ["settings", "data"], "access": ["settings", "team"], "feed": ["objects", "load"] },
+  "texts": { "sections": ["texts", "interface"] },
 };
 
 function normalizeRoute(view, tab) {
@@ -1279,7 +1280,7 @@ var PALETTE_ACTIONS = [
   { title: "Диалоги", words: "клиенты переписка сообщения", run: function () { return go("clients", "inbox"); } },
   { title: "Воронка", words: "клиенты этапы сделки", run: function () { return go("clients", "pipeline"); } },
   { title: "Отчёт", words: "неделя итоги реклама", run: function () { return go("reports"); } },
-  { title: "Настройки компании", words: "часы работы калькулятор напоминания", run: function () { return go("settings", "company"); } },
+  { title: "Работа с клиентами", words: "настройки компании часы работы рабочее время калькулятор напоминания", run: function () { return go("settings", "company"); } },
 ];
 var paletteOpen = false;
 

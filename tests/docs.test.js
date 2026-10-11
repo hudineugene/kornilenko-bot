@@ -19,14 +19,14 @@ test('инструкция «Что делать, если…» называет
   assert.match(runbook, /bot\.exe --reset-password/, 'про сброс пароля без Node');
   assert.match(runbook, /start-bot\.ps1/);
   assert.match(runbook, /tools\\stop-bot\.ps1/);
-  assert.match(runbook, /Данные и копии/, 'экран восстановления назван так же, как в панели');
+  assert.match(runbook, /Настройки → Копии/, 'экран восстановления назван так же, как в панели');
   // Режим действительно поддержан точкой входа программы.
   assert.match(read('src/entry.mjs'), /--reset-password/);
   assert.match(read('package.json'), /esbuild src\/entry\.mjs/, 'bot.exe собирается из точки входа с этим режимом');
   // Экран из инструкции есть в панели.
   const menu = read('src/panel/runtime.mjs');
-  assert.match(menu, /"Данные и копии"/);
-  assert.match(menu, /\["telegram", "Подключение"\]/);
+  assert.match(menu, /\["data", "Копии"\]/);
+  assert.match(menu, /\["telegram", "Telegram и приложение"\]/);
 });
 
 test('start-bot.ps1: в комментарии правильный путь журнала', () => {

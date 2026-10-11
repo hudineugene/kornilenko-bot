@@ -134,8 +134,8 @@ function renderConnection(host) {
   host.querySelector("#addManager").onclick = function () { managers.push({ name: "", chatId: "" }); drawManagers(); watcher.check(); };
 }
 
-// «Подключение к Telegram» — вкладка «Подключение» в «Настройках»: токен бота, включение и
-// автозапуск нужны редко, и на рабочем экране «Настройки → Команда» им не место.
+// «Подключение к Telegram» — вкладка «Telegram и приложение» в «Настройках»: токен бота, включение и
+// автозапуск нужны редко, и на рабочем экране «Настройки → Команда и доступ» им не место.
 function renderTelegramConnection(host) {
   var config = state.config, bot = state.bot || {}, mini = config.miniApp || {};
   host.innerHTML = '<div class="grid cols-2"><div class="stack">' +
@@ -274,7 +274,7 @@ function renderWork(host) {
         [[0, "не обещать срок"], [5, "5 минут"], [10, "10 минут"], [15, "15 минут"], [30, "30 минут"], [60, "час"], [120, "2 часа"], [240, "4 часа"]].map(function (option) {
           return '<option value="' + option[0] + '"' + (Number(hours.replyMinutes || 0) === option[0] ? " selected" : "") + ">" + option[1] + "</option>";
         }).join("") + '</select><div class="hint">Эту строку клиент видит на экране связи и после заявки. В нерабочее время вместо неё идёт текст ниже. Обещайте только то, что выдерживаете.</div></div>' +
-      '<div class="hint">Сообщение, которое клиент видит в нерабочее время, — во вкладке «Тексты бота» → «Контакты».</div>' +
+      '<div class="hint">Сообщение, которое клиент видит в нерабочее время, — во вкладке «Тексты и контакты» → «Контакты».</div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Свободное время для просмотров</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="slotsOn"' + (slots.enabled ? " checked" : "") + "> Предлагать клиенту свободные слоты</label>" +
@@ -396,7 +396,8 @@ function groupErrors(errors) {
   return groups;
 }
 
-function renderData(host) {
+// Вкладка «Копии»: резервная копия, копия в Telegram, счётчики.
+function renderDataCopies(host) {
   var backup = state.config.telegramBackup || {};
   host.innerHTML = '<div class="grid cols-2">' +
     '<div class="card"><header><h3>Резервная копия</h3></header><div class="card-body stack">' +
@@ -404,17 +405,6 @@ function renderData(host) {
       '<div class="row wrap"><button class="btn secondary" id="downloadBackup" type="button">⬇ Скачать копию</button>' +
       '<label class="btn ghost clickable-area">⬆ Восстановить<input type="file" id="restoreFile" accept=".kbz,.json,.gz,.kbk,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
       '<div class="hint">Подходит любая копия, сделанная ботом: скачанная этой кнопкой, из папки <b>backups</b> рядом с ботом или присланная в Telegram (для неё понадобится пароль копии). Ежедневная копия создаётся сама. Перед восстановлением прежние данные бот складывает в ту же папку — вернуться будет куда.</div>' +
-    "</div></div>" +
-    '<div class="card"><header><h3>Проекты из файла</h3></header><div class="card-body stack">' +
-      '<p class="small muted">Берёт из файла выбранное: проекты добавляются или обновляются по номеру, остальное заменяется целиком. Клиенты, заявки, пароль, токен и админ-чат не меняются.</p>' +
-      '<label class="check"><input type="checkbox" id="partObjects" checked> Проекты и их фотографии</label>' +
-      '<label class="check"><input type="checkbox" id="partPhotos"> Только фотографии: у проектов, которые уже есть, заменить фото, остальное не менять</label>' +
-      '<label class="check"><input type="checkbox" id="partSea"> Только расстояние до пляжа: у проектов, которые уже есть, обновить это поле, остальное не менять</label>' +
-      '<label class="check"><input type="checkbox" id="partContacts"> Контакты и фото менеджера</label>' +
-      '<label class="check"><input type="checkbox" id="partAbout"> «О компании», цифры доверия и отзывы</label>' +
-      '<label class="check"><input type="checkbox" id="partTexts"> Тексты бота: приветствие и фото, меню, гид «Как купить», план покупки, автоответы, шаблоны</label>' +
-      '<label class="check"><input type="checkbox" id="partSettings"> Настройки: калькулятор, рабочее время, окна просмотров, часовой пояс</label>' +
-      '<div class="row wrap"><label class="btn ghost clickable-area">⬆ Выбрать файл каталога<input type="file" id="partsFile" accept=".kbz,.json,.gz,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
     "</div></div>" +
     '<div class="card"><header><h3>Копия в Telegram</h3></header><div class="card-body stack"><div class="stack" id="tgBackupForm">' +
       '<label class="check"><input type="checkbox" id="tgBackupOn"' + (backup.enabled ? " checked" : "") + "> Присылать зашифрованную копию раз в неделю</label>" +
@@ -425,24 +415,13 @@ function renderData(host) {
       (backup.lastError ? '<div class="banner bad">' + esc(backup.lastError) + "</div>" : "") +
       '<div class="hint">Файл .kbk можно восстановить здесь же — понадобится этот пароль.</div>' +
     "</div></div>" +
-    '<div class="card"><header><h3>Самопроверка</h3><div class="actions"><button class="btn secondary small" id="runSelfCheck" type="button">Проверить сейчас</button></div></header>' +
-      '<div class="card-body stack" id="selfCheckBody"><p class="small muted">Проверяет токен и связь, чат администратора, видимость каталога у клиентов, файлы картинок и версию данных. Ничего не меняет.</p></div>' +
-    "</div>" +
-    '<div class="card"><header><h3>Файлы картинок</h3><div class="actions"><button class="btn secondary small" id="checkMedia" type="button">Проверить файлы</button></div></header>' +
-      '<div class="card-body stack" id="mediaCheckBody"><p class="small muted">Сверяет картинки в данных с файлами в папке bot-media. Потерянные можно вернуть из ежедневной копии.</p></div>' +
-    "</div>" +
-    '<div class="card"><header><h3>Журнал ошибок</h3><div class="actions"><button class="btn ghost small" id="clearErrors" type="button">Очистить</button></div></header>' +
-      ((state.errors || []).length ? '<div class="list">' + groupErrors(state.errors).slice(0, 20).map(function (error) {
-        return '<div class="list-item"><span class="grow"><b>' + esc(error.area || error.context || "Ошибка") + '</b>' + (error.count > 1 ? ' <span class="chip warn">×' + error.count + "</span>" : "") + '<br><span class="small muted">' + esc(error.message) + "</span></span>" +
-          '<span class="small muted nowrap">' + (error.count > 1 ? "последняя " : "") + dateTime(error.createdAt || error.at) + "</span></div>";
-      }).join("") + "</div>" : '<div class="empty"><b>Ошибок нет</b></div>') +
-    "</div>" +
     '<div class="card"><header><h3>Статистика и история</h3></header><div class="card-body stack">' +
       '<div class="small muted">Сообщений получено: ' + num((state.stats || {}).messagesReceived) + " · отправлено: " + num((state.stats || {}).messagesSent) + "</div>" +
       '<div class="row wrap"><button class="btn ghost small" id="resetStats" type="button">Обнулить счётчики</button>' +
       '<button class="btn ghost small" id="clearActivity" type="button">Очистить историю активности</button></div>' +
       '<div class="hint">Заявки и клиенты при этом не удаляются.</div>' +
-    "</div></div></div>";
+    "</div></div>" +
+    "</div>";
 
   host.querySelector("#downloadBackup").onclick = async function () {
     var password = await askPassword("Скачать копию данных?", "В копии есть токен бота и данные клиентов, поэтому нужен текущий пароль панели.");
@@ -486,6 +465,109 @@ function renderData(host) {
       setTimeout(function () { location.reload(); }, 1200);
     } catch (error) { fail(error); }
   };
+  // Поля копии в Telegram — форма: правка попадает в полосу «Сохранить» внизу.
+  // Включение копии и смена её пароля отправляют все данные из бота: сервер требует
+  // текущий пароль панели и повтор пароля копии — без них сохранить было нельзя.
+  watchForm(host.querySelector("#tgBackupForm"), async function () {
+    var enabled = host.querySelector("#tgBackupOn").checked;
+    var pass = host.querySelector("#tgBackupPass").value;
+    var confirmField = host.querySelector("#tgBackupPass2");
+    if (pass && pass !== confirmField.value) {
+      fieldError(confirmField, "Пароли копии не совпадают");
+      throw new Error("Пароли копии не совпадают");
+    }
+    var payload = { enabled: enabled, password: pass, passwordConfirm: confirmField.value };
+    if (enabled || pass) {
+      var current = await askPassword("Копия в Telegram", "Копия отправляет из бота все данные: объекты, клиентов и заявки. Для этого нужен текущий пароль панели.");
+      if (!current) throw new Error("Сохранение отменено");
+      payload.currentPassword = current;
+    }
+    await send("/api/telegram-backup", "PUT", payload);
+  }, "Настройки копии в Telegram изменены");
+  host.querySelector("#sendTgBackup").onclick = async function () {
+    try { await send("/api/telegram-backup/send", "POST", {}); toast("Копия отправлена в Telegram"); await reload(); } catch (error) { fail(error); }
+  };
+  host.querySelector("#resetStats").onclick = async function () {
+    if (!(await confirmDialog("Обнулить счётчики?", "Счётчики сообщений начнутся с нуля.", "Обнулить", true))) return;
+    try { await send("/api/statistics/reset", "POST", {}); await reload(); } catch (error) { fail(error); }
+  };
+  host.querySelector("#clearActivity").onclick = async function () {
+    if (!(await confirmDialog("Очистить историю активности?", "История действий клиентов будет удалена.", "Очистить", true))) return;
+    try { await api("/api/activity", { method: "DELETE" }); await reload(); } catch (error) { fail(error); }
+  };
+}
+
+// Вкладка «Проверка и журнал»: самопроверка, файлы картинок, журнал ошибок.
+function renderDataCheck(host) {
+  host.innerHTML = '<div class="grid cols-2">' +
+    '<div class="card"><header><h3>Самопроверка</h3><div class="actions"><button class="btn secondary small" id="runSelfCheck" type="button">Проверить сейчас</button></div></header>' +
+      '<div class="card-body stack" id="selfCheckBody"><p class="small muted">Проверяет токен и связь, чат администратора, видимость каталога у клиентов, файлы картинок и версию данных. Ничего не меняет.</p></div>' +
+    "</div>" +
+    '<div class="card"><header><h3>Файлы картинок</h3><div class="actions"><button class="btn secondary small" id="checkMedia" type="button">Проверить файлы</button></div></header>' +
+      '<div class="card-body stack" id="mediaCheckBody"><p class="small muted">Сверяет картинки в данных с файлами в папке bot-media. Потерянные можно вернуть из ежедневной копии.</p></div>' +
+    "</div>" +
+    '<div class="card"><header><h3>Журнал ошибок</h3><div class="actions"><button class="btn ghost small" id="clearErrors" type="button">Очистить</button></div></header>' +
+      ((state.errors || []).length ? '<div class="list">' + groupErrors(state.errors).slice(0, 20).map(function (error) {
+        return '<div class="list-item"><span class="grow"><b>' + esc(error.area || error.context || "Ошибка") + '</b>' + (error.count > 1 ? ' <span class="chip warn">×' + error.count + "</span>" : "") + '<br><span class="small muted">' + esc(error.message) + "</span></span>" +
+          '<span class="small muted nowrap">' + (error.count > 1 ? "последняя " : "") + dateTime(error.createdAt || error.at) + "</span></div>";
+      }).join("") + "</div>" : '<div class="empty"><b>Ошибок нет</b></div>') +
+    "</div>" +
+    "</div>";
+
+  function checkRow(check) {
+    var kind = check.status === "bad" ? "bad" : check.status === "warn" ? "warn" : "ok";
+    var mark = iconSpan(check.status === "bad" ? "close" : check.status === "warn" ? "warning" : "check");
+    return '<div class="list-item"><span class="grow"><b>' + esc(check.title) + "</b><br><span class=\"muted small\">" + esc(check.detail) +
+      (check.hint ? " · " + esc(check.hint) : "") + '</span></span><span class="chip ' + kind + '">' + mark + "</span></div>";
+  }
+  host.querySelector("#runSelfCheck").onclick = async function () {
+    var body = host.querySelector("#selfCheckBody");
+    body.innerHTML = '<p class="small muted">Проверяю…</p>';
+    try {
+      var report = await api("/api/self-check");
+      var summary = report.bad ? "Есть проблемы: " + report.bad : report.warn ? "Стоит посмотреть: " + report.warn : "Всё в порядке";
+      body.innerHTML = '<div class="row wrap"><span class="chip ' + (report.bad ? "bad" : report.warn ? "warn" : "ok") + '">' + esc(summary) + "</span>" +
+        '<span class="small muted">проверено ' + dateTime(report.checkedAt) + "</span></div>" +
+        '<div class="list">' + (report.checks || []).map(checkRow).join("") + "</div>";
+    } catch (error) { body.innerHTML = '<div class="banner bad">' + esc(error.message) + "</div>"; }
+  };
+  host.querySelector("#checkMedia").onclick = async function () {
+    var body = host.querySelector("#mediaCheckBody");
+    body.innerHTML = '<p class="small muted">Сверяю файлы…</p>';
+    try {
+      var report = await send("/api/media-check", "POST", {});
+      body.innerHTML = mediaCheckHtml(report);
+      var restore = body.querySelector("#restoreMedia");
+      if (restore) restore.onclick = async function () {
+        try {
+          var done = await send("/api/media-check", "POST", { restore: true });
+          body.innerHTML = mediaCheckHtml(done);
+          toast(done.restored ? "Вернули файлов: " + done.restored : "В копии этих файлов нет");
+        } catch (error) { fail(error); }
+      };
+    } catch (error) { body.innerHTML = '<div class="banner bad">' + esc(error.message) + "</div>"; }
+  };
+  host.querySelector("#clearErrors").onclick = async function () {
+    try { await api("/api/errors", { method: "DELETE" }); await reload(); } catch (error) { fail(error); }
+  };
+}
+
+// Карточка «Проекты из файла»: живёт на вкладке «Объекты → Загрузка».
+function renderFileImport(host) {
+  host.innerHTML = '<div class="grid cols-2">' +
+    '<div class="card"><header><h3>Проекты из файла</h3></header><div class="card-body stack">' +
+      '<p class="small muted">Берёт из файла выбранное: проекты добавляются или обновляются по номеру, остальное заменяется целиком. Клиенты, заявки, пароль, токен и админ-чат не меняются.</p>' +
+      '<label class="check"><input type="checkbox" id="partObjects" checked> Проекты и их фотографии</label>' +
+      '<label class="check"><input type="checkbox" id="partPhotos"> Только фотографии: у проектов, которые уже есть, заменить фото, остальное не менять</label>' +
+      '<label class="check"><input type="checkbox" id="partSea"> Только расстояние до пляжа: у проектов, которые уже есть, обновить это поле, остальное не менять</label>' +
+      '<label class="check"><input type="checkbox" id="partContacts"> Контакты и фото менеджера</label>' +
+      '<label class="check"><input type="checkbox" id="partAbout"> «О компании», цифры доверия и отзывы</label>' +
+      '<label class="check"><input type="checkbox" id="partTexts"> Тексты бота: приветствие и фото, меню, гид «Как купить», план покупки, автоответы, шаблоны</label>' +
+      '<label class="check"><input type="checkbox" id="partSettings"> Настройки: калькулятор, рабочее время, окна просмотров, часовой пояс</label>' +
+      '<div class="row wrap"><label class="btn ghost clickable-area">⬆ Выбрать файл каталога<input type="file" id="partsFile" accept=".kbz,.json,.gz,application/json,application/gzip,application/octet-stream" class="hidden"></label></div>' +
+    "</div></div>" +
+    "</div>";
+
   // «Только фотографии» и «Проекты целиком» — разные режимы: отметка одного снимает другой.
   host.querySelector("#partPhotos").onchange = function () { if (this.checked) host.querySelector("#partObjects").checked = false; };
   host.querySelector("#partObjects").onchange = function () { if (this.checked) host.querySelector("#partPhotos").checked = false; };
@@ -525,72 +607,6 @@ function renderData(host) {
       toast(done.length ? done.join(". ") : "В файле нечего было брать");
       setTimeout(function () { location.reload(); }, 1500);
     } catch (error) { fail(error); }
-  };
-  // Поля копии в Telegram — форма: правка попадает в полосу «Сохранить» внизу.
-  // Включение копии и смена её пароля отправляют все данные из бота: сервер требует
-  // текущий пароль панели и повтор пароля копии — без них сохранить было нельзя.
-  watchForm(host.querySelector("#tgBackupForm"), async function () {
-    var enabled = host.querySelector("#tgBackupOn").checked;
-    var pass = host.querySelector("#tgBackupPass").value;
-    var confirmField = host.querySelector("#tgBackupPass2");
-    if (pass && pass !== confirmField.value) {
-      fieldError(confirmField, "Пароли копии не совпадают");
-      throw new Error("Пароли копии не совпадают");
-    }
-    var payload = { enabled: enabled, password: pass, passwordConfirm: confirmField.value };
-    if (enabled || pass) {
-      var current = await askPassword("Копия в Telegram", "Копия отправляет из бота все данные: объекты, клиентов и заявки. Для этого нужен текущий пароль панели.");
-      if (!current) throw new Error("Сохранение отменено");
-      payload.currentPassword = current;
-    }
-    await send("/api/telegram-backup", "PUT", payload);
-  }, "Настройки копии в Telegram изменены");
-  host.querySelector("#sendTgBackup").onclick = async function () {
-    try { await send("/api/telegram-backup/send", "POST", {}); toast("Копия отправлена в Telegram"); await reload(); } catch (error) { fail(error); }
-  };
-  function checkRow(check) {
-    var kind = check.status === "bad" ? "bad" : check.status === "warn" ? "warn" : "ok";
-    var mark = iconSpan(check.status === "bad" ? "close" : check.status === "warn" ? "warning" : "check");
-    return '<div class="list-item"><span class="grow"><b>' + esc(check.title) + "</b><br><span class=\"muted small\">" + esc(check.detail) +
-      (check.hint ? " · " + esc(check.hint) : "") + '</span></span><span class="chip ' + kind + '">' + mark + "</span></div>";
-  }
-  host.querySelector("#runSelfCheck").onclick = async function () {
-    var body = host.querySelector("#selfCheckBody");
-    body.innerHTML = '<p class="small muted">Проверяю…</p>';
-    try {
-      var report = await api("/api/self-check");
-      var summary = report.bad ? "Есть проблемы: " + report.bad : report.warn ? "Стоит посмотреть: " + report.warn : "Всё в порядке";
-      body.innerHTML = '<div class="row wrap"><span class="chip ' + (report.bad ? "bad" : report.warn ? "warn" : "ok") + '">' + esc(summary) + "</span>" +
-        '<span class="small muted">проверено ' + dateTime(report.checkedAt) + "</span></div>" +
-        '<div class="list">' + (report.checks || []).map(checkRow).join("") + "</div>";
-    } catch (error) { body.innerHTML = '<div class="banner bad">' + esc(error.message) + "</div>"; }
-  };
-  host.querySelector("#checkMedia").onclick = async function () {
-    var body = host.querySelector("#mediaCheckBody");
-    body.innerHTML = '<p class="small muted">Сверяю файлы…</p>';
-    try {
-      var report = await send("/api/media-check", "POST", {});
-      body.innerHTML = mediaCheckHtml(report);
-      var restore = body.querySelector("#restoreMedia");
-      if (restore) restore.onclick = async function () {
-        try {
-          var done = await send("/api/media-check", "POST", { restore: true });
-          body.innerHTML = mediaCheckHtml(done);
-          toast(done.restored ? "Вернули файлов: " + done.restored : "В копии этих файлов нет");
-        } catch (error) { fail(error); }
-      };
-    } catch (error) { body.innerHTML = '<div class="banner bad">' + esc(error.message) + "</div>"; }
-  };
-  host.querySelector("#clearErrors").onclick = async function () {
-    try { await api("/api/errors", { method: "DELETE" }); await reload(); } catch (error) { fail(error); }
-  };
-  host.querySelector("#resetStats").onclick = async function () {
-    if (!(await confirmDialog("Обнулить счётчики?", "Счётчики сообщений начнутся с нуля.", "Обнулить", true))) return;
-    try { await send("/api/statistics/reset", "POST", {}); await reload(); } catch (error) { fail(error); }
-  };
-  host.querySelector("#clearActivity").onclick = async function () {
-    if (!(await confirmDialog("Очистить историю активности?", "История действий клиентов будет удалена.", "Очистить", true))) return;
-    try { await api("/api/activity", { method: "DELETE" }); await reload(); } catch (error) { fail(error); }
   };
 }
 
@@ -654,15 +670,21 @@ function renderAccess(host) {
   };
 }
 
+// «Команда и доступ»: кто работает с ботом (менеджеры, админ-чат, звук) и как заходят в панель (пароль, интернет).
+function renderTeamAndAccess(host) {
+  host.innerHTML = '<div class="stack"><div id="teamPart"></div><div id="accessPart"></div></div>';
+  renderConnection(host.querySelector("#teamPart"));
+  renderAccess(host.querySelector("#accessPart"));
+}
+
 VIEWS.settings = {
   render: function (host, tab) {
-    // Редкое и осторожное — токен, копии, доступ из интернета, загрузка с сайта — лежит
-    // теми же вкладками, что и повседневное: отдельного «Обслуживания» третьего уровня нет.
-    if (tab === "team") return renderConnection(host);
+    // Редкое и осторожное — токен, копии, доступ из интернета — лежит теми же вкладками, что и повседневное:
+    // отдельного «Обслуживания» третьего уровня нет. Загрузка проектов — в «Объекты → Загрузка».
+    if (tab === "team") return renderTeamAndAccess(host);
     if (tab === "telegram") return renderTelegramConnection(host);
-    if (tab === "data") return renderData(host);
-    if (tab === "access") return renderAccess(host);
-    if (tab === "feed") return renderFeed(host);
+    if (tab === "data") return renderDataCopies(host);
+    if (tab === "check") return renderDataCheck(host);
     renderWork(host);
   },
 };

@@ -10,7 +10,7 @@ var interfaceFocusKey = "";
 // Строка о каталоге в приветствии — та же, что бот покажет клиенту: считается по
 // настоящему каталогу (в продаже и забронированные, готовые на этом языке), а не
 // выдумана в предпросмотре. Тексты берутся из словаря бота, поэтому правка формулировки
-// в «Все подписи бота» видна и здесь.
+// в «Подписи бота» видна и здесь.
 function catalogPreviewLine(language) {
   var groups = interfaceTexts().catalogSummary || {};
   var copy = groups[language] || groups.ru;
@@ -770,15 +770,21 @@ function renderTrust(host) {
   host.querySelector("#trustPreview").innerHTML = preview.length ? preview.map(esc).join("<br>") : '<span class="muted">Пока пусто — клиенты этого экрана не увидят.</span>';
 }
 
+// «Подписи бота»: сверху — что показывается, когда раздел пуст, ниже — все подписи бота.
+function renderLabelsAndEmptySections(host) {
+  host.innerHTML = '<div class="stack"><div id="emptyPart"></div><div id="labelsPart"></div></div>';
+  renderSections(host.querySelector("#emptyPart"));
+  renderInterface(host.querySelector("#labelsPart"));
+}
+
 VIEWS.texts = {
-  subtitle: function () { return "Всё, что бот говорит клиенту"; },
+  subtitle: function () { return "Всё, что бот и приложение говорят клиенту"; },
   render: function (host, tab) {
-    if (tab === "sections") return renderSections(host);
     if (tab === "contacts") return renderContacts(host);
     if (tab === "rules") return renderRules(host);
     if (tab === "trust") return renderTrust(host);
     if (tab === "plan") return renderBuyPlan(host);
-    if (tab === "interface") return renderInterface(host);
+    if (tab === "interface") return renderLabelsAndEmptySections(host);
 
     renderWelcome(host);
   },

@@ -117,7 +117,7 @@ function renderObjects(host) {
     return !catalogStatus || record.status === catalogStatus;
   });
   pageAction("＋ Объект", function () { openRecordEditor("objects", null); });
-  pageAction("⇩ Загрузить с сайта", function () { go("settings", "feed"); }, "secondary");
+  pageAction("⇩ Загрузить с сайта", function () { go("objects", "load"); }, "secondary");
   host.innerHTML = '<div class="toolbar">' +
       '<select id="catalogStatus" class="field-sm"><option value="">Все статусы</option>' + PROPERTY_STATUS.map(function (item) {
         return '<option value="' + item[0] + '"' + (catalogStatus === item[0] ? " selected" : "") + ">" + item[1] + "</option>";
@@ -1241,9 +1241,17 @@ function renderFeed(host) {
   }, "Настройки загрузки с сайта изменены");
 }
 
+// «Объекты → Загрузка»: всё, чем проекты попадают в каталог пачкой — из файла и с сайта.
+function renderLoad(host) {
+  host.innerHTML = '<div class="stack"><div id="loadFile"></div><div id="loadFeed"></div></div>';
+  renderFileImport(host.querySelector("#loadFile"));
+  renderFeed(host.querySelector("#loadFeed"));
+}
+
 VIEWS.objects = {
   render: function (host, tab) {
     if (tab === "offers") return renderOffers(host);
+    if (tab === "load") return renderLoad(host);
     renderObjects(host);
   },
 };

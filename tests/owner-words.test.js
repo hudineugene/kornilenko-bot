@@ -38,7 +38,7 @@ test.describe('адреса в панели, на которые отсылае�
     // Раньше адреса писались строками прямо в коде и отставали от панели.
     for (const file of ['selfcheck.mjs', 'retention.mjs', 'inquiries.mjs', 'offsite.mjs']) {
       const text = source(file);
-      assert.ok(!/Настройки → (Подключение|Данные|Работа с клиентами)/.test(text), file + ': остался адрес несуществующего раздела');
+      assert.ok(!/Настройки → (Подключение|Данные|Компания|Загрузка)/.test(text), file + ': остался адрес несуществующего раздела');
       assert.ok(!text.includes('Интерфейс → privacy'), file + ': остался адрес несуществующей вкладки');
       assert.ok(!text.includes('«Переписка» → «Очистить»'), file + ': остался прежний адрес очистки');
       assert.ok(!text.includes('«Резервная копия» → «Восстановить»'), file + ': остался прежний адрес восстановления');
@@ -51,7 +51,7 @@ test.describe('адреса в панели, на которые отсылае�
     const { runSelfCheck } = await import('../src/selfcheck.mjs');
     const report = runSelfCheck();
     const token = report.checks.find((item) => item.id === 'token');
-    assert.equal(token.hint, 'Настройки → Подключение');
+    assert.equal(token.hint, 'Настройки → Telegram и приложение');
   });
 });
 

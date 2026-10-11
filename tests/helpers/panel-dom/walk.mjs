@@ -75,6 +75,7 @@ async function walk(kind, state) {
   await screen('viewings/history', async () => { await panel.go('viewings', 'history'); });
   await screen('objects/list', () => panel.go('objects', 'list'));
   await screen('objects/offers', () => panel.go('objects', 'offers'));
+  await screen('objects/load (из файла и с сайта)', () => panel.go('objects', 'load'));
   await screen('posts/broadcast', () => panel.go('posts', 'broadcast'));
   await screen('posts/channel', async () => { s.selectedGroup = 'g1'; await panel.go('posts', 'channel'); });
   if (state.groups.length) await screen('posts/channel (группа с темами)', async () => { s.selectedGroup = 'g2'; s.renderView(); await settle(60); });
@@ -87,10 +88,10 @@ async function walk(kind, state) {
   }
   await screen('reports', () => panel.go('reports'));
   await screen('reports (подробнее раскрыто)', async () => { const d = page().querySelector('details'); if (d) d.open = true; });
-  for (const tab of ['welcome', 'contacts', 'trust', 'plan', 'sections', 'rules', 'interface']) await screen('texts/' + tab, () => panel.go('texts', tab));
+  for (const tab of ['welcome', 'contacts', 'trust', 'plan', 'rules', 'interface']) await screen('texts/' + tab, () => panel.go('texts', tab));
   await screen('texts/interface (группа раскрыта)', async () => { const d = page().querySelectorAll('details'); d.forEach((x) => { x.open = true; }); await settle(30); });
-  for (const tab of ['company', 'team', 'telegram', 'data', 'access', 'feed']) await screen('settings/' + tab, () => panel.go('settings', tab));
-  await screen('settings/data (самопроверка и файлы)', async () => { await panel.go('settings', 'data'); doc.getElementById('runSelfCheck').click(); doc.getElementById('checkMedia').click(); await settle(60); });
+  for (const tab of ['company', 'telegram', 'team', 'data', 'check']) await screen('settings/' + tab, () => panel.go('settings', tab));
+  await screen('settings/check (самопроверка и файлы)', async () => { await panel.go('settings', 'check'); doc.getElementById('runSelfCheck').click(); doc.getElementById('checkMedia').click(); await settle(60); });
 
   // --- окна
   const first = (list) => (list || [])[0] || {};
