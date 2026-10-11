@@ -99,3 +99,11 @@ test('приложение: словарь украинского полон, я
   assert.ok(Object.values(T.uk).every((value) => !/[ыэъ]/i.test(value)), 'русских букв в интерфейсе нет');
   assert.match(APP_JS, /\['ru', 'uk', 'en', 'es'\]/, 'переключатель языка знает украинский');
 });
+
+test('имя менеджера для украинского клиента — в украинской форме', async () => {
+  const { managerNameFor } = await import('../src/util.mjs');
+  assert.equal(managerNameFor({ managerName: 'Евгений' }, 'uk'), 'Євген');
+  assert.equal(managerNameFor({ managerName: 'Елена Петрова' }, 'uk'), 'Олена Петрова');
+  assert.equal(managerNameFor({ managerName: 'Евгений' }, 'ru'), 'Евгений');
+  assert.equal(managerNameFor({ managerName: 'Евгений' }, 'en'), 'Evgeniy');
+});
