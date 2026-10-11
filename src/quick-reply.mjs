@@ -10,8 +10,10 @@ import { userById, userByChatId } from './users.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 import { INTERACTION_TEXT } from './texts.mjs';
 import { adminCallbackAllowed, handleAdministratorReply } from './inquiries.mjs';
+import { addUk } from './languages.mjs';
 
 const OBJECT_FALLBACK = { ru: 'этот объект', en: 'this property', es: 'este inmueble' };
+addUk(OBJECT_FALLBACK);
 const PICK_LIFETIME_MS = 30 * 60 * 1000;
 const MAX_PICKS = 60;
 
@@ -41,7 +43,7 @@ function templateText(template, inquiry) {
   let body = own || String(texts.ru || texts.en || texts.es || '');
   const property = inquiry.propertyId ? data.objects.find((record) => String(record.id) === String(inquiry.propertyId)) : null;
   const name = String((user && (user.contactName || user.firstName)) || '');
-  body = body.replace(/\{(?:имя|name)\}/gi, name).replace(/\{(?:объект|property)\}/gi, property ? localized(property.title, own ? language : 'ru') : OBJECT_FALLBACK[own ? language : 'ru'] || OBJECT_FALLBACK.ru);
+  body = body.replace(/\{(?:имя|ім['’ʼ]?я|name)\}/gi, name).replace(/\{(?:объект|об['’ʼ]?єкт|property)\}/gi, property ? localized(property.title, own ? language : 'ru') : OBJECT_FALLBACK[own ? language : 'ru'] || OBJECT_FALLBACK.ru);
   return { text: body.trim(), language, missing: language !== 'ru' && !own && Boolean(body) };
 }
 

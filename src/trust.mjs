@@ -11,6 +11,7 @@ import { sendUiMessage, validHttpUrl } from './catalog.mjs';
 import { MENU_LABELS, NAVIGATION_TEXT } from './texts.mjs';
 import { acknowledgeCallback, sendManagerPhoto, whatsappRow } from './sections.mjs';
 import { imageExists } from './media.mjs';
+import { addUk, isCyrillic } from './languages.mjs';
 
 const TRUST_TEXT = {
   ru: {
@@ -53,6 +54,7 @@ const TRUST_TEXT = {
     whatsappHello: '¡Hola! Tengo una pregunta sobre vuestra empresa.',
   },
 };
+addUk(TRUST_TEXT);
 
 function copyFor(language) {
   return TRUST_TEXT[language] || TRUST_TEXT.ru;
@@ -92,7 +94,7 @@ function trustText(language) {
   const deals = Number(trust.dealsCount) || 0;
   const name = managerNameFor(contact, language);
   if (name && !imageExists(contact.photo)) lines.push('👨‍💼 ' + name);
-  if (years) lines.push(copy.years + years + ' ' + (language === 'ru' ? russianPlural(years, copy.yearsWord) : years === 1 ? copy.yearsWord[0] : copy.yearsWord[1]));
+  if (years) lines.push(copy.years + years + ' ' + (isCyrillic(language) ? russianPlural(years, copy.yearsWord) : years === 1 ? copy.yearsWord[0] : copy.yearsWord[1]));
   if (deals) lines.push(copy.deals + deals);
   if (trust.registration) lines.push(copy.registration + cleanText(trust.registration, 500));
   if (trust.officeAddress) lines.push(copy.office + cleanText(trust.officeAddress, 300));

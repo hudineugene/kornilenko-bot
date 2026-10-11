@@ -5,7 +5,7 @@ import { telegramRequest } from '../telegram.mjs';
 import { data, scheduleSave } from '../store.mjs';
 import { miniAppSettings } from './settings.mjs';
 
-const BUTTON_TEXT = { ru: '🏡 Каталог', en: '🏡 Catalog', es: '🏡 Catálogo' };
+const BUTTON_TEXT = { ru: '🏡 Каталог', uk: '🏡 Каталог', en: '🏡 Catalog', es: '🏡 Catálogo' };
 
 async function configureMiniAppButton(token) {
   if (!token) return;

@@ -10,16 +10,22 @@ import { createInquiry } from '../inquiries.mjs';
 import { propertyIdFromStartPayload } from '../catalog.mjs';
 import { withOffHoursNote } from '../hours.mjs';
 import { miniAppSettings } from './settings.mjs';
+import { LANGUAGES } from '../languages.mjs';
 
 // Кнопки, которые бот сам присылает клиенту (напоминание о просмотре, отписка, согласия, подборки) и которые должны работать.
 const KEPT_CALLBACKS = ['subs:', 'privacy:', 'vfb:', 'vcal:', 'myreq:', 'vf:', 'digest:', 'alerts:', 'saved:'];
 const NUDGE_PAUSE_MS = 12 * 60 * 60 * 1000;
-const BUTTON = { ru: '🏡 Открыть каталог', en: '🏡 Open the catalog', es: '🏡 Abrir el catálogo' };
+const BUTTON = { ru: '🏡 Открыть каталог', uk: '🏡 Відкрити каталог', en: '🏡 Open the catalog', es: '🏡 Abrir el catálogo' };
 const TEXT = {
   ru: {
     hello: 'Здравствуйте{name}! 👋\n\nКаталог проектов, запись на просмотр, расчёт стоимости и связь с менеджером теперь собраны в нашем приложении.\n\nНажмите кнопку «{button}» внизу экрана.',
     property: 'Этот проект открывается в нашем приложении: там фото, характеристики, расчёт стоимости и запись на просмотр.\n\nНажмите кнопку «{button}» внизу экрана.',
     received: 'Спасибо, сообщение передано менеджеру: он ответит вам в этом чате.\n\nПроекты, запись на просмотр и расчёт стоимости удобнее смотреть в приложении: кнопка «{button}» внизу экрана.',
+  },
+  uk: {
+    hello: 'Вітаємо{name}! 👋\n\nКаталог проєктів, запис на огляд, розрахунок вартості та зв’язок із менеджером тепер зібрані в нашому застосунку.\n\nНатисніть кнопку «{button}» внизу екрана.',
+    property: 'Цей проєкт відкривається в нашому застосунку: там фото, характеристики, розрахунок вартості та запис на огляд.\n\nНатисніть кнопку «{button}» внизу екрана.',
+    received: 'Дякуємо, повідомлення передано менеджеру: він відповість вам у цьому чаті.\n\nПроєкти, запис на огляд і розрахунок вартості зручніше переглядати в застосунку: кнопка «{button}» внизу екрана.',
   },
   en: {
     hello: 'Hello{name}! 👋\n\nThe project catalogue, viewing requests, cost calculator and contact with a manager are now all in our app.\n\nTap the “{button}” button at the bottom of the screen.',
@@ -44,7 +50,7 @@ function appOnlyCallbackAllowed(callbackData) {
 }
 
 function nudgeLanguage(user) {
-  return ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : telegramInterfaceLanguage(user);
+  return LANGUAGES.includes(user.preferredLanguage) ? user.preferredLanguage : telegramInterfaceLanguage(user);
 }
 
 async function sendAppNudge(chatId, user, token, { kind = 'hello', propertyId = '' } = {}) {

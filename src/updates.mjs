@@ -543,7 +543,7 @@ async function handleUpdate(update, token) {
       answer = [received, propertyTitle ? '🔖 ' + propertyTitle : ''].filter(Boolean).join('\n\n');
       inquiryAnswer = true;
     } else {
-      answer = user.preferredLanguage === 'en' ? 'This property is no longer available.' : user.preferredLanguage === 'es' ? 'Este inmueble ya no está disponible.' : 'Этот объект уже недоступен.';
+      answer = user.preferredLanguage === 'en' ? 'This property is no longer available.' : user.preferredLanguage === 'es' ? 'Este inmueble ya no está disponible.' : user.preferredLanguage === 'uk' ? 'Цей об’єкт уже недоступний.' : 'Этот объект уже недоступен.';
     }
     scheduleSave();
   }
@@ -607,7 +607,7 @@ async function handleUpdate(update, token) {
       } catch (error) {
         recordError('Содержимое меню', error);
         runtime.lastError = error.message;
-        answer = user.preferredLanguage === 'en' ? 'This section is temporarily unavailable. Please try again.' : user.preferredLanguage === 'es' ? 'Esta sección no está disponible temporalmente. Inténtalo de nuevo.' : 'Раздел временно недоступен. Попробуйте ещё раз.';
+        answer = user.preferredLanguage === 'en' ? 'This section is temporarily unavailable. Please try again.' : user.preferredLanguage === 'es' ? 'Esta sección no está disponible temporalmente. Inténtalo de nuevo.' : user.preferredLanguage === 'uk' ? 'Розділ тимчасово недоступний. Спробуйте ще раз.' : 'Раздел временно недоступен. Попробуйте ещё раз.';
       }
       if (!answer) {
         const heading = MENU_LABELS[user.preferredLanguage][menuItem];

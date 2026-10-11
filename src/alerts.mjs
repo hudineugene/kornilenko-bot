@@ -14,6 +14,7 @@ import { contentButtons, localizedExact, objectCaptionHtml, objectPriceText, pro
 import { acknowledgeCallback } from './sections.mjs';
 import { userUnavailableError } from './broadcasts.mjs';
 import { savedSearchMatches } from './saved-search.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 // --- Property alerts ---------------------------------------------------------
 // A client hears about a property again when it matters to them: a favourite
@@ -52,7 +53,7 @@ function normalizedSearchText(value) {
 
 function locationMatches(request, record) {
   const place = ['city', 'district', 'address', 'title']
-    .flatMap((field) => ['ru', 'en', 'es'].map((language) => localizedExact(record[field], language, 400)))
+    .flatMap((field) => LANGUAGES.map((language) => localizedExact(record[field], language, 400)))
     .join(' ')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -70,18 +71,18 @@ const SELECTION_TIER_ORDER = { exact: 0, close: 1, consider: 2 };
 function requestedCurrency(text) {
   const value = normalizedSearchText(text);
   const words = value.split(/[^\p{L}]+/u).filter(Boolean);
-  if (value.includes('$') || words.some((word) => word === 'usd' || word.startsWith('dollar') || word.startsWith('dolar') || word.startsWith('доллар'))) return 'USD';
+  if (value.includes('$') || words.some((word) => word === 'usd' || word.startsWith('dollar') || word.startsWith('dolar') || word.startsWith('доллар') || word.startsWith('долар'))) return 'USD';
   if (value.includes('£') || words.some((word) => word === 'gbp' || word.startsWith('pound') || word.startsWith('libra') || word.startsWith('фунт'))) return 'GBP';
   if (value.includes('₴') || words.some((word) => word === 'uah' || word === 'грн' || word.startsWith('грив'))) return 'UAH';
   if (value.includes('₽') || words.some((word) => word === 'rub' || word.startsWith('руб'))) return 'RUB';
-  if (value.includes('€') || words.some((word) => word === 'eur' || word.startsWith('euro') || word === 'евро')) return 'EUR';
+  if (value.includes('€') || words.some((word) => word === 'eur' || word.startsWith('euro') || word === 'евро' || word === 'євро')) return 'EUR';
   return '';
 }
 
 function requestedRentPeriod(text) {
   const words = normalizedSearchText(text).split(/[^\p{L}]+/u).filter(Boolean);
-  if (words.some((word) => word.startsWith('week') || word.startsWith('semana') || word.startsWith('недел'))) return 'week';
-  if (words.some((word) => word.startsWith('month') || word.startsWith('mensual') || word === 'mes' || word.startsWith('месяц') || word.startsWith('месяч'))) return 'month';
+  if (words.some((word) => word.startsWith('week') || word.startsWith('semana') || word.startsWith('недел') || word.startsWith('тижд') || word.startsWith('тижн'))) return 'week';
+  if (words.some((word) => word.startsWith('month') || word.startsWith('mensual') || word === 'mes' || word.startsWith('месяц') || word.startsWith('месяч') || word.startsWith('місяц') || word.startsWith('місяч'))) return 'month';
   return '';
 }
 

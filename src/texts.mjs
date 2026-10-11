@@ -1,18 +1,21 @@
 // Тексты бота на трёх языках и тексты интерфейса, редактируемые в панели.
 
 import { cleanText, clone } from './util.mjs';
+import { LANGUAGES, addUk } from './languages.mjs';
 
-const LANGUAGE_NAMES = { ru: 'Русский', en: 'English', es: 'Español' };
+const LANGUAGE_NAMES = { ru: 'Русский', uk: 'Українська', en: 'English', es: 'Español' };
 const LANGUAGE_SELECTED = {
   ru: 'Готово — выбран русский язык',
   en: 'Done — English is selected',
   es: 'Listo — has seleccionado español',
 };
+addUk(LANGUAGE_SELECTED);
 const MENU_LABELS = {
   ru: { objects: '🏘 Объекты', selection: '✨ Подбор', promotions: '🔥 Акции', favorites: '❤️ Избранное', contacts: '💬 Связаться', request: '📞 Позвоните мне', about: 'ℹ️ О компании', help: '❓ Помощь', more: '👤 Моё', guide: '🇪🇸 Как купить', language: '🌐 Сменить язык', placeholder: 'Напишите, что ищете' },
   en: { objects: '🏘 Properties', selection: '✨ Help me choose', promotions: '🔥 Offers', favorites: '❤️ Favourites', contacts: '💬 Contact us', request: '📞 Call me back', about: 'ℹ️ About', help: '❓ Help', more: '👤 My account', guide: '🇪🇸 Buying in Spain', language: '🌐 Change language', placeholder: 'Write what you are looking for' },
   es: { objects: '🏘 Inmuebles', selection: '✨ Buscar por mí', promotions: '🔥 Promociones', favorites: '❤️ Favoritos', contacts: '💬 Contactar', request: '📞 Llámame', about: 'ℹ️ La empresa', help: '❓ Ayuda', more: '👤 Mi espacio', guide: '🇪🇸 Cómo comprar', language: '🌐 Cambiar idioma', placeholder: 'Escribe qué buscas' },
 };
+addUk(MENU_LABELS);
 // Labels from earlier keyboards: clients may still tap those messages, so
 // both the long labels from before version 17 and "More" from version 17 work.
 const PREVIOUS_MENU_LABELS = {
@@ -20,6 +23,7 @@ const PREVIOUS_MENU_LABELS = {
   en: { objects: '🏘 Our properties', selection: ['✨ Help me find a property', '✨ Find for me'], contacts: '💬 Contact a manager', request: '📞 Request a call', more: ['☰ More', '👤 My space'] },
   es: { objects: '🏘 Nuestros inmuebles', selection: ['✨ Ayúdame a elegir', '✨ Búsqueda'], contacts: '💬 Contactar con un gestor', request: '📞 Solicitar una llamada', more: '☰ Más' },
 };
+addUk(PREVIOUS_MENU_LABELS);
 // Названия кнопки «Связаться», которые были в главном меню до переименования.
 // У клиента, который не обновлял чат, на клавиатуре может остаться любое из
 // них; без этого нажатие уходило как обычный текст — заявкой и ответом
@@ -29,6 +33,7 @@ const EARLIER_CONTACT_LABELS = {
   en: ['💬 Manager', '💬 Agent'],
   es: ['💬 Gestor', '💬 Asesor'],
 };
+addUk(EARLIER_CONTACT_LABELS);
 // «❤️ Favorites» до перехода на британское «Favourites»: клавиатура с этой
 // кнопкой могла остаться у клиента.
 const EARLIER_FAVORITES_LABELS = { ru: [], en: ['❤️ Favorites'], es: [] };
@@ -37,22 +42,27 @@ const LEGACY_MENU_LABELS = {
   en: { objects: 'Our properties', contacts: 'Contacts', promotions: 'Special offers', favorites: 'Favourites', request: 'Contact an agent', about: 'About us', language: 'Change language' },
   es: { objects: 'Nuestros inmuebles', contacts: 'Contactos', promotions: 'Promociones', favorites: 'Favoritos', request: 'Contactar con un agente', about: 'Sobre nosotros', language: 'Cambiar idioma' },
 };
+addUk(LEGACY_MENU_LABELS);
+addUk(EARLIER_FAVORITES_LABELS);
 const MENU_HINTS = {
   ru: 'Можно просто написать, что ищете{example}. Или выберите раздел в меню ниже 👇',
   en: 'You can simply write what you are looking for{example}. Or choose a section below 👇',
   es: 'Puedes escribir lo que buscas{example}. O elige una sección abajo 👇',
 };
+addUk(MENU_HINTS);
 // Живая строка в приветствии: сколько объектов сейчас в каталоге и где они.
 const CATALOG_SUMMARY_TEXT = {
   ru: { line: 'Сейчас в каталоге: {count} — {cities}', empty: 'Каталог пополняется — напишите, что ищете, и менеджер подберёт варианты.', one: 'объект', few: 'объекта', many: 'объектов' },
   en: { line: 'In the catalogue right now: {count} — {cities}', empty: 'The catalogue is being filled — write what you are looking for and an agent will help.', one: 'property', few: 'properties', many: 'properties' },
   es: { line: 'Ahora en el catálogo: {count} — {cities}', empty: 'El catálogo se está completando: escribe qué buscas y un asesor te ayudará.', one: 'inmueble', few: 'inmuebles', many: 'inmuebles' },
 };
+addUk(CATALOG_SUMMARY_TEXT);
 const MAIN_MENU_TEXT = {
   ru: 'Главное меню. Что вас интересует?',
   en: 'Main menu. What are you interested in?',
   es: 'Menú principal. ¿Qué te interesa?',
 };
+addUk(MAIN_MENU_TEXT);
 const MY_AREA_TEXT = {
   ru: {
     title: '👤 Моё',
@@ -76,6 +86,7 @@ const MY_AREA_TEXT = {
     recentEmpty: 'Todavía no has abierto ninguna ficha. Consulta el catálogo y aquí aparecerán los inmuebles vistos recientemente.',
   },
 };
+addUk(MY_AREA_TEXT);
 const SAVED_SEARCH_TEXT = {
   ru: {
     title: '🔔 Сохранённый поиск',
@@ -156,6 +167,7 @@ const SAVED_SEARCH_TEXT = {
     newMatch: '🔔 Nuevo inmueble según tu búsqueda guardada',
   },
 };
+addUk(SAVED_SEARCH_TEXT);
 const COMPARISON_TEXT = {
   ru: {
     title: '⚖️ Сравнение объектов',
@@ -278,6 +290,7 @@ const COMPARISON_TEXT = {
     back: 'Atrás',
   },
 };
+addUk(COMPARISON_TEXT);
 // Клиент с открытой заявкой написал условия поиска, но фраза не разобралась: вместо
 // одной реакции 👀 — короткий ответ с кнопкой мастера подбора.
 const SEARCH_UNCLEAR_TEXT = {
@@ -285,52 +298,62 @@ const SEARCH_UNCLEAR_TEXT = {
   en: "I didn't quite get the criteria. Pick them step by step — it's quick:",
   es: 'No he entendido bien los criterios. Elígelos paso a paso, es rápido:',
 };
+addUk(SEARCH_UNCLEAR_TEXT);
 
 const MANAGER_CONTACT_TEXT = {
   ru: { intro: '💬 Связь с менеджером\nВыберите удобный способ.', tapPhone: 'Нажмите на номер, чтобы позвонить.', call: 'Позвонить', whatsapp: 'WhatsApp', telegram: 'Telegram', website: 'Сайт', map: 'Карта', request: '📞 Заказать звонок', question: '❓ Задать вопрос', askQuestion: '❓ Вопрос менеджеру\nНапишите ваш вопрос. Менеджер ответит в этом чате.', whatsappHello: 'Здравствуйте! Пишу из Telegram-бота, хочу узнать об объектах.', whatsappHelloProperty: 'Здравствуйте! Интересует объект: {property}.', received: 'Спасибо! Вопрос передан менеджеру.', replyHeader: '👨‍💼 Ответ менеджера', cancel: 'Отменить' },
   en: { intro: '💬 Contact an agent\nChoose a convenient way.', tapPhone: 'Tap a phone number to call.', call: 'Call', whatsapp: 'WhatsApp', telegram: 'Telegram', website: 'Website', map: 'Map', request: '📞 Request a call', question: '❓ Ask a question', askQuestion: '❓ Question for an agent\nSend your question. An agent will reply in this chat.', whatsappHello: 'Hello! I am writing from the Telegram bot, I would like to know about your properties.', whatsappHelloProperty: 'Hello! I am interested in the property: {property}.', received: 'Thank you! Your question has been sent to an agent.', replyHeader: '👨‍💼 Agent reply', cancel: 'Cancel' },
   es: { intro: '💬 Contacto con un asesor\nElige una forma cómoda.', tapPhone: 'Pulsa un número para llamar.', call: 'Llamar', whatsapp: 'WhatsApp', telegram: 'Telegram', website: 'Sitio web', map: 'Mapa', request: '📞 Solicitar una llamada', question: '❓ Hacer una pregunta', askQuestion: '❓ Pregunta al asesor\nEscribe tu pregunta. Un asesor responderá en este chat.', whatsappHello: '¡Hola! Escribo desde el bot de Telegram, me gustaría saber más sobre sus inmuebles.', whatsappHelloProperty: '¡Hola! Me interesa el inmueble: {property}.', received: '¡Gracias! Tu pregunta ha sido enviada a un asesor.', replyHeader: '👨‍💼 Respuesta del asesor', cancel: 'Cancelar' },
 };
+addUk(MANAGER_CONTACT_TEXT);
 const NAVIGATION_TEXT = {
   ru: { guide: '🇪🇸 Как купить в Испании', guideConsult: '💬 Бесплатная консультация', mainMenu: 'Главное меню', backToCard: 'К карточке объекта', close: 'Закрыть', browse: 'Посмотреть объекты', readMore: 'Читать подробнее' },
   en: { guide: '🇪🇸 Buying in Spain', guideConsult: '💬 Free consultation', mainMenu: 'Main menu', backToCard: 'Back to property', close: 'Close', browse: 'Browse properties', readMore: 'Read more' },
   es: { guide: '🇪🇸 Cómo comprar en España', guideConsult: '💬 Consulta gratuita', mainMenu: 'Menú inicial', backToCard: 'Volver al inmueble', close: 'Cerrar', browse: 'Ver inmuebles', readMore: 'Leer más' },
 };
+addUk(NAVIGATION_TEXT);
 const INTERACTION_TEXT = {
   ru: { collapseDetails: 'К карточке объекта', failed: 'Не удалось выполнить действие. Попробуйте ещё раз.', duplicate: 'Подождите секунду…', stale: 'Это действие уже завершено. Выберите нужный раздел в меню.', unfinished: 'У вас осталась незавершённая форма. Продолжить с сохранённого шага или вернуться в главное меню?', continueForm: '▶️ Продолжить заполнение', discardForm: '✕ Закрыть форму', expired: 'Прошло больше суток, поэтому незавершённая форма была закрыта. Начните заново — ранее введённые данные не будут отправлены.', resume: '↺ Начать заново', backToMenu: '🏠 Главное меню', hideGallery: 'Скрыть фотографии и вернуться', reminderLead: '✍️ Вы начали оформлять заявку на звонок, но не закончили. Продолжим с того же места? Это займёт меньше минуты.', reminderViewing: '✍️ Вы начали запись на просмотр, но не закончили. Продолжим с того же места?', reminderSelection: '✍️ Вы начали подбор объекта, но не закончили. Продолжим с того же места? Осталось совсем немного.' },
   en: { collapseDetails: 'Back to property', failed: 'The action could not be completed. Please try again.', duplicate: 'Please wait a moment…', stale: 'This action has already finished. Choose a section from the menu.', unfinished: 'You have an unfinished form. Continue from the saved step or return to the main menu?', continueForm: '▶️ Continue form', discardForm: '✕ Close form', expired: 'More than 24 hours have passed, so the unfinished form was closed. Start again — your earlier entries will not be sent.', resume: '↺ Start again', backToMenu: '🏠 Main menu', hideGallery: 'Hide photos and go back', reminderLead: '✍️ You started a call request but did not finish it. Shall we continue where you left off? It takes less than a minute.', reminderViewing: '✍️ You started booking a viewing but did not finish it. Shall we continue where you left off?', reminderSelection: '✍️ You started a property search but did not finish it. Shall we continue where you left off? Only a few questions are left.' },
   es: { collapseDetails: 'Volver al inmueble', failed: 'No se pudo completar la acción. Inténtalo de nuevo.', duplicate: 'Espera un momento…', stale: 'Esta acción ya ha terminado. Elige una sección del menú.', unfinished: 'Tienes un formulario sin terminar. ¿Quieres continuar desde el paso guardado o volver al menú principal?', continueForm: '▶️ Continuar formulario', discardForm: '✕ Cerrar formulario', expired: 'Han pasado más de 24 horas, por lo que el formulario sin terminar se ha cerrado. Empieza de nuevo; los datos anteriores no se enviarán.', resume: '↺ Empezar de nuevo', backToMenu: '🏠 Menú inicial', hideGallery: 'Ocultar fotos y volver', reminderLead: '✍️ Empezaste a solicitar una llamada, pero no terminaste. ¿Seguimos donde lo dejaste? Tarda menos de un minuto.', reminderViewing: '✍️ Empezaste a reservar una visita, pero no terminaste. ¿Seguimos donde lo dejaste?', reminderSelection: '✍️ Empezaste la búsqueda de inmueble, pero no terminaste. ¿Seguimos donde lo dejaste? Quedan muy pocas preguntas.' },
 };
+addUk(INTERACTION_TEXT);
 const COMMAND_TEXT = {
   ru: { cancelled: 'Действие отменено. Вы вернулись в главное меню.', nothingToCancel: 'Сейчас нет незавершённых действий. Главное меню уже доступно.', unknown: 'Я не знаю такую команду. Выберите нужный раздел в меню или используйте /help.', myId: 'Ваш Telegram Chat ID:' },
   en: { cancelled: 'The action has been cancelled. You are back in the main menu.', nothingToCancel: 'There is no unfinished action right now. The main menu is ready.', unknown: 'I do not recognise that command. Choose a section from the menu or use /help.', myId: 'Your Telegram Chat ID:' },
   es: { cancelled: 'La acción se ha cancelado. Has vuelto al menú principal.', nothingToCancel: 'No hay ninguna acción pendiente. El menú principal está disponible.', unknown: 'No reconozco ese comando. Elige una sección del menú o usa /help.', myId: 'Tu ID de chat de Telegram:' },
 };
+addUk(COMMAND_TEXT);
 const EMPTY_STATE_TEXT = {
   ru: { catalog: '🏘 Каталог\nСейчас в каталоге нет доступных объектов. Менеджер поможет подобрать подходящий вариант.', favorites: '🤍 Избранное\nВ избранном пока ничего нет. Откройте каталог и нажмите 🤍 у понравившегося объекта.', promotions: '🔥 Акции\nАктивных акций сейчас нет. Посмотрите наши объекты или задайте вопрос менеджеру.' },
   en: { catalog: '🏘 Catalogue\nThere are no available properties in the catalogue right now. An agent can help you find a suitable option.', favorites: '🤍 Favourites\nYour favourites are empty. Open the catalogue and tap 🤍 on a property you like.', promotions: '🔥 Offers\nThere are no active offers right now. Browse our properties or ask an agent.' },
   es: { catalog: '🏘 Catálogo\nAhora mismo no hay inmuebles disponibles en el catálogo. Un asesor puede ayudarte a encontrar una opción.', favorites: '🤍 Favoritos\nTodavía no tienes favoritos. Abre el catálogo y pulsa 🤍 en un inmueble que te guste.', promotions: '🔥 Promociones\nNo hay promociones activas ahora mismo. Consulta nuestros inmuebles o pregunta a un asesor.' },
 };
+addUk(EMPTY_STATE_TEXT);
 const PROPERTY_TYPE_LABELS = {
   ru: { apartment: 'Квартира', house: 'Дом', villa: 'Вилла', townhouse: 'Таунхаус', land: 'Участок', commercial: 'Коммерческая недвижимость', newbuild: 'Новостройка', other: 'Недвижимость' },
   en: { apartment: 'Apartment', house: 'House', villa: 'Villa', townhouse: 'Townhouse', land: 'Land', commercial: 'Commercial property', newbuild: 'New development', other: 'Property' },
   es: { apartment: 'Apartamento', house: 'Casa', villa: 'Villa', townhouse: 'Adosado', land: 'Terreno', commercial: 'Propiedad comercial', newbuild: 'Obra nueva', other: 'Inmueble' },
 };
+addUk(PROPERTY_TYPE_LABELS);
 const PROPERTY_BADGE_LABELS = {
   ru: { new: 'Новинка', recommended: 'Рекомендуем', exclusive: 'Эксклюзив', price_reduced: 'Цена снижена' },
   en: { new: 'New', recommended: 'Recommended', exclusive: 'Exclusive', price_reduced: 'Price reduced' },
   es: { new: 'Nuevo', recommended: 'Recomendado', exclusive: 'Exclusivo', price_reduced: 'Precio rebajado' },
 };
+addUk(PROPERTY_BADGE_LABELS);
 const PROPERTY_CONDITION_LABELS = {
   ru: { new: 'Новое', renovated: 'После ремонта', needs_renovation: 'Требует ремонта', under_construction: 'Строится' },
   en: { new: 'Brand new', renovated: 'Renovated', needs_renovation: 'Needs renovation', under_construction: 'Under construction' },
   es: { new: 'A estrenar', renovated: 'Reformado', needs_renovation: 'Para reformar', under_construction: 'En construcción' },
 };
+addUk(PROPERTY_CONDITION_LABELS);
 const PROPERTY_ACTION_TEXT = {
   ru: { details: 'Подробнее', contact: 'Связаться', photos: 'Фото', contactManager: 'Связаться', share: 'Поделиться', sharePrefix: 'Посмотрите этот объект: ', viewWebsite: 'Посмотреть на сайте', videoTour: 'Видео-тур', openMap: 'Открыть карту', interest: 'Заказать звонок', viewing: 'Записаться на просмотр', viewingShort: 'Просмотр', similarShort: 'Похожие', mapShort: 'Карта', siteShort: 'Сайт', shareShort: 'Друзьям', availability: 'Уточнить доступность', similar: 'Похожие объекты', question: 'Задать вопрос', gallery: 'Все фотографии', favoriteButton: 'Добавить в избранное', favoriteRemoveButton: 'Убрать из избранного', cardFavorite: 'В избранное', cardFavoriteRemove: 'Из избранного', favoriteAdd: 'Добавлено в избранное', favoriteRemove: 'Удалено из избранного', askQuestion: '❓ Вопрос по объекту\nНапишите ваш вопрос по этому объекту. Можно отправить текст, фотографию или голосовое сообщение.', cancel: 'Отменить действие', cancelled: 'Действие отменено', received: 'Спасибо! Менеджер получил ваше обращение и ответит в этом чате.', emptyFavorites: 'В избранном пока нет объектов. Добавляйте их кнопкой ❤️ под карточкой.', forRent: 'Аренда', forSale: 'Продажа', reserved: 'Забронирован', available: 'Доступен', priceMonth: '/ месяц', priceWeek: '/ неделю', priceOnRequest: 'Цена по запросу', priceFrom: 'от', floor: 'Этаж', bedroomsLabel: 'Спальни', bathroomsLabel: 'Санузлы', areaLabel: 'Площадь', plotAreaLabel: 'Участок', distanceSeaLabel: 'До моря', conditionLabel: 'Состояние', specificationsTitle: 'Характеристики', marketTitle: '📊 Рынок', marketLine: '{place}: по нашему каталогу обычно ≈ {price} (объектов: {count})', marketHigher: 'Этот объект — на {percent}% дороже', marketLower: 'Этот объект — на {percent}% дешевле', marketSame: 'Этот объект — примерно на этом уровне', shareList: '📤 Поделиться списком', shareListReady: 'Список готов — объектов: {count}. Отправьте ссылку семье или друзьям: по ней в боте откроются эти карточки, и можно отметить понравившиеся ❤️.', shareListSend: '📤 Отправить', shareListEmpty: 'Сначала добавьте объекты в избранное', shareListNoLink: 'Ссылка пока недоступна. Попробуйте позже.', sharedHeading: '📤 Вам прислали список · объектов: {count}\nЛистайте ◀️ ▶️, отмечайте 🤍', sharedMarked: '🤍 В вашем списке отметили: «{title}»', sharedMenu: '📤 Список', listUnavailable: 'Этот список больше недоступен. Откройте каталог — там все актуальные объекты.', listSharePrefix: 'Список объектов: ', descriptionTitle: 'Описание', reference: '№ объекта:', updated: 'Обновлено', propertyUnavailable: 'Этот объект уже недоступен.', propertyHeading: 'Объект', requestViewingPrefix: 'Запрос на просмотр:', questionPrefix: 'Вопрос по объекту:', interestPrefix: 'Интересует объект:', noSimilar: '🏘 Похожие объекты\nСейчас похожих объектов нет. Менеджер может предложить другие варианты.', similarHeading: 'Похожие объекты', similarWhy: 'Почему подходит: {reasons}', similarNote: 'Обратите внимание: {warnings}', similarReasonType: 'тот же тип', similarReasonRelatedType: 'близкий тип', similarReasonCity: 'тот же город', similarReasonDistrict: 'тот же район', similarReasonPrice: 'близкая цена', similarReasonBedrooms: 'похожее число спален', similarReasonArea: 'похожая площадь', similarWarningPriceDifferent: 'цена заметно отличается', similarWarningPriceMissing: 'цена указана не у всех объектов', similarWarningCurrency: 'цена в другой валюте', managerPrompt: 'Как менеджер может помочь по этому объекту?', photosUnavailable: 'Фотографии пока недоступны', nextProperty: 'Следующий объект →', nextPrompt: 'Что вы хотите сделать дальше?', askPrice: 'Узнать цену', askPriceShort: 'Цена?', promotionAsk: 'Узнать подробнее' },
   en: { details: 'Details', contact: 'Contact us', photos: 'Photos', contactManager: 'Contact us', share: 'Share property', sharePrefix: 'Take a look at this property: ', viewWebsite: 'View on website', videoTour: 'Video tour', openMap: 'Open map', interest: 'Request a call', viewing: 'Book a viewing', viewingShort: 'Viewing', similarShort: 'Similar', mapShort: 'Map', siteShort: 'Site', shareShort: 'Share', availability: 'Check availability', similar: 'Similar properties', question: 'Ask a question', gallery: 'All photos', favoriteButton: 'Add to favourites', favoriteRemoveButton: 'Remove from favourites', cardFavorite: 'Save', cardFavoriteRemove: 'Saved ✓', favoriteAdd: 'Added to favourites', favoriteRemove: 'Removed from favourites', askQuestion: '❓ Question about the property\nSend your question about this property. You can send text, a photo, or a voice message.', cancel: 'Cancel', cancelled: 'Action cancelled', received: 'Thank you! An agent received your message and will reply in this chat.', emptyFavorites: 'Your favourites are empty. Add properties with the ❤️ button under a card.', forRent: 'For rent', forSale: 'For sale', reserved: 'Reserved', available: 'Available', priceMonth: '/ month', priceWeek: '/ week', priceOnRequest: 'Price on request', priceFrom: 'from', floor: 'Floor', bedroomsLabel: 'Bedrooms', bathroomsLabel: 'Bathrooms', areaLabel: 'Area', plotAreaLabel: 'Plot', distanceSeaLabel: 'Distance to sea', inRussian: '🇷🇺 Text in Russian — translation coming soon', conditionLabel: 'Condition', specificationsTitle: 'Key details', marketTitle: '📊 Market', marketLine: '{place}: in our catalogue typically ≈ {price} ({count} properties)', marketHigher: 'This property is {percent}% more expensive', marketLower: 'This property is {percent}% cheaper', marketSame: 'This property is about average', shareList: '📤 Share the shortlist', shareListReady: 'Your shortlist is ready — properties: {count}. Send the link to family or friends: it opens these cards in the bot, and they can mark favourites with ❤️.', shareListSend: '📤 Send', shareListEmpty: 'Add properties to favourites first', shareListNoLink: 'The link is not available yet. Please try later.', sharedHeading: '📤 You were sent a shortlist · properties: {count}\nSwipe ◀️ ▶️, mark favourites with 🤍', sharedMarked: '🤍 Someone marked from your shortlist: “{title}”', sharedMenu: '📤 Shortlist', listUnavailable: 'This shortlist is no longer available. Open the catalogue for all current properties.', listSharePrefix: 'A shortlist of properties: ', descriptionTitle: 'About the property', reference: 'Ref:', updated: 'Updated', propertyUnavailable: 'This property is no longer available.', propertyHeading: 'Property', requestViewingPrefix: 'Viewing request:', questionPrefix: 'Question about:', interestPrefix: 'Interested in:', noSimilar: '🏘 Similar properties\nNo similar properties are available right now. An agent can suggest alternatives.', similarHeading: 'Similar properties', similarWhy: 'Why it fits: {reasons}', similarNote: 'Please note: {warnings}', similarReasonType: 'same type', similarReasonRelatedType: 'related type', similarReasonCity: 'same city', similarReasonDistrict: 'same area', similarReasonPrice: 'similar price', similarReasonBedrooms: 'similar number of bedrooms', similarReasonArea: 'similar floor area', similarWarningPriceDifferent: 'the price differs noticeably', similarWarningPriceMissing: 'some properties have no listed price', similarWarningCurrency: 'the price uses another currency', managerPrompt: 'How would you like the agent to help with this property?', photosUnavailable: 'Photos are not available yet', nextProperty: 'Next property →', nextPrompt: 'What would you like to do next?', askPrice: 'Ask for the price', askPriceShort: 'Price?', promotionAsk: 'Learn more' },
   es: { details: 'Detalles', contact: 'Contactar', photos: 'Fotos', contactManager: 'Contactar', share: 'Compartir inmueble', sharePrefix: 'Mira este inmueble: ', viewWebsite: 'Ver en el sitio web', videoTour: 'Visita en vídeo', openMap: 'Abrir mapa', interest: 'Solicitar una llamada', viewing: 'Pedir visita', viewingShort: 'Visita', similarShort: 'Similares', mapShort: 'Mapa', siteShort: 'Web', shareShort: 'Enviar', availability: 'Consultar disponibilidad', similar: 'Inmuebles similares', question: 'Hacer una pregunta', gallery: 'Todas las fotos', favoriteButton: 'Añadir a favoritos', favoriteRemoveButton: 'Quitar de favoritos', cardFavorite: 'Guardar', cardFavoriteRemove: 'Quitar', favoriteAdd: 'Añadido a favoritos', favoriteRemove: 'Eliminado de favoritos', askQuestion: '❓ Pregunta sobre el inmueble\nEscribe tu pregunta sobre este inmueble. Puedes enviar texto, una foto o un mensaje de voz.', cancel: 'Cancelar acción', cancelled: 'Acción cancelada', received: '¡Gracias! Un asesor ha recibido tu mensaje y responderá en este chat.', emptyFavorites: 'Todavía no tienes favoritos. Añade inmuebles con el botón ❤️ de la ficha.', forRent: 'Alquiler', forSale: 'Venta', reserved: 'Reservado', available: 'Disponible', priceMonth: '/ mes', priceWeek: '/ semana', priceOnRequest: 'Precio a consultar', priceFrom: 'desde', floor: 'Planta', bedroomsLabel: 'Dormitorios', bathroomsLabel: 'Baños', areaLabel: 'Superficie', plotAreaLabel: 'Parcela', distanceSeaLabel: 'Distancia al mar', inRussian: '🇷🇺 Texto en ruso — traducción próximamente', conditionLabel: 'Estado', specificationsTitle: 'Características', marketTitle: '📊 Mercado', marketLine: '{place}: en nuestro catálogo suele rondar {price} ({count} inmuebles)', marketHigher: 'Este inmueble es un {percent}% más caro', marketLower: 'Este inmueble es un {percent}% más barato', marketSame: 'Este inmueble está en la media', shareList: '📤 Compartir la lista', shareListReady: 'Tu lista ya está lista — inmuebles: {count}. Envía el enlace a tu familia o amigos: abre estas fichas en el bot y pueden marcar sus favoritos con ❤️.', shareListSend: '📤 Enviar', shareListEmpty: 'Primero añade inmuebles a favoritos', shareListNoLink: 'El enlace aún no está disponible. Inténtalo más tarde.', sharedHeading: '📤 Te han enviado una lista · inmuebles: {count}\nPasa con ◀️ ▶️ y marca favoritos con 🤍', sharedMarked: '🤍 Han marcado de tu lista: «{title}»', sharedMenu: '📤 Lista', listUnavailable: 'Esta lista ya no está disponible. Abre el catálogo para ver todos los inmuebles actuales.', listSharePrefix: 'Una lista de inmuebles: ', descriptionTitle: 'Descripción', reference: 'Ref.:', updated: 'Actualizado', propertyUnavailable: 'Este inmueble ya no está disponible.', propertyHeading: 'Inmueble', requestViewingPrefix: 'Solicitud de visita:', questionPrefix: 'Pregunta sobre:', interestPrefix: 'Interés en:', noSimilar: '🏘 Inmuebles similares\nNo hay inmuebles similares disponibles ahora mismo. Un asesor puede sugerirte alternativas.', similarHeading: 'Inmuebles similares', similarWhy: 'Por qué encaja: {reasons}', similarNote: 'Ten en cuenta: {warnings}', similarReasonType: 'mismo tipo', similarReasonRelatedType: 'tipo relacionado', similarReasonCity: 'misma ciudad', similarReasonDistrict: 'misma zona', similarReasonPrice: 'precio similar', similarReasonBedrooms: 'número de dormitorios similar', similarReasonArea: 'superficie similar', similarWarningPriceDifferent: 'el precio es bastante diferente', similarWarningPriceMissing: 'algunos inmuebles no muestran el precio', similarWarningCurrency: 'el precio está en otra moneda', managerPrompt: '¿Cómo quieres que te ayude el asesor con este inmueble?', photosUnavailable: 'Las fotos aún no están disponibles', nextProperty: 'Siguiente inmueble →', nextPrompt: '¿Qué quieres hacer ahora?', askPrice: 'Consultar el precio', askPriceShort: '¿Precio?', promotionAsk: 'Más información' },
 };
+addUk(PROPERTY_ACTION_TEXT);
 const LEAD_FORM_TEXT = {
   ru: {
     askName: 'Как к вам обращаться?',
@@ -432,6 +455,7 @@ const LEAD_FORM_TEXT = {
     success: '¡Gracias! Tu solicitud ha sido enviada. Un asesor te llamará a la hora indicada.',
   },
 };
+addUk(LEAD_FORM_TEXT);
 const VIEWING_FORM_TEXT = {
   ru: {
     askDate: '📅 Когда вам удобно посмотреть этот объект?',
@@ -524,6 +548,7 @@ const VIEWING_FORM_TEXT = {
     phoneForViewingSaved: '¡Gracias! Un asesor lo usará el día de la visita.',
   },
 };
+addUk(VIEWING_FORM_TEXT);
 const SELECTION_FORM_TEXT = {
   ru: {
     intro: '✨ Я задам несколько коротких вопросов и передам ваши пожелания менеджеру.',
@@ -730,18 +755,21 @@ const SELECTION_FORM_TEXT = {
     warningBedroomsMissing: 'el asesor confirmará los dormitorios',
   },
 };
+addUk(SELECTION_FORM_TEXT);
 
 const LANGUAGE_PICKER_TEXT = {
   ru: '🌐 Choose your language\nElige tu idioma\nВыберите язык',
   en: '🌐 Choose your language\nElige tu idioma\nВыберите язык',
   es: '🌐 Choose your language\nElige tu idioma\nВыберите язык',
 };
+addUk(LANGUAGE_PICKER_TEXT);
 
 const BOT_COMMAND_DESCRIPTIONS = {
   ru: { start: 'Запустить бота', menu: 'Открыть главное меню', requests: 'Мои заявки', language: 'Сменить язык', privacy: 'Мои данные и политика', help: 'Помощь', cancel: 'Отменить текущее действие' },
   en: { start: 'Start the bot', menu: 'Open main menu', requests: 'My requests', language: 'Change language', privacy: 'My data and policy', help: 'Help', cancel: 'Cancel current action' },
   es: { start: 'Iniciar el bot', menu: 'Abrir el menú principal', requests: 'Mis solicitudes', language: 'Cambiar idioma', privacy: 'Mis datos y política', help: 'Ayuda', cancel: 'Cancelar la acción actual' },
 };
+addUk(BOT_COMMAND_DESCRIPTIONS);
 
 // Данные клиента и политика конфиденциальности: раздел «Мои данные», где
 // видно, что бот хранит, и где клиент сам удаляет всё о себе. Черновик
@@ -802,6 +830,7 @@ const PRIVACY_TEXT = {
     nothing: 'Aparte del idioma, el bot todavía no guarda nada sobre ti.',
   },
 };
+addUk(PRIVACY_TEXT);
 
 // "My requests": the client sees what happened to what they sent.
 const MY_REQUESTS_TEXT = {
@@ -887,6 +916,7 @@ const MY_REQUESTS_TEXT = {
     kept: 'De acuerdo, la visita se mantiene.',
   },
 };
+addUk(MY_REQUESTS_TEXT);
 
 // What the client agrees to receive: broadcasts and property alerts.
 const SUBSCRIPTION_TEXT = {
@@ -933,6 +963,7 @@ const SUBSCRIPTION_TEXT = {
     newsConsent: 'Las novedades y ofertas se envían solo con tu consentimiento: pulsa «Novedades y promociones» para recibirlas. Puedes desactivarlas cuando quieras.',
   },
 };
+addUk(SUBSCRIPTION_TEXT);
 
 // The purchase calculator under a property for sale.
 const CALCULATOR_TEXT = {
@@ -1000,6 +1031,7 @@ const CALCULATOR_TEXT = {
     discuss: '💬 Consultar',
   },
 };
+addUk(CALCULATOR_TEXT);
 
 // Messages about a viewing after the request: confirmation, a reminder the
 // evening before and a question about how it went.
@@ -1089,6 +1121,7 @@ const VIEWING_NOTICE_TEXT = {
     calendarGone: 'La visita está cancelada o sin confirmar: no hay nada que añadir al calendario.',
   },
 };
+addUk(VIEWING_NOTICE_TEXT);
 
 // Подборка, которую менеджер предлагает клиенту из панели: сообщение по умолчанию и кнопка, открывающая карточки в чате.
 const OFFER_TEXT = {
@@ -1096,6 +1129,7 @@ const OFFER_TEXT = {
   en: { message: 'We picked some properties for you — open the list and browse the cards.', button: '🏘 View the list' },
   es: { message: 'Hemos elegido inmuebles para ti: abre la lista y recorre las fichas.', button: '🏘 Ver la lista' },
 };
+addUk(OFFER_TEXT);
 
 // Every phrase below is shown to a bot user. The administrator can override it
 // without changing this file; these values remain the safe multilingual defaults.
@@ -1272,6 +1306,7 @@ const CATALOG_FILTER_TEXT = {
     customPriceCancelled: 'La introducción del precio se ha cancelado. El filtro no ha cambiado.',
   },
 };
+addUk(CATALOG_FILTER_TEXT);
 
 const PROPERTY_ALERT_TEXT = {
   ru: {
@@ -1302,6 +1337,7 @@ const PROPERTY_ALERT_TEXT = {
     turnedOn: 'Los avisos sobre inmuebles vuelven a estar activados.',
   },
 };
+addUk(PROPERTY_ALERT_TEXT);
 
 const INTERFACE_TEXT_TARGETS = {
   languageSelected: { target: LANGUAGE_SELECTED, scalarKey: 'text' },
@@ -1337,7 +1373,7 @@ const INTERFACE_TEXT_TARGETS = {
 
 const INTERFACE_TEXT_DEFAULTS = Object.fromEntries(Object.entries(INTERFACE_TEXT_TARGETS).map(([group, descriptor]) => [
   group,
-  Object.fromEntries(['ru', 'en', 'es'].map((language) => [
+  Object.fromEntries(LANGUAGES.map((language) => [
     language,
     descriptor.scalarKey
       ? { [descriptor.scalarKey]: descriptor.target[language] }
@@ -1350,7 +1386,7 @@ function normalizedInterfaceText(value, strict = false) {
   const result = {};
   for (const [group, languages] of Object.entries(INTERFACE_TEXT_DEFAULTS)) {
     result[group] = {};
-    for (const language of ['ru', 'en', 'es']) {
+    for (const language of LANGUAGES) {
       const defaults = languages[language];
       const source = incoming[group] && incoming[group][language] && typeof incoming[group][language] === 'object'
         ? incoming[group][language]
@@ -1388,7 +1424,7 @@ function normalizedInterfaceText(value, strict = false) {
 function interfaceTextOverrides(effective) {
   const overrides = {};
   for (const [group, languages] of Object.entries(INTERFACE_TEXT_DEFAULTS)) {
-    for (const language of ['ru', 'en', 'es']) {
+    for (const language of LANGUAGES) {
       for (const [key, fallback] of Object.entries(languages[language])) {
         const value = effective[group] && effective[group][language] && effective[group][language][key];
         // Тексты при сохранении обрезаются по краям, поэтому и словарь сравниваем
@@ -1408,7 +1444,7 @@ function interfaceTextOverrides(effective) {
 function applyInterfaceText(value) {
   const next = normalizedInterfaceText(value);
   for (const [group, descriptor] of Object.entries(INTERFACE_TEXT_TARGETS)) {
-    for (const language of ['ru', 'en', 'es']) {
+    for (const language of LANGUAGES) {
       const languageValue = next[group][language];
       if (descriptor.scalarKey) descriptor.target[language] = languageValue[descriptor.scalarKey];
       else descriptor.target[language] = clone(languageValue);
@@ -1420,7 +1456,7 @@ function applyInterfaceText(value) {
 // Слова, которые клиент выбрал кнопкой при записи на просмотр («Por la tarde», «This weekend»), — по-русски, для менеджера.
 function russianViewingText(text) {
   const value = String(text || '');
-  for (const code of ['en', 'es']) {
+  for (const code of ['uk', 'en', 'es']) {
     const copy = VIEWING_FORM_TEXT[code];
     for (const key of ['timeOptions', 'dateOptions']) {
       const index = copy && Array.isArray(copy[key]) ? copy[key].indexOf(value) : -1;

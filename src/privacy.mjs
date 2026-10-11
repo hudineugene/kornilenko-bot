@@ -13,6 +13,7 @@ import { notifyAdministratorAction } from './inquiries.mjs';
 import { recordError } from './analytics.mjs';
 import { localized } from './catalog.mjs';
 import { viewingDateLabel } from './viewings.mjs';
+import { LANGUAGES, LOCALES, addUk } from './languages.mjs';
 
 function copyFor(user) {
   const language = (user && user.preferredLanguage) || 'ru';
@@ -23,9 +24,16 @@ function copyFor(user) {
 function firstContactDate(value, language) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return String(value).slice(0, 10);
-  const locale = language === 'en' ? 'en-GB' : language === 'es' ? 'es-ES' : 'ru-RU';
+  const locale = LOCALES[language] || LOCALES.ru;
   return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
 }
+
+const STORED_WORDS = {
+  ru: { name: 'имя в Telegram', username: 'имя пользователя', phone: 'телефон', contactName: 'имя для связи', requests: 'заявки и сообщения', favorites: 'избранное', comparison: 'сравнение', saved: 'сохранённый поиск', sharedLists: 'списки, которыми вы поделились', recent: 'просмотренные объекты', since: 'первое обращение' },
+  en: { name: 'Telegram name', username: 'username', phone: 'phone', contactName: 'contact name', requests: 'requests and messages', favorites: 'favourites', comparison: 'comparison', saved: 'saved search', sharedLists: 'shortlists you shared', recent: 'viewed properties', since: 'first contact' },
+  es: { name: 'nombre en Telegram', username: 'usuario', phone: 'teléfono', contactName: 'nombre de contacto', requests: 'solicitudes y mensajes', favorites: 'favoritos', comparison: 'comparación', saved: 'búsqueda guardada', sharedLists: 'listas que compartiste', recent: 'inmuebles vistos', since: 'primer contacto' },
+};
+addUk(STORED_WORDS);
 
 // Список «что хранится» собирается из того, что действительно есть: пустых
 // строк вида «телефон: нет» клиенту не нужно.
@@ -33,11 +41,7 @@ function storedSummary(user) {
   const language = (user && user.preferredLanguage) || 'ru';
   // Подписи в виде «что: сколько» — так не нужно согласовывать числа со словами
   // в трёх языках.
-  const words = {
-    ru: { name: 'имя в Telegram', username: 'имя пользователя', phone: 'телефон', contactName: 'имя для связи', requests: 'заявки и сообщения', favorites: 'избранное', comparison: 'сравнение', saved: 'сохранённый поиск', sharedLists: 'списки, которыми вы поделились', recent: 'просмотренные объекты', since: 'первое обращение' },
-    en: { name: 'Telegram name', username: 'username', phone: 'phone', contactName: 'contact name', requests: 'requests and messages', favorites: 'favourites', comparison: 'comparison', saved: 'saved search', sharedLists: 'shortlists you shared', recent: 'viewed properties', since: 'first contact' },
-    es: { name: 'nombre en Telegram', username: 'usuario', phone: 'teléfono', contactName: 'nombre de contacto', requests: 'solicitudes y mensajes', favorites: 'favoritos', comparison: 'comparación', saved: 'búsqueda guardada', sharedLists: 'listas que compartiste', recent: 'inmuebles vistos', since: 'primer contacto' },
-  }[language] || {};
+  const words = STORED_WORDS[language] || STORED_WORDS.ru;
   const rows = [];
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
   if (fullName) rows.push('• ' + words.name + ': ' + fullName);
@@ -97,7 +101,7 @@ async function sendPrivacyCentre(chatId, user, token) {
 // Политика бывает длинной: отправляем частями, чтобы Telegram не обрезал.
 async function sendPrivacyPolicy(chatId, user, token) {
   const copy = copyFor(user);
-  const whole = [copy.policyTitle, '', copy.policy].join('\n');
+  const whole = [copy.policyTitle, '', policyFor(user.preferredLanguage || 'ru')].join('\n');
   // Политика — первый абзац сразу, остальное сворачиваемой цитатой; очень длинная (больше одного сообщения) идёт частями, как раньше.
   if (whole.length <= 3800) {
     const collapsed = collapsedTail(whole, 3);
@@ -194,10 +198,23 @@ function phoneNotice(language) {
   return cleanText(copy.phoneNotice, 300);
 }
 
+const POLICY_DRAFT = /\[[^\]]+\]/;
+
+// Политика на языке клиента. Украинский, пока владелец его не заполнил, показывает заполненную русскую: черновик с
+// подстановками в скобках клиенту не нужен.
+function policyFor(language) {
+  const own = String((PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).policy || '');
+  if (language === 'uk' && (!own.trim() || POLICY_DRAFT.test(own))) {
+    const russian = String(PRIVACY_TEXT.ru.policy || '');
+    if (russian.trim() && !POLICY_DRAFT.test(russian)) return russian;
+  }
+  return own;
+}
+
 // Черновик политики узнаётся по подстановкам в квадратных скобках.
 function policyIsDraft() {
-  const values = ['ru', 'en', 'es'].map((language) => String((PRIVACY_TEXT[language] || {}).policy || ''));
-  return values.some((value) => !value.trim() || /\[[^\]]+\]/.test(value));
+  const values = LANGUAGES.map((language) => policyFor(language));
+  return values.some((value) => !value.trim() || POLICY_DRAFT.test(value));
 }
 
 export {

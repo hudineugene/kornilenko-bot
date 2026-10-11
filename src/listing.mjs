@@ -23,6 +23,7 @@ import {
   recordImages,
   validHttpUrl,
 } from './catalog.mjs';
+import { LANGUAGES, addUk } from './languages.mjs';
 
 const MESSAGE_LIMIT = 4096;
 const CAPTION_LIMIT = 1024;
@@ -34,6 +35,7 @@ const LISTING_TEXT = {
   en: { priceDrop: 'Price reduced', sold: 'Sold', openBot: '🤖 View in the bot', map: 'Map', video: 'Video', website: 'Website', truncated: 'Description shortened — see the full listing with photos in the bot ↓', tagDeal: { sale: 'forsale', rent: 'forrent' } },
   es: { priceDrop: 'Precio rebajado', sold: 'Vendido', openBot: '🤖 Ver en el bot', map: 'Mapa', video: 'Vídeo', website: 'Web', truncated: 'Descripción abreviada: ficha completa con fotos en el bot ↓', tagDeal: { sale: 'venta', rent: 'alquiler' } },
 };
+addUk(LISTING_TEXT);
 
 // Значок перед заголовком абзаца описания — по смыслу заголовка; нет подходящего — маркер «▸».
 const LABEL_ICONS = [
@@ -142,7 +144,7 @@ function fitDescription(blocks, budget) {
 // с полным описанием (до 4096 знаков). Без фотографий в любом режиме — одно текстовое сообщение.
 // options.reserve — сколько знаков уйдёт на подпись канала; options.source — метка источника в ссылке на бота.
 function buildListing(record, language, options = {}) {
-  const lang = ['ru', 'en', 'es'].includes(language) ? language : 'ru';
+  const lang = LANGUAGES.includes(language) ? language : 'ru';
   const copy = PROPERTY_ACTION_TEXT[lang] || PROPERTY_ACTION_TEXT.ru;
   const text = textOf(lang);
   const reserve = Math.max(0, Number(options.reserve) || 0);

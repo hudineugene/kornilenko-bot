@@ -31,6 +31,7 @@ import {
   refreshGroups,
   rememberTopic,
 } from './groups.mjs';
+import { LANGUAGES, addUk } from './languages.mjs';
 
 // Member permissions a group can set for everyone (setChatPermissions).
 const CHAT_PERMISSIONS = [
@@ -96,6 +97,7 @@ function channelPostForProperty(record, language, body = {}) {
 }
 
 const CHANNEL_BUTTON_TEXT = { ru: '🤖 Смотреть в боте', en: '🤖 View in the bot', es: '🤖 Ver en el bot' };
+addUk(CHANNEL_BUTTON_TEXT);
 
 // Публикация объявления в выбранные группы — общий код с командой /post (listing-publish.mjs).
 async function publishListing(res, record, body) {
@@ -318,7 +320,7 @@ async function handleGroupApi(req, res, url) {
     if (!record) return json(res, 404, { error: 'Объект не найден' }), true;
     const group = groupById(cleanText(body.groupId, 60));
     if (!group) return json(res, 404, { error: 'Канал не найден' }), true;
-    const language = ['ru', 'en', 'es'].includes(body.language) ? body.language : 'ru';
+    const language = LANGUAGES.includes(body.language) ? body.language : 'ru';
     const post = channelPostForProperty(record, language, body);
     if (!post.text && !post.image) return json(res, 400, { error: 'Пост пустой: заполните карточку объекта' }), true;
     try {

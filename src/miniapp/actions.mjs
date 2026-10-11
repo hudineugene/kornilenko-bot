@@ -18,6 +18,7 @@ import { sendMessage } from '../telegram.mjs';
 import { menuKeyboard } from '../menus.mjs';
 import { withOffHoursNote } from '../hours.mjs';
 import { findRecord } from './data.mjs';
+import { LANGUAGES } from '../languages.mjs';
 
 const COMPARISON_LIMIT = 3;
 const MAX_FAVORITES = 500;
@@ -55,7 +56,7 @@ function visibleOnly(list, language) {
 }
 
 function actionLanguage(user, language) {
-  return ['ru', 'en', 'es'].includes(language) ? language : user.preferredLanguage || 'ru';
+  return LANGUAGES.includes(language) ? language : user.preferredLanguage || 'ru';
 }
 
 function toggleFavorite(user, id, on, token, appLanguage = '') {

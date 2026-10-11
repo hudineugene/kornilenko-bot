@@ -13,6 +13,7 @@ import { parseContentRecord } from './admin-input.mjs';
 import { queuePropertyAlerts } from './alerts.mjs';
 import { broadcastCardContent } from './broadcasts.mjs';
 import { PLACES } from './places.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 // Каждая ветка сама отвечает клиенту и возвращает управление. Если не подошла
 // ни одна, функция возвращает false — тогда запрос ищут в других модулях.
@@ -26,7 +27,7 @@ async function handleContentApi(req, res, url) {
     const session = requireAuth(req, res, true);
     if (!session) return;
     const body = await readJson(req);
-    const language = ['ru', 'en', 'es'].includes(body.language) ? body.language : 'ru';
+    const language = LANGUAGES.includes(body.language) ? body.language : 'ru';
     const record = data.objects.find((item) => String(item.id) === String(body.propertyId || ''));
     if (!record) return json(res, 404, { error: 'Объект не найден' });
     const card = broadcastCardContent(record, language, cleanText(body.message, 1000));
@@ -38,11 +39,11 @@ async function handleContentApi(req, res, url) {
     if (!session) return;
     try {
       const body = await readJson(req);
-      const language = ['ru', 'en', 'es'].includes(body.language) ? body.language : 'ru';
-      const empty = !['ru', 'en', 'es'].some((code) => cleanText(body.title && body.title[code], 160));
+      const language = LANGUAGES.includes(body.language) ? body.language : 'ru';
+      const empty = !LANGUAGES.some((code) => cleanText(body.title && body.title[code], 160));
       // Название в редакторе может быть ещё пустым — показываем карточку без него, а не ошибку.
       const record = parseContentRecord({ ...body, title: empty ? { ru: '—' } : body.title, imageDataUrlsByLanguage: {}, removeImageIdsByLanguage: {} }, 'objects');
-      if (empty) record.title = { ru: '', en: '', es: '' };
+      if (empty) record.title = Object.fromEntries(LANGUAGES.map((code) => [code, '']));
       const markup = contentButtons(record, language, null, 'property', null);
       const rows = markup ? markup.inline_keyboard.map((row) => row.map((button) => button.text)) : [];
       // В предпросмотре нет самих фотографий, но у настоящей карточки с двумя и более есть кнопка «📷 Фото · N»: показываем её.
@@ -81,7 +82,7 @@ async function handleContentApi(req, res, url) {
     if (!record) return json(res, 404, { error: 'Изображение не найдено' });
     const imageId = cleanText(url.searchParams.get('imageId'), 80);
     const searchableImages = mediaMatch[1] === 'objects' || mediaMatch[1] === 'promotions'
-      ? ['ru', 'en', 'es'].flatMap((language) => recordImages(record, language))
+      ? LANGUAGES.flatMap((language) => recordImages(record, language))
       : recordImages(record);
     const image = imageId ? searchableImages.find((item) => String(item.id) === imageId) : (record.image || searchableImages[0]);
     if (!imageExists(image)) return json(res, 404, { error: 'Изображение не найдено' });
@@ -196,17 +197,17 @@ async function handleContentApi(req, res, url) {
     if (index < 0) return json(res, 404, { error: 'Объект не найден' });
     const copy = clone(data.objects[index]);
     const now = new Date().toISOString();
-    const suffix = { ru: ' (копия)', en: ' (copy)', es: ' (copia)' };
+    const suffix = { ru: ' (копия)', uk: ' (копія)', en: ' (copy)', es: ' (copia)' };
     copy.id = crypto.randomUUID();
     copy.status = 'hidden';
     copy.reference = '';
     copy.createdAt = now;
     copy.updatedAt = now;
-    copy.title = Object.fromEntries(['ru', 'en', 'es'].map((language) => {
+    copy.title = Object.fromEntries(LANGUAGES.map((language) => {
       const title = cleanText(copy.title && copy.title[language], 160);
       return [language, title ? cleanText(title + suffix[language], 160) : ''];
     }));
-    for (const language of ['ru', 'en', 'es']) {
+    for (const language of LANGUAGES) {
       const images = copy.imagesByLanguage && Array.isArray(copy.imagesByLanguage[language]) ? copy.imagesByLanguage[language] : [];
       for (const image of images) image.id = crypto.randomUUID();
     }

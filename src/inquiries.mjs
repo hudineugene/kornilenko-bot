@@ -18,6 +18,7 @@ import { PLACES } from './places.mjs';
 import { acknowledgeCallback, propertyRequestText } from './sections.mjs';
 import { recordBroadcastResponse, userUnavailableError } from './broadcasts.mjs';
 import { sendStatusNotice } from './status.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 const MAX_INQUIRIES = 5000;
 const MAX_INQUIRY_MESSAGES = 200;
@@ -262,7 +263,7 @@ function createInquiry(user, text, context = {}) {
     id: crypto.randomUUID(),
     userId: String(user.id),
     chatId: String(user.chatId),
-    language: ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'ru',
+    language: LANGUAGES.includes(user.preferredLanguage) ? user.preferredLanguage : 'ru',
     text: cleanText(text, 4000),
     type: ['question', 'interest', 'selection', 'viewing', 'lead', 'general'].includes(context.type) ? context.type : 'general',
     propertyId: cleanText(context.propertyId, 100),

@@ -7,8 +7,9 @@ import { data, scheduleSave } from './store.mjs';
 import { normalizeWorkingHours } from './data-format.mjs';
 import { whatsappContactUrl } from './catalog.mjs';
 import { cleanText, localDayKey, managerNameFor } from './util.mjs';
+import { LANGUAGES, addUk } from './languages.mjs';
 
-const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
+const LOCALES = { ru: 'ru-RU', uk: 'uk-UA', en: 'en-GB', es: 'es-ES' };
 // Without office hours set, admin messages keep the old daytime window.
 const DEFAULT_ADMIN_WINDOW = { from: 9, to: 21 };
 
@@ -45,6 +46,10 @@ function openingPhrase(opening, language, now = new Date()) {
   const weekday = new Intl.DateTimeFormat(LOCALES[language] || LOCALES.ru, { weekday: 'long' }).format(opening);
   if (language === 'en') return (days === 0 ? 'today' : days === 1 ? 'tomorrow' : 'on ' + weekday) + ' from ' + time;
   if (language === 'es') return (days === 0 ? 'hoy' : days === 1 ? 'mañana' : 'el ' + weekday) + ' a partir de las ' + time;
+  if (language === 'uk') {
+    const ukrainianDay = { понеділок: 'у понеділок', вівторок: 'у вівторок', середа: 'у середу', четвер: 'у четвер', 'пʼятниця': 'у пʼятницю', 'п’ятниця': 'у п’ятницю', субота: 'у суботу', неділя: 'у неділю' }[weekday] || 'у ' + weekday;
+    return (days === 0 ? 'сьогодні' : days === 1 ? 'завтра' : ukrainianDay) + ' з ' + time;
+  }
   const russianDay = { понедельник: 'в понедельник', вторник: 'во вторник', среда: 'в среду', четверг: 'в четверг', пятница: 'в пятницу', суббота: 'в субботу', воскресенье: 'в воскресенье' }[weekday] || weekday;
   return (days === 0 ? 'сегодня' : days === 1 ? 'завтра' : russianDay) + ' с ' + time;
 }
@@ -56,7 +61,7 @@ function offHoursNote(language, now = new Date()) {
   if (!hours.enabled || isWorkingTime(now, hours)) return '';
   const opening = nextOpening(now, hours);
   if (!opening) return '';
-  const lang = ['ru', 'en', 'es'].includes(language) ? language : 'ru';
+  const lang = LANGUAGES.includes(language) ? language : 'ru';
   return String(hours.note[lang] || hours.note.ru).replaceAll('{next}', openingPhrase(opening, lang, now));
 }
 
@@ -77,15 +82,17 @@ function replyPromise(language, now = new Date()) {
   const minutes = Number(hours.replyMinutes) || 0;
   if (!minutes) return '';
   if (hours.enabled && !isWorkingTime(now, hours)) return '';
-  const lang = ['ru', 'en', 'es'].includes(language) ? language : 'ru';
+  const lang = LANGUAGES.includes(language) ? language : 'ru';
   if (minutes < 60) {
     if (lang === 'en') return 'We usually reply within ' + minutes + ' minutes.';
     if (lang === 'es') return 'Solemos responder en ' + minutes + ' minutos.';
+    if (lang === 'uk') return 'Зазвичай відповідаємо за ' + minutes + ' ' + plural(minutes, 'хвилину', 'хвилини', 'хвилин') + '.';
     return 'Обычно отвечаем за ' + minutes + ' ' + plural(minutes, 'минуту', 'минуты', 'минут') + '.';
   }
   const inHours = Math.round(minutes / 60);
   if (lang === 'en') return 'We usually reply within ' + (inHours === 1 ? 'an hour' : inHours + ' hours') + '.';
   if (lang === 'es') return 'Solemos responder en ' + (inHours === 1 ? 'una hora' : inHours + ' horas') + '.';
+  if (lang === 'uk') return 'Зазвичай відповідаємо протягом ' + (inHours === 1 ? 'години' : inHours + ' ' + plural(inHours, 'години', 'годин', 'годин')) + '.';
   return 'Обычно отвечаем в течение ' + (inHours === 1 ? 'часа' : inHours + ' ' + plural(inHours, 'часа', 'часов', 'часов')) + '.';
 }
 
@@ -110,12 +117,13 @@ const WHAT_NEXT_TEXT = {
   en: { contact: '👨‍💼 Your contact: ', hours: '🕘 Working hours: ', whatsapp: '🟢 Faster on WhatsApp: ' },
   es: { contact: '👨‍💼 Tu contacto: ', hours: '🕘 Horario: ', whatsapp: '🟢 Más rápido por WhatsApp: ' },
 };
+addUk(WHAT_NEXT_TEXT);
 
 // Что клиент видит после заявки помимо «спасибо»: кто на связи, в какие часы
 // работают и где можно написать быстрее. Берётся из настроек владельца; что не
 // заполнено — строки нет (выдуманных обещаний бот не даёт).
 function whatNextLines(language, now = new Date()) {
-  const lang = ['ru', 'en', 'es'].includes(language) ? language : 'ru';
+  const lang = LANGUAGES.includes(language) ? language : 'ru';
   const copy = WHAT_NEXT_TEXT[lang];
   const contacts = data.contacts || {};
   const hours = workingHours();

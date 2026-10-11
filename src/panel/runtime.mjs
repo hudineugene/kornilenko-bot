@@ -1261,7 +1261,7 @@ function globalSearchMatches(query) {
     return (userName(user) + " " + (user.username || "") + " " + (user.phone || "") + " " + (user.id || "")).toLowerCase().indexOf(needle) >= 0;
   }).slice(0, 5);
   var objects = (state.objects || []).filter(function (record) {
-    var words = ["ru", "en", "es"].map(function (code) { return localized(record.title, code) + " " + localized(record.city, code); }).join(" ");
+    var words = ["ru", "uk", "en", "es"].map(function (code) { return localized(record.title, code) + " " + localized(record.city, code); }).join(" ");
     return (words + " " + (record.reference || "") + " " + (record.id || "")).toLowerCase().indexOf(needle) >= 0;
   }).slice(0, 5);
   return { clients: clients, objects: objects };

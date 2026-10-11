@@ -4,7 +4,8 @@
 
 import crypto from 'node:crypto';
 
-const DEFAULT_MAX_AGE_SECONDS = 24 * 60 * 60;
+// Приложение остаётся открытым в Telegram днями, а данные входа не обновляются: срок взят с запасом.
+const DEFAULT_MAX_AGE_SECONDS = 3 * 24 * 60 * 60;
 
 // → { ok: true, user, authDate, startParam } или { ok: false, reason }
 function validateInitData(initData, botToken, options = {}) {

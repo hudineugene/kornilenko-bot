@@ -18,6 +18,7 @@ import { imageExists, imageHasTransparency } from './media.mjs';
 import { buildListing, plainOf } from './listing.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { applyPrivateChatStatus } from './users.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 // What the bot saw in the group: enough to answer, delete or pin a message.
 const GROUP_MESSAGE_LIMIT = 200;
@@ -788,7 +789,7 @@ function newGroupPost(fields) {
     pin: Boolean(fields.pin),
     notify: fields.notify !== false,
     // Объявление об объекте: текст и фотографии собираются в момент отправки, поэтому хранится только «что» и «на каком языке».
-    listing: fields.listing && fields.listing.objectId ? { objectId: cleanText(fields.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(fields.listing.language) ? fields.listing.language : 'ru', layout: fields.listing.layout === 'split' ? 'split' : 'single', ...(fields.listing.priceDrop === true ? { priceDrop: true } : {}) } : null,
+    listing: fields.listing && fields.listing.objectId ? { objectId: cleanText(fields.listing.objectId, 100), language: LANGUAGES.includes(fields.listing.language) ? fields.listing.language : 'ru', layout: fields.listing.layout === 'split' ? 'split' : 'single', ...(fields.listing.priceDrop === true ? { priceDrop: true } : {}) } : null,
     status: 'scheduled',
     sendAt: fields.sendAt,
     createdAt: new Date().toISOString(),

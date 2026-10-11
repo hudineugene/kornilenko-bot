@@ -16,6 +16,7 @@ import { propertyRequestText } from './sections.mjs';
 import { closeMovedViewing, parseViewingDate, sendViewingConfirmation, viewingDayForOption, viewingIsUpcoming, viewingMoveLine } from './viewings.mjs';
 import { withOffHoursNote } from './hours.mjs';
 import { availableSlotDays, bookedViewings, freeTimes, slotFree, slotSettings, slotsEnabled } from './slots.mjs';
+import { LANGUAGES, LOCALES } from './languages.mjs';
 
 function savedLeadOption(user, language, field) {
   const copy = LEAD_FORM_TEXT[language] || LEAD_FORM_TEXT.ru;
@@ -110,7 +111,7 @@ function preferredTimeWithDate(value, language, answeredAt) {
   const date = new Date(answeredAt || Date.now());
   if (!Number.isFinite(date.getTime())) return text;
   if (optionIndex === 1) date.setDate(date.getDate() + 1);
-  const locale = language === 'en' ? 'en-GB' : language === 'es' ? 'es-ES' : 'ru-RU';
+  const locale = LOCALES[language] || LOCALES.ru;
   const calendarDate = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
   return text + ' (' + calendarDate + ')';
 }
@@ -241,7 +242,7 @@ function isStaleFormControl(text) {
   const value = String(text || '').trim();
   if (!value) return false;
   const keys = ['confirm', 'cancel', 'edit', 'editName', 'editPhone', 'editTime', 'restart', 'editDate', 'editDeal', 'editType', 'editLocation', 'editBudget', 'editBedrooms'];
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LANGUAGES) {
     const interaction = INTERACTION_TEXT[language];
     if (interaction && [interaction.continueForm, interaction.discardForm, interaction.resume, interaction.backToMenu].includes(value)) return true;
     for (const source of [LEAD_FORM_TEXT[language], VIEWING_FORM_TEXT[language], SELECTION_FORM_TEXT[language], CATALOG_FILTER_TEXT[language]]) {
@@ -535,7 +536,7 @@ function viewingDateValue(value, copy, language, now = new Date()) {
   const index = copy.dateOptions.indexOf(value);
   if (index < 0 || index > 2) return value;
   const date = new Date(now);
-  const locale = language === 'en' ? 'en-GB' : language === 'es' ? 'es-ES' : 'ru-RU';
+  const locale = LOCALES[language] || LOCALES.ru;
   if (index === 2) {
     const formatter = { format: (value) => formatDayMonth(value, language) };
     // On Sunday "at the weekend" means today, not the next weekend.
@@ -657,12 +658,12 @@ function closeWords(first, second) {
 // вариант ответа, справа — начала слов, которыми это пишут от руки. Языки
 // вместе: клиент может ответить по-русски и в английской анкете.
 const ANSWER_SYNONYMS = [
-  { option: /покупк|buy|comprar/i, typed: ['куп', 'покуп', 'приобрет', 'buy', 'purchas', 'compr'] },
-  { option: /аренд|rent|alquilar/i, typed: ['снять', 'сним', 'сдач', 'аренд', 'rent', 'leas', 'alquil'] },
+  { option: /покупк|купівл|buy|comprar/i, typed: ['куп', 'покуп', 'приобрет', 'придб', 'buy', 'purchas', 'compr'] },
+  { option: /аренд|оренд|rent|alquilar/i, typed: ['снять', 'сним', 'сдач', 'аренд', 'зняти', 'знім', 'оренд', 'орендув', 'винайм', 'rent', 'leas', 'alquil'] },
   { option: /квартир|apartment|apartamento/i, typed: ['квартир', 'студи', 'flat', 'studio', 'apartm', 'apartam', 'pis'] },
-  { option: /вилла|house|casa/i, typed: ['дом', 'вилл', 'коттедж', 'таунхаус', 'hous', 'villa', 'cottage', 'cas', 'chalet', 'adosad'] },
-  { option: /участок|land|terreno/i, typed: ['участ', 'земл', 'сотк', 'land', 'plot', 'terren', 'solar', 'parcel'] },
-  { option: /коммерч|commercial|comercial/i, typed: ['коммерч', 'офис', 'магазин', 'помещен', 'бизнес', 'commerc', 'office', 'shop', 'busines', 'local', 'negoci'] },
+  { option: /вилла|вілла|будин|house|casa/i, typed: ['дом', 'вилл', 'коттедж', 'таунхаус', 'будин', 'дім', 'вілл', 'котедж', 'hous', 'villa', 'cottage', 'cas', 'chalet', 'adosad'] },
+  { option: /участок|ділянк|land|terreno/i, typed: ['участ', 'земл', 'сотк', 'ділянк', 'земельн', 'land', 'plot', 'terren', 'solar', 'parcel'] },
+  { option: /коммерч|комерц|commercial|comercial/i, typed: ['коммерч', 'офис', 'магазин', 'помещен', 'бизнес', 'комерц', 'комерційн', 'офіс', 'приміщ', 'бізнес', 'commerc', 'office', 'shop', 'busines', 'local', 'negoci'] },
 ];
 
 function matchingOptions(list, matches) {
@@ -675,7 +676,7 @@ function matchingOptions(list, matches) {
 function mentionsTime(text) {
   // «3.11» — это дата, поэтому время с точкой («17.30») отдельно не ищем: только «17:30», «17 ч», «после 16», слова.
   // Границу слова ставим через (?<![\p{L}\p{N}]): \b в JavaScript знает только латиницу и «после 16» не находил.
-  return /\d{1,2}:\d{2}|(?<![\p{L}\p{N}])\d{1,2}\s?(?:h|ч|am|pm)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:после|до|около|after|before|at|around|despu[eé]s|antes|a las)\s+\d|(?<![\p{L}\p{N}])(?:в|at|a las)\s+\d{1,2}[.:]\d{2}|(?<![\p{L}\p{N}])\d{1,2}\s?час|(?<![\p{L}\p{N}])(?:в|на|at|a las|a la)\s+(?:[01]?\d|2[0-3])(?![\p{L}\p{N}:.,]|\s*(?:числа|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|de\s))|утр|вечер|днём|днем|обед|утром|morning|afternoon|evening|ma[nñ]ana por|tarde|noche/iu.test(String(text));
+  return /\d{1,2}:\d{2}|(?<![\p{L}\p{N}])\d{1,2}\s?(?:h|ч|am|pm)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:после|після|до|около|близько|after|before|at|around|despu[eé]s|antes|a las)\s+\d|(?<![\p{L}\p{N}])(?:в|о|об|at|a las)\s+\d{1,2}[.:]\d{2}|(?<![\p{L}\p{N}])\d{1,2}\s?(?:час|год)|(?<![\p{L}\p{N}])(?:в|на|о|об|at|a las|a la)\s+(?:[01]?\d|2[0-3])(?![\p{L}\p{N}:.,]|\s*(?:числа|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря|січня|лютого|березня|квітня|травня|червня|липня|серпня|вересня|жовтня|листопада|грудня|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|de\s))|утр|вечер|днём|днем|обед|утром|вранці|зранку|вечір|ввечері|вдень|обід|morning|afternoon|evening|ma[nñ]ana por|tarde|noche/iu.test(String(text));
 }
 
 function optionFromText(text, options) {

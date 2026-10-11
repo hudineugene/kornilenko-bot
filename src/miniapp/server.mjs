@@ -8,7 +8,7 @@ import os from 'node:os';
 import { cleanText } from '../util.mjs';
 import { data } from '../store.mjs';
 import { ADMIN_ALLOWED_HOSTS, ADMIN_ASSETS, FONT_ASSETS, MINIAPP_ASSETS } from '../config.mjs';
-import { markFunnel, recordPropertyEvent } from '../analytics.mjs';
+import { markFunnel, recordError, recordPropertyEvent } from '../analytics.mjs';
 import { imageBytes, imageExists } from '../media.mjs';
 import { validateInitData } from './auth.mjs';
 import {
@@ -21,6 +21,7 @@ import { userById } from '../users.mjs';
 import { APP_CSS, APP_HTML, APP_JS } from './assets.mjs';
 import { miniAppSettings } from './settings.mjs';
 import { privateAddress } from './network.mjs';
+import { LANGUAGES } from '../languages.mjs';
 
 const MAX_BODY = 16 * 1024;
 // Заявки (запись, звонок, вопрос) — строго; сердечки, сравнение и счётчики — свободнее: листая каталог, их ставят десятками.
@@ -190,13 +191,13 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST') {
-    if (who.guest) return sendJson(res, 401, { error: 'Откройте приложение из Telegram, чтобы записаться или сохранить', reason: who.reason });
+    if (who.guest) return sendJson(res, 401, { error: 'Откройте приложение из Telegram, чтобы записаться или сохранить', reason: who.reason, code: 'auth-' + (who.reason || 'empty') });
     const lightRoute = ['/favorite', '/compare', '/track'].includes(route);
     const bucket = lightRoute ? TOGGLE_LIMIT : REQUEST_LIMIT;
     if (rateLimited((lightRoute ? 'light:' : 'write:') + who.tgUser.id, bucket)) return sendJson(res, 429, { error: 'Слишком много действий подряд. Попробуйте через несколько минут.', code: 'too-many' });
     const body = await readJson(req);
     const user = userFor(who.tgUser);
-    const language = ['ru', 'en', 'es'].includes(body.lang) ? body.lang : appLanguage('', user, who.tgUser.language_code);
+    const language = LANGUAGES.includes(body.lang) ? body.lang : appLanguage('', user, who.tgUser.language_code);
     try {
       if (route === '/favorite') return sendJson(res, 200, toggleFavorite(user, cleanText(body.id, 100), body.on, token, language));
       if (route === '/compare') return sendJson(res, 200, toggleCompare(user, cleanText(body.id, 100), body.on, language));
@@ -267,6 +268,8 @@ async function handleMiniAppRequest(req, res) {
     if (!res.headersSent) {
       if (error && error.status && error.status < 500) return sendJson(res, error.status, { error: error.message, code: error.code || '' });
       console.error('Ошибка Mini App:', error && error.message);
+      // Попадает в журнал ошибок панели: клиент увидел «Не получилось», владельцу нужна причина.
+      try { recordError('Приложение в Telegram', error); } catch { /* журнал недоступен */ }
       sendJson(res, 500, { error: 'Внутренняя ошибка' });
     }
   }

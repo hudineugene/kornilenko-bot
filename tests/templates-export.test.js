@@ -164,7 +164,7 @@ test.describe('property copies and order', () => {
     const copy = data.objects[index + 1];
     assert.equal(copy.id, id);
     assert.equal(copy.status, 'hidden', 'not shown to clients until checked');
-    assert.deepEqual(copy.title, { ru: 'Вилла у моря (копия)', en: 'Sea villa (copy)', es: '' });
+    assert.deepEqual(copy.title, { ru: 'Вилла у моря (копия)', uk: '', en: 'Sea villa (copy)', es: '' });
     assert.equal(copy.reference, '');
     assert.equal(copy.imagesByLanguage.ru[0].storageFile, 'abc.jpg');
     assert.notEqual(copy.imagesByLanguage.ru[0].id, 'photo-1');

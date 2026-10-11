@@ -31,6 +31,7 @@ import {
   PROPERTY_CONDITION_LABELS,
   PROPERTY_TYPE_LABELS,
 } from './texts.mjs';
+import { isCyrillic } from './languages.mjs';
 
 const INDEX_MARKS = ['1️⃣', '2️⃣', '3️⃣'];
 
@@ -78,7 +79,7 @@ function recordValues(record, language) {
   const city = localizedExact(record.city, language, 160);
   const district = localizedExact(record.district, language, 160);
   const floor = [cleanText(record.floor, 20), cleanText(record.floors, 20)].filter(Boolean).join('/');
-  const areaUnit = language === 'ru' ? 'м²' : 'm²';
+  const areaUnit = isCyrillic(language) ? 'м²' : 'm²';
   return {
     price: objectPriceText(record, language),
     location: [city, district].filter(Boolean).join(', '),
@@ -141,7 +142,7 @@ function comparisonText(user) {
   const values = records.map((record) => recordValues(record, language));
   const numbers = comparableNumbers(records);
   const symbol = numbers.currency === 'EUR' ? '€' : numbers.currency;
-  const unit = language === 'ru' ? 'м²' : 'm²';
+  const unit = isCyrillic(language) ? 'м²' : 'm²';
   values.forEach((value, index) => {
     if (numbers.pricePerM2[index]) value.pricePerM2 = formatMoney(Math.round(numbers.pricePerM2[index]), symbol, language, 0) + '/' + unit;
     if (numbers.purchaseCosts[index]) value.purchaseCosts = '≈ ' + formatMoney(Math.round(numbers.purchaseCosts[index]), symbol, language, 0);

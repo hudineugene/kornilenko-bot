@@ -11,9 +11,10 @@ import { recordError } from './analytics.mjs';
 import { markUnavailable } from './users.mjs';
 import { sendMessage, sendPhotoMessage } from './telegram.mjs';
 import { escapeTelegramHtml, localized, objectCaptionHtml, propertyReadyForLanguage, recordImages, validHttpUrl } from './catalog.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 function broadcastUsers(entry) {
-  const languages = Array.isArray(entry.languages) ? entry.languages.filter((language) => ['ru', 'en', 'es'].includes(language)) : [];
+  const languages = Array.isArray(entry.languages) ? entry.languages.filter((language) => LANGUAGES.includes(language)) : [];
   const requiredTags = Array.isArray(entry.tags) ? entry.tags.map((tag) => String(tag).toLocaleLowerCase('ru-RU')) : [];
   const pipelineStages = Array.isArray(entry.pipelineStages) ? entry.pipelineStages.filter((stage) => PIPELINE_STAGES.includes(stage)) : [];
   const sources = Array.isArray(entry.sources) ? entry.sources.map((source) => String(source).toLocaleLowerCase('ru-RU')) : [];

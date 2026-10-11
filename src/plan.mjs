@@ -17,6 +17,7 @@ import { withOffHoursNote } from './hours.mjs';
 import { temporaryDeliveryError, userUnavailableError } from './broadcasts.mjs';
 import { INTERACTION_TEXT, MENU_LABELS } from './texts.mjs';
 import { DEFAULT_BUY_PLAN, normalizeBuyPlan } from './data-format.mjs';
+import { addUk } from './languages.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const REMIND_AFTER_MS = 6 * DAY_MS;
@@ -104,6 +105,7 @@ const PLAN_TEXT = {
     menu: '🏠 Menú inicial',
   },
 };
+addUk(PLAN_TEXT);
 
 function planCopy(language) {
   return PLAN_TEXT[language] || PLAN_TEXT.ru;

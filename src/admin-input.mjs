@@ -9,6 +9,7 @@ import { data } from './store.mjs';
 import { validHttpUrl } from './catalog.mjs';
 // Счёт попыток входа живёт рядом с картой попыток, в admin-http.
 import { LOGIN_LIMIT_PER_ADDRESS, LOGIN_LIMIT_TOTAL, attemptKey, expandIpv6, forgetLoginAttempts, loginAllowed, loginAttempts, parseUploadedImage, rememberFailedLogin } from './admin-http.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 function replyTemplateInput(body) {
   const title = cleanText(body && body.title, 80);
@@ -19,7 +20,7 @@ function replyTemplateInput(body) {
 
 function translatedInput(value, maxLength, required = false) {
   const result = {};
-  for (const language of ['ru', 'en', 'es']) result[language] = cleanText(value && value[language], maxLength);
+  for (const language of LANGUAGES) result[language] = cleanText(value && value[language], maxLength);
   if (required && !result.ru && !result.en && !result.es) throw new Error('Заполните текст хотя бы на одном языке');
   return result;
 }
@@ -27,7 +28,7 @@ function translatedInput(value, maxLength, required = false) {
 function messagesInput(value) {
   const incomingMessages = value && typeof value === 'object' ? value : {};
   const nextMessages = {};
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LANGUAGES) {
     const incoming = incomingMessages[language] || {};
     nextMessages[language] = {
       greeting: cleanText(incoming.greeting, 4000),
@@ -44,7 +45,7 @@ function messagesInput(value) {
 function menuInput(value) {
   const incomingMenu = value && typeof value === 'object' ? value : {};
   const nextMenu = {};
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LANGUAGES) {
     const incoming = incomingMenu[language] || {};
     nextMenu[language] = {};
     for (const key of ['objects', 'contacts', 'promotions', 'about']) {
@@ -110,12 +111,12 @@ function validatePartsBackup(backup) {
 function validatePartsPayload(backup) {
   validatePartsBackup(backup);
   validateStoredImage(backup.contacts && backup.contacts.photo, 'фото менеджера');
-  for (const language of ['ru', 'en', 'es']) validateStoredImage(backup.welcomeImages && backup.welcomeImages[language], 'приветствие ' + language);
+  for (const language of LANGUAGES) validateStoredImage(backup.welcomeImages && backup.welcomeImages[language], 'приветствие ' + language);
   for (const record of backup.objects || []) {
     validateStoredImage(record && record.image, 'objects');
     for (const image of (record && Array.isArray(record.images) ? record.images : [])) validateStoredImage(image, 'objects gallery');
     if (record && record.imagesByLanguage && typeof record.imagesByLanguage === 'object') {
-      for (const language of ['ru', 'en', 'es']) {
+      for (const language of LANGUAGES) {
         for (const image of (Array.isArray(record.imagesByLanguage[language]) ? record.imagesByLanguage[language] : [])) {
           validateStoredImage(image, 'objects ' + language + ' gallery');
         }
@@ -126,14 +127,14 @@ function validatePartsPayload(backup) {
 
 function validateBackupPayload(backup) {
   validateBackupStructure(backup);
-  for (const language of ['ru', 'en', 'es']) validateStoredImage(backup.welcomeImages && backup.welcomeImages[language], 'приветствие ' + language);
+  for (const language of LANGUAGES) validateStoredImage(backup.welcomeImages && backup.welcomeImages[language], 'приветствие ' + language);
   validateStoredImage(backup.contacts && backup.contacts.photo, 'фото менеджера');
   for (const key of ['objects', 'promotions', 'broadcasts']) {
     for (const record of backup[key] || []) {
       validateStoredImage(record && record.image, key);
       for (const image of (record && Array.isArray(record.images) ? record.images : [])) validateStoredImage(image, key + ' gallery');
       if ((key === 'objects' || key === 'promotions') && record && record.imagesByLanguage && typeof record.imagesByLanguage === 'object') {
-        for (const language of ['ru', 'en', 'es']) {
+        for (const language of LANGUAGES) {
           for (const image of (Array.isArray(record.imagesByLanguage[language]) ? record.imagesByLanguage[language] : [])) {
             validateStoredImage(image, key + ' ' + language + ' gallery');
           }
@@ -207,11 +208,11 @@ function parseContentImages(body, currentImages, language) {
 function parseContentRecord(body, kind, existing = {}) {
   const now = new Date().toISOString();
   const localizedImageKind = kind === 'objects' || kind === 'promotions';
-  const currentImagesByLanguage = localizedImageKind ? normalizePropertyImages(existing) : { ru: [], en: [], es: [] };
-  const imagesByLanguage = localizedImageKind ? Object.fromEntries(['ru', 'en', 'es'].map((language) => [
+  const currentImagesByLanguage = localizedImageKind ? normalizePropertyImages(existing) : { ru: [], uk: [], en: [], es: [] };
+  const imagesByLanguage = localizedImageKind ? Object.fromEntries(LANGUAGES.map((language) => [
     language,
     parseContentImages(body, currentImagesByLanguage[language], language),
-  ])) : { ru: [], en: [], es: [] };
+  ])) : { ru: [], uk: [], en: [], es: [] };
   const mapUrl = kind === 'objects' ? cleanText(body.mapUrl, 500) : '';
   const videoUrl = kind === 'objects' ? cleanText(body.videoUrl, 500) : '';
   const common = {
@@ -295,8 +296,8 @@ function rulesConflict(candidate, exceptId = '') {
 function parseBroadcast(body, existing = {}, options = {}) {
   const requireMessages = options.requireMessages !== false;
   const requireSelectedTexts = options.requireSelectedTexts !== false;
-  const messages = translatedInput(body.messages || (body.text ? { ru: body.text, en: body.text, es: body.text } : {}), 4000, requireMessages);
-  const languages = Array.isArray(body.languages) ? body.languages.filter((language) => ['ru', 'en', 'es'].includes(language)) : [];
+  const messages = translatedInput(body.messages || (body.text ? Object.fromEntries(LANGUAGES.map((code) => [code, body.text])) : {}), 4000, requireMessages);
+  const languages = Array.isArray(body.languages) ? body.languages.filter((language) => LANGUAGES.includes(language)) : [];
   if (requireSelectedTexts) {
     if (!languages.length) throw new Error('Выберите хотя бы один язык аудитории');
     for (const language of languages) {

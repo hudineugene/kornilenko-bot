@@ -7,8 +7,9 @@ import { cleanText, delay } from './util.mjs';
 import { data, saveDataNow } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { GENERAL_TOPIC_ID, groupById, groupList, messageLink, newGroupPost, postToGroup, publishBlocker, refreshGroup } from './groups.mjs';
+import { LANGUAGES } from './languages.mjs';
 
-const LISTING_LANGUAGES = ['ru', 'en', 'es'];
+const LISTING_LANGUAGES = LANGUAGES;
 const MAX_LISTING_TARGETS = 20;
 const MAX_SCHEDULED_POSTS = 50;
 // Telegram разрешает в группу около 20 сообщений в минуту: между группами делаем паузу, а в одну — альбом и текст.

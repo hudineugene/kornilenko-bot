@@ -1,3 +1,4 @@
+import { addUk, isCyrillic } from './languages.mjs';
 // Тексты недельного дайджеста и мягкого возврата. Отдельным файлом: их читают и
 // каталог (заголовок списка), и сам модуль рассылки.
 
@@ -60,6 +61,7 @@ const DIGEST_TEXT = {
     nothing: 'Ahora mismo no hay nada que mostrar.',
   },
 };
+addUk(DIGEST_TEXT);
 
 function digestCopy(language) {
   return DIGEST_TEXT[language] || DIGEST_TEXT.ru;
@@ -70,7 +72,7 @@ function comebackText(language, count) {
   const copy = digestCopy(language);
   const tens = count % 100;
   const ones = count % 10;
-  const index = language === 'ru'
+  const index = isCyrillic(language)
     ? (tens >= 11 && tens <= 14 ? 2 : ones === 1 ? 0 : ones >= 2 && ones <= 4 ? 1 : 2)
     : (count === 1 ? 0 : 1);
   return copy.comeback.replace('{count}', () => count + ' ' + copy.comebackForms[index]);

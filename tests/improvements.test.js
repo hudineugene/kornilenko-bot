@@ -62,11 +62,20 @@ test.describe('language from Telegram', () => {
   });
 
   test('a neighbouring language gets the Russian welcome, not a language screen', async () => {
-    const client = newcomer('uk');
+    const client = newcomer('be');
     const sent = await client.say('/start');
-    assert.equal(client.user.preferredLanguage, 'ru', 'украинскому Telegram русский ближе английского');
+    assert.equal(client.user.preferredLanguage, 'ru', 'белорусскому Telegram русский ближе английского');
     assert.match(sent[0].body.text, /^Здравствуйте/);
     assert.ok(buttonsOf(sent[0].body.reply_markup).includes(MENU.ru.language), 'язык угадан — кнопка «🌐» сразу в приветствии');
+  });
+
+  test('a Ukrainian Telegram gets the Ukrainian welcome and menu', async () => {
+    const client = newcomer('uk', 'Олена');
+    const sent = await client.say('/start');
+    assert.equal(client.user.preferredLanguage, 'uk');
+    assert.match(sent[0].body.text, /^(Вітаю|Вітаємо|Добрий день)/);
+    assert.ok(buttonsOf(sent[0].body.reply_markup).includes(MENU.uk.more), 'меню на украинском');
+    assert.ok(!/Здравствуйте|Объекты/.test(sent[0].body.text + buttonsOf(sent[0].body.reply_markup).join(' ')), 'русских слов в меню нет');
   });
 
   test('any other language gets the English welcome with a language button', async () => {
@@ -92,7 +101,7 @@ test.describe('language from Telegram', () => {
   test('/language on the first contact shows the picker', async () => {
     const client = newcomer('ru');
     const sent = await client.say('/language');
-    assert.deepEqual(callbacksOf(sent[0].body.reply_markup), ['language:ru', 'language:en', 'language:es']);
+    assert.deepEqual(callbacksOf(sent[0].body.reply_markup), ['language:ru', 'language:uk', 'language:en', 'language:es']);
   });
 });
 

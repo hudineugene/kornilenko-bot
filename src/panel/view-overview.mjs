@@ -568,7 +568,7 @@ function funnelTable(title, rows, tracked, labelOf) {
 function funnelBlock(funnel) {
   if (!funnel || !funnel.joined) return "";
   var tracked = Boolean(funnel.trackedFrom);
-  var languageName = { ru: "Русский", en: "English", es: "Español", unknown: "Язык не выбран" };
+  var languageName = { ru: "Русский", uk: "Українська", en: "English", es: "Español", unknown: "Язык не выбран" };
   return '<div class="funnel-report"><div class="week-subtitle">Что сделали новые клиенты недели</div>' +
     barList(funnelSteps(funnel), funnel.joined) +
     // Шаги не вложены: заявку можно оставить, ни разу не открыв «Подробнее», — поэтому это отдельные показатели, а не воронка.
@@ -673,7 +673,7 @@ VIEWS.reports = {
       return { id: record.id, title: localized(record.title, "ru") || record.reference || record.id, views: Number(stats.impressions || stats.views || 0), details: Number(stats.details || 0), inquiries: catalogPropertyStats(record).inquiries };
     }).sort(function (a, b) { return b.views - a.views; });
     var counts = state.languageCounts || {};
-    var languages = { ru: counts.ru, en: counts.en, es: counts.es, unknown: counts.unknown };
+    var languages = { ru: counts.ru, uk: counts.uk || 0, en: counts.en, es: counts.es, unknown: counts.unknown };
     var campaigns = (state.broadcasts || []).filter(function (entry) { return entry.sent; });
 
     host.innerHTML =
@@ -695,7 +695,7 @@ VIEWS.reports = {
       "</div>" +
       '<div class="grid cols-2 gap-bottom">' +
         '<div class="card"><header><h3>Языки клиентов</h3></header>' + barList(Object.keys(languages).filter(function (code) { return languages[code]; }).map(function (code) {
-          return [{ ru: "Русский", en: "English", es: "Español", unknown: "Язык не выбран" }[code] || code, languages[code]];
+          return [{ ru: "Русский", uk: "Українська", en: "English", es: "Español", unknown: "Язык не выбран" }[code] || code, languages[code]];
         }), counts.all) + "</div>" +
         '<div class="card"><header><h3>Рассылки</h3></header>' +
           (campaigns.length ? '<div class="table-wrap"><table class="table-stack"><thead><tr><th>Дата</th><th>Отправлено</th><th>Отклики</th><th>Отписки</th></tr></thead><tbody>' +

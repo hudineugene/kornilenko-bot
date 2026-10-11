@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA_FILE, MEDIA_DIRECTORY } from './config.mjs';
 import { deletedForMedia } from './trash.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 function storedImageFile(image) {
   const fileName = image && typeof image.storageFile === 'string' ? image.storageFile.trim() : '';
@@ -57,7 +58,7 @@ function imageHasTransparency(image) {
 
 function forEachStoredImage(root, callback) {
   if (!root || typeof root !== 'object') return;
-  for (const language of ['ru', 'en', 'es']) callback(root.welcomeImages && root.welcomeImages[language]);
+  for (const language of LANGUAGES) callback(root.welcomeImages && root.welcomeImages[language]);
   callback(root.contacts && root.contacts.photo);
   // Плашки рубрик лежат в настройках, а отложенные посты — своим списком:
   // без них уборка ничейных файлов удалила бы их картинки.
@@ -67,7 +68,7 @@ function forEachStoredImage(root, callback) {
   for (const record of Array.isArray(root.objects) ? root.objects : []) {
     callback(record && record.image);
     for (const image of record && Array.isArray(record.images) ? record.images : []) callback(image);
-    for (const language of ['ru', 'en', 'es']) {
+    for (const language of LANGUAGES) {
       for (const image of record && record.imagesByLanguage && Array.isArray(record.imagesByLanguage[language]) ? record.imagesByLanguage[language] : []) callback(image);
     }
   }
@@ -76,7 +77,7 @@ function forEachStoredImage(root, callback) {
       callback(record && record.image);
       for (const image of record && Array.isArray(record.images) ? record.images : []) callback(image);
       if (key === 'promotions') {
-        for (const language of ['ru', 'en', 'es']) {
+        for (const language of LANGUAGES) {
           for (const image of record && record.imagesByLanguage && Array.isArray(record.imagesByLanguage[language]) ? record.imagesByLanguage[language] : []) callback(image);
         }
       }
@@ -95,7 +96,7 @@ function dropMissingImages(root) {
     missing += 1;
     return false;
   };
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LANGUAGES) {
     if (root.welcomeImages && root.welcomeImages[language] && !keep(root.welcomeImages[language])) root.welcomeImages[language] = null;
   }
   if (root.contacts && root.contacts.photo && !keep(root.contacts.photo)) root.contacts.photo = null;
@@ -105,7 +106,7 @@ function dropMissingImages(root) {
       if (record.image && !keep(record.image)) record.image = null;
       if (Array.isArray(record.images)) record.images = record.images.filter(keep);
       if (record.imagesByLanguage && typeof record.imagesByLanguage === 'object') {
-        for (const language of ['ru', 'en', 'es']) {
+        for (const language of LANGUAGES) {
           if (Array.isArray(record.imagesByLanguage[language])) record.imagesByLanguage[language] = record.imagesByLanguage[language].filter(keep);
         }
       }

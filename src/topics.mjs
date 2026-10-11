@@ -3,18 +3,20 @@
 // ключевым словам, а не решение: переписка клиента остаётся как есть.
 
 const TOPICS = [
-  { label: 'цена', words: ['цена', 'цены', 'цену', 'цене', 'ценах', 'стоимост', 'сколько стоит', 'прайс', 'почём', 'почем', 'price', 'how much', 'precio', 'cuánto cuesta', 'cuanto cuesta', 'cuánto vale'] },
-  { label: 'рассрочка и оплата', words: ['рассрочк', 'оплат', 'платеж', 'платёж', 'первый взнос', 'задаток', 'бронь', 'резерв', 'instalment', 'installment', 'payment', 'deposit', 'reservation', 'pago', 'plazos', 'entrada', 'reserva'] },
-  { label: 'ипотека', words: ['ипотек', 'кредит', 'mortgage', 'loan', 'hipoteca', 'préstamo', 'prestamo'] },
-  { label: 'налоги и расходы', words: ['налог', 'расходы', 'комисси', 'нотариус', 'itp', 'iva', 'tax', 'costs', 'notary', 'impuesto', 'gastos', 'notario'] },
-  { label: 'просмотр', words: ['посмотреть', 'просмотр', 'показать', 'приехать', 'viewing', 'visit', 'see the', 'visita', 'ver el', 'ver la'] },
-  { label: 'документы', words: ['документ', 'nie', 'паспорт', 'договор', 'юрист', 'адвокат', 'documents', 'contract', 'lawyer', 'documentos', 'contrato', 'abogado'] },
-  { label: 'планировка и фото', words: ['планировк', 'фото', 'видео', 'чертеж', 'чертёж', 'floor plan', 'floorplan', 'photos', 'video', 'planos', 'fotos', 'vídeo'] },
-  { label: 'сроки сдачи', words: ['сдач', 'срок', 'когда будет готов', 'строительств', 'delivery', 'completion', 'when will it', 'entrega', 'finalización', 'finalizacion'] },
-  { label: 'аренда и доход', words: ['аренд', 'доход', 'окупаем', 'инвест', 'rental', 'yield', 'investment', 'rentabilidad', 'alquiler', 'inversión', 'inversion'] },
-  { label: 'ВНЖ и виза', words: ['внж', 'вид на жительство', 'резидент', 'golden visa', 'visa', 'residenc'] },
-  { label: 'о компании', words: ['кто вы', 'застройщик', 'гарант', 'надёжн', 'надежн', 'who are you', 'developer', 'guarantee', 'quiénes sois', 'quienes sois', 'promotor', 'garantía', 'garantia'] },
-  { label: 'контакты', words: ['телефон', 'позвонить', 'офис', 'ваш адрес', 'phone', 'call you', 'office', 'teléfono', 'telefono', 'oficina'] },
+  { label: 'цена', words: ['цена', 'цены', 'цену', 'цене', 'ценах', 'стоимост', 'сколько стоит', 'прайс', 'почём', 'почем', 'price', 'how much', 'precio', 'cuánto cuesta', 'cuanto cuesta', 'cuánto vale',
+    'ціна', 'ціни', 'ціну', 'ціні', 'ціною', 'цінах', 'вартіст', 'скільки коштує', 'скільки це коштує', 'скільки вартує', 'почому'] },
+  { label: 'рассрочка и оплата', words: ['рассрочк', 'оплат', 'платеж', 'платёж', 'первый взнос', 'задаток', 'бронь', 'резерв', 'instalment', 'installment', 'payment', 'deposit', 'reservation', 'pago', 'plazos', 'entrada', 'reserva',
+    'розстрочк', 'платіж', 'внесок', 'завдаток', 'бронюван', 'передоплат'] },
+  { label: 'ипотека', words: ['ипотек', 'кредит', 'mortgage', 'loan', 'hipoteca', 'préstamo', 'prestamo', 'іпотек'] },
+  { label: 'налоги и расходы', words: ['налог', 'расходы', 'комисси', 'нотариус', 'itp', 'iva', 'tax', 'costs', 'notary', 'impuesto', 'gastos', 'notario', 'податк', 'податок', 'витрат', 'комісі', 'нотаріус'] },
+  { label: 'просмотр', words: ['посмотреть', 'просмотр', 'показать', 'приехать', 'viewing', 'visit', 'see the', 'visita', 'ver el', 'ver la', 'подивит', 'переглян', 'перегляд', 'показати', 'приїхат', 'приїзд'] },
+  { label: 'документы', words: ['документ', 'nie', 'паспорт', 'договор', 'юрист', 'адвокат', 'documents', 'contract', 'lawyer', 'documentos', 'contrato', 'abogado', 'договір', 'юрист', 'адвокат'] },
+  { label: 'планировка и фото', words: ['планировк', 'фото', 'видео', 'чертеж', 'чертёж', 'floor plan', 'floorplan', 'photos', 'video', 'planos', 'fotos', 'vídeo', 'плануванн', 'планувальн', 'відео', 'креслен'] },
+  { label: 'сроки сдачи', words: ['сдач', 'срок', 'когда будет готов', 'строительств', 'delivery', 'completion', 'when will it', 'entrega', 'finalización', 'finalizacion', 'здач', 'термін', 'коли буде готов', 'будівництв'] },
+  { label: 'аренда и доход', words: ['аренд', 'доход', 'окупаем', 'инвест', 'rental', 'yield', 'investment', 'rentabilidad', 'alquiler', 'inversión', 'inversion', 'оренд', 'дохід', 'окупн', 'інвест'] },
+  { label: 'ВНЖ и виза', words: ['внж', 'вид на жительство', 'резидент', 'golden visa', 'visa', 'residenc', 'посвідк', 'вид на проживання', 'віза', 'візу', 'візи', 'візов'] },
+  { label: 'о компании', words: ['кто вы', 'застройщик', 'гарант', 'надёжн', 'надежн', 'who are you', 'developer', 'guarantee', 'quiénes sois', 'quienes sois', 'promotor', 'garantía', 'garantia', 'хто ви', 'забудовник', 'надійн', 'довіря'] },
+  { label: 'контакты', words: ['телефон', 'позвонить', 'офис', 'ваш адрес', 'phone', 'call you', 'office', 'teléfono', 'telefono', 'oficina', 'зателефон', 'подзвон', 'передзвон', 'офіс', 'ваша адреса', 'вашу адресу'] },
 ];
 
 import { mentions } from './words.mjs';

@@ -10,12 +10,15 @@ import { startViewingForm } from './forms.mjs';
 import { cancelViewing, viewingIsUpcoming, viewingWhen } from './viewings.mjs';
 import { backButtonText, formatDayMonth } from './util.mjs';
 import { planHelpSteps } from './plan.mjs';
+import { addUk } from './languages.mjs';
 
 const MY_REQUESTS_SHOWN = 5;
-const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
+const LOCALES = { ru: 'ru-RU', uk: 'uk-UA', en: 'en-GB', es: 'es-ES' };
 
 const PLAN_STEP_WORD = { ru: 'План · шаг', en: 'Plan · step', es: 'Plan · paso' };
+addUk(PLAN_STEP_WORD);
 const PLAN_STEPS_WORD = { ru: 'План · шаги', en: 'Plan · steps', es: 'Plan · pasos' };
+addUk(PLAN_STEPS_WORD);
 
 function requestTypeLabel(inquiry, copy, language = 'ru') {
   // Помощь по шагу плана покупки — «📋 План · шаг 2: Банковский счёт», а не безликий «Вопрос».

@@ -19,6 +19,7 @@ import { STARTER_TEMPLATES } from './starter-templates.mjs';
 import { CLIENT_EXPORT_COLUMNS, INQUIRY_EXPORT_COLUMNS, clientExportRows, inquiryExportRows, xlsxWorkbook } from './excel.mjs';
 import { confirmViewing, viewingCalendarFile } from './viewings.mjs';
 import { sendInquiryToAdministrator, weeklyReportData, weeklyReportText } from './notices.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 // Сколько бесед вернуть в ответ на поиск: больше в списке всё равно не читают,
 // а перебор пяти тысяч переписок не должен занимать заметное время.
@@ -284,7 +285,7 @@ async function handleClientsApi(req, res, url) {
     const admin = cleanText(data.config.adminName, 60) || 'Администратор';
     const inquiry = {
       id: crypto.randomUUID(), userId: String(user.id), chatId: user.chatId ? String(user.chatId) : '',
-      language: ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'ru',
+      language: LANGUAGES.includes(user.preferredLanguage) ? user.preferredLanguage : 'ru',
       text: cleanText(body.note, 4000) || 'Просмотр назначен вручную', type: 'viewing', propertyId, sourceMessageId: null,
       lead: null, selection: null, matching: null,
       viewing: normalizeViewing({ date, timeText: time, confirmedDate: date, confirmedTime: time, confirmedAt: now }),
@@ -381,7 +382,7 @@ async function handleClientsApi(req, res, url) {
     const now = new Date().toISOString();
     const inquiry = {
       id: crypto.randomUUID(), userId: String(user.id), chatId: user.chatId ? String(user.chatId) : '',
-      language: ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'ru',
+      language: LANGUAGES.includes(user.preferredLanguage) ? user.preferredLanguage : 'ru',
       text: note || 'Следующий шаг', type: 'general', propertyId: '', sourceMessageId: null, lead: null, selection: null, matching: null, viewing: null,
       status: 'in_progress', pipelineStage: 'contact', note: '', replies: [], messages: [], readAt: now, remindedAt: '',
       followUpDate: date, followUpTime: time, followUpNotifiedAt: '', assignee: cleanText(data.config.adminName, 60) || 'Администратор',

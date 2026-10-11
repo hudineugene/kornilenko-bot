@@ -77,7 +77,7 @@ test('подпись Telegram: верная принимается, поддел
   assert.equal(validateInitData(params.toString(), TOKEN).reason, 'bad-signature');
 
   assert.equal(validateInitData(initDataFor(777), '999:OTHER_TOKEN_VALUE').ok, false);
-  assert.equal(validateInitData(initDataFor(777, { auth_date: NOW - 3 * 86400 }), TOKEN).reason, 'expired');
+  assert.equal(validateInitData(initDataFor(777, { auth_date: NOW - 4 * 86400 }), TOKEN).reason, 'expired');
   assert.equal(validateInitData(initDataFor(777, { auth_date: NOW + 3600 }), TOKEN).reason, 'from-future');
   assert.equal(validateInitData('', TOKEN).ok, false);
   assert.equal(validateInitData('hash=zzz', TOKEN).ok, false);
@@ -96,6 +96,7 @@ test('гость видит каталог без скрытых объекто�
 
   const write = await call('/api/app/favorite', { method: 'POST', body: { id: 'villa-marbella-01', on: true } });
   assert.equal(write.status, 401);
+  assert.equal(write.json.code, 'auth-empty', 'гостю объясняют, что открыть приложение нужно из чата');
 
   const forged = await call('/api/app/favorite', { method: 'POST', body: { id: 'villa-marbella-01', on: true }, initData: initDataFor(4242, {}, '1:WRONG_TOKEN_XXXX') });
   assert.equal(forged.status, 401);

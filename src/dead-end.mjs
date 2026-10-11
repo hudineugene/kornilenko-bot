@@ -5,12 +5,14 @@
 
 import { cleanText } from './util.mjs';
 import { localizedExact } from './catalog.mjs';
+import { addUk } from './languages.mjs';
 
 const DEAD_END_TEXT = {
   ru: { notify: '🔔 Сообщить о похожих', budget: '💶 Ближайшее по бюджету', budgetHeading: 'Ближайшее по бюджету' },
   en: { notify: '🔔 Tell me about similar', budget: '💶 Closest by budget', budgetHeading: 'Closest by budget' },
   es: { notify: '🔔 Avisarme de similares', budget: '💶 Lo más cercano', budgetHeading: 'Lo más cercano por presupuesto' },
 };
+addUk(DEAD_END_TEXT);
 
 // Верхняя граница бюджета для сохранённого поиска: цена карточки плюс пятая часть,
 // округлённая вверх до «красивого» шага. Ниже цены искать не ограничиваем.

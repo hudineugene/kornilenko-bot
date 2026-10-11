@@ -52,6 +52,7 @@ import { handleGroupApi } from './group-api.mjs';
 import { openEventStream } from './panel-events.mjs';
 import { autostartStatus, setAutostart } from './autostart.mjs';
 import { readAllAdminNotifications, updateAdminNotification } from './admin-notifications.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 function portableBackupData() {
   const payload = clone(data);
@@ -312,7 +313,7 @@ async function handleApi(req, res, url) {
       const nextMenu = menuInput(body.menu);
       const nextImages = { ...data.welcomeImages };
       const imageChanges = body.images && typeof body.images === 'object' ? body.images : {};
-      for (const language of ['ru', 'en', 'es']) {
+      for (const language of LANGUAGES) {
         const change = imageChanges[language];
         if (!change) continue;
         if (change.remove) nextImages[language] = null;
@@ -453,7 +454,7 @@ async function handleApi(req, res, url) {
       }
       if (parts.includes('about')) {
         if (backup.trust) data.trust = incoming.trust;
-        for (const language of ['ru', 'en', 'es']) {
+        for (const language of LANGUAGES) {
           // Берём только то, что в файле написано: нормализация подставила бы стандартный текст там, где его нет.
           const raw = backup.config && backup.config.menu && backup.config.menu[language];
           const about = raw && typeof raw.about === 'string' ? cleanText(raw.about, 4000) : '';
@@ -473,7 +474,7 @@ async function handleApi(req, res, url) {
           data.interfaceText = applyInterfaceText(incoming.interfaceText);
           result.texts += 1;
         }
-        for (const language of ['ru', 'en', 'es']) {
+        for (const language of LANGUAGES) {
           if (backup.welcomeImages && backup.welcomeImages[language] && incoming.welcomeImages[language]) {
             data.welcomeImages[language] = incoming.welcomeImages[language];
             result.texts += 1;
@@ -704,8 +705,8 @@ async function handleApi(req, res, url) {
     try {
       const entry = parseBroadcast(await readJson(req), {}, { requireMessages: false, requireSelectedTexts: false });
       const users = broadcastUsers(entry);
-      const byLanguage = { ru: 0, en: 0, es: 0 };
-      for (const user of users) byLanguage[['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'ru'] += 1;
+      const byLanguage = { ru: 0, uk: 0, en: 0, es: 0 };
+      for (const user of users) byLanguage[LANGUAGES.includes(user.preferredLanguage) ? user.preferredLanguage : 'ru'] += 1;
       const sample = users.slice(0, 5).map((user) => cleanText(user.contactName || [user.firstName, user.lastName].filter(Boolean).join(' ') || (user.username ? '@' + user.username : 'Клиент ' + user.id), 160));
       return json(res, 200, { total: users.length, byLanguage, sample });
     } catch (error) {

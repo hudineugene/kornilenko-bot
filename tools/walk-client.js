@@ -84,7 +84,7 @@ function report(title, from, chatId) {
     // Над карточкой каталога с условиями — строка «что понял бот» (до двух строк), поэтому там до 13.
     // В «Похожих» над карточкой ещё заголовок и причины («Почему подходит: …») — две строки: до 14.
     const caption = String(call.body.caption || '');
-    const limit = caption.startsWith('<i>🔎 ') ? 13 : /^<i>(Похожие|Similar|Inmuebles similares)/i.test(caption) ? 14 : 12;
+    const limit = caption.startsWith('<i>🔎 ') ? 13 : /^<i>(Похожие|Схожі|Similar|Inmuebles similares)/i.test(caption) ? 14 : 12;
     if (call.method === 'sendPhoto' && call.body.caption && rows > limit) notes.push(title + ' — карточка в ' + rows + ' строк (правило: до ' + limit + ')');
     if (rows > 30) notes.push(title + ' — ответ в ' + rows + ' строк (больше экрана)');
     // Жирный заголовок — у каждого экрана с кнопками (правило этапов 45 и 49): первая строка — «значок Название».
@@ -166,10 +166,11 @@ function client(id, name, lang) {
 
 const SAYINGS = {
   ru: { name: 'Анна', callTime: 'Сегодня после 18:00', ask: 'Куплю квартиру в Бенидорме до 400 000 €', follow: 'А когда можно посмотреть?' },
+  uk: { name: 'Олена', callTime: 'Сьогодні після 18:00', ask: 'Куплю квартиру в Бенідормі до 400 000 €', follow: 'А коли можна подивитися?' },
   en: { name: 'John', callTime: 'Today after 18:00', ask: 'I want to buy a flat in Benidorm up to €400,000', follow: 'When can I see it?' },
   es: { name: 'Carlos', callTime: 'Hoy después de las 18:00', ask: 'Quiero comprar un piso en Benidorm hasta 400.000 €', follow: '¿Cuándo puedo verlo?' },
 };
-const CLIENT_IDS = { ru: 94000001, en: 94000002, es: 94000004 };
+const CLIENT_IDS = { ru: 94000001, uk: 94000005, en: 94000002, es: 94000004 };
 
 // Один и тот же путь клиента на любом языке: всё, что зависит от языка, берётся из меню бота и таблицы SAYINGS.
 // Обход: с каждого экрана нажимаем каждую кнопку-callback (кроме разрушающих и уводящих из бота) и смотрим, что ответил бот.
@@ -276,7 +277,7 @@ async function walk(lang) {
 
 (async () => {
   out.push('# Прогон глазами клиента');
-  const only = process.argv[3] ? process.argv[3].split(',') : ['ru', 'en', 'es'];
+  const only = process.argv[3] ? process.argv[3].split(',') : ['ru', 'uk', 'en', 'es'];
   for (const lang of only) await walk(lang);
 
   const file = path.join(box, 'walk-client.md');

@@ -129,7 +129,7 @@ test('a saved draft can be sent from the panel and keeps its audience segment', 
     assert.equal(created.status, 201);
     const { id } = await created.json();
     const estimate = await realFetch(base + '/api/broadcast/estimate', { method: 'POST', headers, body: JSON.stringify(body) });
-    assert.deepEqual(await estimate.json(), { total: 1, byLanguage: { ru: 1, en: 0, es: 0 }, sample: ['Анна'] });
+    assert.deepEqual(await estimate.json(), { total: 1, byLanguage: { ru: 1, uk: 0, en: 0, es: 0 }, sample: ['Анна'] });
     const sent = await realFetch(base + '/api/broadcasts/' + id, { method: 'PATCH', headers, body: JSON.stringify({ ...body, mode: 'send' }) });
     assert.equal(sent.status, 202);
     await new Promise((resolve) => setTimeout(resolve, 80));

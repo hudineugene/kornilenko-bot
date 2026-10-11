@@ -29,7 +29,7 @@ function catalogPreviewLine(language) {
   return copy.line.replace("{count}", function () { return records.length + " " + word; }).replace("{cities}", function () { return cities.join(", "); });
 }
 
-var EXAMPLE_QUERY = { ru: "Альтеа, 3 спальни, до 350 000 €", en: "Altea, 3 bedrooms, up to €350,000", es: "Altea, 3 dormitorios, hasta 350.000 €" };
+var EXAMPLE_QUERY = { ru: "Альтеа, 3 спальни, до 350 000 €", uk: "Альтеа, 3 спальні, до 350 000 €", en: "Altea, 3 bedrooms, up to €350,000", es: "Altea, 3 dormitorios, hasta 350.000 €" };
 
 async function renderWelcome(host) {
   // Подписи кнопок приезжают отдельным запросом: рисуем экран, когда они уже
@@ -88,7 +88,7 @@ async function renderWelcome(host) {
 
   bindLanguageTabs(host);
   var pendingImages = {};
-  var exampleNames = { ru: "Анна", en: "Anna", es: "Ana" };
+  var exampleNames = { ru: "Анна", uk: "Анна", en: "Anna", es: "Ana" };
   // Предпросмотр перерисовывается на каждый ввод: владелец видит ровно то,
   // что придёт клиенту, — картинку, текст и клавиатуру меню.
   function languageValue(selector, language) {
@@ -386,7 +386,7 @@ function renderRules(host) {
     templatesCardHtml() + "</div>" +
     '<div class="card"><header><h3>Проверить сообщение</h3></header><div class="card-body stack">' +
       '<div class="field"><label for="ruleTestText">Сообщение клиента</label><input id="ruleTestText" placeholder="Например: сколько стоит"></div>' +
-      '<div class="field"><label for="ruleTestLang">Язык</label><select id="ruleTestLang"><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option></select></div>' +
+      '<div class="field"><label for="ruleTestLang">Язык</label><select id="ruleTestLang"><option value="ru">Русский</option><option value="uk">Українська</option><option value="en">English</option><option value="es">Español</option></select></div>' +
       '<button class="btn secondary" id="ruleTest" type="button">Проверить</button><div id="ruleTestResult" class="small muted"></div>' +
     "</div></div></div>";
   bindTemplatesCard(host, function () { renderRules(host); });
@@ -426,7 +426,7 @@ function openRuleEditor(id) {
       '<div class="grid cols-2"><div class="field"><label for="rType">Как сравнивать</label><select id="rType">' + RULE_TYPES.map(function (type) {
         return '<option value="' + type[0] + '"' + (rule && rule.type === type[0] ? " selected" : "") + ">" + type[1] + "</option>";
       }).join("") + "</select></div>" +
-      '<div class="field"><label for="rLang">Язык</label><select id="rLang"><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option><option value="all">Любой</option></select></div></div>' +
+      '<div class="field"><label for="rLang">Язык</label><select id="rLang"><option value="ru">Русский</option><option value="uk">Українська</option><option value="en">English</option><option value="es">Español</option><option value="all">Любой</option></select></div></div>' +
       '<div class="field"><label for="rAnswer">Ответ бота</label><textarea id="rAnswer" class="area-sm">' + esc(rule && rule.answer || "") + "</textarea></div>" +
       '<label class="check"><input type="checkbox" id="rEnabled"' + (!rule || rule.enabled !== false ? " checked" : "") + "> Автоответ включён</label></div>",
     footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveRule" type="button">Сохранить</button>',

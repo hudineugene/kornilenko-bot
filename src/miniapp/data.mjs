@@ -15,8 +15,8 @@ import { calculatorAvailable, calculatorSettings, purchaseEstimate } from '../ca
 import { CALCULATOR_TEXT, MENU_LABELS } from '../texts.mjs';
 import { replyPromise } from '../hours.mjs';
 import { imageExists } from '../media.mjs';
+import { LANGUAGES, isCyrillic } from '../languages.mjs';
 
-const LANGUAGES = ['ru', 'en', 'es'];
 const RESIDENTIAL = new Set(['apartment', 'house', 'villa', 'townhouse', 'newbuild']);
 
 function appLanguage(requested, user = null, telegramCode = '') {
@@ -57,7 +57,7 @@ function findImage(recordId, imageId) {
 
 function factList(record, language, full) {
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
-  const unit = language === 'ru' ? 'м²' : 'm²';
+  const unit = isCyrillic(language) ? 'м²' : 'm²';
   const residential = RESIDENTIAL.has(record.propertyType);
   const facts = [];
   const bedrooms = rangeText(record.bedrooms, record.bedroomsMax, language, true);

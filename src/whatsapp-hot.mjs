@@ -3,12 +3,14 @@
 // чем к нему пришли, а клиенту не пришлось ничего печатать.
 
 import { cleanText } from './util.mjs';
+import { addUk } from './languages.mjs';
 
 const WHATSAPP_HOT_TEXT = {
   ru: { compare: 'Здравствуйте! Сравниваю объекты: {list}. Хочу обсудить.', search: 'Здравствуйте! Ищу недвижимость: {summary}. Подскажите, что есть?' },
   en: { compare: 'Hello! I am comparing these properties: {list}. I would like to discuss them.', search: 'Hello! I am looking for a property: {summary}. What do you have?' },
   es: { compare: '¡Hola! Estoy comparando estos inmuebles: {list}. Me gustaría comentarlos.', search: '¡Hola! Busco un inmueble: {summary}. ¿Qué tenéis?' },
 };
+addUk(WHATSAPP_HOT_TEXT);
 
 function hotText(language) {
   return WHATSAPP_HOT_TEXT[language] || WHATSAPP_HOT_TEXT.ru;

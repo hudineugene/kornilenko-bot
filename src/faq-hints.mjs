@@ -8,6 +8,7 @@ import { data } from './store.mjs';
 import { validHttpUrl } from './catalog.mjs';
 import { GUIDE_COSTS_PAGE } from './goal.mjs';
 import { mentions } from './words.mjs';
+import { addUk } from './languages.mjs';
 
 const COOLDOWN_MS = 30 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 200;
@@ -21,6 +22,7 @@ const INTENTS = [
       ru: ['телефон', 'позвонить', 'контакты', 'ваш адрес', 'адрес офиса', 'где офис', 'офис', 'где вы находитесь', 'как вас найти', 'ватсап', 'вотсап', 'whatsapp'],
       en: ['phone number', 'your phone', 'call you', 'your contacts', 'your address', 'your office', 'where are you located', 'where is your office', 'whatsapp'],
       es: ['teléfono', 'telefono', 'llamaros', 'vuestro contacto', 'vuestra dirección', 'vuestra direccion', 'vuestra oficina', 'dónde estáis', 'donde estais', 'whatsapp'],
+      uk: ['телефон', 'зателефонувати', 'подзвонити', 'ваші контакти', 'ваша адреса', 'адреса офісу', 'де офіс', 'де ваш офіс', 'офіс', 'де ви знаходитесь', 'де ви розташовані', 'як вас знайти', 'вацап', 'вотсап', 'whatsapp'],
     },
   },
   {
@@ -29,6 +31,7 @@ const INTENTS = [
       ru: ['кто вы', 'кто такие', 'о компании', 'о вашей компании', 'вы застройщик', 'застройщик или', 'вы агентство', 'агентство или', 'вам можно доверять', 'надёжн', 'надежн', 'сколько лет на рынке', 'опыт работы'],
       en: ['who are you', 'about your company', 'about the company', 'are you a developer', 'developer or', 'are you an agency', 'agency or', 'can i trust', 'are you reliable', 'how long have you'],
       es: ['quiénes sois', 'quienes sois', 'sobre la empresa', 'sois promotor', 'promotor o', 'sois una agencia', 'agencia o', 'puedo confiar', 'sois fiables', 'cuánto tiempo lleváis', 'cuanto tiempo llevais'],
+      uk: ['хто ви', 'хто такі', 'про компанію', 'про вашу компанію', 'ви забудовник', 'забудовник чи', 'ви агентство', 'агентство чи', 'вам можна довіряти', 'надійн', 'скільки років на ринку', 'досвід роботи'],
     },
   },
   {
@@ -37,6 +40,7 @@ const INTENTS = [
       ru: ['как купить', 'как происходит покупка', 'порядок покупки', 'этапы сделки', 'какие документы', 'как оформить', 'процесс покупки', 'что такое nie', 'нужен ли nie'],
       en: ['how to buy', 'how do i buy', 'buying process', 'steps to buy', 'what documents', 'which documents', 'what is nie', 'do i need nie'],
       es: ['cómo comprar', 'como comprar', 'proceso de compra', 'pasos para comprar', 'qué documentos', 'que documentos', 'necesito nie'],
+      uk: ['як купити', 'як відбувається купівля', 'порядок купівлі', 'етапи угоди', 'які документи', 'як оформити', 'процес купівлі', 'що таке nie', 'чи потрібен nie'],
     },
   },
   {
@@ -45,6 +49,7 @@ const INTENTS = [
       ru: ['налог', 'расходы при покупке', 'дополнительные расходы', 'сколько стоит оформление', 'ипотек', 'кредит', 'нотариус', 'itp', 'iva'],
       en: ['taxes', 'closing costs', 'extra costs', 'additional costs', 'mortgage', 'loan', 'notary', 'itp', 'iva'],
       es: ['impuestos', 'gastos de compra', 'gastos adicionales', 'hipoteca', 'préstamo', 'prestamo', 'notario', 'itp', 'iva'],
+      uk: ['податк', 'податок', 'витрати при купівлі', 'додаткові витрати', 'скільки коштує оформлення', 'іпотек', 'кредит', 'нотаріус', 'itp', 'iva'],
     },
   },
   {
@@ -53,20 +58,23 @@ const INTENTS = [
       ru: ['планировк', 'фото', 'видео', 'рендер', 'чертеж', 'чертёж'],
       en: ['floor plan', 'floorplan', 'layout', 'photos', 'pictures', 'video', 'render'],
       es: ['planos', 'plano de', 'fotos', 'vídeo', 'video', 'render'],
+      uk: ['планування', 'планувальн', 'фото', 'відео', 'рендер', 'креслен'],
     },
   },
   {
     key: 'price',
     // «Сколько стоит двухкомнатная?» — про объект; «сколько стоит содержание квартиры» — уже про другое, подсказка не нужна.
-    needs: ['квартир', 'комнат', 'спальн', 'вилл', 'апартамент', 'студи', 'объект', 'flat', 'apartment', 'villa', 'bedroom', 'studio', 'piso', 'dormitorio'],
-    blocks: ['содержан', 'коммунал', 'обслужив', 'аренд', 'maintenance', 'upkeep', 'community fee', 'rent', 'comunidad', 'alquiler'],
+    needs: ['квартир', 'комнат', 'спальн', 'вилл', 'апартамент', 'студи', 'объект', 'flat', 'apartment', 'villa', 'bedroom', 'studio', 'piso', 'dormitorio', 'кімнат', 'вілл', 'студі', 'об\'єкт', 'об’єкт', 'обʼєкт', 'обєкт'],
+    blocks: ['содержан', 'коммунал', 'обслужив', 'аренд', 'maintenance', 'upkeep', 'community fee', 'rent', 'comunidad', 'alquiler', 'утриман', 'комунальн', 'обслуговув', 'оренд'],
     words: {
       ru: ['сколько стоит', 'какая цена', 'цена', 'стоимость', 'прайс', 'почём', 'почем'],
       en: ['how much', 'price', 'what does it cost', 'cost of'],
       es: ['cuánto cuesta', 'cuanto cuesta', 'precio', 'cuánto vale', 'cuanto vale'],
+      uk: ['скільки коштує', 'скільки вартує', 'яка ціна', 'яка вартість', 'ціна', 'ціни', 'ціну', 'вартість', 'прайс', 'почому'],
     },
   },
 ];
+addUk(INTENTS);
 
 const TEXT = {
   ru: {
@@ -100,6 +108,7 @@ const TEXT = {
     buttons: { contacts: '☎️ Contacto', map: '📍 Oficina en el mapa', about: 'ℹ️ La empresa', guide: '📖 Cómo comprar', costs: '🧾 Gastos de compra', catalog: '🏘 Inmuebles' },
   },
 };
+addUk(TEXT);
 
 function normalized(text) {
   return String(text || '').toLocaleLowerCase('ru-RU').replace(/[ё]/g, 'е').replace(/\s+/g, ' ').trim();

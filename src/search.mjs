@@ -5,28 +5,32 @@
 
 import { cleanText, parseMoneyAmount } from './util.mjs';
 import { localizedExact, publishedCatalog } from './catalog.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 const DEAL_TERMS = {
-  sale: ['купить', 'покупка', 'покупку', 'покупать', 'продажа', 'продажу', 'buy', 'buying', 'purchase', 'sale', 'comprar', 'compra', 'venta'],
-  rent: ['аренда', 'аренду', 'аренды', 'снять', 'снимать', 'арендовать', 'rent', 'renting', 'rental', 'alquilar', 'alquiler'],
+  sale: ['купить', 'покупка', 'покупку', 'покупать', 'продажа', 'продажу', 'buy', 'buying', 'purchase', 'sale', 'comprar', 'compra', 'venta',
+    'купити', 'купую', 'купувати', 'купівля', 'купівлю', 'купівлі', 'придбати', 'придбання', 'продаж'],
+  rent: ['аренда', 'аренду', 'аренды', 'снять', 'снимать', 'арендовать', 'rent', 'renting', 'rental', 'alquilar', 'alquiler',
+    'оренда', 'оренду', 'оренди', 'оренді', 'орендувати', 'орендую', 'винайняти', 'винаймати', 'зняти', 'знімати'],
 };
 const TYPE_TERMS = {
-  apartment: ['квартира', 'квартиру', 'квартиры', 'апартамент', 'апартаменты', 'апартаментов', 'apartment', 'apartments', 'flat', 'flats', 'apartamento', 'apartamentos', 'piso', 'pisos'],
-  house: ['дом', 'дома', 'house', 'houses', 'home', 'homes', 'casa', 'casas'],
-  villa: ['вилла', 'виллу', 'виллы', 'villa', 'villas'],
-  townhouse: ['таунхаус', 'таунхаусы', 'townhouse', 'townhouses', 'adosado', 'adosados'],
-  land: ['участок', 'участка', 'земля', 'землю', 'plot', 'plots', 'land', 'terreno', 'terrenos', 'parcela', 'parcelas'],
-  commercial: ['коммерческая недвижимость', 'коммерческое помещение', 'офис', 'commercial property', 'commercial', 'office', 'local comercial', 'locales comerciales'],
-  newbuild: ['новостройка', 'новостройку', 'новостройки', 'new build', 'newbuild', 'new development', 'obra nueva'],
+  apartment: ['квартира', 'квартиру', 'квартиры', 'апартамент', 'апартаменты', 'апартаментов', 'apartment', 'apartments', 'flat', 'flats', 'apartamento', 'apartamentos', 'piso', 'pisos', 'квартири', 'квартирі', 'апартаменти', 'апартаментів'],
+  house: ['дом', 'дома', 'house', 'houses', 'home', 'homes', 'casa', 'casas', 'будинок', 'будинку', 'будинки', 'будинків', 'дім', 'доми'],
+  villa: ['вилла', 'виллу', 'виллы', 'villa', 'villas', 'вілла', 'віллу', 'вілли', 'віллі', 'вілл'],
+  townhouse: ['таунхаус', 'таунхаусы', 'townhouse', 'townhouses', 'adosado', 'adosados', 'таунхауси', 'таунхаусів'],
+  land: ['участок', 'участка', 'земля', 'землю', 'plot', 'plots', 'land', 'terreno', 'terrenos', 'parcela', 'parcelas', 'ділянка', 'ділянку', 'ділянки', 'ділянок', 'земельна ділянка', 'земельну ділянку', 'земельні ділянки', 'землі'],
+  commercial: ['коммерческая недвижимость', 'коммерческое помещение', 'офис', 'commercial property', 'commercial', 'office', 'local comercial', 'locales comerciales', 'комерційна нерухомість', 'комерційну нерухомість', 'комерційної нерухомості', 'комерційне приміщення', 'комерційні приміщення', 'офіс', 'офіси'],
+  newbuild: ['новостройка', 'новостройку', 'новостройки', 'new build', 'newbuild', 'new development', 'obra nueva', 'новобудова', 'новобудову', 'новобудови', 'новобудов', 'нова забудова', 'нову забудову'],
 };
 // «3 bed villa» — так пишут чаще, чем «3 bedroom»: короткие «bed»/«beds» тоже спальни.
-const BEDROOM_WORDS = ['спальня', 'спальню', 'спальней', 'спальни', 'спален', 'спальнями', 'спальне', 'habitacion', 'habitaciones', 'bedroom', 'bedrooms', 'beds', 'bed', 'dormitorio', 'dormitorios', 'habitacion', 'habitaciones'];
+const BEDROOM_WORDS = ['спальня', 'спальню', 'спальней', 'спальни', 'спален', 'спальнями', 'спальне', 'habitacion', 'habitaciones', 'bedroom', 'bedrooms', 'beds', 'bed', 'dormitorio', 'dormitorios', 'habitacion', 'habitaciones',
+  'спальню', 'спальні', 'спалень', 'спальнею', 'спальнях', 'кімната', 'кімнату', 'кімнати', 'кімнат', 'кімнатна', 'кімнатну', 'кімнатні', 'кімнатних'];
 // Признаки словами: «у моря», «с бассейном». Названия мест эти фразы не заменяют (см. NEUTRAL_PLACE_PHRASES).
 const FEATURE_TERMS = {
-  pool: ['с бассейном', 'бассейном', 'бассейн', 'бассейна', 'swimming pool', 'with pool', 'with a pool', 'pool', 'con piscina', 'piscina'],
-  terrace: ['с террасой', 'террасой', 'терраса', 'террасу', 'terrace', 'with terrace', 'with a terrace', 'terraza', 'con terraza'],
-  parking: ['с парковкой', 'парковкой', 'парковка', 'парковку', 'с гаражом', 'гаражом', 'гараж', 'parking', 'garage', 'garaje', 'aparcamiento', 'con garaje'],
-  garden: ['с садом', 'садом', 'сад', 'garden', 'with garden', 'with a garden', 'jardin', 'con jardin'],
+  pool: ['с бассейном', 'бассейном', 'бассейн', 'бассейна', 'swimming pool', 'with pool', 'with a pool', 'pool', 'con piscina', 'piscina', 'з басейном', 'басейном', 'басейн', 'басейна', 'басейну', 'басейни'],
+  terrace: ['с террасой', 'террасой', 'терраса', 'террасу', 'terrace', 'with terrace', 'with a terrace', 'terraza', 'con terraza', 'з терасою', 'терасою', 'тераса', 'терасу', 'тераси'],
+  parking: ['с парковкой', 'парковкой', 'парковка', 'парковку', 'с гаражом', 'гаражом', 'гараж', 'parking', 'garage', 'garaje', 'aparcamiento', 'con garaje', 'з парковкою', 'парковкою', 'парковку', 'паркінг', 'паркінгом', 'з паркінгом', 'з гаражем', 'гаражем', 'гараж', 'гаража', 'гаражу'],
+  garden: ['с садом', 'садом', 'сад', 'garden', 'with garden', 'with a garden', 'jardin', 'con jardin', 'з садом', 'садом', 'сад', 'саду'],
 };
 
 function parseFeatures(message) {
@@ -36,7 +40,10 @@ function parseFeatures(message) {
   return features;
 }
 
-const LOCATION_PREPOSITIONS = ['в', 'около', 'рядом с', 'in', 'near', 'around', 'en', 'cerca de'];
+const LOCATION_PREPOSITIONS = ['в', 'около', 'рядом с', 'in', 'near', 'around', 'en', 'cerca de', 'біля', 'коло', 'поруч з', 'поруч із', 'поблизу', 'неподалік від'];
+// Украинское «у» («у Малазі») — тот же предлог места, что «в». По-русски «у» — это «у меня», «у вас», поэтому считаем его
+// предлогом только в сообщении с украинскими буквами: поведение для русских сообщений остаётся прежним.
+const UKRAINIAN_LETTERS = /[іїєґ]/iu;
 
 // «Рядом с морем», «near the beach» — пожелание, а не название места: раньше «рядом с» / «near»
 // считались незнакомым городом, и вся фраза уходила менеджеру. Такие обороты выбрасываем
@@ -45,6 +52,7 @@ const NEUTRAL_PLACE_PHRASES = [
   'у моря', 'рядом с морем', 'около моря', 'возле моря', 'близко к морю', 'недалеко от моря', 'у пляжа', 'рядом с пляжем', 'около пляжа', 'на берегу моря', 'с видом на море',
   'near the beach', 'near the sea', 'close to the beach', 'close to the sea', 'by the sea', 'by the beach', 'next to the beach', 'on the beach', 'with sea view', 'sea view',
   'cerca de la playa', 'cerca del mar', 'junto a la playa', 'junto al mar', 'frente al mar', 'en primera linea', 'con vistas al mar',
+  'біля моря', 'поруч із морем', 'поруч з морем', 'коло моря', 'близько до моря', 'недалеко від моря', 'неподалік від моря', 'біля пляжу', 'поруч із пляжем', 'поруч з пляжем', 'на березі моря', 'з видом на море', 'вид на море',
 ].sort((a, b) => b.length - a.length);
 
 function withoutNeutralPlaces(message) {
@@ -58,6 +66,8 @@ const NUMBER_WORDS = {
   один: 1, одна: 1, одну: 1, одной: 1, два: 2, две: 2, двух: 2, двумя: 2, три: 3, трех: 3, тремя: 3, четыре: 4, четырех: 4, четырьмя: 4,
   one: 1, two: 2, three: 3, four: 4,
   un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4,
+  // Украинские; апостроф в «п’ять» placeKey превращает в пробел (а «ʼ» оставляет буквой), поэтому ключей два.
+  одної: 1, дві: 2, двох: 2, двома: 2, трьох: 3, трьома: 3, чотирьох: 4, чотирма: 4, 'п ять': 5, пʼять: 5,
 };
 
 // "REF-1024", "ref 1024" and "Ref1024" are the same reference.
@@ -90,10 +100,15 @@ function placeForms(value) {
   const forms = new Set([name]);
   const last = name.slice(-1);
   const base = name.slice(0, -1);
-  if (last === 'а') for (const ending of ['е', 'у', 'ы', 'ой']) forms.add(base + ending);
-  else if (last === 'я') for (const ending of ['е', 'ю', 'и', 'ей']) forms.add(base + ending);
+  if (last === 'а') {
+    for (const ending of ['е', 'у', 'ы', 'ой', 'і']) forms.add(base + ending);
+    // Украинский местный падеж: «у Малазі» (г → з, к → ц, х → с).
+    const mutated = { г: 'з', к: 'ц', х: 'с' }[base.slice(-1)];
+    if (mutated) forms.add(base.slice(0, -1) + mutated + 'і');
+  }
+  else if (last === 'я') for (const ending of ['е', 'ю', 'и', 'ей', 'і']) forms.add(base + ending);
   else if (last === 'й') for (const ending of ['е', 'я', 'ю']) forms.add(base + ending);
-  else if (/[бвгджзклмнпрстфхцчшщ]$/u.test(last)) for (const ending of ['е', 'а', 'у']) forms.add(name + ending);
+  else if (/[бвгджзклмнпрстфхцчшщ]$/u.test(last)) for (const ending of ['е', 'а', 'у', 'і']) forms.add(name + ending);
   return Array.from(forms).filter(Boolean);
 }
 
@@ -105,7 +120,7 @@ function mentionedPlaces(message, records, language, field) {
   for (const record of records) {
     const display = localizedExact(record[field], language, 160);
     if (!display) continue;
-    const aliases = ['ru', 'en', 'es'].map((code) => localizedExact(record[field], code, 160)).filter(Boolean);
+    const aliases = LANGUAGES.map((code) => localizedExact(record[field], code, 160)).filter(Boolean);
     const found = aliases.some((alias) => {
       const key = placeKey(alias);
       if (!key) return false;
@@ -125,7 +140,7 @@ function parseBedrooms(message) {
   const normalized = placeKey(message);
   const numberWords = Object.keys(NUMBER_WORDS).join('|');
   const before = normalized.match(new RegExp('(?<![\\p{L}\\d])(\\d{1,2}|' + numberWords + ')\\s*(?:' + words + ')', 'u'));
-  const after = normalized.match(new RegExp('(?:' + words + ')\\s*(?:от|from|desde)?\\s*(\\d{1,2})', 'u'));
+  const after = normalized.match(new RegExp('(?:' + words + ')\\s*(?:от|від|from|desde)?\\s*(\\d{1,2})', 'u'));
   const spoken = before && NUMBER_WORDS[before[1]];
   const count = Number(spoken || before && before[1] || after && after[1] || 0);
   return count > 0 ? Math.min(4, count) : 0;
@@ -134,8 +149,8 @@ function parseBedrooms(message) {
 const MONEY_AMOUNT_PATTERN = '(\\d{1,3}(?:[ .\\u00a0\\u202f]\\d{3})+|\\d+(?:[.,]\\d+)?)';
 // Longer words must come before their prefixes: otherwise “mil” is captured
 // as “m” and 300 mil incorrectly becomes 300 million.
-const MONEY_SUFFIX_PATTERN = '(millones|millón|millions|million|млн|тысяч|тыс|mil|k|к|m)?';
-const MONEY_CONTEXT_PATTERN = /[€$£]|\b(?:eur|euro|euros|usd|dollar|dollars|gbp|pound|pounds|price|budget|precio|presupuesto|rent|rental|alquiler|sale|venta|buy|purchase)\b|(?:евро|доллар|фунт|цена|бюджет|аренд|покуп|продаж|квартир|недвижим|вилл|дом)/iu;
+const MONEY_SUFFIX_PATTERN = '(millones|millón|millions|million|мільйонів|мільйони|мільйона|мільйон|млн|тисячі|тисяч|тис|тысяч|тыс|mil|k|к|m)?';
+const MONEY_CONTEXT_PATTERN = /[€$£]|\b(?:eur|euro|euros|usd|dollar|dollars|gbp|pound|pounds|price|budget|precio|presupuesto|rent|rental|alquiler|sale|venta|buy|purchase)\b|(?:евро|доллар|фунт|цена|бюджет|аренд|покуп|продаж|квартир|недвижим|вилл|дом|євро|долар|ціна|ціну|ціни|оренд|купити|купів|купува|купую|придба|нерухом|вілл|будин)/iu;
 
 function moneyWithInheritedScale(amount, suffix, otherSuffix) {
   // Букву приписываем вплотную: с пробелом одиночная «к» или «m» считается
@@ -162,12 +177,12 @@ function validPriceRange(message, match) {
 
 function parsePriceRange(message) {
   const text = String(message || '');
-  const start = '(?:(?:цена|бюджет(?:ом)?|price|budget|precio|presupuesto)\\s*)?(?:от|from|desde|de|between|entre)';
+  const start = '(?:(?:цена|ціна|ціною|бюджет(?:ом)?|price|budget|precio|presupuesto)\\s*)?(?:от|від|from|desde|de|between|entre)';
   const separator = '(?:до|to|hasta|a|and|y|[-–—])';
-  const explicit = text.match(new RegExp(start + '[^\\d]{0,12}' + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN + '\\s*(?:€|eur(?:os?)?|евро|usd|dollars?|доллар(?:ов|а)?|gbp|pounds?|фунт(?:ов|а)?)?\\s*' + separator + '[^\\d]{0,12}' + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
+  const explicit = text.match(new RegExp(start + '[^\\d]{0,12}' + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN + '\\s*(?:€|eur(?:os?)?|евро|євро|usd|dollars?|доллар(?:ов|а)?|долар(?:ів|а|и)?|gbp|pounds?|фунт(?:ов|а|ів|и)?)?\\s*' + separator + '[^\\d]{0,12}' + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
   const explicitRange = validPriceRange(text, explicit);
   if (explicitRange) return explicitRange;
-  const currency = '(?:€|\\$|£|eur(?:os?)?|евро|usd|dollars?|доллар(?:ов|а)?|gbp|pounds?|фунт(?:ов|а)?)?';
+  const currency = '(?:€|\\$|£|eur(?:os?)?|евро|євро|usd|dollars?|доллар(?:ов|а)?|долар(?:ів|а|и)?|gbp|pounds?|фунт(?:ов|а|ів|и)?)?';
   const dashed = text.match(new RegExp(currency + '\\s*' + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN + '\\s*' + currency + '\\s*[-–—]\\s*' + currency + '\\s*' + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
   return validPriceRange(text, dashed);
 }
@@ -175,7 +190,7 @@ function parsePriceRange(message) {
 // «до» внутри «дом» или «надо» — не признак цены, поэтому слова-указатели
 // ищутся целиком. Между словом и суммой допускаем только пробелы, знаки и
 // короткие связки: иначе «до моря 150 м» превратилось бы в «до 150 €».
-const MONEY_GAP_PATTERN = '(?:[^\\p{L}\\d]|чем|около|примерно|than|about|de|unos|como)*';
+const MONEY_GAP_PATTERN = '(?:[^\\p{L}\\d]|чем|около|примерно|ніж|близько|приблизно|than|about|de|unos|como)*';
 
 function wholeWords(marker) {
   return '(?<![\\p{L}\\d])' + marker + '(?![\\p{L}\\d])';
@@ -188,7 +203,7 @@ const MONEY_FLOOR = 100;
 function parseMinPrice(message) {
   const range = parsePriceRange(message);
   if (range) return range.minPrice;
-  const marker = '(?:не\\s+дешевле|цена\\s+от|бюджет(?:ом)?\\s+от|минимум|от|price\\s+from|budget\\s+from|at\\s+least|minimum|min|from|precio\\s+desde|presupuesto\\s+desde|como\\s+mínimo|como\\s+minimo|mínimo|minimo|desde)';
+  const marker = '(?:не\\s+дешевле|цена\\s+от|бюджет(?:ом)?\\s+от|минимум|от|не\\s+дешевше|не\\s+менше|ціна\\s+від|бюджет(?:ом)?\\s+від|мінімум|щонайменше|від|price\\s+from|budget\\s+from|at\\s+least|minimum|min|from|precio\\s+desde|presupuesto\\s+desde|como\\s+mínimo|como\\s+minimo|mínimo|minimo|desde)';
   const match = String(message || '').match(new RegExp(wholeWords(marker) + MONEY_GAP_PATTERN + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
   const amount = match ? parseMoneyAmount(match[1] + ' ' + (match[2] || '')) : 0;
   return amount >= MONEY_FLOOR ? amount : 0;
@@ -200,8 +215,8 @@ function parseMaxPrice(message) {
   const text = String(message || '');
   // Do not reinterpret a lower-only boundary (“from 300k”) as a maximum just
   // because the same sentence also contains the word “budget”.
-  if (/(?:цена\s+от|бюджет(?:ом)?\s+от|не\s+дешевле|price\s+from|budget\s+from|at\s+least|precio\s+desde|presupuesto\s+desde|como\s+m[ií]nimo)/iu.test(text)) return 0;
-  const marker = '(?:не\\s+дороже|цена\\s+до|бюджет(?:ом)?(?:\\s+до)?|максимум|до|up\\s+to|under|below|budget(?:\\s+of)?|maximum|max|hasta|presupuesto(?:\\s+de)?|máximo|maximo)';
+  if (/(?:цена\s+от|бюджет(?:ом)?\s+от|не\s+дешевле|ціна\s+від|бюджет(?:ом)?\s+від|не\s+дешевше|щонайменше|price\s+from|budget\s+from|at\s+least|precio\s+desde|presupuesto\s+desde|como\s+m[ií]nimo)/iu.test(text)) return 0;
+  const marker = '(?:не\\s+дороже|цена\\s+до|бюджет(?:ом)?(?:\\s+до)?|максимум|не\\s+дорожче|не\\s+більше|ціна\\s+до|максимально|до|up\\s+to|under|below|budget(?:\\s+of)?|maximum|max|hasta|presupuesto(?:\\s+de)?|máximo|maximo)';
   const match = text.match(new RegExp(wholeWords(marker) + MONEY_GAP_PATTERN + MONEY_AMOUNT_PATTERN + '\\s*' + MONEY_SUFFIX_PATTERN, 'iu'));
   // Передаём кусок исходного текста, а не число отдельно: разборщику нужно
   // видеть, что идёт следом — «150 кв.м» и «300 м от моря» это не цена.
@@ -219,7 +234,7 @@ function naturalCatalogFilter(message, records, language) {
   const districts = mentionedPlaces(message, records, language, 'district');
   const normalized = placeKey(message);
   const tokens = new Set(normalized.split(' ').filter(Boolean));
-  const hasLocationChoice = (cities.length || districts.length) && ['или', 'or', 'o'].some((word) => tokens.has(word));
+  const hasLocationChoice = (cities.length || districts.length) && ['или', 'or', 'o', 'або', 'чи'].some((word) => tokens.has(word));
   const ambiguousLocation = cities.length > 1 || districts.length > 1 || hasLocationChoice;
   if (ambiguousLocation) return null;
 
@@ -256,9 +271,11 @@ function naturalCatalogFilter(message, records, language) {
   const features = parseFeatures(message);
   const filter = { deal, type, bedrooms, city, district, minPrice, maxPrice, ...(features.length ? { features } : {}), sort: '' };
   const count = [deal, type, bedrooms, city, district, minPrice, maxPrice].filter(Boolean).length + (features.length ? 1 : 0);
-  const mentionsUnknownLocation = !city && !district && phraseIncluded(withoutNeutralPlaces(message), LOCATION_PREPOSITIONS);
+  const placeText = withoutNeutralPlaces(message);
+  const mentionsUnknownLocation = !city && !district && (phraseIncluded(placeText, LOCATION_PREPOSITIONS) || (UKRAINIAN_LETTERS.test(message) && phraseIncluded(placeText, ['у'])));
   const looksLikeQuestion = /[?？]/u.test(message)
-    || phraseIncluded(message, ['есть ли', 'можно ли', 'сколько', 'какая цена', 'is there', 'are there', 'how much', 'what price', 'hay', 'cuánto', 'cuanto', 'qué precio', 'que precio']);
+    || phraseIncluded(message, ['есть ли', 'можно ли', 'сколько', 'какая цена', 'is there', 'are there', 'how much', 'what price', 'hay', 'cuánto', 'cuanto', 'qué precio', 'que precio',
+      'чи є', 'є чи', 'чи можна', 'скільки', 'яка ціна', 'яка вартість']);
 
   if (looksLikeQuestion) return null;
   if (count >= 3 && !mentionsUnknownLocation) return filter;

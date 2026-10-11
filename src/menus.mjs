@@ -13,6 +13,7 @@ import { tunnelInstalled } from './remote.mjs';
 import { inquiryChats } from './inquiries.mjs';
 import { ADMIN_COMMAND_DESCRIPTIONS } from './admin-commands.mjs';
 import { refreshChatMenuButton } from './miniapp/menu-button.mjs';
+import { LANGUAGES, addUk } from './languages.mjs';
 
 function languageMessages(language) {
   return data.config.messages[language] || data.config.messages.ru;
@@ -78,9 +79,11 @@ function menuItemForText(text, language) {
 // про место поиска, оказывался на другом языке интерфейса.
 const LANGUAGE_TEXT_ALIASES = {
   ru: ['русский', 'руский', 'russian', '🇷🇺'],
+  uk: ['українська', 'українською', 'украинский', 'украинском', 'украинська', 'ukrainian', 'ucraniano', 'ua', 'uk', '🇺🇦'],
   en: ['english', 'английский', 'англ', '🇬🇧', '🇺🇸'],
   es: ['español', 'espanol', 'испанский', 'spanish', '🇪🇸'],
 };
+addUk(LANGUAGE_TEXT_ALIASES);
 
 function languageFromText(text, options = {}) {
   const value = String(text || '').toLocaleLowerCase('ru-RU').replace(/[^\p{L}\p{Emoji_Presentation}]+/gu, ' ').trim();
@@ -88,7 +91,8 @@ function languageFromText(text, options = {}) {
   for (const [language, aliases] of Object.entries(LANGUAGE_TEXT_ALIASES)) {
     // Точное совпадение — когда язык уже выбран: «есть русский агент?» должно
     // остаться вопросом менеджеру, а не сменой языка.
-    if (aliases.some((alias) => value === alias || (!options.exact && value.split(' ').includes(alias)))) return language;
+    // Двухбуквенные коды («ua», «uk») — только когда они и есть всё сообщение: «uk» внутри фразы чаще значит Великобританию.
+    if (aliases.some((alias) => value === alias || (!options.exact && alias.length > 2 && value.split(' ').includes(alias)))) return language;
   }
   return '';
 }
@@ -204,7 +208,7 @@ async function sendMoreMenu(chatId, user, token) {
         [
           { text: (PRIVACY_TEXT[language] || PRIVACY_TEXT.ru).menuShort, callback_data: 'privacy:open' },
           { text: labels.help, callback_data: 'nav:help' },
-          { text: '🌐 ' + ({ ru: 'Язык', en: 'Language', es: 'Idioma' }[language] || 'Язык'), callback_data: 'nav:language' },
+          { text: '🌐 ' + ({ ru: 'Язык', uk: 'Мова', en: 'Language', es: 'Idioma' }[language] || 'Язык'), callback_data: 'nav:language' },
         ],
         [{ text: '🏠 ' + navigation.mainMenu, callback_data: 'nav:menu' }],
       ],
@@ -221,7 +225,7 @@ function sharedMenuRow(user, language) {
 }
 
 async function sendLanguagePicker(chatId, token, currentLanguage = '') {
-  const language = ['ru', 'en', 'es'].includes(currentLanguage) ? currentLanguage : 'ru';
+  const language = LANGUAGES.includes(currentLanguage) ? currentLanguage : 'ru';
   const languageButton = (language, flag) => ({
     text: (currentLanguage === language ? '✓ ' : '') + flag + ' ' + LANGUAGE_NAMES[language],
     callback_data: 'language:' + language,
@@ -234,6 +238,7 @@ async function sendLanguagePicker(chatId, token, currentLanguage = '') {
       reply_markup: {
         inline_keyboard: [
           [languageButton('ru', '🇷🇺')],
+          [languageButton('uk', '🇺🇦')],
           [languageButton('en', '🇬🇧')],
           [languageButton('es', '🇪🇸')],
         ],
@@ -248,6 +253,7 @@ async function configureBotCommands(token) {
   const commandSets = {
     default: commandsFor('en'),
     ru: commandsFor('ru'),
+    uk: commandsFor('uk'),
     en: commandsFor('en'),
     es: commandsFor('es'),
   };

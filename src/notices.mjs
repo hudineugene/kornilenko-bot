@@ -22,6 +22,7 @@ import { runDueGroupPosts } from './groups.mjs';
 import { runRetentionCleanup } from './retention.mjs';
 import { runComeback, runWeeklyDigest } from './digest.mjs';
 import { runPlanReminders } from './plan.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 const DIGEST_HOUR = 9;
 
@@ -408,7 +409,7 @@ function botFunnel(users, start) {
     goals: { ...goals, answered, mostlyBrowsing: answered >= 5 && goals.browse * 2 > answered },
     trackedFrom,
     partial: Boolean(earliest) && new Date(earliest) > start,
-    byLanguage: groups((user) => ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'unknown'),
+    byLanguage: groups((user) => LANGUAGES.includes(user.preferredLanguage) ? user.preferredLanguage : 'unknown'),
     bySource: groups((user) => sourceDisplay(user.source) || 'без метки').slice(0, 5),
   };
 }

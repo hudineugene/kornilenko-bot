@@ -6,6 +6,7 @@ import { cleanText, localDayKey } from './util.mjs';
 import { data, runtime, saveDataNow } from './store.mjs';
 import { propertyReadyForLanguage } from './catalog.mjs';
 import { awaitingReply } from './inquiries.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 const MAX_NOTIFICATION_STATES = 1000;
 
@@ -126,7 +127,7 @@ function currentAdminNotifications() {
   // клиентская беда, и раньше о ней знал только Обзор — считая у себя в
   // браузере, поэтому в центр уведомлений и на телефон она не попадала.
   const active = data.objects.filter((record) => record.status === 'active');
-  const invisible = active.filter((record) => !['ru', 'en', 'es'].some((language) => propertyReadyForLanguage(record, language)));
+  const invisible = active.filter((record) => !LANGUAGES.some((language) => propertyReadyForLanguage(record, language)));
   if (!active.length) {
     items.push({
       id: 'catalog:empty', kind: 'catalog', severity: 'warn', title: 'В каталоге нет активных объектов',

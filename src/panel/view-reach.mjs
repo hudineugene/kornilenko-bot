@@ -234,7 +234,7 @@ function openCampaignEditor(id) {
       bindLanguageTabs(dialog);
       var image = null;
       var savedImageUrl = entry && entry.image && entry.image.exists ? "/api/media/broadcasts/" + encodeURIComponent(entry.id) : "";
-      var exampleNames = { ru: "Анна", en: "Anna", es: "Ana" };
+      var exampleNames = { ru: "Анна", uk: "Анна", en: "Anna", es: "Ana" };
       function campaignLanguageValue(name, language) {
         var input = dialog.querySelector('[data-tr="' + name + '"][data-lang="' + language + '"]');
         return input ? String(input.value || "").trim() : "";

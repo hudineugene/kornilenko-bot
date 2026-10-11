@@ -5,12 +5,15 @@ import { cleanText, clone } from './util.mjs';
 import { INTERFACE_TEXT_DEFAULTS } from './texts.mjs';
 import { PREVIOUS_INTERFACE_TEXTS, VERSION_38_DEFAULT_HASHES } from './legacy-texts.mjs';
 import { normalizedSimilarPropertyDetails } from './similar.mjs';
+import { LANGUAGES, addUk } from './languages.mjs';
 
 // Версия формата данных. Поднимается при каждом изменении набора полей: по ней
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 52;
+const DATA_VERSION = 53;
+// Миграции чинят тексты прежних версий, а их было только на трёх языках; украинского в них нет.
+const LEGACY_LANGUAGES = ['ru', 'en', 'es'];
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
 // 0 turns reminders about unanswered inquiries off.
 const RETENTION_MONTH_OPTIONS = [0, 12, 18, 24, 36, 48];
@@ -83,6 +86,7 @@ const DEFAULT_GUIDE_PAGES = [
     },
   },
 ];
+addUk(DEFAULT_GUIDE_PAGES);
 
 // «Мой план покупки»: чек-лист шагов для покупателя из другой страны. Порядок и
 // набор шагов заданы ботом, тексты владелец правит в панели. Формулировки
@@ -180,6 +184,7 @@ const DEFAULT_BUY_PLAN = [
     },
   },
 ];
+addUk(DEFAULT_BUY_PLAN);
 
 function normalizeBuyPlan(value) {
   const saved = Array.isArray(value) ? value : [];
@@ -187,8 +192,8 @@ function normalizeBuyPlan(value) {
     const stored = saved.find((item) => item && item.id === step.id) || {};
     return {
       id: step.id,
-      title: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText((stored.title || {})[language], 120) || step.title[language]])),
-      text: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText((stored.text || {})[language], 1500) || step.text[language]])),
+      title: Object.fromEntries(LANGUAGES.map((language) => [language, cleanText((stored.title || {})[language], 120) || step.title[language]])),
+      text: Object.fromEntries(LANGUAGES.map((language) => [language, cleanText((stored.text || {})[language], 1500) || step.text[language]])),
     };
   });
 }
@@ -263,7 +268,7 @@ const defaultData = {
     },
   ],
   users: {},
-  welcomeImages: { ru: null, en: null, es: null },
+  welcomeImages: { ru: null, uk: null, en: null, es: null },
   objects: [],
   promotions: [],
   contacts: {
@@ -277,7 +282,7 @@ const defaultData = {
     mapUrl: '',
     // Фото менеджера: клиент видит его над экраном «Связаться».
     photo: null,
-    text: { ru: '', en: '', es: '' },
+    text: { ru: '', uk: '', en: '', es: '' },
   },
   interfaceText: {},
   // «Почему мы»: то, что владелец сам решил показать клиентам как основание для
@@ -308,6 +313,7 @@ const defaultData = {
   // после нештатной остановки.
   handledUpdateIds: [],
 };
+addUk(defaultData);
 
 function normalizeStoredImages(record) {
   const source = Array.isArray(record && record.images) && record.images.length
@@ -324,14 +330,14 @@ function normalizeStoredImages(record) {
 function normalizePropertyImages(record) {
   const stored = record && record.imagesByLanguage;
   if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-    return Object.fromEntries(['ru', 'en', 'es'].map((language) => [
+    return Object.fromEntries(LANGUAGES.map((language) => [
       language,
       normalizeStoredImages({ images: Array.isArray(stored[language]) ? stored[language] : [] }),
     ]));
   }
   // Images from older versions are treated as Russian so they are never
   // accidentally shown to English- or Spanish-speaking users.
-  return { ru: normalizeStoredImages(record || {}), en: [], es: [] };
+  return { ru: normalizeStoredImages(record || {}), uk: [], en: [], es: [] };
 }
 
 function normalizeAdminNotificationStates(value) {
@@ -356,10 +362,10 @@ function normalizeAdminNotificationStates(value) {
 
 function normalizeLocalizedField(value, maximum) {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText(value[language], maximum)]));
+    return Object.fromEntries(LANGUAGES.map((language) => [language, cleanText(value[language], maximum)]));
   }
   const legacy = cleanText(value, maximum);
-  return { ru: legacy, en: legacy, es: legacy };
+  return Object.fromEntries(LANGUAGES.map((language) => [language, legacy]));
 }
 
 // One-time upgrade of texts that still equal defaults from older versions.
@@ -436,7 +442,7 @@ const textFingerprint = (value) => crypto.createHash('sha1').update(JSON.stringi
 function migrateStaleTexts(interfaceText, messages) {
   const same = (first, second) => JSON.stringify(first) === JSON.stringify(second);
   for (const [group, languages] of Object.entries(INTERFACE_TEXT_DEFAULTS)) {
-    for (const language of ['ru', 'en', 'es']) {
+    for (const language of LEGACY_LANGUAGES) {
       const stored = interfaceText && interfaceText[group] && interfaceText[group][language];
       if (!stored || typeof stored !== 'object') continue;
       const previous = (PREVIOUS_INTERFACE_TEXTS[group] && PREVIOUS_INTERFACE_TEXTS[group][language]) || {};
@@ -452,7 +458,7 @@ function migrateStaleTexts(interfaceText, messages) {
       }
     }
   }
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LEGACY_LANGUAGES) {
     const current = messages[language];
     if (!current) continue;
     const help = String(current.help || '');
@@ -470,7 +476,7 @@ const SELECTION_STEP_NUMBERS = { askDeal: 1, askLocation: 3, askBudget: 4, askBe
 function migrateSelectionSteps(interfaceText) {
   const form = interfaceText && interfaceText.selectionForm;
   if (!form || typeof form !== 'object') return;
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LEGACY_LANGUAGES) {
     const texts = form[language];
     if (!texts || typeof texts !== 'object') continue;
     for (const [key, step] of Object.entries(SELECTION_STEP_NUMBERS)) {
@@ -489,11 +495,13 @@ const PREVIOUS_MENU_DEFAULTS = {
   en: { objects: '🏘 Our properties', selection: '✨ Help me find a property', contacts: '💬 Contact a manager', request: '📞 Request a call' },
   es: { objects: '🏘 Nuestros inmuebles', selection: '✨ Ayúdame a elegir', contacts: '💬 Contactar con un gestor', request: '📞 Solicitar una llamada' },
 };
+addUk(PREVIOUS_MENU_DEFAULTS);
 const PREVIOUS_HELP_DEFAULTS = {
   ru: '👋 Чем я могу помочь?\n\n🏘 Наши объекты — посмотреть недвижимость\n✨ Помогите подобрать объект — оставить пожелания менеджеру\n❤️ Избранное — вернуться к сохранённым объектам\n🔥 Акции — посмотреть специальные предложения\n💬 Связаться с менеджером — задать вопрос или заказать звонок\n☰ Ещё — открыть информацию о компании и помощь\n🌐 Сменить язык — выбрать другой язык\n\nВы также можете написать вопрос обычным сообщением. Менеджер ответит в этом чате.',
   en: '👋 How can I help?\n\n🏘 Our properties — browse available real estate\n✨ Help me find a property — send your preferences to a manager\n❤️ Favorites — return to saved properties\n🔥 Offers — view current promotions\n💬 Contact a manager — ask a question or request a call\n☰ More — open company information and help\n🌐 Change language — select another language\n\nYou can also send a regular message. A manager will reply in this chat.',
   es: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Nuestros inmuebles — ver las propiedades disponibles\n✨ Ayúdame a elegir — enviar tus preferencias a un gestor\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — consultar las ofertas actuales\n💬 Contactar con un gestor — hacer una pregunta o solicitar una llamada\n☰ Más — abrir la información de la empresa y la ayuda\n🌐 Cambiar idioma — seleccionar otro idioma\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
 };
+addUk(PREVIOUS_HELP_DEFAULTS);
 
 // Версия 48: английские и испанские ярлыки и фразы «как родные» («Help me choose», «My account»,
 // «Buscar por mí»). Прежние значения по умолчанию, оставшиеся у владельца нетронутыми, заменяются на
@@ -524,7 +532,7 @@ function migrateWording(interfaceText, messages) {
 
 function migrateShortMenu(interfaceText, messages) {
   const labels = interfaceText && interfaceText.menuLabels;
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LEGACY_LANGUAGES) {
     const saved = labels && labels[language];
     if (saved && typeof saved === 'object') {
       for (const [key, previous] of Object.entries(PREVIOUS_MENU_DEFAULTS[language])) {
@@ -559,6 +567,7 @@ const VERSION_17_MY_DEFAULTS = {
     viewingFooter: 'Si cambian tus planes, abre «☰ Más → 📋 Mis solicitudes» o escríbenos.',
   },
 };
+addUk(VERSION_17_MY_DEFAULTS);
 
 // Версия 35: короткое меню («Связаться» вместо «Менеджера»), подсказка про
 // свободный поиск и такое же приглашение в поле ввода. Трогаем только те
@@ -568,9 +577,10 @@ const VERSION_34_DEFAULTS = {
   en: { contacts: '💬 Agent', placeholder: 'Choose a menu item', hint: 'Choose a section from the menu below 👇' },
   es: { contacts: '💬 Asesor', placeholder: 'Elige una opción', hint: 'Elige una sección del menú 👇' },
 };
+addUk(VERSION_34_DEFAULTS);
 
 function migrateShortGreeting(interfaceText) {
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LEGACY_LANGUAGES) {
     const previous = VERSION_34_DEFAULTS[language];
     const labels = interfaceText && interfaceText.menuLabels && interfaceText.menuLabels[language];
     if (labels && typeof labels === 'object') {
@@ -585,7 +595,7 @@ function migrateShortGreeting(interfaceText) {
 }
 
 function migrateMyArea(interfaceText, messages) {
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LEGACY_LANGUAGES) {
     const previous = VERSION_17_MY_DEFAULTS[language];
     const labels = interfaceText && interfaceText.menuLabels && interfaceText.menuLabels[language];
     if (labels && labels.more === previous.label) labels.more = INTERFACE_TEXT_DEFAULTS.menuLabels[language].more;
@@ -613,9 +623,10 @@ const VERSION_18_COMPARISON_DEFAULTS = {
     help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — ofertas actuales\n📞 Llámame — un gestor te llamará cuando te venga bien\n💬 Gestor — hacer una pregunta, llamar o escribir por WhatsApp\n👤 Mi espacio — favoritos, inmuebles vistos, solicitudes y avisos\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
   },
 };
+addUk(VERSION_18_COMPARISON_DEFAULTS);
 
 function migrateComparison(interfaceText, messages) {
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LEGACY_LANGUAGES) {
     const previous = VERSION_18_COMPARISON_DEFAULTS[language];
     const myArea = interfaceText && interfaceText.myArea && interfaceText.myArea[language];
     if (myArea && myArea.intro === previous.intro) myArea.intro = INTERFACE_TEXT_DEFAULTS.myArea[language].intro;
@@ -641,9 +652,10 @@ const VERSION_19_SAVED_SEARCH_DEFAULTS = {
     help: '👋 ¿Cómo puedo ayudarte?\n\n🏘 Inmuebles — ver las propiedades disponibles\n✨ Búsqueda — cuéntanos qué buscas y recibe opciones adecuadas\n❤️ Favoritos — volver a los inmuebles guardados\n🔥 Promociones — ofertas actuales\n📞 Llámame — un gestor te llamará cuando te venga bien\n💬 Gestor — hacer una pregunta, llamar o escribir por WhatsApp\n👤 Mi espacio — favoritos, comparación, inmuebles vistos, solicitudes y avisos\n\nTambién puedes enviar un mensaje normal. Un gestor responderá en este chat.',
   },
 };
+addUk(VERSION_19_SAVED_SEARCH_DEFAULTS);
 
 function migrateSavedSearch(interfaceText, messages) {
-  for (const language of ['ru', 'en', 'es']) {
+  for (const language of LEGACY_LANGUAGES) {
     const previous = VERSION_19_SAVED_SEARCH_DEFAULTS[language];
     const myArea = interfaceText && interfaceText.myArea && interfaceText.myArea[language];
     if (myArea && myArea.intro === previous.intro) myArea.intro = INTERFACE_TEXT_DEFAULTS.myArea[language].intro;
@@ -804,7 +816,7 @@ function normalizeGroups(value) {
     // Номер группы в метке источника («g3»): выдаётся один раз при первой публикации и не меняется.
     sourceCode: /^\d{1,4}$/.test(String(item.sourceCode || '')) ? String(item.sourceCode) : '',
     // Язык, на котором последний раз публиковали объявление: подставляется по умолчанию.
-    listingLanguage: ['ru', 'en', 'es'].includes(item.listingLanguage) ? item.listingLanguage : '',
+    listingLanguage: LANGUAGES.includes(item.listingLanguage) ? item.listingLanguage : '',
     lastError: cleanText(item.lastError, 500),
   }));
 }
@@ -814,7 +826,7 @@ function normalizePublications(value) {
   return value.slice(0, 30).map((item) => ({
     groupId: cleanText(item && item.groupId, 40),
     title: cleanText(item && item.title, 200),
-    language: ['ru', 'en', 'es'].includes(item && item.language) ? item.language : 'ru',
+    language: LANGUAGES.includes(item && item.language) ? item.language : 'ru',
     at: cleanText(item && item.at, 40),
     messageId: Math.max(0, Number(item && item.messageId) || 0),
     messageIds: (Array.isArray(item && item.messageIds) ? item.messageIds : []).map((value) => Math.max(0, Math.floor(Number(value)) || 0)).filter(Boolean).slice(0, 12),
@@ -843,7 +855,7 @@ function normalizeGroupPosts(value) {
     withoutSignature: Boolean(item.withoutSignature),
     pin: Boolean(item.pin),
     notify: item.notify !== false,
-    listing: item.listing && item.listing.objectId ? { objectId: cleanText(item.listing.objectId, 100), language: ['ru', 'en', 'es'].includes(item.listing.language) ? item.listing.language : 'ru', layout: item.listing.layout === 'split' ? 'split' : 'single', ...(item.listing.priceDrop === true ? { priceDrop: true } : {}) } : null,
+    listing: item.listing && item.listing.objectId ? { objectId: cleanText(item.listing.objectId, 100), language: LANGUAGES.includes(item.listing.language) ? item.listing.language : 'ru', layout: item.listing.layout === 'split' ? 'split' : 'single', ...(item.listing.priceDrop === true ? { priceDrop: true } : {}) } : null,
     status: ['scheduled', 'sent', 'failed', 'cancelled'].includes(item.status) ? item.status : 'scheduled',
     sendAt: cleanText(item.sendAt, 40),
     sentAt: cleanText(item.sentAt, 40),
@@ -920,6 +932,7 @@ const DEFAULT_WORKING_HOURS = {
     es: 'Ahora estamos fuera de horario: un gestor responderá {next}. Tu mensaje está guardado.',
   },
 };
+addUk(DEFAULT_WORKING_HOURS);
 
 // The purchase calculator under a property. Off until the administrator
 // checks the rates: taxes depend on the region and change over time.
@@ -1031,7 +1044,7 @@ function normalizeWorkingHours(value) {
     from,
     to,
     replyMinutes,
-    note: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText(note[language], 500) || DEFAULT_WORKING_HOURS.note[language]])),
+    note: Object.fromEntries(LANGUAGES.map((language) => [language, cleanText(note[language], 500) || DEFAULT_WORKING_HOURS.note[language]])),
   };
 }
 
@@ -1145,11 +1158,11 @@ function normalizeGuidePages(value) {
     const stored = saved.find((item) => item && item.id === page.id) || {};
     return {
       id: page.id,
-      title: Object.fromEntries(['ru', 'en', 'es'].map((language) => [
+      title: Object.fromEntries(LANGUAGES.map((language) => [
         language,
         cleanText((stored.title || {})[language], 120) || page.title[language],
       ])),
-      text: Object.fromEntries(['ru', 'en', 'es'].map((language) => [
+      text: Object.fromEntries(LANGUAGES.map((language) => [
         language,
         cleanText((stored.text || {})[language], 3000) || page.text[language],
       ])),
@@ -1244,7 +1257,7 @@ function normalizeReplyTemplates(value) {
   return value.map((item) => ({
     id: cleanText(item && item.id, 100) || crypto.randomUUID(),
     title: cleanText(item && item.title, 80),
-    text: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText(item && item.text && item.text[language], 4000)])),
+    text: Object.fromEntries(LANGUAGES.map((language) => [language, cleanText(item && item.text && item.text[language], 4000)])),
     updatedAt: cleanText(item && item.updatedAt, 40) || new Date().toISOString(),
   })).filter((item) => item.title && (item.text.ru || item.text.en || item.text.es)).slice(0, MAX_REPLY_TEMPLATES);
 }
@@ -1265,7 +1278,7 @@ function normalizeLoadedData(parsed) {
     const legacyFormat = storedVersion < 14;
     const messages = {};
     const menu = {};
-    for (const language of ['ru', 'en', 'es']) {
+    for (const language of LANGUAGES) {
       messages[language] = {
         ...defaultData.config.messages[language],
         ...(parsedMessages[language] || {}),
@@ -1357,10 +1370,10 @@ function normalizeLoadedData(parsed) {
     const broadcasts = Array.isArray(parsed.broadcasts) ? parsed.broadcasts.map((source) => {
       const entry = source.messages ? { ...source } : {
         ...source,
-        messages: { ru: source.text || '', en: source.text || '', es: source.text || '' },
+        messages: Object.fromEntries(LANGUAGES.map((language) => [language, source.text || ''])),
         languages: [],
         tags: [],
-        buttonText: { ru: '', en: '', es: '' },
+        buttonText: Object.fromEntries(LANGUAGES.map((language) => [language, ''])),
         buttonUrl: '',
       };
       if (entry.status === 'running') entry.status = 'queued';
@@ -1385,7 +1398,7 @@ function normalizeLoadedData(parsed) {
       id: String(item.id || crypto.randomUUID()),
       userId: String(item.userId || ''),
       chatId: item.chatId == null ? '' : String(item.chatId),
-      language: ['ru', 'en', 'es'].includes(item.language) ? item.language : 'ru',
+      language: LANGUAGES.includes(item.language) ? item.language : 'ru',
       text: cleanText(item.text, 4000),
       status: ['new', 'in_progress', 'closed'].includes(item.status) ? item.status : 'new',
       pipelineStage: normalizePipelineStage(item.pipelineStage, item),

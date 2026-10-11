@@ -18,8 +18,9 @@ import { acknowledgeCallback, propertyRequestText, sendSimilarProperty } from '.
 import { temporaryDeliveryError, userUnavailableError } from './broadcasts.mjs';
 import { adminMorningHour } from './hours.mjs';
 import { adminSendPlan } from './notify-plan.mjs';
+import { LANGUAGES, isCyrillic } from './languages.mjs';
 
-const LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
+const LOCALES = { ru: 'ru-RU', uk: 'uk-UA', en: 'en-GB', es: 'es-ES' };
 const VIEWING_REMINDER_HOUR = 18;
 const VIEWING_FEEDBACK_HOUR = 10;
 const CLIENT_QUIET_HOUR = 21;
@@ -137,7 +138,7 @@ function parseViewingDate(text, now = new Date()) {
 function viewingDateLabel(key, language) {
   if (!DAY_KEY_PATTERN.test(String(key || ''))) return '';
   // Для русского «Чт 01.10» однозначно; в английском и испанском «01/10» читают то как день и месяц, то наоборот — пишем месяц словом.
-  const style = language === 'ru' || !LOCALES[language] ? { weekday: 'short', day: '2-digit', month: '2-digit' } : { weekday: 'short', day: 'numeric', month: 'short' };
+  const style = isCyrillic(language) || !LOCALES[language] ? { weekday: 'short', day: '2-digit', month: '2-digit' } : { weekday: 'short', day: 'numeric', month: 'short' };
   const formatted = new Intl.DateTimeFormat(LOCALES[language] || LOCALES.ru, style).format(dateFromDayKey(key));
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
@@ -150,7 +151,7 @@ function viewingWhen(inquiry, language) {
   const confirmedDate = confirmed ? viewingDateLabel(viewing.confirmedDate, language) : '';
   // "Another date" is one free-text answer ("25 September after 4 pm"): the
   // time is part of it, and the form stored "As specified" as the time.
-  const freeText = ['ru', 'en', 'es'].some((code) => VIEWING_FORM_TEXT[code] && VIEWING_FORM_TEXT[code].asSpecified === viewing.timeText);
+  const freeText = LANGUAGES.some((code) => VIEWING_FORM_TEXT[code] && VIEWING_FORM_TEXT[code].asSpecified === viewing.timeText);
   // Менеджеру слова клиента («Por la tarde») — по-русски; самому клиенту — как он их выбрал.
   const words = language === 'ru' ? russianViewingText : (text) => text;
   if (freeText) {

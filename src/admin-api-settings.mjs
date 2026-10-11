@@ -22,6 +22,7 @@ import { configureMiniAppButton, resetChatMenuButtons } from './miniapp/menu-but
 import { ADMIN_ALLOWED_HOSTS } from './config.mjs';
 import { resolvesToPrivateAddress } from './miniapp/network.mjs';
 import { applyImport, feedSettings, fetchFeed, planImport, planSummary, readFeed } from './feed-import.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 // Каждая ветка сама отвечает клиенту и возвращает управление. Если не подошла
 // ни одна, функция возвращает false — тогда запрос ищут в других модулях.
@@ -43,7 +44,7 @@ function refreshStaffCommands(previousChatIds = []) {
     if (!session) return;
     const body = await readJson(req);
     const text = cleanText(body.text, 1000);
-    const language = ['ru', 'en', 'es'].includes(body.language) ? body.language : 'ru';
+    const language = LANGUAGES.includes(body.language) ? body.language : 'ru';
     if (!text) return json(res, 400, { error: 'Введите тестовое сообщение' });
     const rule = findRule(text, language);
     return json(res, 200, { matched: rule || null });
@@ -482,7 +483,7 @@ function refreshStaffCommands(previousChatIds = []) {
     const days = Array.isArray(body.days) ? body.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) : [];
     if (body.enabled === true && !days.length) return json(res, 400, { error: 'Отметьте хотя бы один рабочий день' });
     const note = body.note && typeof body.note === 'object' ? body.note : {};
-    for (const language of ['ru', 'en', 'es']) {
+    for (const language of LANGUAGES) {
       if (cleanText(note[language], 500) && !String(note[language]).includes('{next}')) return json(res, 400, { error: 'В тексте для клиента оставьте {next} — туда бот подставит, когда ответит менеджер' });
     }
     if (body.replyMinutes != null && !REPLY_MINUTES_CHOICES.includes(Number(body.replyMinutes))) {

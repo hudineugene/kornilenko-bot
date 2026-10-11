@@ -14,6 +14,7 @@ import { createInquiry, notifyAdministratorAction } from './inquiries.mjs';
 import { acknowledgeCallback, whatsappRow } from './sections.mjs';
 import { searchMessage } from './whatsapp-hot.mjs';
 import { start } from './lifecycle.mjs';
+import { LANGUAGES, LOCALES, addUk, isCyrillic } from './languages.mjs';
 
 function localized(value, language) {
   if (!value || typeof value !== 'object') return '';
@@ -22,7 +23,8 @@ function localized(value, language) {
 
 function localizedExact(value, language, maximum = 4000) {
   if (!value || typeof value !== 'object') return '';
-  return cleanText(value[language], maximum);
+  // Украинский без своего текста показывается русским: клиент не остаётся с пустой карточкой, а владелец переводит позже.
+  return cleanText(value[language] || (language === 'uk' ? value.ru : ''), maximum);
 }
 
 function validHttpUrl(value) {
@@ -60,9 +62,9 @@ function whatsappContactUrl(value, fallbackPhone = '', message = '') {
 // общие, а не прячем объект от целого языка.
 function recordImages(record, language) {
   if (record && record.imagesByLanguage && typeof record.imagesByLanguage === 'object') {
-    const order = ['ru', 'en', 'es'].includes(language)
-      ? [language, ...['ru', 'en', 'es'].filter((code) => code !== language)]
-      : ['ru', 'en', 'es'];
+    const order = LANGUAGES.includes(language)
+      ? [language, ...LANGUAGES.filter((code) => code !== language)]
+      : LANGUAGES;
     for (const candidate of order) {
       const images = record.imagesByLanguage[candidate];
       const ready = Array.isArray(images) ? images.filter(imageExists).slice(0, 10) : [];
@@ -100,7 +102,7 @@ function propertyPublicationIssues(record, language) {
 }
 
 function propertyPublicationReadiness(record) {
-  return Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, propertyPublicationIssues(record, language)]));
+  return Object.fromEntries(LANGUAGES.map((language) => [language, propertyPublicationIssues(record, language)]));
 }
 
 function propertyReadyForLanguage(record, language) {
@@ -305,8 +307,8 @@ function locationText(parts, address) {
 function distanceText(value, language = 'ru') {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return '';
-  if (number >= 1000) return formatNumber(Math.round(number / 100) / 10, language, 1) + ' ' + (language === 'ru' ? 'км' : 'km');
-  return formatNumber(number, language, 2) + ' ' + (language === 'ru' ? 'м' : 'm');
+  if (number >= 1000) return formatNumber(Math.round(number / 100) / 10, language, 1) + ' ' + (isCyrillic(language) ? 'км' : 'km');
+  return formatNumber(number, language, 2) + ' ' + (isCyrillic(language) ? 'м' : 'm');
 }
 
 // У комплекса из нескольких вариантов («1–2 спальни», «37–60 м²») верхняя граница хранится рядом с обычным значением;
@@ -324,7 +326,7 @@ function rangeText(low, high, language, allowZero = false) {
 function propertySpecRows(record, language, options = {}) {
   const compact = Boolean(options.compact);
   const copy = PROPERTY_ACTION_TEXT[language] || PROPERTY_ACTION_TEXT.ru;
-  const metre = language === 'ru' ? 'м' : 'm';
+  const metre = isCyrillic(language) ? 'м' : 'm';
   const facts = [];
   const bedrooms = rangeText(record.bedrooms, record.bedroomsMax, language, true);
   const bathrooms = numericText(record.bathrooms, language);
@@ -367,7 +369,7 @@ function pricePerSquareMetre(record, language) {
   const price = Number(record.priceValue);
   const area = Number(record.area);
   if (!Number.isFinite(price) || !Number.isFinite(area) || price <= 0 || area <= 0) return '';
-  const metre = language === 'ru' ? 'м' : 'm';
+  const metre = isCyrillic(language) ? 'м' : 'm';
   const perMetre = Math.round(price / area);
   const symbol = record.currency === 'USD' ? '$' : record.currency === 'GBP' ? '£' : '€';
   return formatMoney(perMetre, symbol, language, 0) + '/' + metre + '²';
@@ -453,7 +455,7 @@ function objectCaption(record, language, options = {}) {
   const market = options.market;
   if (market && copy.marketTitle) {
     const symbol = record.currency === 'USD' ? '$' : record.currency === 'GBP' ? '£' : '€';
-    const metre = (language === 'ru' ? 'м' : 'm') + '²';
+    const metre = (isCyrillic(language) ? 'м' : 'm') + '²';
     const verdict = Math.abs(market.percent) < 3 ? copy.marketSame : (market.percent > 0 ? copy.marketHigher : copy.marketLower).replace('{percent}', () => String(Math.abs(market.percent)));
     sections.push([copy.marketTitle,
       copy.marketLine.replace('{place}', () => market.place).replace('{price}', () => formatMoney(market.typical, symbol, language, 0) + '/' + metre).replace('{count}', () => String(market.count)),
@@ -463,7 +465,7 @@ function objectCaption(record, language, options = {}) {
   if (record.updatedAt) {
     const date = new Date(record.updatedAt);
     if (Number.isFinite(date.getTime())) {
-      const locale = language === 'en' ? 'en-GB' : language === 'es' ? 'es-ES' : 'ru-RU';
+      const locale = LOCALES[language] || LOCALES.ru;
       sections.push([copy.updated + ': ' + new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)]);
     }
   }
@@ -550,7 +552,7 @@ function recordHasFeature(record, key) {
   }
   const pattern = FEATURE_PATTERNS[key];
   if (!pattern) return false;
-  const text = ['ru', 'en', 'es'].map((code) => localizedExact(record.title, code, 300) + ' ' + localizedExact(record.description, code, 3000)).join(' ');
+  const text = LANGUAGES.map((code) => localizedExact(record.title, code, 300) + ' ' + localizedExact(record.description, code, 3000)).join(' ');
   return pattern.test(text);
 }
 const CATALOG_INLINE_LOCATION_LIMIT = 4;
@@ -723,6 +725,7 @@ const FILTER_TYPE_LABELS = {
   en: { apartment: 'Apartment', house: 'House', villa: 'Villa', townhouse: 'Townhouse', land: 'Land', commercial: 'Commercial', newbuild: 'New build', other: 'Other' },
   es: { apartment: 'Piso', house: 'Casa', villa: 'Villa', townhouse: 'Adosado', land: 'Terreno', commercial: 'Comercial', newbuild: 'Obra nueva', other: 'Otro' },
 };
+addUk(FILTER_TYPE_LABELS);
 
 function markedFilterLabel(text, selected = false) {
   return (selected ? '✓ ' : '') + text;
@@ -1117,8 +1120,8 @@ function rememberRecentlyViewed(user, record, mode = 'all') {
 // instead of losing or mixing the location filter.
 function translatedCatalogFilter(value, language) {
   const filter = normalizedCatalogFilter(value);
-  if ((!filter.city && !filter.district) || !['ru', 'en', 'es'].includes(language)) return filter;
-  const matchesLocalizedField = (record, field, valueToMatch) => !valueToMatch || ['ru', 'en', 'es']
+  if ((!filter.city && !filter.district) || !LANGUAGES.includes(language)) return filter;
+  const matchesLocalizedField = (record, field, valueToMatch) => !valueToMatch || LANGUAGES
     .some((candidate) => sameCity(field === 'city' ? recordCity(record, candidate) : recordDistrict(record, candidate), valueToMatch));
   const matched = data.objects.find((record) => matchesLocalizedField(record, 'city', filter.city)
     && matchesLocalizedField(record, 'district', filter.district));
@@ -1202,8 +1205,8 @@ function catalogListLine(record, language, number) {
   const type = (PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[record.propertyType] || '';
   const city = localizedExact(record.city, language, 80);
   const price = objectPriceText(record, language);
-  const bedrooms = Number(record.bedrooms) > 0 ? rangeText(record.bedrooms, record.bedroomsMax, language, true) + ' ' + (language === 'ru' ? 'сп.' : language === 'es' ? 'dorm.' : 'bed') : '';
-  const area = Number(record.area) > 0 ? numericText(record.area, language) + ' ' + (language === 'ru' ? 'м' : 'm') + '²' : '';
+  const bedrooms = Number(record.bedrooms) > 0 ? rangeText(record.bedrooms, record.bedroomsMax, language, true) + ' ' + (language === 'ru' ? 'сп.' : language === 'uk' ? 'спал.' : language === 'es' ? 'dorm.' : 'bed') : '';
+  const area = Number(record.area) > 0 ? numericText(record.area, language) + ' ' + (isCyrillic(language) ? 'м' : 'm') + '²' : '';
   // «250 000 € · 2 сп. · 70 м² · Бенидорм»: то, чем объекты различаются, а не «Квартира · Бенидорм» пять раз подряд. Тип — только у
   // необычного (вилла, участок): квартира подразумевается. Строка не длиннее 38 знаков: длиннее — переносится, и восемь объектов
   // занимают шестнадцать строк.
@@ -1326,6 +1329,7 @@ const EXAMPLE_FEATURE_PHRASES = {
   en: { pool: 'with a pool', sea: 'by the sea', terrace: 'with a terrace', garden: 'with a garden', parking: 'with parking' },
   es: { pool: 'con piscina', sea: 'cerca del mar', terrace: 'con terraza', garden: 'con jardín', parking: 'con parking' },
 };
+addUk(EXAMPLE_FEATURE_PHRASES);
 
 function searchExampleText(user, language) {
   const record = publishedCatalog(user).find((item) => item.status === 'active' && item.dealType !== 'rent'
@@ -1341,6 +1345,10 @@ function searchExampleText(user, language) {
   const phrase = featureKey ? EXAMPLE_FEATURE_PHRASES[language][featureKey] || EXAMPLE_FEATURE_PHRASES.ru[featureKey] : '';
   if (language === 'en') return bedrooms + (bedrooms === 1 ? ' bedroom' : ' bedrooms') + ' in ' + city + (phrase ? ' ' + phrase : '') + ' under ' + limit;
   if (language === 'es') return bedrooms + (bedrooms === 1 ? ' dormitorio' : ' dormitorios') + ' en ' + city + (phrase ? ' ' + phrase : '') + ' hasta ' + limit;
+  if (language === 'uk') {
+    const form = bedrooms % 10 === 1 && bedrooms % 100 !== 11 ? 'спальня' : [2, 3, 4].includes(bedrooms % 10) && ![12, 13, 14].includes(bedrooms % 100) ? 'спальні' : 'спалень';
+    return city + ', ' + bedrooms + ' ' + form + (phrase ? ', ' + phrase : '') + ', до ' + limit;
+  }
   const word = bedrooms % 10 === 1 && bedrooms % 100 !== 11 ? 'спальня' : [2, 3, 4].includes(bedrooms % 10) && ![12, 13, 14].includes(bedrooms % 100) ? 'спальни' : 'спален';
   return city + ', ' + bedrooms + ' ' + word + (phrase ? ', ' + phrase : '') + ', до ' + limit;
 }
@@ -1453,7 +1461,7 @@ async function sendPropertyCard(chatId, user, token, record, catalog = null) {
 // и настоящая карточка (подпись, кнопки, «Подробнее»), но ничего не меняет: клиента, избранное и счётчики показов не трогает.
 // Кнопки с действиями неактивны (нажатие отвечает «это пример»): иначе у владельца завелась бы заявка от самого себя.
 async function sendPropertyPreview(chatId, record, language, token) {
-  const lang = ['ru', 'en', 'es'].includes(language) ? language : 'ru';
+  const lang = LANGUAGES.includes(language) ? language : 'ru';
   const copy = PROPERTY_ACTION_TEXT[lang] || PROPERTY_ACTION_TEXT.ru;
   const user = { id: 'preview', preferredLanguage: lang, favorites: [], comparison: [] };
   const caption = propertyCardCaption(user, record, lang, null);

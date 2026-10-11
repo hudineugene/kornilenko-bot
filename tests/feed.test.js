@@ -64,7 +64,7 @@ test('Kyero fields become the bot\'s property fields', () => {
   const [villa, flat] = bot.readFeed(FEED);
   assert.equal(villa.reference, 'KB-101');
   assert.deepEqual(villa.fields, { dealType: 'sale', pricePeriod: 'total', priceValue: 450000, currency: 'EUR', propertyType: 'villa', bedrooms: 3, bathrooms: 2, area: 180, plotArea: 600, condition: 'new' });
-  assert.deepEqual(villa.texts.title, { ru: 'Вилла · Finestrat', en: 'Villa · Finestrat', es: 'Villa · Finestrat' });
+  assert.deepEqual(villa.texts.title, { ru: 'Вилла · Finestrat', uk: 'Вілла · Finestrat', en: 'Villa · Finestrat', es: 'Villa · Finestrat' });
   assert.equal(villa.texts.description.en, 'Modern villa with sea views & pool', 'HTML in the description becomes plain text');
   assert.equal(villa.texts.description.ru, 'Современная вилла с видом на море и бассейном');
   assert.equal(villa.texts.mapUrl, 'https://www.google.com/maps?q=38.56,-0.21');

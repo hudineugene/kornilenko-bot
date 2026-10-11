@@ -16,6 +16,7 @@ import { parseUploadedImage } from './admin-http.mjs';
 import { configured } from './store.mjs';
 import { deliverPropertyAlerts, propertyAlertDeliveries, rememberPriceChange } from './alerts.mjs';
 import { propertyReadyForLanguage } from './catalog.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 const MAX_FEED_BYTES = 20 * 1024 * 1024;
 const MAX_FEED_PROPERTIES = 2000;
@@ -124,12 +125,12 @@ function plainText(value) {
 // <desc><en>…</en><es>…</es></desc> → { ru, en, es }; a plain text goes to
 // every language.
 function localizedOf(node, maximum) {
-  if (!node) return { ru: '', en: '', es: '' };
+  if (!node) return Object.fromEntries(LANGUAGES.map((code) => [code, '']));
   if (!node.children.length) {
     const plain = cleanText(plainText(node.text), maximum);
-    return { ru: plain, en: plain, es: plain };
+    return Object.fromEntries(LANGUAGES.map((code) => [code, plain]));
   }
-  return Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, cleanText(plainText(textOf(node, language)), maximum)]));
+  return Object.fromEntries(LANGUAGES.map((language) => [language, cleanText(plainText(textOf(node, language)), maximum)]));
 }
 
 function numberOf(value) {
@@ -157,7 +158,7 @@ function propertyTypeOf(value) {
 
 // A title when the feed has none: "Villa · Finestrat" in each language.
 function generatedTitle(type, town) {
-  return Object.fromEntries(['ru', 'en', 'es'].map((language) => [
+  return Object.fromEntries(LANGUAGES.map((language) => [
     language,
     cleanText([(PROPERTY_TYPE_LABELS[language] || PROPERTY_TYPE_LABELS.ru)[type] || '', town].filter(Boolean).join(' · '), 160),
   ]));
@@ -182,7 +183,7 @@ function feedItemOf(node) {
     .map((image) => textOf(image, 'url') || image.attributes.url || '')
     .filter((address) => /^https?:\/\//i.test(address))
     .slice(0, MAX_IMAGES_PER_PROPERTY);
-  const titles = titleNode ? localizedOf(titleNode, 160) : { ru: '', en: '', es: '' };
+  const titles = titleNode ? localizedOf(titleNode, 160) : Object.fromEntries(LANGUAGES.map((code) => [code, '']));
   const generated = generatedTitle(type || 'other', town);
   return {
     reference,
@@ -199,10 +200,10 @@ function feedItemOf(node) {
       condition: textOf(node, 'new_build') === '1' ? 'new' : '',
     },
     texts: {
-      title: Object.fromEntries(['ru', 'en', 'es'].map((language) => [language, titles[language] || generated[language]])),
+      title: Object.fromEntries(LANGUAGES.map((language) => [language, titles[language] || generated[language]])),
       description: localizedOf(child(node, 'desc'), 3000),
-      city: { ru: town, en: town, es: town },
-      district: (() => { const place = cleanText(textOf(node, 'location_detail'), 160); return { ru: place, en: place, es: place }; })(),
+      city: Object.fromEntries(LANGUAGES.map((code) => [code, town])),
+      district: (() => { const place = cleanText(textOf(node, 'location_detail'), 160); return Object.fromEntries(LANGUAGES.map((code) => [code, place])); })(),
       url: /^https?:\/\//i.test(url) ? cleanText(url, 500) : '',
       mapUrl: Number.isFinite(latitude) && Number.isFinite(longitude) && (latitude || longitude) ? 'https://www.google.com/maps?q=' + latitude + ',' + longitude : '',
     },
@@ -228,12 +229,12 @@ function referenceKey(value) {
 }
 
 function isEmptyLocalized(value) {
-  return !value || !['ru', 'en', 'es'].some((language) => cleanText(value[language], 10));
+  return !value || !LANGUAGES.some((language) => cleanText(value[language], 10));
 }
 
 function hasImages(record) {
   const images = record.imagesByLanguage || {};
-  return ['ru', 'en', 'es'].some((language) => Array.isArray(images[language]) && images[language].length);
+  return LANGUAGES.some((language) => Array.isArray(images[language]) && images[language].length);
 }
 
 // What the import would do, without changing anything.
@@ -441,7 +442,7 @@ async function downloadImages(addresses, fetcher, budget, result, lookup = dnsLo
 
 // The same photo files for every language; stored once on disk.
 function imagesForAllLanguages(images) {
-  return { ru: images, en: images.map((image) => ({ ...image, id: crypto.randomUUID() })), es: images.map((image) => ({ ...image, id: crypto.randomUUID() })) };
+  return Object.fromEntries(LANGUAGES.map((code, index) => [code, index === 0 ? images : images.map((image) => ({ ...image, id: crypto.randomUUID() }))]));
 }
 
 let importRunning = false;
@@ -481,8 +482,8 @@ async function runImport(items, options) {
       propertyType: item.fields.propertyType || 'other',
       title: item.texts.title,
       description: item.texts.description,
-      address: { ru: '', en: '', es: '' },
-      price: { ru: '', en: '', es: '' },
+      address: Object.fromEntries(LANGUAGES.map((code) => [code, ''])),
+      price: Object.fromEntries(LANGUAGES.map((code) => [code, ''])),
       city: item.texts.city,
       district: item.texts.district,
       url: item.texts.url,
@@ -499,7 +500,7 @@ async function runImport(items, options) {
     // "Show at once" must not bypass the common card standard. A feed may
     // omit a translation or a key characteristic; keep such a record as a
     // draft so the administrator can complete it safely in the panel.
-    if (options.publishNew && ['ru', 'en', 'es'].every((language) => propertyReadyForLanguage(record, language))) {
+    if (options.publishNew && LANGUAGES.every((language) => propertyReadyForLanguage(record, language))) {
       record.status = 'active';
     }
     data.objects.push(record);

@@ -33,7 +33,7 @@ test('набор полей формата не меняется без повы
   const fingerprint = crypto.createHash('sha1').update(paths.join('\n'), 'utf8').digest('hex').slice(0, 16);
 
   // Ожидаемое: версия формата и отпечаток её набора полей.
-  const expected = { version: 52, fingerprint: 'cfceb677cc1e1a37' };
+  const expected = { version: 53, fingerprint: '8e2f92d10b5582f3' };
 
   assert.equal(DATA_VERSION, expected.version, 'версия формата изменилась — обновите ожидаемое значение в этом тесте');
   assert.equal(fingerprint, expected.fingerprint, [

@@ -2,7 +2,7 @@
 
 const CATALOG_JS = String.raw`
 var catalogStatus = "";
-var LANGUAGES = [["ru", "Русский"], ["en", "English"], ["es", "Español"]];
+var LANGUAGES = [["ru", "Русский"], ["uk", "Українська"], ["en", "English"], ["es", "Español"]];
 var PROPERTY_TYPES = [["apartment", "Квартира"], ["house", "Дом"], ["villa", "Вилла"], ["townhouse", "Таунхаус"], ["land", "Участок"], ["commercial", "Коммерческая"], ["newbuild", "Новостройка"], ["other", "Другое"]];
 var PROPERTY_STATUS = [["active", "Опубликован"], ["reserved", "Забронирован"], ["sold", "Продан"], ["hidden", "Черновик — клиенты не видят"]];
 var BADGES = [["new", "Новинка"], ["recommended", "Рекомендуем"], ["exclusive", "Эксклюзив"], ["price_reduced", "Цена снижена"]];
@@ -750,10 +750,11 @@ function openRecordEditor(kind, id) {
       : '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="saveRecord" type="button">Сохранить</button>',
     ready: function (dialog) {
       bindLanguageTabs(dialog);
-      var pendingImages = { ru: [], en: [], es: [] };
-      var removedImages = { ru: [], en: [], es: [] };
+      var pendingImages = { ru: [], uk: [], en: [], es: [] };
+      var removedImages = { ru: [], uk: [], en: [], es: [] };
       var previewWords = {
         ru: { empty: "Заполните карточку — здесь появится её вид в Telegram", sold: "Продан", hidden: "Скрыт", promotion: "Подробнее об акции" },
+        uk: { empty: "Заповніть картку — тут з’явиться її вигляд у Telegram", sold: "Продано", hidden: "Приховано", promotion: "Детальніше про акцію" },
         en: { empty: "Fill in the card to see its Telegram preview here", sold: "Sold", hidden: "Hidden", promotion: "Learn more" },
         es: { empty: "Completa la ficha para ver aquí su aspecto en Telegram", sold: "Vendido", hidden: "Oculto", promotion: "Más información" },
       };
@@ -920,7 +921,7 @@ function openRecordEditor(kind, id) {
         if (plotField) plotField.classList.toggle("hidden", ["apartment", "newbuild"].indexOf(type) >= 0);
       }
       function metreShort(language) {
-        return language === "ru" ? "м" : "m";
+        return language === "ru" || language === "uk" ? "м" : "m";
       }
       function pricePreview(language, actions) {
         var amount = Number(value("fPrice"));

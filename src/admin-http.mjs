@@ -20,6 +20,7 @@ import { userById } from './users.mjs';
 import { adminNotifications, attentionCounts, waitingConversationCount } from './admin-notifications.mjs';
 import { awaitingReply } from './inquiries.mjs';
 import { miniAppSettings } from './miniapp/settings.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 const SESSIONS_FILE = path.join(path.dirname(DATA_FILE), 'bot-sessions.json');
 const SESSION_PERSIST_STEP_MS = 10 * 60 * 1000;
@@ -652,7 +653,7 @@ function imageRef(image) {
 function publicRecord(record, collection) {
   const { image, images, imagesByLanguage, ...publicFields } = record;
   if (collection === 'objects' || collection === 'promotions') {
-    const publicImagesByLanguage = Object.fromEntries(['ru', 'en', 'es'].map((language) => [
+    const publicImagesByLanguage = Object.fromEntries(LANGUAGES.map((language) => [
       language,
       recordImages(record, language).map(imageRef),
     ]));
@@ -670,11 +671,11 @@ function publicRecord(record, collection) {
 }
 
 function languageCounts() {
-  const result = { all: 0, ru: 0, en: 0, es: 0, unknown: 0 };
+  const result = { all: 0, ru: 0, uk: 0, en: 0, es: 0, unknown: 0 };
   for (const user of Object.values(data.users)) {
     if (user.blocked || !user.chatId) continue;
     result.all += 1;
-    const language = ['ru', 'en', 'es'].includes(user.preferredLanguage) ? user.preferredLanguage : 'unknown';
+    const language = LANGUAGES.includes(user.preferredLanguage) ? user.preferredLanguage : 'unknown';
     result[language] += 1;
   }
   return result;
@@ -853,7 +854,7 @@ function safeState(session) {
       // The key stays on this computer; the panel only learns the state.
       telegramBackup: (({ enabled, key, lastSentAt, lastError }) => ({ enabled, passwordSet: Boolean(key), lastSentAt, lastError }))(normalizeTelegramBackup(data.config.telegramBackup)),
     },
-    welcomeImages: Object.fromEntries(['ru', 'en', 'es'].map((language) => {
+    welcomeImages: Object.fromEntries(LANGUAGES.map((language) => {
       const image = data.welcomeImages[language];
       return [language, imageMeta(image)];
     })),

@@ -5,6 +5,7 @@ import { data, scheduleSave } from './store.mjs';
 import { adminMuteNotices, adminNotifyTimes, inquiryTimes } from './inquiries.mjs';
 import { normalizedCatalogFilter, normalizedSavedSearch } from './catalog.mjs';
 import { normalizedSimilarPropertyDetails } from './similar.mjs';
+import { LANGUAGES } from './languages.mjs';
 
 // data.users is a plain object, so ids such as "__proto__" must not reach it
 // directly: that would return Object.prototype and let a PATCH pollute it.
@@ -60,7 +61,7 @@ function leadSourceFromPayload(payload) {
 
 // Языки, в которых русский понятнее английского: соседние страны, где им
 // пользуются каждый день.
-const RUSSIAN_NEIGHBOUR_LANGUAGES = ['uk', 'be', 'kk', 'ky', 'uz', 'tg', 'hy', 'az', 'mo'];
+const RUSSIAN_NEIGHBOUR_LANGUAGES = ['be', 'kk', 'ky', 'uz', 'tg', 'hy', 'az', 'mo'];
 
 // Язык клиента по настройкам Telegram. Мы говорим на трёх языках, поэтому
 // выбираем ближайший: русский соседям, испанский испаноязычным, всем
@@ -69,7 +70,7 @@ const RUSSIAN_NEIGHBOUR_LANGUAGES = ['uk', 'be', 'kk', 'ky', 'uz', 'tg', 'hy', '
 // переключить одной кнопкой.
 function telegramInterfaceLanguage(user) {
   const code = String(user && user.languageCode || '').toLowerCase().split('-')[0];
-  if (['ru', 'en', 'es'].includes(code)) return code;
+  if (LANGUAGES.includes(code)) return code;
   if (RUSSIAN_NEIGHBOUR_LANGUAGES.includes(code)) return 'ru';
   return 'en';
 }
@@ -77,7 +78,7 @@ function telegramInterfaceLanguage(user) {
 // Язык угадан, а не задан клиентом: в приветствии показываем кнопку «🌐».
 function languageWasGuessed(user) {
   const code = String(user && user.languageCode || '').toLowerCase().split('-')[0];
-  return !['ru', 'en', 'es'].includes(code);
+  return !LANGUAGES.includes(code);
 }
 
 // Telegram отказался доставлять: клиент заблокировал бота или удалил аккаунт.

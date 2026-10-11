@@ -12,6 +12,7 @@ import { sendUiMessage } from './catalog.mjs';
 import { notifyAdministratorAction } from './inquiries.mjs';
 import { acknowledgeCallback } from './sections.mjs';
 import { INTERACTION_TEXT } from './texts.mjs';
+import { addUk } from './languages.mjs';
 
 const GOALS = ['live', 'invest', 'browse'];
 
@@ -77,6 +78,7 @@ const GOAL_TEXT = {
     labels: { live: 'comprar para vivir', invest: 'inversión y alquiler', browse: 'solo mirando' },
   },
 };
+addUk(GOAL_TEXT);
 
 // Страницы гида: 2 — «расходы», 4 — «аренда» (порядок задан в DEFAULT_GUIDE_PAGES).
 const GUIDE_COSTS_PAGE = 2;

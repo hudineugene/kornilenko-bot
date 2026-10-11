@@ -867,7 +867,7 @@ function openManualClient() {
     body: '<div class="stack"><p class="small muted">Для тех, кто позвонил или написал в WhatsApp: в боте его нет, но в базе он будет. Писать ему из панели нельзя — только вести заметки и назначать просмотры.</p>' +
       '<div class="field"><label for="mcName">Имя <span class="required">*</span></label><input id="mcName" placeholder="Джон Смит"></div>' +
       '<div class="grid cols-2"><div class="field"><label for="mcPhone">Телефон</label><input id="mcPhone" placeholder="+34 …"></div>' +
-      '<div class="field"><label for="mcLanguage">Язык</label><select id="mcLanguage"><option value="">Не выбран</option><option value="ru">Русский</option><option value="en">English</option><option value="es">Español</option></select></div></div>' +
+      '<div class="field"><label for="mcLanguage">Язык</label><select id="mcLanguage"><option value="">Не выбран</option><option value="ru">Русский</option><option value="uk">Українська</option><option value="en">English</option><option value="es">Español</option></select></div></div>' +
       '<div class="field"><label for="mcSource">Откуда</label><input id="mcSource" list="mcSourceList" value="звонок"><datalist id="mcSourceList">' + sources.map(function (name) { return '<option value="' + esc(name) + '">'; }).join("") + '</datalist></div>' +
       '<div class="field"><label for="mcNote">Заметка</label><textarea id="mcNote" placeholder="Что просил, когда удобно"></textarea></div></div>',
     footer: '<button class="btn secondary" data-close="1" type="button">Отмена</button><button class="btn" id="mcCreate" type="button">Добавить клиента</button>',
@@ -1108,7 +1108,7 @@ async function openNextQuickReply(handled) {
   return true;
 }
 
-var LANGUAGE_WORDS = { en: "английский", es: "испанский" };
+var LANGUAGE_WORDS = { uk: "украинский", en: "английский", es: "испанский" };
 
 function openQuickReply(inquiryId, handledBefore) {
   var handled = (handledBefore || []).slice();

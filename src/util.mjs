@@ -1,6 +1,7 @@
 // Мелкие общие функции без состояния.
 
 import crypto from 'node:crypto';
+import { isCyrillic } from './languages.mjs';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -36,7 +37,7 @@ const MEASURE_UNIT = /^\s*(?:кв\.?\s*м|м²|м2|метр\w*|м(?![а-яё])|�
 // Масштаб числа: «300к», «1,5 млн», «500 тысяч». Одиночная буква считается
 // масштабом только вплотную к числу: «300к» — тысячи, «300 к» и «300 m» —
 // скорее единица измерения.
-const MONEY_SCALE = /^(\s*)(millones|millón|millions|million|млн|тысяч|тыс|mil|k|к|m)(?![\p{L}])/iu;
+const MONEY_SCALE = /^(\s*)(millones|millón|millions|million|мільйонів|мільйони|мільйона|мільйон|млн|тисячі|тисяч|тис|тысяч|тыс|mil|k|к|m)(?![\p{L}])/iu;
 
 function parseMoneyAmount(value) {
   const text = cleanText(value, 100);
@@ -52,8 +53,9 @@ function parseMoneyAmount(value) {
   const match = [text, number[0], scaleWord];
   const suffix = String(match[2] || '').normalize('NFD').replace(/\p{M}+/gu, '').toLocaleLowerCase();
   const compact = match[1].replace(/[\s\u00a0\u202f]/g, '');
-  const million = /^(?:млн|million|millions|millon|millones|m)$/u.test(suffix);
-  const thousand = /^(?:тыс|тысяч|k|к|mil)$/u.test(suffix);
+  // «мільйон» после снятия значков становится «мільион» («й» → «и»), поэтому украинское слово записано так.
+  const million = /^(?:млн|мільион(?:ів|и|а)?|million|millions|millon|millones|m)$/u.test(suffix);
+  const thousand = /^(?:тыс|тысяч|тис|тисяч|тисячі|k|к|mil)$/u.test(suffix);
   let amount;
   if (million && /^\d+[.,]\d{1,2}$/u.test(compact)) amount = Number(compact.replace(',', '.'));
   else if (!million && /[.,]/u.test(compact) && !/^\d{1,3}(?:[.,]\d{3})+$/u.test(compact)) return 0;
@@ -102,7 +104,7 @@ function dayKey(value = new Date()) {
 function formatDayMonth(value, language = 'ru') {
   const date = new Date(value);
   const pad = (number) => String(number).padStart(2, '0');
-  return pad(date.getDate()) + (language === 'ru' ? '.' : '/') + pad(date.getMonth() + 1);
+  return pad(date.getDate()) + (isCyrillic(language) ? '.' : '/') + pad(date.getMonth() + 1);
 }
 
 // Имя менеджера одно, а клиентов трое языков: EN/ES-клиент видел «Meeting you: Ольга Корниленко».
@@ -122,7 +124,7 @@ function latinName(name) {
 
 function managerNameFor(contact, language = 'ru') {
   const name = cleanText(contact && contact.managerName, 160);
-  return language === 'ru' ? name : latinName(name);
+  return isCyrillic(language) ? name : latinName(name);
 }
 
 function localDayKey(value = new Date()) {
@@ -141,7 +143,7 @@ function dateFromDayKey(key, addDays = 0) {
 // «€250,000» (символ впереди), испанский «250.000 €» и русский «250 000 €» (символ
 // после). Группировка всегда включена: испанский по умолчанию не отделяет
 // тысячи у четырёхзначных чисел, и «3571 €/m²» стояло рядом с «250.000 €».
-const NUMBER_LOCALES = { ru: 'ru-RU', en: 'en-GB', es: 'es-ES' };
+const NUMBER_LOCALES = { ru: 'ru-RU', uk: 'uk-UA', en: 'en-GB', es: 'es-ES' };
 
 function formatNumber(value, language = 'ru', maximumFractionDigits = 2) {
   return new Intl.NumberFormat(NUMBER_LOCALES[language] || NUMBER_LOCALES.ru, { maximumFractionDigits, useGrouping: 'always' }).format(value);
