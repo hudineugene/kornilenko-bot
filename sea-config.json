@@ -9,6 +9,11 @@
     "admin-app-icon-192": "Kornilenko_Admin_Codex_Assets/kornilenko_app_icon_192.png",
     "admin-app-icon-512": "Kornilenko_Admin_Codex_Assets/kornilenko_app_icon_512.png",
     "font-inter-latin": "panel-fonts/inter-latin-wght-normal.woff2",
-    "font-inter-cyrillic": "panel-fonts/inter-cyrillic-wght-normal.woff2"
+    "font-inter-cyrillic": "panel-fonts/inter-cyrillic-wght-normal.woff2",
+    "miniapp-logo": "miniapp-assets/logo.png",
+    "miniapp-hero": "miniapp-assets/hero.jpg",
+    "miniapp-art-coastal": "miniapp-assets/art-coastal.jpg",
+    "miniapp-art-pool": "miniapp-assets/art-pool.jpg",
+    "miniapp-grid": "miniapp-assets/grid.svg"
   }
 }

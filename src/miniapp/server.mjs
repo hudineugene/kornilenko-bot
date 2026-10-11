@@ -7,12 +7,12 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import { cleanText } from '../util.mjs';
 import { data } from '../store.mjs';
-import { ADMIN_ALLOWED_HOSTS, ADMIN_ASSETS, FONT_ASSETS } from '../config.mjs';
+import { ADMIN_ALLOWED_HOSTS, ADMIN_ASSETS, FONT_ASSETS, MINIAPP_ASSETS } from '../config.mjs';
 import { markFunnel, recordPropertyEvent } from '../analytics.mjs';
 import { imageBytes, imageExists } from '../media.mjs';
 import { validateInitData } from './auth.mjs';
 import {
-  appLanguage, bootstrapOf, detailOf, findImage, findRecord,
+  appLanguage, bootstrapOf, detailOf, findImage, findRecord, meOf,
 } from './data.mjs';
 import {
   AppError, askQuestion, requestCall, requestViewing, toggleCompare, toggleFavorite, userFor, viewingOptions,
@@ -182,6 +182,10 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, detailOf(record, language));
     }
     if (route === '/viewing-options') return sendJson(res, 200, viewingOptions(language));
+    if (route === '/me') {
+      if (who.guest || !existing) return sendJson(res, 200, { guest: true, inquiries: [], recent: [] });
+      return sendJson(res, 200, { guest: false, ...meOf(existing, language) });
+    }
     return sendJson(res, 404, { error: 'Не найдено' });
   }
 
@@ -236,7 +240,11 @@ async function handleMiniAppRequest(req, res) {
     if (url.pathname === '/app.js') return sendText(res, 200, 'text/javascript; charset=utf-8', APP_JS, 'no-cache');
     if (url.pathname === '/fonts/inter-latin.woff2') return sendAsset(req, res, FONT_ASSETS.interLatin);
     if (url.pathname === '/fonts/inter-cyrillic.woff2') return sendAsset(req, res, FONT_ASSETS.interCyrillic);
-    if (url.pathname === '/logo.png') return sendAsset(req, res, ADMIN_ASSETS.sidebarLogo);
+    if (url.pathname === '/logo.png') return sendAsset(req, res, MINIAPP_ASSETS.logo || ADMIN_ASSETS.sidebarLogo);
+    if (url.pathname === '/hero.jpg') return sendAsset(req, res, MINIAPP_ASSETS.hero);
+    if (url.pathname === '/art/coastal.jpg') return sendAsset(req, res, MINIAPP_ASSETS.artCoastal);
+    if (url.pathname === '/art/pool.jpg') return sendAsset(req, res, MINIAPP_ASSETS.artPool);
+    if (url.pathname === '/grid.svg') return sendAsset(req, res, MINIAPP_ASSETS.grid);
     if (url.pathname === '/icon.png') return sendAsset(req, res, ADMIN_ASSETS.appIcon192);
     const photo = url.pathname.match(/^\/m\/([^/]+)\/([^/]+)$/);
     if (photo) {

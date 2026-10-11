@@ -11,7 +11,7 @@ import {
   distanceText, localized, localizedExact, objectPriceLine, objectPriceText, priceDropVisible, propertyReadyForLanguage,
   propertyShareUrl, rangeText, recordImages, validHttpUrl, whatsappContactUrl,
 } from '../catalog.mjs';
-import { calculatorAvailable, purchaseEstimate } from '../calculator.mjs';
+import { calculatorAvailable, calculatorSettings, purchaseEstimate } from '../calculator.mjs';
 import { CALCULATOR_TEXT, MENU_LABELS } from '../texts.mjs';
 import { replyPromise } from '../hours.mjs';
 import { imageExists } from '../media.mjs';
@@ -252,10 +252,49 @@ function facetsOf(cards) {
   };
 }
 
+// Личная страница клиента: его заявки в понятных этапах и недавно просмотренные проекты. Текст переписки не отдаётся.
+function stepOf(inquiry) {
+  if (inquiry.status === 'closed') return 4;
+  const stage = inquiry.pipelineStage || '';
+  if (['viewing', 'negotiation', 'won'].includes(stage) || (inquiry.viewing && inquiry.viewing.confirmedDate)) return 3;
+  if (inquiry.status === 'in_progress' || ['contact', 'selection'].includes(stage)) return 2;
+  return 1;
+}
+
+function meOf(user, language) {
+  const visible = visibleRecords(language);
+  const cardFor = (id) => {
+    const record = visible.find((item) => item.id === id);
+    return record ? cardOf(record, language) : null;
+  };
+  const inquiries = (Array.isArray(data.inquiries) ? data.inquiries : [])
+    .filter((item) => String(item.userId) === String(user.id))
+    .slice(-8)
+    .reverse()
+    .map((item) => {
+      const card = item.propertyId ? cardFor(item.propertyId) : null;
+      return {
+        id: item.id,
+        type: item.type,
+        step: stepOf(item),
+        createdAt: item.createdAt || '',
+        propertyId: card ? card.id : '',
+        title: card ? card.title : '',
+        cover: card ? card.cover : '',
+        viewing: item.viewing && (item.viewing.dateText || item.viewing.date)
+          ? { date: item.viewing.dateText || item.viewing.date, time: item.viewing.confirmedTime || item.viewing.timeText || '', confirmed: Boolean(item.viewing.confirmedDate) }
+          : null,
+      };
+    });
+  const recent = (Array.isArray(user.recentlyViewed) ? user.recentlyViewed : []).map(cardFor).filter(Boolean).slice(0, 6);
+  return { inquiries, recent };
+}
+
 function bootstrapOf(language, user = null) {
   const cards = visibleRecords(language).map((record) => cardOf(record, language));
   return {
     language,
+    calculatorOn: Boolean(calculatorSettings().enabled),
     cards,
     facets: facetsOf(cards),
     company: companyOf(language, user),
@@ -264,4 +303,4 @@ function bootstrapOf(language, user = null) {
   };
 }
 
-export { appLanguage, bootstrapOf, cardOf, companyOf, descriptionParts, detailOf, findImage, findRecord, visibleRecords };
+export { appLanguage, bootstrapOf, meOf, cardOf, companyOf, descriptionParts, detailOf, findImage, findRecord, visibleRecords };

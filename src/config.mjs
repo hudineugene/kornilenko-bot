@@ -32,6 +32,7 @@ const ADMIN_ALLOWED_HOSTS = new Set(String(process.env.ADMIN_ALLOWED_HOSTS || ''
 const LOGIN_ASSET_DIRECTORY = path.join(APP_DIRECTORY, 'Kornilenko_Login_Codex_Assets');
 const ADMIN_ASSET_DIRECTORY = path.join(APP_DIRECTORY, 'Kornilenko_Admin_Codex_Assets');
 const FONT_DIRECTORY = path.join(APP_DIRECTORY, 'panel-fonts');
+const MINIAPP_ASSET_DIRECTORY = path.join(APP_DIRECTORY, 'miniapp-assets');
 
 function loadBundledAsset(assetDirectory, assetKey, fileName, mimeType) {
   let bytes = null;
@@ -67,6 +68,16 @@ const ADMIN_ASSETS = {
   appIcon512: loadBundledAsset(ADMIN_ASSET_DIRECTORY, 'admin-app-icon-512', 'kornilenko_app_icon_512.png', 'image/png'),
 };
 
+// Графика приложения в Telegram: логотип целиком (только равномерно уменьшен, без обрезки), главное фото, рисунки для пустых
+// экранов и тонкая архитектурная сетка. Фото и рисунки можно заменить файлами с теми же именами.
+const MINIAPP_ASSETS = {
+  logo: loadBundledAsset(MINIAPP_ASSET_DIRECTORY, 'miniapp-logo', 'logo.png', 'image/png'),
+  hero: loadBundledAsset(MINIAPP_ASSET_DIRECTORY, 'miniapp-hero', 'hero.jpg', 'image/jpeg'),
+  artCoastal: loadBundledAsset(MINIAPP_ASSET_DIRECTORY, 'miniapp-art-coastal', 'art-coastal.jpg', 'image/jpeg'),
+  artPool: loadBundledAsset(MINIAPP_ASSET_DIRECTORY, 'miniapp-art-pool', 'art-pool.jpg', 'image/jpeg'),
+  grid: loadBundledAsset(MINIAPP_ASSET_DIRECTORY, 'miniapp-grid', 'grid.svg', 'image/svg+xml'),
+};
+
 const FONT_ASSETS = {
   interLatin: loadBundledAsset(FONT_DIRECTORY, 'font-inter-latin', 'inter-latin-wght-normal.woff2', 'font/woff2'),
   interCyrillic: loadBundledAsset(FONT_DIRECTORY, 'font-inter-cyrillic', 'inter-cyrillic-wght-normal.woff2', 'font/woff2'),
@@ -82,6 +93,7 @@ export {
   HOST,
   LOGIN_ASSETS,
   LOGIN_ASSET_DIRECTORY,
+  MINIAPP_ASSETS,
   MAX_BACKUP_BODY_BYTES,
   MAX_BACKUP_OUTPUT_BYTES,
   MAX_BODY_BYTES,

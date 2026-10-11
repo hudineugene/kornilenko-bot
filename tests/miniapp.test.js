@@ -200,7 +200,7 @@ test('страница: заголовки защиты, нет опасных �
   assert.doesNotMatch(APP_JS, /\beval\(|new Function|document\.write|insertAdjacentHTML|outerHTML/);
   assert.equal((APP_JS.match(/innerHTML/g) || []).length, 1, 'innerHTML только для собственных значков');
   assert.doesNotMatch(APP_CSS, /@import|url\(https?:/);
-  for (const path of ['/app.js', '/app.css', '/logo.png', '/icon.png', '/fonts/inter-latin.woff2', '/fonts/inter-cyrillic.woff2']) {
+  for (const path of ['/app.js', '/app.css', '/logo.png', '/icon.png', '/hero.jpg', '/grid.svg', '/art/coastal.jpg', '/art/pool.jpg', '/fonts/inter-latin.woff2', '/fonts/inter-cyrillic.woff2']) {
     const file = await call(path);
     assert.equal(file.status, 200, path);
   }
@@ -211,21 +211,22 @@ test('страница: заголовки защиты, нет опасных �
   assert.equal(post.status, 405);
 });
 
-test('фирменный редизайн использует логотип, цвета и реальные сценарии приложения', () => {
-  assert.match(APP_CSS, /--teal:#0aa5bd/);
-  assert.match(APP_CSS, /--coral:#e5486a/);
-  assert.match(APP_CSS, /--sun:#ffc629/);
-  assert.match(APP_CSS, /\.catalog-search/);
-  assert.match(APP_CSS, /\.booking-summary/);
-  assert.match(APP_CSS, /\.about-brand/);
+test('оформление по набору элементов: цвета, логотип целиком, четыре вкладки, главная и профиль', () => {
+  assert.match(APP_CSS, /--red:#ef3655/);
+  assert.match(APP_CSS, /--yellow:#ffcc22/);
+  assert.match(APP_CSS, /--cyan:#06b6c8/);
+  assert.match(APP_CSS, /--bg:#f8fafb/);
+  assert.match(APP_CSS, /\.logo\{[^}]*object-fit:contain/, 'логотип не обрезается');
+  assert.doesNotMatch(APP_CSS, /\.logo\{[^}]*overflow:hidden/);
+  assert.match(APP_CSS, /\.hero\{/);
+  assert.match(APP_CSS, /\.status-card/);
   assert.match(APP_JS, /src: '\/logo\.png', alt: company\.name/);
+  assert.match(APP_JS, /src: '\/hero\.jpg'/);
   assert.match(APP_JS, /function searchKey\(value\)/);
-  assert.match(APP_JS, /function cardMatchesFilters\(card, f\)/);
-  assert.match(APP_JS, /class: 'card-price'/);
-  assert.match(APP_JS, /class: 'booking-confirmation'/);
-  assert.match(APP_JS, /class: 'about-brand'/);
-  assert.match(APP_JS, /tabButton\('home', t\('catalog'\)/);
-  assert.match(APP_JS, /tabButton\('cmp', t\('compare'\)/);
+  assert.match(APP_JS, /function renderLanding\(view\)/);
+  assert.match(APP_JS, /function renderProfile\(view\)/);
+  for (const tab of ["tabButton('home'", "tabButton('objects'", "tabButton('fav'", "tabButton('profile'"]) assert.ok(APP_JS.includes(tab), tab);
+  assert.match(APP_JS, /api\('\/me\?lang='/);
 });
 
 test('адрес приложения: только https и обычное имя сайта', () => {
