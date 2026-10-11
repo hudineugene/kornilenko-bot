@@ -77,7 +77,7 @@ test('шапка панели: название агентства есть на
   assert.match(runtime, /<span class="brand-full">Construcciones Kornilenko<\/span><span class="brand-short">Kornilenko<\/span>/);
   const styles = read('src', 'panel', 'styles.mjs');
   assert.doesNotMatch(styles, /\.app-brand b\{display:none\}/, 'название целиком не прячется');
-  assert.match(styles, /\.app-brand \.brand-full,\.app-brand \.brand-sub\{display:none\}\n\s+\.app-brand \.brand-short\{display:inline\}/, 'на ноутбуке — короткое имя');
+  assert.match(styles, /\.app-brand \.brand-full,\.app-brand \.brand-sub\{display:none\}\r?\n\s+\.app-brand \.brand-short\{display:inline\}/, 'на ноутбуке — короткое имя');
 });
 
 test('«База клиентов»: список этапов не растянут на всю ширину', () => {
