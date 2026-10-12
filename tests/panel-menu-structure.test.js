@@ -92,3 +92,21 @@ test('«Работа с клиентами» собрана в группы с �
   assert.deepEqual(order.slice().sort((a, b) => a - b), order, 'группы идут по порядку');
   assert.ok(text.indexOf('Калькулятор покупки') > order[2], 'калькулятор — в своей группе');
 });
+
+test('«Каналы и группы»: у группы с темами есть перенос сообщений между темами', async () => {
+  const { harness, fixtures } = await modules();
+  const state = fixtures.richState();
+  const forum = state.groups.find((item) => item.isForum);
+  assert.ok(forum, 'в данных есть группа с темами');
+  forum.rights = { ...(forum.rights || {}), can_delete_messages: true };
+  forum.topics = [{ id: 1, name: '', closed: false }, { id: 7, name: 'Слово за слово', closed: false }];
+  const panel = await harness.makePanel(state);
+  panel.sandbox.selectedGroup = forum.id;
+  await panel.go('posts', 'channels');
+  await harness.settle(150);
+  const text = String(panel.doc.getElementById('page').textContent || '');
+  assert.match(text, /Перенос сообщений между темами/);
+  assert.match(text, /Переносить сообщения участников из основной ленты в тему/);
+  assert.match(text, /Перенести отмеченные/);
+  assert.match(text, /Слово за слово/);
+});

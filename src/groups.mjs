@@ -74,6 +74,8 @@ function normalizeGroupMessage(message) {
     kind: message.photo ? 'photo' : message.video ? 'video' : message.document ? 'document' : message.voice ? 'voice' : message.poll ? 'poll' : 'text',
     fromBot: Boolean(from.is_bot) || (!message.from && Boolean(message.sender_chat)),
     threadId: 0,
+    // Сообщения одного альбома переносятся вместе.
+    mediaGroupId: cleanText(message.media_group_id, 40),
     date: new Date(Number(message.date || 0) * 1000 || Date.now()).toISOString(),
   };
 }

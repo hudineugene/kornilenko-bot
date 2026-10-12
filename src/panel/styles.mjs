@@ -1145,6 +1145,8 @@ dialog::backdrop{background:var(--overlay)}
   .head-tools #soundToggle{display:none}
   .group-title{margin-top:var(--sp-2)}
 }
+.move-list{display:flex;flex-direction:column;gap:var(--sp-2);max-height:320px;overflow:auto;padding:var(--sp-2);background:var(--surface-soft)}
+.move-row{align-items:flex-start}
 `;
 
 export { PANEL_CSS };

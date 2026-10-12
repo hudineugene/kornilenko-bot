@@ -44,6 +44,7 @@ import { telegramContactLost, telegramContactRestored } from './status.mjs';
 import { ADMIN_CHAT_HINT, handleAdminChatMessage, handleInboxShowCallback } from './admin-commands.mjs';
 import { handlePostCallback } from './post-command.mjs';
 import { handleChatJoinRequest, handleMyChatMember, rememberGroupMessage } from './groups.mjs';
+import { autoMoveFromGeneral } from './group-move.mjs';
 import { refreshChatMenuButton } from './miniapp/menu-button.mjs';
 import { appOnlyActive, appOnlyCallbackAllowed, handleAppOnlyMessage, sendAppNudge } from './miniapp/app-only.mjs';
 
@@ -154,6 +155,8 @@ async function handleUpdate(update, token) {
   // работают команды и ответы на уведомления.
   if (update.message && update.message.chat && update.message.chat.type && update.message.chat.type !== 'private') {
     rememberGroupMessage(update.message);
+    // «Основная лента» форума: сообщения участников уходят в выбранную тему (если правило включено в панели).
+    await autoMoveFromGeneral(update.message, token).catch((error) => recordError('Перенос из «Основной ленты»', error));
     if (!adminChatFor(update.message.chat.id)) return;
   }
   if (update.message_reaction) {

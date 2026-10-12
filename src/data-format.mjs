@@ -801,6 +801,7 @@ function normalizeGroups(value) {
       kind: cleanText(message.kind, 20) || 'text',
       fromBot: Boolean(message.fromBot),
       threadId: Math.max(0, Math.floor(Number(message.threadId)) || 0),
+      mediaGroupId: cleanText(message.mediaGroupId, 40),
       date: cleanText(message.date, 40),
     })),
     joinRequests: (Array.isArray(item.joinRequests) ? item.joinRequests : []).slice(-100).map((request) => ({
@@ -817,6 +818,14 @@ function normalizeGroups(value) {
     sourceCode: /^\d{1,4}$/.test(String(item.sourceCode || '')) ? String(item.sourceCode) : '',
     // Язык, на котором последний раз публиковали объявление: подставляется по умолчанию.
     listingLanguage: LANGUAGES.includes(item.listingLanguage) ? item.listingLanguage : '',
+    // Перенос сообщений из «Основной ленты» в тему: выключен, пока не включат в панели.
+    autoMove: {
+      enabled: Boolean(item.autoMove && item.autoMove.enabled),
+      fromThreadId: 1,
+      toThreadId: Math.max(0, Math.floor(Number(item.autoMove && item.autoMove.toThreadId)) || 0),
+      mode: item.autoMove && item.autoMove.mode === 'copy' ? 'copy' : 'forward',
+      notify: Boolean(item.autoMove && item.autoMove.notify),
+    },
     lastError: cleanText(item.lastError, 500),
   }));
 }

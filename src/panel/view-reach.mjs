@@ -635,6 +635,41 @@ function topicsCard(group) {
     "</div></div>";
 }
 
+// Перенос сообщений между темами: автоматически из «Основной ленты» и вручную по отмеченным сообщениям.
+function moveCard(group) {
+  if (!group.isForum || group.type === "channel") return "";
+  var canDelete = groupCan(group, "can_delete_messages");
+  var topics = (group.topics || []).slice().sort(function (a, b) { return a.id - b.id; });
+  if (!topics.some(function (topic) { return topic.id === 1; })) topics.unshift({ id: 1, name: "", closed: false });
+  var rule = group.autoMove || {};
+  function options(list, chosen) {
+    return list.map(function (topic) {
+      return '<option value="' + topic.id + '"' + (topic.id === chosen ? " selected" : "") + ">" + esc(topicLabel(group, topic.id) + (topic.id === 1 ? " (основная лента)" : "")) + "</option>";
+    }).join("");
+  }
+  var open = topics.filter(function (topic) { return topic.id > 1 && !topic.closed; });
+  if (!canDelete) {
+    return '<div class="card"><header><h3>Перенос сообщений между темами</h3></header><div class="card-body"><div class="banner warn">У бота нет права «Удаление сообщений»: без него перенос оставлял бы копии в двух темах. ' +
+      "Включите его в Telegram: «Администраторы» → бот → «Удаление сообщений», затем нажмите «Проверить права бота».</div></div></div>";
+  }
+  return '<div class="card"><header><h3>Перенос сообщений между темами</h3></header><div class="card-body stack">' +
+    '<div class="hint">В Telegram у ботов нет «переместить»: бот пересылает сообщение в нужную тему и удаляет оригинал. У пересланного виден автор («Переслано от …»); реакции и ответы к нему не переходят.</div>' +
+    '<div class="stack" id="moveAutoForm"><b>Автоматически из основной ленты</b>' +
+      '<label class="check"><input type="checkbox" id="moveAuto"' + (rule.enabled ? " checked" : "") + '> Переносить сообщения участников из основной ленты в тему</label>' +
+      '<div class="field"><label for="moveAutoTo">Куда переносить</label><select id="moveAutoTo">' + (open.length ? options(open, rule.toThreadId) : '<option value="0">Нет открытых тем</option>') + "</select></div>" +
+      '<label class="check"><input type="checkbox" id="moveAutoNotify"' + (rule.notify ? " checked" : "") + "> Сообщать участнику, что его сообщение перенесено</label>" +
+      '<div class="hint">Не переносятся: сообщения администраторов, ответы на сообщения, сообщения ботов и служебные записи.</div>' +
+    "</div>" +
+    '<div class="stack"><b>Вручную</b>' +
+      '<div class="grid cols-2"><div class="field"><label for="moveFrom">Откуда</label><select id="moveFrom">' + options(topics, 1) + "</select></div>" +
+      '<div class="field"><label for="moveTo">Куда</label><select id="moveTo">' + options(topics.filter(function (topic) { return !topic.closed; }), open.length ? open[0].id : 1) + "</select></div></div>" +
+      '<div class="move-list" id="moveList"></div>' +
+      '<div class="row wrap"><label class="check"><input type="radio" name="moveMode" id="moveForward" checked> Переслать (автор виден)</label>' +
+      '<label class="check"><input type="radio" name="moveMode" id="moveCopy"> Копировать (без автора)</label>' +
+      '<div class="grow"></div><button class="btn secondary" id="moveRun" type="button">Перенести отмеченные</button></div>' +
+    "</div></div></div>";
+}
+
 function renderGroupCard(host, group, mode) {
   mode = mode === "manage" ? "manage" : mode === "post" ? "post" : "all";
   var admin = group.status === "administrator" || group.status === "creator";
@@ -699,6 +734,7 @@ function renderGroupCard(host, group, mode) {
           '<button class="btn ghost small" data-decline="' + esc(request.userId) + '" type="button">Отклонить</button></div>';
       }).join("") + "</div></div>" : "") +
       topicsCard(group) +
+      moveCard(group) +
       (group.username ? '<div class="card"><header><h3>Публичная ссылка</h3></header><div class="card-body"><a href="https://t.me/' + esc(group.username) + '" target="_blank" rel="noreferrer">t.me/' + esc(group.username) + "</a></div></div>" : "") +
       '<div class="card"><header><h3>Ссылка-приглашение</h3></header><div class="card-body stack">' +
         (group.inviteLink ? '<div class="row"><input value="' + esc(group.inviteLink) + '" readonly id="inviteLink"><button class="btn ghost small" id="copyInvite" type="button">Копировать</button></div>' : '<span class="small muted">Ссылки нет</span>') +
@@ -865,6 +901,47 @@ function renderGroupCard(host, group, mode) {
   };
   var topicSelect = host.querySelector("#groupTopic");
   if (topicSelect) topicSelect.onchange = function () { selectedTopics[group.id] = Number(topicSelect.value) || 1; };
+  var moveList = host.querySelector("#moveList");
+  if (moveList) {
+    var moveFrom = host.querySelector("#moveFrom");
+    var drawMoveList = function () {
+      var from = Number(moveFrom.value) || 1;
+      var rows = (group.messages || []).filter(function (message) { return (message.threadId || 1) === from && !message.fromBot; }).slice(-30).reverse();
+      moveList.innerHTML = rows.length ? rows.map(function (message) {
+        return '<label class="check move-row"><input type="checkbox" data-move="' + message.messageId + '"><span><b>' + esc(message.name) + '</b> <span class="small muted">' + esc(dateShort(message.date)) + "</span><br>" +
+          '<span class="small muted">' + esc(String(message.text || "").slice(0, 100) || GROUP_MESSAGE_KINDS[message.kind] || message.kind) + "</span></span></label>";
+      }).join("") : '<div class="small muted">В этой теме бот пока ничего не видел.</div>';
+    };
+    moveFrom.onchange = drawMoveList;
+    drawMoveList();
+    host.querySelector("#moveRun").onclick = async function () {
+      var ids = Array.prototype.map.call(moveList.querySelectorAll("[data-move]:checked"), function (box) { return Number(box.dataset.move); });
+      if (!ids.length) { toast("Отметьте сообщения, которые нужно перенести"); return; }
+      var to = Number(host.querySelector("#moveTo").value) || 1;
+      var copy = host.querySelector("#moveCopy").checked;
+      if (!(await confirmDialog("Перенести сообщения?", ids.length + " " + plural(ids.length, "сообщение", "сообщения", "сообщений") + " → тема «" + topicLabel(group, to) + "». " + (copy ? "Они появятся от имени бота, " : "У пересланных виден автор, ") + "оригиналы будут удалены.", "Перенести"))) return;
+      try {
+        var result = await send(base + "/move-messages", "POST", { messageIds: ids, targetThreadId: to, mode: copy ? "copy" : "forward" });
+        var note = "Перенесено: " + result.moved;
+        if (result.failed.length) note += ". Не удалось: " + result.failed.length + " (" + result.failed[0].error + ")";
+        if (result.notDeleted.length) note += ". Оригинал не удалился у " + result.notDeleted.length + " — удалите вручную";
+        toast(note, Boolean(result.failed.length));
+        delete groupDetails[group.id];
+        await reload();
+      } catch (error) { fail(error); }
+    };
+  }
+  var moveAutoForm = host.querySelector("#moveAutoForm");
+  if (moveAutoForm) {
+    watchForm(moveAutoForm, async function () {
+      await send(base + "/auto-move", "PUT", {
+        enabled: host.querySelector("#moveAuto").checked,
+        toThreadId: Number(host.querySelector("#moveAutoTo").value) || 0,
+        notify: host.querySelector("#moveAutoNotify").checked,
+        mode: "forward",
+      });
+    }, "Перенос из основной ленты сохранён");
+  }
   var createTopic = host.querySelector("#createTopic");
   if (createTopic) createTopic.onclick = async function () {
     var name = host.querySelector("#newTopicName").value.trim();

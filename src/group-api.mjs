@@ -32,6 +32,7 @@ import {
   rememberTopic,
 } from './groups.mjs';
 import { LANGUAGES, addUk } from './languages.mjs';
+import { moveGroupMessages, saveAutoMove } from './group-move.mjs';
 
 // Member permissions a group can set for everyone (setChatPermissions).
 const CHAT_PERMISSIONS = [
@@ -406,6 +407,20 @@ async function handleGroupApi(req, res, url) {
       const messageId = await postToGroup(group, fields);
       saveDataNow();
       return json(res, 200, { ok: true, messageId }), true;
+    }
+
+    // --- Перенос сообщений между темами ---------------------------------------
+    if (action === 'move-messages' && !target && req.method === 'POST') {
+      const body = await readJson(req);
+      const result = await moveGroupMessages(group, body.messageIds, body.targetThreadId, { mode: body.mode, token: token() });
+      saveDataNow();
+      return json(res, 200, { ok: true, ...result }), true;
+    }
+    if (action === 'auto-move' && !target && req.method === 'PUT') {
+      const body = await readJson(req);
+      const autoMove = saveAutoMove(group, body);
+      saveDataNow();
+      return json(res, 200, { ok: true, autoMove }), true;
     }
 
     // --- Темы (подгруппы) ---------------------------------------------------
