@@ -22,6 +22,7 @@ test.before(async () => {
     data.config.active = false;
     data.config.adminChatId = '9990001';
     data.config.adminNotificationVerifiedAt = new Date().toISOString();
+    data.config.loginCodeRequired = true;
     const password = bot.hashPassword(PASSWORD);
     data.config.passwordSalt = password.salt;
     data.config.passwordHash = password.hash;

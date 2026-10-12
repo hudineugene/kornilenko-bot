@@ -1182,6 +1182,7 @@ test.describe('access from the internet', () => {
     data.config.passwordSalt = password.salt;
     data.config.passwordHash = password.hash;
     data.config.adminNotificationVerifiedAt = new Date().toISOString();
+    data.config.loginCodeRequired = true;
   }));
 
   test('requests through a proxy or to a public name are remote', () => {

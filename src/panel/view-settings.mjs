@@ -643,13 +643,17 @@ function renderAccess(host) {
       '<button class="btn secondary" id="savePassword" type="button">Сменить пароль</button>' +
       '<div class="hint">После смены пароля остальные сеансы завершатся.</div>' +
     "</div></div>" +
+    '<div class="card"><header><h3>Код из Telegram при входе</h3></header><div class="card-body stack">' +
+      '<label class="check"><input type="checkbox" id="loginCodeOn"' + (config.loginCodeRequired ? " checked" : "") + "> Требовать код из Telegram при входе из интернета</label>" +
+      '<div class="hint">' + (config.loginCodeRequired ? "Из интернета входят по паролю и коду из админ-чата." : "Из интернета входят только по паролю. Код из админ-чата защищает панель, если пароль угадают.") + "</div>" +
+    "</div></div>" +
     '<div class="card"><header><h3>Доступ из интернета</h3></header><div class="card-body stack">' +
       '<label class="check"><input type="checkbox" id="remoteOn"' + (config.remoteAccess ? " checked" : "") + "> Разрешить вход в панель из интернета</label>" +
       '<div class="field"><label for="tunnelHost">Адрес панели в интернете</label><input id="tunnelHost" value="' + esc(config.tunnelHostname || "") + '" placeholder="panel.example.com"></div>' +
       '<div class="field"><label for="tunnelToken">Ключ доступа от Cloudflare</label><input id="tunnelToken" type="password" placeholder="' + (config.tunnelTokenSet ? "токен сохранён" : "из панели Cloudflare") + '"></div>' +
       '<button class="btn secondary small" id="saveRemote" type="button">Сохранить</button>' +
       '<div class="small muted">Состояние: ' + esc(TUNNEL_STATUS_WORDS[tunnel.status] || tunnel.status || "выключен") + (tunnel.url ? " · " + esc(tunnel.url) : "") + (tunnel.error ? " · " + esc(tunnel.error) : "") + "</div>" +
-      '<div class="hint">Вход из интернета требует кода, который приходит в админ-чат Telegram.</div>' +
+      '<div class="hint">' + (config.loginCodeRequired ? "Вход из интернета требует кода, который приходит в админ-чат Telegram." : "Вход из интернета — по паролю. Код из Telegram включается рядом.") + "</div>" +
     "</div></div></div>";
 
   host.querySelector("#savePassword").onclick = async function () {
@@ -663,11 +667,27 @@ function renderAccess(host) {
       location.reload();
     } catch (error) { fail(error); }
   };
+  host.querySelector("#loginCodeOn").onchange = async function () {
+    var box = this;
+    var on = box.checked;
+    try {
+      if (on) {
+        await send("/api/login-code", "PUT", { required: true });
+      } else {
+        if (!(await confirmDialog("Отключить код из Telegram?", "В панель из интернета будут входить только по паролю. Используйте длинный пароль, который нигде больше не применяется.", "Отключить", true))) { box.checked = true; return; }
+        var password = await askPassword("Код из Telegram при входе", "Чтобы отключить код, введите текущий пароль панели.");
+        if (!password) { box.checked = true; return; }
+        await api("/api/login-code", { method: "PUT", headers: { "x-current-password": btoa(unescape(encodeURIComponent(password))) }, body: JSON.stringify({ required: false }) });
+      }
+      toast(on ? "Код из Telegram включён" : "Код из Telegram отключён");
+      await reload();
+    } catch (error) { box.checked = !on; fail(error); }
+  };
   host.querySelector("#saveRemote").onclick = async function () {
     var on = host.querySelector("#remoteOn").checked;
     if (on && !(await confirmDialog(
       "Открыть панель из интернета?",
-      "Панель станет доступна по адресу туннеля. Вход защищён паролем и кодом из Telegram, но лучше включать это только когда нужно.",
+      "Панель станет доступна по адресу туннеля. Вход защищён " + (config.loginCodeRequired ? "паролем и кодом из Telegram" : "паролем") + ", но лучше включать это только когда нужно.",
       "Открыть",
       true
     ))) return;

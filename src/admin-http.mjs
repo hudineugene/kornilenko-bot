@@ -836,6 +836,7 @@ function safeState(session) {
       notifyMode: data.config.notifyMode || 'inquiries',
       notifyPrefs: normalizeNotifyPrefs(data.config.notifyPrefs),
       remoteAccess: Boolean(data.config.remoteAccess),
+      loginCodeRequired: data.config.loginCodeRequired === true,
       // The tunnel token is a secret: the panel only learns whether it is set.
       tunnelTokenSet: Boolean(data.config.tunnelToken),
       tunnelHostname: data.config.tunnelHostname || '',

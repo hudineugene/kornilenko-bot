@@ -136,7 +136,8 @@ async function handleApi(req, res, url) {
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
     const startedAt = Date.now();
     const correct = await verifyPasswordAsync(String(body.password || ''));
-    const remote = !local;
+    // Код из Telegram — только если он включён в панели; иначе из интернета входят по паролю, как с этого компьютера.
+    const remote = !local && data.config.loginCodeRequired === true;
     // Из интернета ответ одинаковый и на верный, и на неверный пароль: иначе
     // перебор узнавал бы пароль, не имея доступа к коду из Telegram. Одинаков
     // и по времени: раньше верный пароль выдавал себя задержкой на отправку
@@ -190,6 +191,24 @@ async function handleApi(req, res, url) {
     forgetLoginAttempts(ip);
     const session = createSession(res, req);
     return json(res, 200, { ok: true, csrf: session.csrf });
+  }
+
+  // Код из Telegram при входе из интернета: включить можно сразу, выключить — только с текущим паролем.
+  if (url.pathname === '/api/login-code' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const required = body.required === true;
+    if (!required && data.config.loginCodeRequired === true) {
+      if (!(await passwordAccepted(req, res, headerPassword(req)))) return;
+    }
+    // Код приходит в админ-чат: без подтверждённого чата вход из интернета остался бы без кода и без входа.
+    if (required && !(cleanText(data.config.adminChatId, 40) && data.config.adminNotificationVerifiedAt && data.config.botToken)) {
+      return json(res, 400, { error: 'Код приходит в админ-чат Telegram. Сначала подключите чат и проверьте его в «Настройки → Команда и доступ».' });
+    }
+    data.config.loginCodeRequired = required;
+    saveDataNow();
+    return json(res, 200, { ok: true, required });
   }
 
   if (url.pathname === '/api/autostart' && req.method === 'GET') {

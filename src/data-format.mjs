@@ -11,7 +11,7 @@ import { LANGUAGES, addUk } from './languages.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 53;
+const DATA_VERSION = 54;
 // Миграции чинят тексты прежних версий, а их было только на трёх языках; украинского в них нет.
 const LEGACY_LANGUAGES = ['ru', 'en', 'es'];
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
@@ -248,6 +248,8 @@ const defaultData = {
     reminderHours: 2,
     timeZone: 'Europe/Madrid',
     remoteAccess: false,
+    // Код из Telegram при входе в панель не с этого компьютера. Выключен: вход по паролю; включается в панели.
+    loginCodeRequired: false,
     tunnelToken: '',
     tunnelHostname: '',
   },
@@ -1602,6 +1604,7 @@ function normalizeLoadedData(parsed) {
     // (например, объект из старых данных или из подготовленной песочницы)
     // считалось бы истиной, и бот поднял бы туннель наружу.
     normalized.config.remoteAccess = normalized.config.remoteAccess === true;
+    normalized.config.loginCodeRequired = normalized.config.loginCodeRequired === true;
     normalized.config.statusNotices = normalized.config.statusNotices !== false;
     normalized.config.managers = normalizeManagers(normalized.config.managers, normalized.config.adminChatId);
     pruneOrphanPropertyAnalytics(normalized);
