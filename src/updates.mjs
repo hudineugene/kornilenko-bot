@@ -156,8 +156,11 @@ async function handleUpdate(update, token) {
   if (update.message && update.message.chat && update.message.chat.type && update.message.chat.type !== 'private') {
     rememberGroupMessage(update.message);
     // «Основная лента» форума: сообщения участников уходят в выбранную тему (если правило включено в панели).
-    await autoMoveFromGeneral(update.message, token).catch((error) => recordError('Перенос из «Основной ленты»', error));
-    if (!adminChatFor(update.message.chat.id)) return;
+    // Группа, назначенная админ- или менеджерским чатом, под перенос не попадает: там работают команды и ответы.
+    if (!adminChatFor(update.message.chat.id)) {
+      await autoMoveFromGeneral(update.message, token).catch((error) => recordError('Перенос из «Основной ленты»', error));
+      return;
+    }
   }
   if (update.message_reaction) {
     await handleMessageReaction(update.message_reaction);

@@ -175,3 +175,47 @@ test('автоперенос с уведомлением пишет участн
   assert.ok(notice, 'уведомление ушло');
   assert.match(notice.body.text, /Ирина, ваше сообщение перенесено в тему «Слово за слово»/);
 });
+
+test('альбом с удалённой в Telegram фотографией: копии откатываются, остальное переносится по одному, лишний номер уходит из ленты', async () => {
+  await deliver(general(300, '', { photo: [{ file_id: 'a' }], media_group_id: 'album-2', caption: 'Фото' }));
+  await deliver(general(301, '', { photo: [{ file_id: 'b' }], media_group_id: 'album-2' }));
+  await deliver(general(302, '', { photo: [{ file_id: 'c' }], media_group_id: 'album-2' }));
+  // Telegram не нашёл вторую фотографию: пачка вернула две записи из трёх.
+  replies.set('forwardMessages', (body) => body.message_ids.filter((id) => id !== 301).map(() => ({ message_id: ++nextId })));
+  replies.set('forwardMessage', (body) => (body.message_id === 301 ? new Error('Bad Request: message to forward not found') : { message_id: ++nextId }));
+  const { moveGroupMessages } = await moveModule();
+  const result = await moveGroupMessages(group(), [300], 7, { token: TOKEN });
+  assert.equal(result.moved, 2, 'две найденные фотографии перенесены');
+  assert.deepEqual(result.gone, [301], 'удалённая в Telegram — отдельно');
+  assert.deepEqual(result.failed, []);
+  const rolledBack = callsOf('deleteMessages').find((call) => call.body.message_ids.some((id) => id > 5000));
+  assert.ok(rolledBack, 'только что созданные копии пачки удалены, дублей в теме нет');
+  assert.ok(!group().messages.some((item) => [300, 301, 302].includes(item.messageId)), 'старые номера из ленты убраны');
+});
+
+test('сообщения, которые уже в нужной теме, не пересылаются в неё же', async () => {
+  await deliver({ message: { message_id: 310, date: now(), chat: chat(), from: { id: 555, first_name: 'Ирина' }, message_thread_id: 7, is_topic_message: true, text: 'Уже здесь' } });
+  const { moveGroupMessages } = await moveModule();
+  await assert.rejects(() => moveGroupMessages(group(), [310], 7, { token: TOKEN }), /уже в выбранной теме/);
+  assert.equal(callsOf('forwardMessage').length, 0);
+});
+
+test('автоперенос на закрытую в Telegram тему выключает правило и сообщает один раз', async () => {
+  const { saveAutoMove } = await moveModule();
+  saveAutoMove(group(), { enabled: true, toThreadId: 7 });
+  replies.set('forwardMessage', () => new Error('Bad Request: TOPIC_CLOSED'));
+  await deliver(general(320, 'Первое'));
+  assert.equal(group().autoMove.enabled, false, 'правило выключилось');
+  const before = callsOf('forwardMessage').length;
+  await deliver(general(321, 'Второе'));
+  assert.equal(callsOf('forwardMessage').length, before, 'дальше сообщения не трогаются и журнал не забивается');
+  const errors = (bot.getData().errors || []).filter((item) => /Перенос/.test(String(item.area || item.context || '')));
+  assert.ok(errors.length <= 1, 'в журнале не больше одной записи, а не по записи на сообщение');
+});
+
+test('повторно полученное обновление не дублирует запись в ленте', async () => {
+  const update = general(330, 'Дубль');
+  await deliver(update);
+  await deliver(update);
+  assert.equal(group().messages.filter((item) => item.messageId === 330).length, 1);
+});

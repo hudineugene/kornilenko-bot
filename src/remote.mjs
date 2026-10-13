@@ -118,7 +118,7 @@ function tunnelMode() {
 async function announceTunnel(url) {
   const adminChatId = cleanText(data.config.adminChatId, 40);
   if (!adminChatId || !data.config.botToken) return;
-  await sendMessage(adminChatId, '🌐 Панель доступна из интернета:\n' + url + '\n\nВход: пароль администратора и код, который придёт сюда. Адрес меняется при каждом перезапуске бота — новый придёт в этот чат.', data.config.botToken, { track: false })
+  await sendMessage(adminChatId, '🌐 Панель доступна из интернета:\n' + url + '\n\nВход: пароль администратора' + (data.config.loginCodeRequired === true ? ' и код, который придёт сюда' : '') + '. Адрес меняется при каждом перезапуске бота — новый придёт в этот чат.', data.config.botToken, { track: false })
     .catch((error) => recordError('Доступ из интернета', error));
 }
 

@@ -226,3 +226,48 @@ test('файл без фотографий не стирает фото прое
   const accepted = await send(distances, 'sea');
   assert.equal(accepted.status, 200);
 });
+
+test('«Только фотографии»: файл без фотографий ничего не стирает; фото по языкам не затираются пустым', async () => {
+  const created = await send(await catalogFile([project('merge-0008', 'Проект с фото', 'photo-k')]), 'objects');
+  assert.equal(created.status, 200);
+  const record = bot.getData().objects.find((item) => item.id === 'merge-0008');
+  record.imagesByLanguage.en = [{ ...record.imagesByLanguage.ru[0], id: 'en-keep' }];
+  const keptRu = record.imagesByLanguage.ru[0].storageFile;
+
+  const noPhotos = project('merge-0008', 'Без фото', 'photo-l');
+  noPhotos.imagesByLanguage = { ru: [], uk: [], en: [], es: [] };
+  const empty = await (await send(await catalogFile([noPhotos]), 'photos')).json();
+  assert.equal(empty.photosUpdated, 0, 'файл без фото не считается обновлением');
+  assert.equal(bot.getData().objects.find((item) => item.id === 'merge-0008').imagesByLanguage.ru[0].storageFile, keptRu);
+
+  // В файле фото только на русском: английские у проекта остаются.
+  const onlyRu = project('merge-0008', 'Новые русские фото', 'photo-m');
+  const merged = await (await send(await catalogFile([onlyRu]), 'objects')).json();
+  assert.equal(merged.objectsUpdated, 1);
+  const after = bot.getData().objects.find((item) => item.id === 'merge-0008');
+  assert.equal(after.imagesByLanguage.en.length, 1, 'английские фото остались');
+  assert.notEqual(after.imagesByLanguage.ru[0].storageFile, keptRu, 'русские — из файла');
+});
+
+test('контакты и тексты берутся по ключам: чего нет в файле, остаётся на сервере', async () => {
+  const data = bot.getData();
+  data.contacts = { ...data.contacts, phone: '+34 600 000 001', manager: 'Серверный менеджер', managerName: 'Серверное имя', photo: { id: 'mgr', storageFile: 'mgr.png', mimeType: 'image/png', size: 10 } };
+  data.config.menu.en = { ...data.config.menu.en, about: 'English about on the server' };
+  const file = await catalogFile([], { contacts: { phone: '+34 611 222 333' }, config: { menu: { ru: { about: 'Новый текст' } } } });
+  const response = await send(file, 'contacts,texts');
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  const after = bot.getData();
+  assert.equal(after.contacts.phone, '+34 611 222 333', 'телефон из файла');
+  assert.equal(after.contacts.managerName, 'Серверное имя', 'имя менеджера не сброшено');
+  assert.ok(after.contacts.photo && after.contacts.photo.storageFile === 'mgr.png', 'фото менеджера на месте');
+  assert.equal(after.config.menu.en.about, 'English about on the server', 'английский текст не сброшен на стандартный');
+  assert.equal(after.config.menu.ru.about, 'Новый текст');
+});
+
+test('проект без номера в файле отклоняется', async () => {
+  const bad = project('', 'Без номера', 'photo-n');
+  delete bad.id;
+  const response = await send(await catalogFile([bad]), 'objects');
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /нет номера/);
+});

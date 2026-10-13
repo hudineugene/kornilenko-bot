@@ -231,7 +231,8 @@ function rememberGroupMessage(message) {
   }
   const remembered = normalizeGroupMessage(message);
   remembered.threadId = threadId;
-  group.messages.push(remembered);
+  // Одно сообщение — одна запись: повторно полученное обновление (после перезапуска) ленту не дублирует.
+  if (!group.messages.some((item) => item.messageId === remembered.messageId)) group.messages.push(remembered);
   if (group.messages.length > GROUP_MESSAGE_LIMIT) group.messages = group.messages.slice(-GROUP_MESSAGE_LIMIT);
   group.lastMessageAt = new Date().toISOString();
   if (message.pinned_message && message.pinned_message.message_id) group.pinnedMessageId = Number(message.pinned_message.message_id);

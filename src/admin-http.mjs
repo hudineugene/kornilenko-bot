@@ -542,6 +542,31 @@ function attemptCount(key, now) {
   return item && item.resetAt >= now ? item.count : 0;
 }
 
+// Проверки пароля, которые уже идут. Счётчик неудач растёт только после проверки, а проверка асинхронная: без
+// этого сотня запросов, пришедших разом, проходила лимит, пока счётчик был нулевым, и каждый перебирал пароль.
+// Идущая проверка занимает место сразу, до первого await.
+const loginInFlight = new Map();
+
+function inFlightCount(key) {
+  return loginInFlight.get(key) || 0;
+}
+
+function reserveLoginCheck(ip, { local = false } = {}) {
+  const keys = [attemptKey(ip)];
+  if (!local) keys.push('*');
+  for (const key of keys) loginInFlight.set(key, inFlightCount(key) + 1);
+  let released = false;
+  return function release() {
+    if (released) return;
+    released = true;
+    for (const key of keys) {
+      const left = inFlightCount(key) - 1;
+      if (left > 0) loginInFlight.set(key, left);
+      else loginInFlight.delete(key);
+    }
+  };
+}
+
 // Проверка без подсчёта: считаем только неудачные попытки, и только те, что
 // пришли снаружи. Раньше счётчик рос на каждом запросе — 61 попытка из
 // интернета запирала вход и владельцу на этом же компьютере, а вместе с ним
@@ -549,8 +574,9 @@ function attemptCount(key, now) {
 function loginAllowed(ip, { local = false } = {}) {
   const now = Date.now();
   pruneLoginAttempts(now);
-  if (attemptCount(attemptKey(ip), now) >= LOGIN_LIMIT_PER_ADDRESS) return false;
-  return local || attemptCount('*', now) < LOGIN_LIMIT_TOTAL;
+  const key = attemptKey(ip);
+  if (attemptCount(key, now) + inFlightCount(key) >= LOGIN_LIMIT_PER_ADDRESS) return false;
+  return local || attemptCount('*', now) + inFlightCount('*') < LOGIN_LIMIT_TOTAL;
 }
 
 function rememberFailedLogin(ip, { local = false } = {}) {
@@ -581,10 +607,15 @@ async function passwordAccepted(req, res, supplied) {
     json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
     return false;
   }
-  if (!(await verifyPasswordAsync(String(supplied || '')))) {
-    rememberFailedLogin(ip, { local });
-    json(res, 403, { error: 'Неверный пароль панели' });
-    return false;
+  const release = reserveLoginCheck(ip, { local });
+  try {
+    if (!(await verifyPasswordAsync(String(supplied || '')))) {
+      rememberFailedLogin(ip, { local });
+      json(res, 403, { error: 'Неверный пароль панели' });
+      return false;
+    }
+  } finally {
+    release();
   }
   forgetLoginAttempts(ip);
   return true;
@@ -983,6 +1014,7 @@ export {
   attemptKey,
   expandIpv6,
   forgetLoginAttempts,
+  reserveLoginCheck,
   loginAllowed,
   loginAttempts,
   rememberFailedLogin,

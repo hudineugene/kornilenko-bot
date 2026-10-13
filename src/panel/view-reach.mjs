@@ -653,10 +653,10 @@ function moveCard(group) {
       "Включите его в Telegram: «Администраторы» → бот → «Удаление сообщений», затем нажмите «Проверить права бота».</div></div></div>";
   }
   return '<div class="card"><header><h3>Перенос сообщений между темами</h3></header><div class="card-body stack">' +
-    '<div class="hint">В Telegram у ботов нет «переместить»: бот пересылает сообщение в нужную тему и удаляет оригинал. У пересланного виден автор («Переслано от …»); реакции и ответы к нему не переходят.</div>' +
+    '<div class="hint">В Telegram у ботов нет «переместить»: бот пересылает сообщение в тему и удаляет оригинал. Автор виден, если не скрыл пересылку; реакции и ответы не переходят.</div>' +
     '<div class="stack" id="moveAutoForm"><b>Автоматически из основной ленты</b>' +
       '<label class="check"><input type="checkbox" id="moveAuto"' + (rule.enabled ? " checked" : "") + '> Переносить сообщения участников из основной ленты в тему</label>' +
-      '<div class="field"><label for="moveAutoTo">Куда переносить</label><select id="moveAutoTo">' + (open.length ? options(open, rule.toThreadId) : '<option value="0">Нет открытых тем</option>') + "</select></div>" +
+      '<div class="field"><label for="moveAutoTo">Куда переносить</label><select id="moveAutoTo">' + ((rule.toThreadId > 1 && !open.some(function (topic) { return topic.id === rule.toThreadId; }) ? '<option value="' + rule.toThreadId + '" selected disabled>Тема №' + rule.toThreadId + ' (закрыта или не найдена)</option>' : "") + (open.length ? options(open, rule.toThreadId) : '<option value="0">Нет открытых тем — добавьте тему в «Темы группы»</option>')) + "</select></div>" +
       '<label class="check"><input type="checkbox" id="moveAutoNotify"' + (rule.notify ? " checked" : "") + "> Сообщать участнику, что его сообщение перенесено</label>" +
       '<div class="hint">Не переносятся: сообщения администраторов, ответы на сообщения, сообщения ботов и служебные записи.</div>' +
     "</div>" +
@@ -925,6 +925,7 @@ function renderGroupCard(host, group, mode) {
         var note = "Перенесено: " + result.moved;
         if (result.failed.length) note += ". Не удалось: " + result.failed.length + " (" + result.failed[0].error + ")";
         if (result.notDeleted.length) note += ". Оригинал не удалился у " + result.notDeleted.length + " — удалите вручную";
+        if (result.gone && result.gone.length) note += ". Уже удалены в Telegram: " + result.gone.length;
         toast(note, Boolean(result.failed.length));
         delete groupDetails[group.id];
         await reload();

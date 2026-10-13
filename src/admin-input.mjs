@@ -102,6 +102,10 @@ function validatePartsBackup(backup) {
   if (backup.objects != null && !Array.isArray(backup.objects)) throw new Error('Некорректный раздел: objects');
   if (backup.contacts != null && (typeof backup.contacts !== 'object' || Array.isArray(backup.contacts))) throw new Error('Некорректный раздел: contacts');
   if ((backup.objects || []).length > 500) throw new Error('Слишком много проектов в файле');
+  // Проекты сопоставляются по номеру (id): без него запись добавлялась бы заново при каждой загрузке.
+  for (const record of backup.objects || []) {
+    if (!record || typeof record.id !== 'string' || !record.id.trim()) throw new Error('У проекта в файле нет номера (id)');
+  }
   for (const key of ['rules', 'replyTemplates', 'guidePages']) {
     if (backup[key] != null && !Array.isArray(backup[key])) throw new Error('Некорректный раздел: ' + key);
   }

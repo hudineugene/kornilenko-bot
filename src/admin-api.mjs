@@ -38,6 +38,7 @@ import {
   readJson,
   requestIsRemote,
   requireAuth,
+  reserveLoginCheck,
   safeState,
   securityHeaders,
   sendJsonText,
@@ -57,6 +58,17 @@ import { LANGUAGES } from './languages.mjs';
 function hasGalleryImages(record) {
   const byLanguage = record && record.imagesByLanguage;
   return !!byLanguage && Object.values(byLanguage).some((list) => Array.isArray(list) && list.length > 0);
+}
+
+// Галереи по языкам: берём из файла там, где в файле есть фото; где файл пуст, остаётся то, что уже у проекта.
+function mergeGalleries(fromFile, existing) {
+  const merged = {};
+  for (const language of LANGUAGES) {
+    const fresh = fromFile && fromFile[language];
+    const old = existing && existing[language];
+    merged[language] = Array.isArray(fresh) && fresh.length ? fresh : (Array.isArray(old) ? old : []);
+  }
+  return merged;
 }
 
 function portableBackupData() {
@@ -133,6 +145,9 @@ async function handleApi(req, res, url) {
     const ip = clientAddress(req);
     const local = isLocalRequest(req);
     if (!loginAllowed(ip, { local })) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
+    // Место в лимите занимаем сразу: проверка идёт асинхронно, и без этого пачка запросов проходила бы лимит разом.
+    const releaseCheck = reserveLoginCheck(ip, { local });
+    try {
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
     const startedAt = Date.now();
     const correct = await verifyPasswordAsync(String(body.password || ''));
@@ -156,6 +171,9 @@ async function handleApi(req, res, url) {
     forgetLoginAttempts(ip);
     const session = createSession(res, req);
     return json(res, 200, { ok: true, csrf: session.csrf });
+    } finally {
+      releaseCheck();
+    }
   }
 
   if (url.pathname === '/api/login/verify' && req.method === 'POST') {
@@ -163,6 +181,8 @@ async function handleApi(req, res, url) {
     const ip = clientAddress(req);
     const localVerify = isLocalRequest(req);
     if (!loginAllowed(ip, { local: localVerify })) return json(res, 429, { error: 'Слишком много попыток. Попробуйте позже.' });
+    const releaseVerify = reserveLoginCheck(ip, { local: localVerify });
+    try {
     const body = await readJson(req, MAX_UNAUTHENTICATED_BODY_BYTES);
     const challenge = cleanText(body.challenge, 100);
     const pending = pendingRemoteLogins.get(challenge);
@@ -191,6 +211,9 @@ async function handleApi(req, res, url) {
     forgetLoginAttempts(ip);
     const session = createSession(res, req);
     return json(res, 200, { ok: true, csrf: session.csrf });
+    } finally {
+      releaseVerify();
+    }
   }
 
   // Код из Telegram при входе из интернета: включить можно сразу, выключить — только с текущим паролем.
@@ -468,8 +491,11 @@ async function handleApi(req, res, url) {
         for (const record of incoming.objects) {
           const index = data.objects.findIndex((item) => item.id === record.id);
           if (index >= 0) {
-            // Файл без фотографий не стирает те, что уже есть у проекта.
-            if (!hasGalleryImages(record) && hasGalleryImages(data.objects[index])) record.imagesByLanguage = data.objects[index].imagesByLanguage;
+            // Файл без фотографий (или без фото на каком-то языке) не стирает те, что уже есть у проекта; история публикаций в группы тоже остаётся.
+            const existing = data.objects[index];
+            record.imagesByLanguage = mergeGalleries(record.imagesByLanguage, existing.imagesByLanguage);
+            if (!record.publishedAt && existing.publishedAt) record.publishedAt = existing.publishedAt;
+            if ((!Array.isArray(record.publications) || !record.publications.length) && Array.isArray(existing.publications) && existing.publications.length) record.publications = existing.publications;
             data.objects[index] = record;
             result.objectsUpdated += 1;
           } else {
@@ -482,8 +508,9 @@ async function handleApi(req, res, url) {
       if (parts.includes('photos') && !parts.includes('objects')) {
         for (const record of incoming.objects) {
           const existing = data.objects.find((item) => item.id === record.id);
-          if (!existing) continue;
-          existing.imagesByLanguage = record.imagesByLanguage;
+          // Файл без фотографий ничего не меняет: иначе «обновление фото» стёрло бы их у проекта.
+          if (!existing || !hasGalleryImages(record)) continue;
+          existing.imagesByLanguage = mergeGalleries(record.imagesByLanguage, existing.imagesByLanguage);
           existing.updatedAt = new Date().toISOString();
           result.photosUpdated += 1;
         }
@@ -500,7 +527,14 @@ async function handleApi(req, res, url) {
         }
       }
       if (parts.includes('contacts') && backup.contacts) {
-        data.contacts = incoming.contacts;
+        // Только то, что в файле написано: остальные поля и фото менеджера остаются как на сервере.
+        const merged = { ...data.contacts };
+        for (const key of Object.keys(backup.contacts)) {
+          if (!(key in incoming.contacts)) continue;
+          if (key === 'photo' && !incoming.contacts.photo) continue;
+          merged[key] = incoming.contacts[key];
+        }
+        data.contacts = merged;
         result.contacts = true;
       }
       if (parts.includes('about')) {
@@ -515,8 +549,19 @@ async function handleApi(req, res, url) {
       }
       // Тексты бота: целиком то, что есть в файле; чего в файле нет — остаётся как на этом сервере.
       if (parts.includes('texts')) {
-        if (sourceConfig.menu) { data.config.menu = incoming.config.menu; result.texts += 1; }
-        if (sourceConfig.messages) { data.config.messages = incoming.config.messages; result.texts += 1; }
+        // По языкам и по ключам: что в файле не названо, остаётся как на сервере (а не сбрасывается на стандартный текст).
+        for (const [section, label] of [['menu', 'menu'], ['messages', 'messages']]) {
+          const wanted = sourceConfig[label];
+          if (!wanted || typeof wanted !== 'object') continue;
+          for (const language of LANGUAGES) {
+            const raw = wanted[language];
+            const fresh = incoming.config[section] && incoming.config[section][language];
+            if (!raw || typeof raw !== 'object' || !fresh) continue;
+            if (!data.config[section][language] || typeof data.config[section][language] !== 'object') data.config[section][language] = {};
+            for (const key of Object.keys(raw)) if (key in fresh) data.config[section][language][key] = fresh[key];
+          }
+          result.texts += 1;
+        }
         if (Array.isArray(backup.guidePages)) { data.guidePages = incoming.guidePages; result.texts += 1; }
         if (backup.buyPlan && typeof backup.buyPlan === 'object') { data.buyPlan = incoming.buyPlan; result.texts += 1; }
         if (Array.isArray(backup.rules)) { data.rules = incoming.rules; result.texts += 1; }

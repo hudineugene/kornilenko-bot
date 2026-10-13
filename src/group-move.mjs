@@ -8,9 +8,10 @@ import { cleanText } from './util.mjs';
 import { data, scheduleSave } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { sendMessage, telegramRequest } from './telegram.mjs';
+import { tellAdminProblem } from './notify-plan.mjs';
 import { GENERAL_TOPIC_ID, fetchAdministrators, findTopic, forgetGroupMessage, groupById, messageLink, topicTitle } from './groups.mjs';
 
-const MOVE_LIMIT = 50;
+const MOVE_LIMIT = 20;
 const ADMIN_CACHE_MS = 10 * 60 * 1000;
 const ALBUM_WAIT_MS = 1500;
 // Что в сообщении считается содержимым: служебные записи («вступил», «закрепил») не переносятся.
@@ -60,6 +61,8 @@ async function deleteOriginals(group, ids, token) {
       try {
         await telegramRequest(token, 'deleteMessage', { chat_id: group.id, message_id: id });
       } catch (error) {
+        // «Сообщение не найдено» — оригинала уже нет (например, ответ на пачку потерялся по таймауту): удалять нечего.
+        if (/message to delete not found|MESSAGE_ID_INVALID/i.test(String(error && error.message))) continue;
         left.push(id);
         recordError('Перенос сообщения: оригинал не удалился', error);
       }
@@ -80,7 +83,7 @@ function movingUnits(group, ids) {
       continue;
     }
     if (byAlbum.has(album)) continue;
-    const members = (group.messages || []).filter((item) => item.mediaGroupId === album).map((item) => item.messageId).sort((a, b) => a - b);
+    const members = [...new Set((group.messages || []).filter((item) => item.mediaGroupId === album).map((item) => item.messageId))].sort((a, b) => a - b);
     const unit = { ids: members.length ? members : [id] };
     byAlbum.set(album, unit);
     units.push(unit);
@@ -122,34 +125,66 @@ async function moveGroupMessages(group, rawIds, targetThreadId, options = {}) {
     throw new Error('У бота нет права удалять сообщения: без него после переноса остались бы копии в двух темах. Включите боту право «Удаление сообщений» в Telegram.');
   }
   const place = target > GENERAL_TOPIC_ID ? { message_thread_id: target } : {};
-  const result = { moved: 0, failed: [], notDeleted: [], newIds: [] };
-  for (const unit of movingUnits(group, ids)) {
+  const result = { moved: 0, failed: [], notDeleted: [], gone: [], newIds: [] };
+  const finishUnit = async (unit, sentIds) => {
+    const left = await deleteOriginals(group, unit.ids, token);
+    result.notDeleted.push(...left);
+    // Сначала запись о новом сообщении (автор берётся из старой), потом оригинал уходит из ленты.
+    addMovedToFeed(group, unit, sentIds, target, mode);
+    for (const id of unit.ids) if (!left.includes(id)) forgetGroupMessage(group, id);
+    result.moved += unit.ids.length;
+    result.newIds.push(...sentIds);
+  };
+  const sendOne = async (id) => {
+    const sent = await telegramRequest(token, mode === 'copy' ? 'copyMessage' : 'forwardMessage', {
+      chat_id: group.id, from_chat_id: group.id, message_id: id, disable_notification: true, ...place,
+    });
+    const sentId = Number(sent && sent.message_id);
+    if (!sentId) throw new Error('Telegram не вернул номер нового сообщения');
+    return sentId;
+  };
+  // Сообщения, которые уже лежат в нужной теме, не трогаем: пересылка «в себя» только плодила бы копии.
+  const feed = new Map((group.messages || []).map((item) => [item.messageId, item]));
+  const here = target > GENERAL_TOPIC_ID ? target : GENERAL_TOPIC_ID;
+  const pending = ids.filter((id) => !(feed.get(id) && (feed.get(id).threadId || GENERAL_TOPIC_ID) === here));
+  if (!pending.length) throw new Error('Эти сообщения уже в выбранной теме');
+  let stopped = '';
+  for (const unit of movingUnits(group, pending)) {
+    if (stopped) {
+      for (const id of unit.ids) result.failed.push({ messageId: id, error: stopped });
+      continue;
+    }
     try {
-      let sentIds;
+      let singles = unit.ids;
       if (unit.ids.length > 1) {
         const sent = await telegramRequest(token, mode === 'copy' ? 'copyMessages' : 'forwardMessages', {
           chat_id: group.id, from_chat_id: group.id, message_ids: unit.ids, disable_notification: true, ...place,
         });
-        sentIds = (Array.isArray(sent) ? sent : []).map((item) => Number(item && item.message_id)).filter(Boolean);
-        // Часть альбома не ушла: оригиналы не трогаем, иначе потеряем то, что не скопировалось.
-        if (sentIds.length !== unit.ids.length) throw new Error('Альбом перенесён не целиком — проверьте обе темы и удалите лишнее вручную');
-      } else {
-        const sent = await telegramRequest(token, mode === 'copy' ? 'copyMessage' : 'forwardMessage', {
-          chat_id: group.id, from_chat_id: group.id, message_id: unit.ids[0], disable_notification: true, ...place,
-        });
-        sentIds = [Number(sent && sent.message_id)].filter(Boolean);
-        if (!sentIds.length) throw new Error('Telegram не вернул номер нового сообщения');
+        const sentIds = (Array.isArray(sent) ? sent : []).map((item) => Number(item && item.message_id)).filter(Boolean);
+        if (sentIds.length === unit.ids.length) {
+          await finishUnit(unit, sentIds);
+          continue;
+        }
+        // Часть альбома Telegram не нашёл (фото удалили в самой группе): убираем только что созданные копии и
+        // переносим по одному — то, что нашлось, переносится, устаревшие номера выбрасываем из ленты.
+        if (sentIds.length) await deleteOriginals(group, sentIds, token);
       }
-      const left = await deleteOriginals(group, unit.ids, token);
-      result.notDeleted.push(...left);
-      // Сначала запись о новом сообщении (автор берётся из старой), потом оригинал уходит из ленты.
-      addMovedToFeed(group, unit, sentIds, target, mode);
-      for (const id of unit.ids) if (!left.includes(id)) forgetGroupMessage(group, id);
-      result.moved += unit.ids.length;
-      result.newIds.push(...sentIds);
+      for (const id of singles) {
+        try {
+          await finishUnit({ ids: [id] }, [await sendOne(id)]);
+        } catch (error) {
+          if (/message to (forward|copy) not found|MESSAGE_ID_INVALID/i.test(String(error && error.message))) {
+            forgetGroupMessage(group, id);
+            result.gone.push(id);
+          } else throw error;
+        }
+      }
     } catch (error) {
-      recordError('Перенос сообщения между темами', error);
-      for (const id of unit.ids) result.failed.push({ messageId: id, error: friendly(error) });
+      if (!options.quiet) recordError('Перенос сообщения между темами', error);
+      const reason = friendly(error);
+      for (const id of unit.ids) result.failed.push({ messageId: id, error: reason });
+      // Telegram просит подождать: остальные не отправляем, чтобы не растягивать запрос на минуты.
+      if (/Too Many Requests|retry after/i.test(String(error && error.message))) stopped = 'Telegram просит подождать — повторите перенос позже';
     }
   }
   scheduleSave();
@@ -182,7 +217,14 @@ async function administratorIds(group, token) {
 
 async function runAutoMove(group, ids, rule, token, who) {
   const target = rule.toThreadId;
-  const result = await moveGroupMessages(group, ids, target, { mode: rule.mode, token });
+  const result = await moveGroupMessages(group, ids, target, { mode: rule.mode, token, quiet: true });
+  if (!result.moved && result.failed.length && /Тема закрыта|Такой темы в группе нет|защищённый контент/.test(result.failed[0].error)) {
+    // Причина не пройдёт сама: правило выключаем и говорим об этом один раз, иначе каждое сообщение забивало бы журнал.
+    group.autoMove = { ...normalizeAutoMove(group.autoMove), enabled: false };
+    scheduleSave();
+    void tellAdminProblem('automove-' + group.id, '⚠️ Перенос из основной ленты в «' + (group.title || 'группе') + '» выключен: ' + result.failed[0].error + '. Включите его снова в панели после исправления.');
+    return result;
+  }
   if (result.moved && rule.notify) {
     const link = messageLink(group, result.newIds[0], target);
     const text = (who ? who + ', в' : 'В') + 'аше сообщение перенесено в тему «' + topicTitle(group, target) + '».' + (link ? '\n' + link : '');
@@ -197,10 +239,12 @@ async function autoMoveFromGeneral(message, token = data.config.botToken) {
   if (!chat || chat.type === 'private' || chat.type === 'channel') return false;
   const group = groupById(chat.id);
   const rule = group && normalizeAutoMove(group.autoMove);
-  if (!rule || !rule.enabled || !group.isForum || !rule.toThreadId) return false;
+  if (!rule || !rule.enabled || !group.isForum || rule.toThreadId <= GENERAL_TOPIC_ID) return false;
   const from = message.from;
   // Только «Основная лента»: сообщения тем помечены is_topic_message. Ответы остаются там, где завязан разговор.
   if (message.is_topic_message || message.reply_to_message || message.is_automatic_forward || message.sender_chat) return false;
+  // Сообщение темы без признака is_topic_message встречается редко, но номер темы у него есть: не трогаем.
+  if (Number(message.message_thread_id) > GENERAL_TOPIC_ID) return false;
   if (!from || from.is_bot) return false;
   if (!CONTENT_FIELDS.some((field) => message[field])) return false;
   if (!canDelete(group)) {
@@ -218,7 +262,8 @@ async function autoMoveFromGeneral(message, token = data.config.botToken) {
     recordError('Перенос из «Основной ленты»: не удалось получить администраторов', error);
     return false;
   }
-  if (admins.has(String(from.id))) return false;
+  // Пустой список администраторов — сбой ответа: иначе из-под правила не вышел бы никто, включая владельца.
+  if (!admins.size || admins.has(String(from.id))) return false;
   const who = cleanText([from.first_name, from.last_name].filter(Boolean).join(' '), 60);
   if (message.media_group_id) {
     const key = group.id + ':' + message.media_group_id;

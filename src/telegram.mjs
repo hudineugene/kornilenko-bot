@@ -184,7 +184,7 @@ async function telegramMultipartRequest(token, method, fields) {
   return telegramCall(token, method, () => {
     const form = new FormData();
     for (const [key, value] of Object.entries(fields)) {
-      if (value == null || value === '') continue;
+      if (value == null || value === '' || (key === 'reply_markup' && !value)) continue;
       if (value && typeof value === 'object' && value.upload instanceof Blob) form.append(key, value.upload, value.fileName || 'file');
       else form.append(key, typeof value === 'string' || value instanceof Blob ? value : JSON.stringify(value));
     }
