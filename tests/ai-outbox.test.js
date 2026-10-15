@@ -31,6 +31,10 @@ global.fetch = async (url, init = {}) => {
     agent.events.push(JSON.parse(init.body));
     return json({ ok: true });
   }
+  if (u === AGENT_URL + '/order') {
+    (agent.orders ||= []).push(JSON.parse(init.body));
+    return json({ text: null });
+  }
   if (u === AGENT_URL + '/log') {
     agent.logs.push(JSON.parse(init.body));
     return json({ ok: true });
@@ -66,6 +70,7 @@ test.beforeEach(() => {
   agent.acks = [];
   agent.outbox = [];
   agent.events = [];
+  agent.orders = [];
   resetData((data) => {
     data.config.aiAgent = { enabled: true, url: AGENT_URL, key: KEY, autoReturnHours: 2 };
   });
@@ -263,4 +268,31 @@ test('профиль клиента: избранное, просмотры и �
   assert.match(context, /Искал в каталоге: покупка, вилла, 3\+ спальни, Финестрат, бюджет до 600 000 €/);
   assert.match(context, /телефон уже оставлял/);
   assert.doesNotMatch(context, /34600000000/);
+});
+
+test('агент сопровождает заявку: изменения статуса уходят в GenAgent один раз', async () => {
+  const chat = await handedToManager();
+  const inquiry = chat.inquiries[0];
+  const { reportAgentOrders } = await outbox();
+  await reportAgentOrders();
+  assert.equal(agent.orders.length, 1);
+  assert.equal(agent.orders[0].user.id, String(chat.id));
+  assert.equal(agent.orders[0].order.status, 'in_progress');
+  assert.equal(agent.orders[0].order.label, 'в работе у менеджера');
+  assert.equal(agent.orders[0].order.id, String(inquiry.id).slice(0, 8));
+  await reportAgentOrders();
+  assert.equal(agent.orders.length, 1, 'без изменений — повторно не шлём');
+  // Запись на просмотр: ждёт подтверждения → подтверждён (с датой)
+  inquiry.type = 'viewing';
+  inquiry.viewing = { date: '2026-10-20', dateText: '20 октября', timeText: '12:00' };
+  await reportAgentOrders();
+  assert.equal(agent.orders[1].order.status, 'viewing_requested');
+  assert.match(agent.orders[1].order.facts, /12:00/);
+  inquiry.viewing.confirmedAt = new Date().toISOString();
+  inquiry.viewing.confirmedDate = '2026-10-20';
+  inquiry.viewing.confirmedTime = '12:30';
+  await reportAgentOrders();
+  assert.equal(agent.orders[2].order.status, 'viewing_confirmed');
+  assert.match(agent.orders[2].order.facts, /12:30/);
+  assert.equal(agent.orders[2].write, undefined, 'живой текст не просим — карточку просмотра шлёт бот');
 });

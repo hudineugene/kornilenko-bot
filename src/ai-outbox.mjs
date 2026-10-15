@@ -133,15 +133,80 @@ async function pollAgentOutbox() {
   }
 }
 
+// --- Агент сопровождает заявку ---------------------------------------------------
+// Раз в минуту сверяем статусы заявок с тем, что уже знает GenAgent, и шлём изменения (POST /order):
+// агент видит ленту заявки и точно отвечает «когда мой просмотр», «что с моей заявкой».
+// Статус меняется во многих местах (кнопки, панель, просмотры, ответы менеджера) — сверка ловит все.
+const ORDERS_EVERY_MS = 60000;
+const ORDERS_PER_RUN = 10;
+const ORDERS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const INQUIRY_KIND = { viewing: 'Просмотр', question: 'Вопрос менеджеру', interest: 'Интерес к объекту', selection: 'Подбор объектов', lead: 'Заявка на звонок', general: 'Заявка' };
+const INQUIRY_STATE = { new: 'получена, ждёт ответа менеджера', in_progress: 'в работе у менеджера', closed: 'закрыта' };
+
+function agentInquiry(inquiry, viewingWhen) {
+  const property = inquiry.propertyId ? (data.objects || []).find((item) => item.id === inquiry.propertyId) : null;
+  const name = property ? cleanText((property.title && (property.title.ru || property.title.en || Object.values(property.title)[0])) || property.reference || '', 80) : '';
+  const title = [INQUIRY_KIND[inquiry.type] || 'Заявка', name].filter(Boolean).join(': ');
+  let status = inquiry.status || 'new';
+  let label = INQUIRY_STATE[status] || status;
+  let facts = '';
+  if (inquiry.type === 'viewing' && inquiry.viewing) {
+    const when = viewingWhen(inquiry, 'ru');
+    const at = [when.date, when.time].filter(Boolean).join(', ');
+    if (inquiry.viewing.cancelledAt) [status, label] = ['viewing_cancelled', 'просмотр отменён'];
+    else if (inquiry.viewing.confirmedAt) [status, label] = ['viewing_confirmed', 'просмотр подтверждён'];
+    else if (status !== 'closed') [status, label] = ['viewing_requested', 'запись на просмотр, ждёт подтверждения менеджера'];
+    if (at) facts = (inquiry.viewing.online ? 'Онлайн-показ: ' : 'Когда: ') + at;
+  }
+  return { id: String(inquiry.id).slice(0, 8), title: title.slice(0, 120), status, label, ...(facts ? { facts: facts.slice(0, 600) } : {}) };
+}
+
+async function reportAgentOrders() {
+  const settings = aiAgentSettings();
+  if (!settings || state.ordersBusy) return;
+  state.ordersBusy = true;
+  try {
+    const { viewingWhen } = await import('./viewings.mjs');
+    const since = Date.now() - ORDERS_WINDOW_MS;
+    let sent = 0;
+    for (const inquiry of data.inquiries || []) {
+      if (sent >= ORDERS_PER_RUN) break;
+      if (inquiry.system || !inquiry.userId || Date.parse(inquiry.updatedAt || inquiry.createdAt || 0) < since) continue;
+      const order = agentInquiry(inquiry, viewingWhen);
+      const sig = [order.status, order.label, order.facts || ''].join('|');
+      if (inquiry.agentSig === sig) continue;
+      const user = userById(inquiry.userId);
+      const response = await fetch(settings.url + '/order', {
+        method: 'POST',
+        headers: headers(settings),
+        body: JSON.stringify({ user: { id: String(inquiry.userId), ...(user && user.firstName ? { name: cleanText([user.firstName, user.lastName].filter(Boolean).join(' '), 200) } : {}) }, order }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!response.ok) throw new Error('ответ ' + response.status);
+      inquiry.agentSig = sig;
+      sent += 1;
+    }
+    if (sent) scheduleSave();
+  } catch (error) {
+    state.lastError = error.message;
+  } finally {
+    state.ordersBusy = false;
+  }
+}
+
 function startAgentOutbox() {
   if (state.timer) return;
   state.timer = setInterval(() => void pollAgentOutbox(), POLL_EVERY_MS);
   if (state.timer.unref) state.timer.unref();
+  state.ordersTimer = setInterval(() => void reportAgentOrders(), ORDERS_EVERY_MS);
+  if (state.ordersTimer.unref) state.ordersTimer.unref();
 }
 
 function stopAgentOutbox() {
   if (state.timer) clearInterval(state.timer);
+  if (state.ordersTimer) clearInterval(state.ordersTimer);
   state.timer = null;
+  state.ordersTimer = null;
 }
 
-export { logToAgent, pollAgentOutbox, startAgentOutbox, stopAgentOutbox };
+export { agentInquiry, logToAgent, pollAgentOutbox, reportAgentOrders, startAgentOutbox, stopAgentOutbox };
