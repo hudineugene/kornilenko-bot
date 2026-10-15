@@ -40,7 +40,7 @@ import { handleSavedSearchCallback } from './saved-search.mjs';
 import { handleTrustCallback } from './trust.mjs';
 import { askGoal, handleGoalCallback } from './goal.mjs';
 import { faqHint } from './faq-hints.mjs';
-import { aiAgentSettings, aiReplyMarkup, askAiAgent, handoffText, sendAgentEvent, sendAiCards, transcribeVoice } from './ai-agent.mjs';
+import { aiAgentSettings, aiReplyMarkup, askAiAgent, handleAiBookingCallback, handoffText, sendAgentEvent, sendAiCards, transcribeVoice } from './ai-agent.mjs';
 import { handleDigestCallback } from './digest.mjs';
 import { handlePlanCallback } from './plan.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
@@ -185,6 +185,11 @@ async function handleUpdate(update, token) {
   }
   if (update.callback_query && String(update.callback_query.data || '').startsWith('inq:show:')) {
     await handleInboxShowCallback(update.callback_query, token);
+    return;
+  }
+  // «Записаться» под ответом консультанта — на выбранное время просмотра.
+  if (update.callback_query && String(update.callback_query.data || '').startsWith('aibk:')) {
+    await handleAiBookingCallback(update.callback_query, token);
     return;
   }
   // Подсказка следующего вопроса от консультанта: обрабатываем, как будто клиент написал этот текст.

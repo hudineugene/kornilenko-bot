@@ -77,7 +77,7 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
   const typing = () => (chatId && token ? telegramRequest(token, 'sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => {}) : null);
   void typing();
   const timer = setInterval(() => void typing(), TYPING_EVERY_MS);
-  const fullContext = [cleanText(context, 1000), clientProfile(user)].filter(Boolean).join('\n\n');
+  const fullContext = [cleanText(context, 1000), clientProfile(user), await slotsContext()].filter(Boolean).join('\n\n');
   try {
     const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
     const response = await fetch(settings.url, {
@@ -111,6 +111,10 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
       if (result.shownIds.length >= 3) break;
     }
     // Консультант зовёт на просмотр конкретного объекта — кнопка записи на него.
+    // Клиент согласился на конкретное время просмотра ([[ACTION book: объект | YYYY-MM-DD HH:MM]]) —
+    // кнопка «Записаться» на это время (или ближайшие свободные, если его уже заняли).
+    const book = actions.find((item) => item.type === 'book' && item.value);
+    if (book) result.booking = await bookingOffer(book.value, user);
     const viewing = actions.find((item) => item.type === 'viewing' && item.value);
     if (viewing) result.viewingId = await viewingRecordId(viewing.value, user);
     // Передаёт менеджеру — квалификация лида из разговора: бюджет, цель, спальни, район, сроки, связь.
@@ -155,6 +159,11 @@ async function leadFromConversation(settings, user) {
 // Объект, на просмотр которого зовёт консультант (по коду или названию из метки [[ACTION viewing: …]]).
 async function viewingRecordId(value, user) {
   try {
+    // Код объекта из базы знаний агента («Код объекта: …») — точное совпадение по коду или id.
+    const { publishedCatalog: catalogOf } = await import('./catalog.mjs');
+    const code = String(value).trim().toLowerCase();
+    const byCode = catalogOf(user).find((record) => record.status === 'active' && [record.reference, record.id].some((item) => item && String(item).toLowerCase() === code));
+    if (byCode) return byCode.id;
     const { catalogRequest } = await import('./search.mjs');
     const found = catalogRequest(String(value), user);
     if (found && found.record && found.record.status === 'active') return found.record.id;
@@ -188,7 +197,8 @@ async function viewingRow(ai, user) {
 // Кнопки под ответом консультанта: запись на просмотр (если звал), каталог ([[ACTION button: catalog]]),
 // подсказки следующего вопроса ([[ACTION suggest: …]] — нажатие = клиент написал этот вопрос) и оценка 👍/👎.
 async function aiReplyMarkup(ai, user) {
-  const rows = [...(await viewingRow(ai, user))];
+  const rows = [...bookingRows(ai, user)];
+  if (!rows.length) rows.push(...(await viewingRow(ai, user)));
   const actions = (ai && ai.actions) || [];
   if (!rows.length && actions.some((item) => item.type === 'button' && String(item.value).trim().toLowerCase() === 'catalog')) {
     const label = { ru: '🏡 Открыть каталог', uk: '🏡 Відкрити каталог', en: '🏡 Open the catalog', es: '🏡 Abrir el catálogo' }[clientLanguage(user)] || '🏡 Открыть каталог';
@@ -265,6 +275,105 @@ async function sendAiCards(chatId, user, token, ai) {
   return sent;
 }
 
+// ---------- запись на просмотр от консультанта ----------
+
+// Свободное время просмотров (окна из настроек) — консультанту, чтобы он предлагал реальное время.
+async function slotsContext() {
+  try {
+    const { availableSlotDays, slotsEnabled } = await import('./slots.mjs');
+    if (!slotsEnabled()) return '';
+    const days = availableSlotDays('ru').slice(0, 5);
+    if (!days.length) return '';
+    return 'Свободное время для просмотров объектов (дата YYYY-MM-DD — часы): ' + days.map((day) => day.key + ' (' + day.label + '): ' + day.times.join(', ')).join('; ')
+      + '. Когда клиент выбрал объект и время из этого списка — предложи записать и добавь в конце строку [[ACTION book: <код объекта> | <YYYY-MM-DD> <HH:MM>]]: бот покажет кнопку записи на это время.';
+  } catch {
+    return '';
+  }
+}
+
+// { recordId, title, day, time, free, alternatives: [{ day, time }] } или null, если объект не нашёлся.
+async function bookingOffer(value, user) {
+  const [objectPart, whenPart = ''] = String(value).split('|').map((part) => part.trim());
+  const recordId = objectPart ? await viewingRecordId(objectPart, user) : '';
+  if (!recordId) return null;
+  const { availableSlotDays, slotFree, slotsEnabled } = await import('./slots.mjs');
+  if (!slotsEnabled()) return null;
+  const { publishedCatalog } = await import('./catalog.mjs');
+  const record = publishedCatalog(user).find((item) => item.id === recordId);
+  if (!record || record.status !== 'active') return null;
+  const match = /(\d{4}-\d{2}-\d{2})\D+(\d{1,2}:\d{2})/.exec(whenPart);
+  const day = match ? match[1] : '';
+  const time = match ? match[2].padStart(5, '0') : '';
+  const free = Boolean(day && time && slotFree(day, time));
+  const alternatives = [];
+  if (!free) {
+    // Сначала выбранный клиентом день и следующие за ним, потом остальные ближайшие.
+    const slotDays = availableSlotDays('ru');
+    const ordered = day ? [...slotDays.filter((item) => item.key >= day), ...slotDays.filter((item) => item.key < day)] : slotDays;
+    for (const slotDay of ordered) {
+      for (const slotTime of slotDay.times) if (alternatives.length < 3) alternatives.push({ day: slotDay.key, time: slotTime });
+      if (alternatives.length >= 3) break;
+    }
+  }
+  const title = (record.title && (record.title[clientLanguage(user)] || record.title.ru || record.title.en)) || record.reference || record.id;
+  return { recordId, title: cleanText(title, 40), day, time, free, alternatives };
+}
+
+const BOOK_TEXT = {
+  ru: { book: '✅ Записаться', other: '📅 Свободно', at: 'в' },
+  uk: { book: '✅ Записатися', other: '📅 Вільно', at: 'о' },
+  en: { book: '✅ Book', other: '📅 Free', at: 'at' },
+  es: { book: '✅ Reservar', other: '📅 Libre', at: 'a las' },
+};
+
+function slotLabel(day, time, language) {
+  const date = new Date(day + 'T12:00:00');
+  const locale = { ru: 'ru-RU', uk: 'uk-UA', en: 'en-GB', es: 'es-ES' }[language] || 'ru-RU';
+  return new Intl.DateTimeFormat(locale, { weekday: 'short', day: '2-digit', month: '2-digit' }).format(date) + ' ' + (BOOK_TEXT[language] || BOOK_TEXT.ru).at + ' ' + time;
+}
+
+// Кнопки записи под ответом консультанта: на выбранное время или на ближайшие свободные.
+function bookingRows(ai, user) {
+  const offer = ai && ai.booking;
+  if (!offer) return [];
+  const language = clientLanguage(user);
+  const copy = BOOK_TEXT[language] || BOOK_TEXT.ru;
+  const callback = (day, time) => 'aibk:' + offer.recordId + ':' + day + ':' + time.replace(':', '');
+  if (offer.free) return [[{ text: copy.book + ': ' + offer.title + ', ' + slotLabel(offer.day, offer.time, language), callback_data: callback(offer.day, offer.time) }]];
+  return offer.alternatives.map((slot) => [{ text: copy.other + ': ' + slotLabel(slot.day, slot.time, language), callback_data: callback(slot.day, slot.time) }]);
+}
+
+// Нажали «Записаться» под ответом консультанта: запись тем же путём, что в приложении (окна, подтверждение,
+// заявка менеджеру). Нет телефона — открываем обычную запись на объект, где его спросят.
+async function handleAiBookingCallback(query, token) {
+  const match = /^aibk:([^:]+):(\d{4}-\d{2}-\d{2}):(\d{4})$/.exec(String(query.data || ''));
+  const { acknowledgeCallback } = await import('./sections.mjs');
+  const { userById } = await import('./users.mjs');
+  const user = match && query.from && userById(String(query.from.id));
+  if (!user) return acknowledgeCallback(query, token, 'Кнопка устарела — напишите, когда удобно');
+  const [, recordId, day, hhmm] = match;
+  const time = hhmm.slice(0, 2) + ':' + hhmm.slice(2);
+  const language = clientLanguage(user);
+  if (!user.phone) {
+    await acknowledgeCallback(query, token, '');
+    const row = await viewingRow({ viewingId: recordId }, user);
+    const ask = { ru: 'Чтобы записать вас, менеджеру нужен телефон — оставьте его в записи на просмотр 👇', uk: 'Щоб записати вас, менеджеру потрібен телефон — залиште його в записі на перегляд 👇', en: 'To book you in, the manager needs your phone — leave it in the viewing form 👇', es: 'Para reservar, el gestor necesita su teléfono — déjelo en el formulario 👇' }[language];
+    const { sendMessage } = await import('./telegram.mjs');
+    await sendMessage(query.message ? query.message.chat.id : user.id, ask, token, { reply_markup: { inline_keyboard: row } });
+    return undefined;
+  }
+  const { requestViewing, AppError } = await import('./miniapp/actions.mjs');
+  try {
+    await requestViewing(user, { propertyId: recordId, day, time, note: 'Записался через ИИ-консультанта' }, token, language);
+    await acknowledgeCallback(query, token, '');
+    if (query.message) await telegramRequest(token, 'editMessageReplyMarkup', { chat_id: query.message.chat.id, message_id: query.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => {});
+  } catch (error) {
+    const taken = error instanceof AppError && error.code === 'slot-taken';
+    await acknowledgeCallback(query, token, taken ? { ru: 'Это время только что заняли — выберите другое', uk: 'Цей час щойно зайняли — оберіть інший', en: 'That time was just taken — pick another', es: 'Esa hora acaba de ocuparse — elija otra' }[language] : 'Не получилось записать — попробуйте ещё раз');
+  }
+  return undefined;
+}
+
 // Голосовое клиента → текст. Расшифровывает GenAgent на своём сервере (без оплаты за минуты).
 // { text, reason } или null, если консультант выключен, файл не скачался или GenAgent не ответил.
 const VOICE_MAX_SECONDS = 120;
@@ -296,4 +405,4 @@ async function transcribeVoice(voice, user, token) {
   }
 }
 
-export { aiReplyMarkup, askAiAgent, clientProfile, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };
+export { aiReplyMarkup, askAiAgent, clientProfile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };
