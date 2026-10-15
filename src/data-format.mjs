@@ -11,7 +11,7 @@ import { LANGUAGES, addUk } from './languages.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 56;
+const DATA_VERSION = 57;
 // Миграции чинят тексты прежних версий, а их было только на трёх языках; украинского в них нет.
 const LEGACY_LANGUAGES = ['ru', 'en', 'es'];
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
@@ -949,10 +949,11 @@ addUk(DEFAULT_WORKING_HOURS);
 // checks the rates: taxes depend on the region and change over time.
 const DEFAULT_CALCULATOR = {
   enabled: false,
-  resaleTaxPercent: 10,
+  // Comunitat Valenciana с 01.06.2026 (Ley 5/2025): ITP на вторичку 9%, AJD на новостройку 1,4%.
+  resaleTaxPercent: 9,
   newBuildTaxPercent: 10,
   businessTaxPercent: 21,
-  stampDutyPercent: 1.5,
+  stampDutyPercent: 1.4,
   otherCostsPercent: 1.5,
   downPaymentPercent: 30,
   interestPercent: 4,
@@ -1613,6 +1614,12 @@ function normalizeLoadedData(parsed) {
     normalized.config.workingHours = normalizeWorkingHours(normalized.config.workingHours);
     normalized.config.notifyPrefs = normalizeNotifyPrefs(normalized.config.notifyPrefs);
     normalized.config.calculator = normalizeCalculator(normalized.config.calculator);
+    // Один раз (данные до версии 57): прежние ставки Валенсии 10% ITP и 1,5% AJD — на новые с 01.06.2026.
+    // Ставки, которые администратор задал сам (другие значения), не трогаем.
+    if (storedVersion < 57) {
+      if (normalized.config.calculator.resaleTaxPercent === 10) normalized.config.calculator.resaleTaxPercent = 9;
+      if (normalized.config.calculator.stampDutyPercent === 1.5) normalized.config.calculator.stampDutyPercent = 1.4;
+    }
     normalized.config.engagement = normalizeEngagement(normalized.config.engagement);
     normalized.config.viewingSlots = normalizeViewingSlots(normalized.config.viewingSlots);
     normalized.config.telegramBackup = normalizeTelegramBackup(normalized.config.telegramBackup);

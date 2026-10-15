@@ -33,7 +33,7 @@ test('набор полей формата не меняется без повы
   const fingerprint = crypto.createHash('sha1').update(paths.join('\n'), 'utf8').digest('hex').slice(0, 16);
 
   // Ожидаемое: версия формата и отпечаток её набора полей.
-  const expected = { version: 56, fingerprint: '59fbb88d01aa1c80' };
+  const expected = { version: 57, fingerprint: '59fbb88d01aa1c80' };
 
   assert.equal(DATA_VERSION, expected.version, 'версия формата изменилась — обновите ожидаемое значение в этом тесте');
   assert.equal(fingerprint, expected.fingerprint, [
@@ -41,4 +41,19 @@ test('набор полей формата не меняется без повы
     'Поднимите DATA_VERSION в src/data-format.mjs и впишите здесь новые версию и отпечаток (' + fingerprint + ').',
     'Иначе старый bot.exe не заметит, что файл новее, и молча потеряет новые поля.',
   ].join(' '));
+});
+
+test('ставки калькулятора Валенсии 2026: старые 10% ITP и 1,5% AJD один раз меняются на 9% и 1,4%', async () => {
+  const { normalizeLoadedData } = await import('../src/data-format.mjs');
+  const old = normalizeLoadedData({ version: 56, config: { calculator: { enabled: true, resaleTaxPercent: 10, stampDutyPercent: 1.5, newBuildTaxPercent: 10 } } });
+  assert.equal(old.config.calculator.resaleTaxPercent, 9);
+  assert.equal(old.config.calculator.stampDutyPercent, 1.4);
+  assert.equal(old.config.calculator.newBuildTaxPercent, 10);
+  // Свои ставки администратора не трогаем
+  const custom = normalizeLoadedData({ version: 56, config: { calculator: { enabled: true, resaleTaxPercent: 8, stampDutyPercent: 1.2 } } });
+  assert.equal(custom.config.calculator.resaleTaxPercent, 8);
+  assert.equal(custom.config.calculator.stampDutyPercent, 1.2);
+  // После миграции ручная установка 10% сохраняется
+  const fresh = normalizeLoadedData({ version: 57, config: { calculator: { enabled: true, resaleTaxPercent: 10, stampDutyPercent: 1.5 } } });
+  assert.equal(fresh.config.calculator.resaleTaxPercent, 10);
 });
