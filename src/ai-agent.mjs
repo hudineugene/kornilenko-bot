@@ -409,6 +409,26 @@ async function askAboutPhoto(user, message, token, context = 'Клиент пр�
   });
 }
 
+// Голосовое из мини-приложения (WAV, записан в браузере) → текст. { text, reason } или null (GenAgent недоступен).
+async function transcribeWav(user, base64) {
+  const settings = aiAgentSettings();
+  if (!settings || !base64) return null;
+  try {
+    const response = await fetch(settings.url + '/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + settings.key },
+      body: JSON.stringify({ user: { id: String(user.id) }, audio: base64, format: 'wav', language: clientLanguage(user) }),
+      signal: AbortSignal.timeout(90000),
+    });
+    if (!response.ok) throw new Error('GenAgent ответил ' + response.status);
+    const result = await response.json();
+    return { text: result.text ? cleanText(result.text, 2000) : null, reason: result.reason || (result.text ? '' : 'no_speech') };
+  } catch (error) {
+    console.warn('Голосовое из приложения не расшифровано:', error && error.message);
+    return null;
+  }
+}
+
 // Голосовое клиента → текст. Расшифровывает GenAgent на своём сервере (без оплаты за минуты).
 // { text, reason } или null, если консультант выключен, файл не скачался или GenAgent не ответил.
 const VOICE_MAX_SECONDS = 120;
@@ -440,4 +460,4 @@ async function transcribeVoice(voice, user, token) {
   }
 }
 
-export { aiReplyMarkup, askAboutPhoto, askAiAgent, clientProfile, downloadTelegramFile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };
+export { aiReplyMarkup, askAboutPhoto, askAiAgent, transcribeWav, clientProfile, downloadTelegramFile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };

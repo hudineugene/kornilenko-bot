@@ -250,6 +250,12 @@ h3{font-size:16px;font-weight:600}
 .chat-input textarea{flex:1;min-height:44px;max-height:120px;resize:none;border-radius:14px}
 .chat-send{width:48px;height:44px;padding:0;flex:none;display:grid;place-items:center}
 .chat-send svg{width:20px;height:20px}
+.chat-tool{width:44px;height:44px;flex:none;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--muted);display:grid;place-items:center;padding:0}
+.chat-tool svg{width:20px;height:20px}
+.chat-tool.rec{width:auto;display:flex;align-items:center;gap:6px;padding:0 12px;background:var(--red);border-color:var(--red);color:#fff;font-variant-numeric:tabular-nums;font-weight:600}
+.chat-tool:disabled{opacity:.45}
+.chat-file{display:none}
+.bubble img{display:block;max-width:220px;max-height:260px;border-radius:12px;margin:-2px -4px 6px;object-fit:cover}
 .ai-fab{position:fixed;right:16px;bottom:calc(var(--tab) + var(--bottom) + 16px);z-index:31;width:56px;height:56px;border-radius:50%;border:0;background:var(--red);color:#fff;display:grid;place-items:center;box-shadow:0 8px 22px rgba(239,54,85,.35)}
 .ai-fab svg{width:26px;height:26px}
 .sheet-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}
@@ -423,6 +429,13 @@ const APP_JS = String.raw`
     ['en', { aiTitle: 'Consultant', aiHint: 'Answers questions about our projects, prices and buying in Spain', aiAbout: 'Question about “{x}”', aiHello: 'Hello! I am the company consultant. Ask about our projects, prices, payment plans or buying in Spain.', aiPlaceholder: 'Your question…', aiTyping: 'typing…', aiHandoff: 'Your question has been passed to an agent — they will message you in the bot chat.', aiForwarded: 'Your question has been passed to an agent — the reply will come in the bot chat.', aiViewing: '📅 Book a viewing' }],
     ['es', { aiTitle: 'Asesor', aiHint: 'Responde sobre nuestros proyectos, precios y la compra en España', aiAbout: 'Pregunta sobre «{x}»', aiHello: '¡Hola! Soy el asesor de la empresa. Pregunta por los proyectos, precios, pagos a plazos o la compra en España.', aiPlaceholder: 'Tu pregunta…', aiTyping: 'escribiendo…', aiHandoff: 'Hemos pasado tu pregunta a un asesor: te escribirá en el chat con el bot.', aiForwarded: 'Tu pregunta se ha pasado a un asesor: la respuesta llegará al chat con el bot.', aiViewing: '📅 Reservar una visita' }],
   ].forEach(function (pair) { T[pair[0]] = Object.assign(T[pair[0]] || {}, pair[1]); });
+  // Фото и голосовое в чате консультанта
+  [
+    ['ru', { aiPhoto: 'Отправить фото', aiVoice: 'Записать голосовое', aiStop: 'Остановить и отправить', aiMicDenied: 'Нет доступа к микрофону. Разрешите его для Telegram или отправьте голосовое в чат с ботом.', aiPhotoBad: 'Не получилось открыть фото — попробуйте другое.', aiVoiceShort: 'Голосовое слишком короткое.' }],
+    ['uk', { aiPhoto: 'Надіслати фото', aiVoice: 'Записати голосове', aiStop: 'Зупинити й надіслати', aiMicDenied: 'Немає доступу до мікрофона. Дозвольте його для Telegram або надішліть голосове в чат із ботом.', aiPhotoBad: 'Не вдалося відкрити фото — спробуйте інше.', aiVoiceShort: 'Голосове надто коротке.' }],
+    ['en', { aiPhoto: 'Send a photo', aiVoice: 'Record a voice message', aiStop: 'Stop and send', aiMicDenied: 'No access to the microphone. Allow it for Telegram or send a voice message in the bot chat.', aiPhotoBad: 'Could not open the photo — try another one.', aiVoiceShort: 'The voice message is too short.' }],
+    ['es', { aiPhoto: 'Enviar una foto', aiVoice: 'Grabar un audio', aiStop: 'Detener y enviar', aiMicDenied: 'No hay acceso al micrófono. Permítelo para Telegram o envía el audio en el chat con el bot.', aiPhotoBad: 'No se pudo abrir la foto: prueba con otra.', aiVoiceShort: 'El audio es demasiado corto.' }],
+  ].forEach(function (pair) { T[pair[0]] = Object.assign(T[pair[0]] || {}, pair[1]); });
 
   var ICON = {
     home: '<path d="M3 10.5 12 3l9 7.5V21h-6.5v-7h-5v7H3z"/>',
@@ -464,6 +477,9 @@ const APP_JS = String.raw`
     floor: '<path d="M5 21V5l7-2 7 2v16M3 21h18M9 9h2M13 9h2M9 13h2M13 13h2"/>',
     tag: '<path d="M3 12V4h8l10 10-8 8zM7.5 8v.01"/>',
     chat: '<path d="M4 5h16v11H9l-5 4z"/>',
+    camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
     plane: '<path d="M21 4 3 11l6 2.5L11 20l3-4.5L19 18z"/>',
     mail: '<path d="M3 6h18v12H3zM3 7l9 7 9-7"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
@@ -1319,35 +1335,43 @@ const APP_JS = String.raw`
       sheet.classList.add('chat-sheet');
       sheet.appendChild(h('div', { class: 'sheet-title' }, [
         h('h2', { text: t('aiTitle') }),
-        h('button', { class: 'sheet-close', 'aria-label': t('close'), onclick: close }, [icon('x')]),
+        h('button', { class: 'sheet-close', 'aria-label': t('close'), onclick: function () { stopRecording(false); close(); } }, [icon('x')]),
       ]));
       sheet.appendChild(h('div', { class: 'sub', text: detail ? t('aiAbout').replace('{x}', detail.title || '') : t('aiHint') }));
       var log = h('div', { class: 'chat-log', 'aria-live': 'polite' });
       sheet.appendChild(log);
-      function add(kind, text) {
-        var node = h('div', { class: kind === 'note' ? 'chat-note' : 'bubble ' + kind, text: text });
+      function add(kind, text, image) {
+        var node = h('div', { class: kind === 'note' ? 'chat-note' : 'bubble ' + kind }, [image ? h('img', { src: image, alt: '' }) : null, text || null]);
         log.appendChild(node);
         log.scrollTop = log.scrollHeight;
         return node;
       }
       if (!S.chat.length) S.chat.push({ kind: 'bot', text: t('aiHello') });
-      S.chat.forEach(function (item) { add(item.kind, item.text); });
+      S.chat.forEach(function (item) { add(item.kind, item.text, item.image); });
       var input = h('textarea', { rows: '1', maxlength: '1000', placeholder: t('aiPlaceholder') });
       if (preset) input.value = preset;
       var sendButton = h('button', { class: 'btn primary chat-send', 'aria-label': t('send'), onclick: submit }, [icon('arrow')]);
       input.addEventListener('keydown', function (event) {
         if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submit(); }
       });
-      function submit() {
-        var text = input.value.trim();
-        if (text.length < 2 || sendButton.disabled) return;
-        input.value = '';
-        S.chat.push({ kind: 'me', text: text });
-        add('me', text);
+      function busy(on) {
+        sendButton.disabled = on;
+        photoButton.disabled = on;
+        if (!recording) micButton.disabled = on;
+      }
+      // Ответ консультанта: текст, кнопки объектов и записи, оценка, подсказки следующего вопроса
+      function ask(payload) {
         var typing = add('bot typing', t('aiTyping'));
-        sendButton.disabled = true;
-        api('/assistant', 'POST', { text: text, propertyId: detail ? detail.id : '' }).then(function (result) {
+        busy(true);
+        payload.propertyId = detail ? detail.id : '';
+        return api('/assistant', 'POST', payload).then(function (result) {
           typing.remove();
+          // Голосовое: показываем, что консультант расслышал
+          if (result.heard) {
+            var said = '🎙 ' + result.heard;
+            S.chat.push({ kind: 'me', text: said });
+            log.insertBefore(h('div', { class: 'bubble me', text: said }), log.lastChild && log.lastChild.classList && log.lastChild.classList.contains('typing') ? log.lastChild : null);
+          }
           if (result.reply) {
             S.chat.push({ kind: 'bot', text: result.reply });
             add('bot', result.reply);
@@ -1390,11 +1414,129 @@ const APP_JS = String.raw`
           add('note', error.message);
           haptic('err');
         }).then(function () {
-          sendButton.disabled = false;
-          input.focus();
+          busy(false);
         });
       }
-      sheet.appendChild(h('div', { class: 'chat-input' }, [input, sendButton]));
+      function submit() {
+        var text = input.value.trim();
+        if (text.length < 2 || sendButton.disabled) return;
+        input.value = '';
+        S.chat.push({ kind: 'me', text: text });
+        add('me', text);
+        ask({ text: text }).then(function () { input.focus(); });
+      }
+
+      // Фото: уменьшаем на телефоне (до 1280 px) и делаем превью; подпись — то, что набрано в поле
+      var fileInput = h('input', { type: 'file', accept: 'image/*', class: 'chat-file', 'aria-hidden': 'true', tabindex: '-1' });
+      function shrink(img, max, quality) {
+        var scale = Math.min(1, max / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
+        canvas.height = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg', quality);
+      }
+      fileInput.addEventListener('change', function () {
+        var file = fileInput.files && fileInput.files[0];
+        fileInput.value = '';
+        if (!file) return;
+        var url = URL.createObjectURL(file);
+        var img = new Image();
+        img.onload = function () {
+          var big = shrink(img, 1280, 0.85);
+          var small = shrink(img, 320, 0.7);
+          URL.revokeObjectURL(url);
+          var caption = input.value.trim();
+          input.value = '';
+          S.chat.push({ kind: 'me', text: caption, image: small });
+          add('me', caption, small);
+          ask({ text: caption, image: { data: big.split(',')[1], thumb: small.split(',')[1] } });
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); toast(t('aiPhotoBad')); haptic('err'); };
+        img.src = url;
+      });
+      var photoButton = h('button', { class: 'chat-tool', type: 'button', 'aria-label': t('aiPhoto'), title: t('aiPhoto'), onclick: function () { fileInput.click(); } }, [icon('camera')]);
+
+      // Голосовое: пишем звук с микрофона, на отправке — WAV 16 кГц (одинаково на любом телефоне)
+      var recording = null;
+      var micButton = h('button', { class: 'chat-tool', type: 'button', 'aria-label': t('aiVoice'), title: t('aiVoice'), onclick: function () { if (recording) stopRecording(true); else startRecording(); } }, [icon('mic')]);
+      function showRecording() {
+        clear(micButton);
+        if (!recording) {
+          micButton.className = 'chat-tool';
+          micButton.setAttribute('aria-label', t('aiVoice'));
+          micButton.appendChild(icon('mic'));
+          return;
+        }
+        var seconds = Math.floor((Date.now() - recording.started) / 1000);
+        micButton.className = 'chat-tool rec';
+        micButton.setAttribute('aria-label', t('aiStop'));
+        micButton.appendChild(icon('stop'));
+        micButton.appendChild(document.createTextNode(Math.floor(seconds / 60) + ':' + ('0' + (seconds % 60)).slice(-2)));
+      }
+      function startRecording() {
+        var Context = window.AudioContext || window.webkitAudioContext;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !Context) { toast(t('aiMicDenied')); return; }
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+          var context = new Context();
+          var source = context.createMediaStreamSource(stream);
+          var processor = context.createScriptProcessor(4096, 1, 1);
+          var chunks = [];
+          processor.onaudioprocess = function (event) { chunks.push(new Float32Array(event.inputBuffer.getChannelData(0))); };
+          source.connect(processor);
+          processor.connect(context.destination);
+          recording = { stream: stream, context: context, processor: processor, chunks: chunks, started: Date.now() };
+          recording.timer = setInterval(function () {
+            showRecording();
+            if (Date.now() - recording.started > 120000) stopRecording(true);
+          }, 500);
+          showRecording();
+          haptic();
+        }).catch(function () { toast(t('aiMicDenied')); haptic('err'); });
+      }
+      function stopRecording(send) {
+        if (!recording) return;
+        var r = recording;
+        recording = null;
+        clearInterval(r.timer);
+        try { r.processor.disconnect(); } catch (e) { /* уже отключён */ }
+        r.stream.getTracks().forEach(function (track) { track.stop(); });
+        var rate = r.context.sampleRate;
+        try { r.context.close(); } catch (e) { /* уже закрыт */ }
+        showRecording();
+        if (!send) return;
+        var total = r.chunks.reduce(function (n, c) { return n + c.length; }, 0);
+        if (total < rate * 0.7) { toast(t('aiVoiceShort')); return; }
+        ask({ voice: wavBase64(r.chunks, total, rate) });
+      }
+      // Float32 с любой частотой → моно 16 кГц, PCM 16 бит, WAV → base64
+      function wavBase64(chunks, total, rate) {
+        var all = new Float32Array(total);
+        var at = 0;
+        chunks.forEach(function (c) { all.set(c, at); at += c.length; });
+        var outLength = Math.floor(total * 16000 / rate);
+        var buffer = new ArrayBuffer(44 + outLength * 2);
+        var view = new DataView(buffer);
+        function text(offset, value) { for (var i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i)); }
+        text(0, 'RIFF'); view.setUint32(4, 36 + outLength * 2, true); text(8, 'WAVE');
+        text(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+        view.setUint32(24, 16000, true); view.setUint32(28, 32000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+        text(36, 'data'); view.setUint32(40, outLength * 2, true);
+        for (var j = 0; j < outLength; j++) {
+          var pos = j * rate / 16000;
+          var k = Math.floor(pos);
+          var frac = pos - k;
+          var sample = all[k] * (1 - frac) + (all[k + 1] || 0) * frac;
+          sample = Math.max(-1, Math.min(1, sample));
+          view.setInt16(44 + j * 2, sample < 0 ? sample * 32768 : sample * 32767, true);
+        }
+        var bytes = new Uint8Array(buffer);
+        var binary = '';
+        for (var b = 0; b < bytes.length; b += 32768) binary += String.fromCharCode.apply(null, bytes.subarray(b, b + 32768));
+        return btoa(binary);
+      }
+
+      sheet.appendChild(h('div', { class: 'chat-input' }, [photoButton, micButton, input, sendButton, fileInput]));
       setTimeout(function () { input.focus(); }, 300);
     });
   }

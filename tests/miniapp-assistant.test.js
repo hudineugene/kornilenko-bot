@@ -15,6 +15,11 @@ const AGENT_URL = 'https://agents.example.com/api/agent/21f9043a-23cd-4ae6-a75e-
 const agent = { calls: [], respond: () => ({ status: 200, body: { reply: 'Ответ консультанта', handoff: false } }) };
 const telegramStub = global.fetch;
 global.fetch = async (url, init) => {
+  // Расшифровка голосового из приложения (WAV)
+  if (String(url) === AGENT_URL + '/transcribe') {
+    agent.transcribes = (agent.transcribes || []).concat(JSON.parse(init.body));
+    return new Response(JSON.stringify(agent.heard === undefined ? { text: 'Сколько стоит вилла?' } : { text: agent.heard }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
   if (String(url) !== AGENT_URL) return telegramStub(url, init);
   agent.calls.push(JSON.parse(init.body));
   const { status, body } = agent.respond();
@@ -115,4 +120,49 @@ test('страница: окно консультанта и кнопка ест
   assert.match(APP_JS, /S\.boot\.assistant && !isGuest\(\)\) return openAssistant/);
   assert.match(APP_JS, /'\/assistant'/);
   assert.match(APP_JS, /ai-fab/);
+});
+
+test('фото из приложения: консультант получает фото, в журнале — превью', async () => {
+  bot.getData().agentJournalBackfilled = 'test';
+  const image = Buffer.alloc(30 * 1024, 7).toString('base64'); // больше обычного предела запроса (16 КБ)
+  const thumb = Buffer.from('thumb').toString('base64');
+  const res = await call('/api/app/assistant', { method: 'POST', initData: initDataFor(7101), body: { text: '', image: { data: image, thumb } } });
+  assert.equal(res.status, 200);
+  assert.equal(agent.calls[0].image.data, image);
+  assert.equal(agent.calls[0].image.mediaType, 'image/jpeg');
+  assert.match(agent.calls[0].context, /прислал фото/);
+  const journaled = (bot.getData().agentJournal || []).map((e) => e.item).find((i) => i.kind === 'photo');
+  assert.equal(journaled.thumb, thumb);
+});
+
+test('голосовое из приложения: расшифровка (WAV) → вопрос консультанту, приложение показывает, что расслышано', async () => {
+  agent.transcribes = [];
+  agent.heard = undefined;
+  const voice = Buffer.alloc(20 * 1024, 1).toString('base64');
+  const res = await call('/api/app/assistant', { method: 'POST', initData: initDataFor(7102), body: { voice } });
+  assert.equal(res.status, 200);
+  assert.equal(agent.transcribes[0].format, 'wav');
+  assert.equal(agent.transcribes[0].audio, voice);
+  assert.equal(agent.calls[0].text, 'Сколько стоит вилла?');
+  assert.equal(res.json.heard, 'Сколько стоит вилла?');
+});
+
+test('голосовое без слов — понятная ошибка, консультант не вызывается', async () => {
+  agent.heard = null;
+  const res = await call('/api/app/assistant', { method: 'POST', initData: initDataFor(7103), body: { voice: Buffer.alloc(2048, 1).toString('base64') } });
+  assert.equal(res.status, 422);
+  assert.equal(res.json.code, 'voice-unclear');
+  assert.equal(agent.calls.length, 0);
+  agent.heard = undefined;
+});
+
+test('большой запрос принимается только в чате консультанта', async () => {
+  const res = await call('/api/app/question', { method: 'POST', initData: initDataFor(7104), body: { text: 'x'.repeat(30 * 1024) } });
+  assert.equal(res.status, 413);
+});
+
+test('в приложении есть кнопки фото и голосового', () => {
+  assert.match(APP_JS, /aiPhoto/);
+  assert.match(APP_JS, /getUserMedia/);
+  assert.match(APP_JS, /wavBase64/);
 });

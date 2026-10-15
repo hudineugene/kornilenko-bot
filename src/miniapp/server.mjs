@@ -25,6 +25,8 @@ import { privateAddress } from './network.mjs';
 import { LANGUAGES } from '../languages.mjs';
 
 const MAX_BODY = 16 * 1024;
+// Чат консультанта: фото (до ~1280 px) и голосовое (WAV до 2 минут) — в base64
+const MAX_CHAT_BODY = 6 * 1024 * 1024;
 // Заявки (запись, звонок, вопрос) — строго; сердечки, сравнение и счётчики — свободнее: листая каталог, их ставят десятками.
 const REQUEST_LIMIT = { count: 12, windowMs: 10 * 60 * 1000 };
 const TOGGLE_LIMIT = { count: 150, windowMs: 10 * 60 * 1000 };
@@ -168,12 +170,12 @@ function sendAsset(req, res, asset) {
   return sendBinary(req, res, asset.bytes, asset.mimeType, 'public, max-age=604800', 'asset:' + asset.mimeType + ':' + asset.bytes.length);
 }
 
-async function readJson(req) {
+async function readJson(req, maxBody = MAX_BODY) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY) throw new AppError('Слишком большой запрос', 413);
+    if (size > maxBody) throw new AppError('Слишком большой запрос', 413);
     chunks.push(chunk);
   }
   if (!size) return {};
@@ -248,7 +250,7 @@ async function handleApi(req, res, url) {
     const chatRoute = route === '/assistant';
     const bucket = lightRoute ? TOGGLE_LIMIT : chatRoute ? CHAT_LIMIT : REQUEST_LIMIT;
     if (rateLimited((lightRoute ? 'light:' : chatRoute ? 'chat:' : 'write:') + who.tgUser.id, bucket)) return sendJson(res, 429, { error: 'Слишком много действий подряд. Попробуйте через несколько минут.', code: 'too-many' });
-    const body = await readJson(req);
+    const body = await readJson(req, chatRoute ? MAX_CHAT_BODY : MAX_BODY);
     const user = userFor(who.tgUser);
     const language = LANGUAGES.includes(body.lang) ? body.lang : appLanguage('', user, who.tgUser.language_code);
     try {

@@ -121,10 +121,10 @@ function recordEdit(message) {
 }
 
 /** Сообщение в Mini App (не сообщение Telegram): свой номер, тот же передаётся консультанту. */
-function recordApp(user, dir, text, { by } = {}) {
+function recordApp(user, dir, text, { by, kind = 'text', thumb, thumbType } = {}) {
   if (!user || !user.chatId) return undefined;
   const id = `app:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
-  push(user.chatId, { id, dir, ...(dir === 'out' && by ? { by } : {}), kind: 'text', text, at: Date.now() });
+  push(user.chatId, { id, dir, ...(dir === 'out' && by ? { by } : {}), kind, text, at: Date.now(), ...(thumb ? { thumb, thumbType: thumbType || 'image/jpeg' } : {}) });
   return id;
 }
 
