@@ -40,7 +40,7 @@ import { handleSavedSearchCallback } from './saved-search.mjs';
 import { handleTrustCallback } from './trust.mjs';
 import { askGoal, handleGoalCallback } from './goal.mjs';
 import { faqHint } from './faq-hints.mjs';
-import { aiAgentSettings, aiReplyMarkup, askAiAgent, handoffText, sendAgentEvent, transcribeVoice } from './ai-agent.mjs';
+import { aiAgentSettings, aiReplyMarkup, askAiAgent, handoffText, sendAgentEvent, sendAiCards, transcribeVoice } from './ai-agent.mjs';
 import { handleDigestCallback } from './digest.mjs';
 import { handlePlanCallback } from './plan.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
@@ -330,6 +330,7 @@ async function handleUpdate(update, token) {
   // Answers to what became an inquiry say when the manager will reply.
   let inquiryAnswer = false;
   let aiAnswered = null; // кнопки под ответом консультанта (запись на просмотр, оценка)
+  let aiResult = null; // ответ консультанта — после него карточки объектов, которые он предложил
   // Сообщение дописано к открытому обращению, и клиенту ничего не отвечали:
   // молчание похоже на потерянное сообщение, поэтому ставим на него реакцию 👀.
   let mergedIntoOpen = false;
@@ -714,6 +715,7 @@ async function handleUpdate(update, token) {
         if (ai) {
           answer = ai.reply;
           aiAnswered = await aiReplyMarkup(ai, user);
+          aiResult = ai;
           // Заявка менеджеру — когда консультант передаёт клиента; а если обращение уже открыто
           // и ждёт менеджера — сообщение дописывается в него, чтобы менеджер видел всю переписку.
           if (ai.handoff || openInquiryOf(user)) {
@@ -775,6 +777,7 @@ async function handleUpdate(update, token) {
         reply_markup: searchHint || aiAnswered || menuKeyboard(user.preferredLanguage),
       });
       recordBotAnswer(user, answer, { messageId: sent && sent.message_id });
+      if (aiResult) await sendAiCards(message.chat.id, user, token, aiResult);
     } catch (error) {
       runtime.lastError = error.message;
       recordError('Ответ клиенту', error);

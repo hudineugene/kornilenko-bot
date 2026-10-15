@@ -7,7 +7,7 @@ import { scheduleSave } from '../store.mjs';
 import { sendMessage } from '../telegram.mjs';
 import { telegramInterfaceLanguage } from '../users.mjs';
 import { createInquiry, managerInConversation, openInquiryOf, recordBotAnswer } from '../inquiries.mjs';
-import { aiReplyMarkup, askAiAgent, handoffText } from '../ai-agent.mjs';
+import { aiReplyMarkup, askAiAgent, handoffText, sendAiCards } from '../ai-agent.mjs';
 import { propertyIdFromStartPayload } from '../catalog.mjs';
 import { withOffHoursNote } from '../hours.mjs';
 import { miniAppSettings } from './settings.mjs';
@@ -92,6 +92,7 @@ async function handleAppOnlyMessage({ user, message, text, command, commandArgum
       const markup = user.appNudgeAt ? await aiReplyMarkup(ai, user) : appKeyboard(miniAppSettings(), nudgeLanguage(user));
       const sent = await sendMessage(message.chat.id, ai.reply, token, { reply_markup: markup });
       recordBotAnswer(user, ai.reply, { messageId: sent && sent.message_id });
+      await sendAiCards(message.chat.id, user, token, ai);
       scheduleSave();
       return;
     }

@@ -1355,6 +1355,10 @@ const APP_JS = String.raw`
             if (result.viewingId) {
               log.appendChild(h('button', { class: 'btn primary chat-viewing', type: 'button', text: t('aiViewing'), onclick: function () { close(); go('property', result.viewingId); } }));
             }
+            // Объекты, которые предложил консультант, — кнопки открывают их карточки.
+            (result.objects || []).forEach(function (object) {
+              log.appendChild(h('button', { class: 'btn chat-viewing', type: 'button', text: '🏡 ' + object.title, onclick: function () { close(); go('property', object.id); } }));
+            });
             // Оценка ответа 👍/👎 — одна на ответ, после нажатия кнопки исчезают.
             var rate = h('div', { class: 'chat-rate' });
             [['👍', true], ['👎', false]].forEach(function (pair) {

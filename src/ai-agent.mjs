@@ -101,7 +101,14 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
     const summary = typeof body.summary === 'string' ? cleanText(body.summary, 1000) : '';
     if (!reply) return null;
     const actions = Array.isArray(body.actions) ? body.actions.filter((item) => item && typeof item.type === 'string') : [];
-    const result = { reply, handoff: body.handoff === true, summary, actions, lead: '', viewingId: '' };
+    const result = { reply, handoff: body.handoff === true, summary, actions, lead: '', viewingId: '', shownIds: [] };
+    // Объекты, которые консультант предлагает посмотреть ([[ACTION show: код или название]]) — бот покажет карточки.
+    const shown = actions.filter((item) => item.type === 'show' && item.value).slice(0, 5);
+    for (const item of shown) {
+      const id = await viewingRecordId(item.value, user);
+      if (id && !result.shownIds.includes(id)) result.shownIds.push(id);
+      if (result.shownIds.length >= 3) break;
+    }
     // Консультант зовёт на просмотр конкретного объекта — кнопка записи на него.
     const viewing = actions.find((item) => item.type === 'viewing' && item.value);
     if (viewing) result.viewingId = await viewingRecordId(viewing.value, user);
@@ -220,6 +227,41 @@ function handoffText(ai, text) {
   return ai && ai.lead ? base + '\n\n🎯 Что известно о клиенте:\n' + ai.lead : base;
 }
 
+// Карточки объектов, которые предложил консультант: фото, короткое описание и кнопка. В режиме «только приложение» —
+// «Подробнее и запись» открывает объект в приложении, иначе — обычные кнопки карточки каталога.
+const CARD_BUTTON = { ru: '🏡 Подробнее и запись на просмотр', uk: '🏡 Детальніше й запис на перегляд', en: '🏡 Details and viewing', es: '🏡 Detalles y visita' };
+async function sendAiCards(chatId, user, token, ai) {
+  const ids = (ai && ai.shownIds) || [];
+  if (!ids.length) return 0;
+  const catalog = await import('./catalog.mjs');
+  const { appOnlyActive } = await import('./miniapp/app-only.mjs');
+  const { miniAppSettings } = await import('./miniapp/settings.mjs');
+  const { sendPhotoMessage, sendMessage } = await import('./telegram.mjs');
+  const { recordPropertyEvent } = await import('./analytics.mjs');
+  const language = clientLanguage(user);
+  const byId = new Map(catalog.publishedCatalog(user).map((record) => [String(record.id), record]));
+  const appUrl = appOnlyActive() ? miniAppSettings().url : '';
+  let sent = 0;
+  for (const id of ids) {
+    const record = byId.get(String(id));
+    if (!record || record.status !== 'active') continue;
+    const caption = catalog.objectCaptionHtml(record, language, { maximum: 600 });
+    const markup = appUrl
+      ? { inline_keyboard: [[{ text: CARD_BUTTON[language] || CARD_BUTTON.ru, web_app: { url: appUrl + '?p=' + encodeURIComponent(record.id) } }]] }
+      : catalog.contentButtons(record, language, user, 'property', null);
+    try {
+      const images = catalog.recordImages(record, language);
+      if (images.length) await sendPhotoMessage(chatId, images[0], caption, token, markup, { parseMode: 'HTML' });
+      else await sendMessage(chatId, caption, token, { reply_markup: markup, parse_mode: 'HTML' });
+      recordPropertyEvent(record.id, 'impressions');
+      sent += 1;
+    } catch (error) {
+      console.warn('Карточка объекта от консультанта не отправлена:', error.message);
+    }
+  }
+  return sent;
+}
+
 // Голосовое клиента → текст. Расшифровывает GenAgent на своём сервере (без оплаты за минуты).
 // { text, reason } или null, если консультант выключен, файл не скачался или GenAgent не ответил.
 const VOICE_MAX_SECONDS = 120;
@@ -251,4 +293,4 @@ async function transcribeVoice(voice, user, token) {
   }
 }
 
-export { aiReplyMarkup, askAiAgent, clientProfile, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };
+export { aiReplyMarkup, askAiAgent, clientProfile, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };

@@ -42,7 +42,10 @@ async function askAssistant(user, body, token, language) {
   saveDataNow();
   // viewingId — консультант зовёт на просмотр этого объекта: приложение покажет кнопку записи.
   const suggest = (ai.actions || []).filter((item) => item.type === 'suggest').map((item) => cleanText(item.value, 60)).filter((value) => value.length >= 3).slice(0, 3);
-  return { reply: ai.reply, handoff: ai.handoff, viewingId: ai.viewingId || '', suggest };
+  // Объекты, которые предложил консультант — приложение покажет кнопки, открывающие их карточки.
+  const objects = (ai.shownIds || []).map((id) => findRecord(id, language)).filter((record) => record && record.status === 'active')
+    .map((record) => ({ id: record.id, title: cleanText(localized(record.title, language) || record.reference || record.id, 60) }));
+  return { reply: ai.reply, handoff: ai.handoff, viewingId: ai.viewingId || '', suggest, objects };
 }
 
 export { askAssistant };
