@@ -756,6 +756,13 @@ async function handleUpdate(update, token) {
     const inquiry = createInquiry(user, summary, { type: 'general', sourceMessage: message });
     answer = mergedAnswer(inquiry) ? '' : fillTemplate(messages.fallback, user);
     inquiryAnswer = true;
+    // Диалог у консультанта: стикер, фото и т. п. он не видит — в «Диалогах» GenAgent пометка, что клиент прислал.
+    // Когда ведёт менеджер, сообщение туда уже передаётся вместе с заявкой.
+    if (aiAgentSettings() && !managerInConversation(user)) {
+      const kind = messageSummary({ ...message, caption: undefined });
+      const label = message.caption && !message.albumMessageIds ? kind + ': ' + summary : summary;
+      void import('./ai-outbox.mjs').then((module) => module.logToAgent(user, 'media', label)).catch(() => {});
+    }
   }
 
   // Клиент с открытой заявкой перечислил условия поиска, а фраза не разобралась: одна реакция 👀

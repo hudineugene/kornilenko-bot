@@ -107,7 +107,7 @@ function mirrorToAgent(inquiry, message) {
   if (message.direction === 'out' && !['bot', 'genagent'].includes(message.source)) role = 'operator';
   else if (message.direction === 'in' && managerInConversation(user)) role = 'user';
   if (!role) return;
-  void import('./ai-outbox.mjs').then((module) => module.logToAgent(user, role, message.text)).catch(() => {});
+  void import('./ai-outbox.mjs').then((module) => module.logToAgent(user, role, message.kind && message.kind !== 'text' ? '[' + message.text + ']' : message.text)).catch(() => {});
 }
 
 // Ответ бота попадает в ту же ленту, что и ответы менеджера: иначе в панели

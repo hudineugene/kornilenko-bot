@@ -8,6 +8,8 @@ import { data } from './store.mjs';
 import { aiAgentSettings } from './ai-agent.mjs';
 
 const SYNC_EVERY_MS = 5 * 60 * 1000;
+// Даже без изменений — раз в 6 часов: GenAgent по тишине понимает, что синхронизация сломалась.
+const RESEND_MS = 6 * 60 * 60 * 1000;
 const FIRST_SYNC_DELAY_MS = 20 * 1000;
 const TIMEOUT_MS = 60000;
 
@@ -133,7 +135,8 @@ async function syncKnowledge({ force = false } = {}) {
   if (!settings || state.running) return { skipped: true };
   const sources = buildKnowledge();
   const hash = knowledgeHash(sources) + '|' + settings.url;
-  if (!force && hash === state.lastHash) return { unchanged: true };
+  const fresh = state.lastSyncAt && Date.now() - Date.parse(state.lastSyncAt) < RESEND_MS;
+  if (!force && hash === state.lastHash && fresh) return { unchanged: true };
   state.running = true;
   try {
     const response = await fetch(settings.url + '/knowledge', {

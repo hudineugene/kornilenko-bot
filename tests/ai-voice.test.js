@@ -10,7 +10,7 @@ const { bot, createChat, resetData, cleanup, telegram, settle, TOKEN } = require
 const AGENT_URL = 'https://agents.example.com/api/agent/21f9043a-23cd-4ae6-a75e-ba46b34f5ed2';
 const KEY = 'ga_test-key';
 
-const agent = { asks: [], transcribes: [], heard: 'Есть ли виллы у моря?' };
+const agent = { asks: [], transcribes: [], logs: [], heard: 'Есть ли виллы у моря?' };
 const telegramStub = global.fetch;
 global.fetch = async (url, init = {}) => {
   const u = String(url);
@@ -21,6 +21,10 @@ global.fetch = async (url, init = {}) => {
   if (u === AGENT_URL + '/transcribe') {
     agent.transcribes.push(JSON.parse(init.body));
     return json(agent.heard ? { text: agent.heard, seconds: 3 } : { text: null, seconds: 3 });
+  }
+  if (u === AGENT_URL + '/log') {
+    agent.logs.push(JSON.parse(init.body));
+    return json({ ok: true });
   }
   if (u === AGENT_URL) {
     agent.asks.push(JSON.parse(init.body));
@@ -44,6 +48,7 @@ test.beforeEach(() => {
   });
   agent.asks = [];
   agent.transcribes = [];
+  agent.logs = [];
   agent.heard = 'Есть ли виллы у моря?';
 });
 test.after(cleanup);
@@ -83,4 +88,26 @@ test('консультант выключен — расшифровки нет'
   const chat = createChat();
   await sendVoice(chat);
   assert.equal(agent.transcribes.length, 0);
+});
+
+async function sendSticker(chat) {
+  messageId += 1;
+  await bot.processUpdates([{ update_id: 900000 + messageId, message: { message_id: messageId, date: Math.floor(Date.now() / 1000), from: { id: chat.id, first_name: 'Анна', language_code: 'ru' }, chat: { id: chat.id, type: 'private' }, sticker: { file_id: 'st-1', emoji: '👍' } } }], TOKEN);
+  await settle();
+}
+
+test('стикер при консультанте — в «Диалоги» GenAgent пометка, консультанту не отправляется', async () => {
+  const chat = createChat();
+  await sendSticker(chat);
+  assert.equal(agent.asks.length, 0);
+  assert.deepEqual(agent.logs.map((l) => [l.role, l.text]), [['media', 'Стикер']]);
+});
+
+test('голосовое: расшифрованное пометкой не дублируется, нерасшифрованное — помечается', async () => {
+  const chat = createChat();
+  await sendVoice(chat);
+  assert.equal(agent.logs.filter((l) => l.role === 'media').length, 0);
+  agent.heard = '';
+  await sendVoice(chat);
+  assert.deepEqual(agent.logs.filter((l) => l.role === 'media').map((l) => l.text), ['Голосовое сообщение']);
 });
