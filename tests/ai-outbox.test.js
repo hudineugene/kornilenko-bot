@@ -6,7 +6,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { bot, createChat, resetData, cleanup, telegram, adminPress, settle, property } = require('./helpers/chat');
+const { bot, createChat, resetData, cleanup, telegram, adminPress, settle, property, TOKEN } = require('./helpers/chat');
 
 const AGENT_URL = 'https://agents.example.com/api/agent/21f9043a-23cd-4ae6-a75e-ba46b34f5ed2';
 const KEY = 'ga_test-key';
@@ -310,4 +310,26 @@ test('честный срок ответа: консультант знает, �
   const chat = createChat();
   await chat.say('Есть ли рассрочка на виллу?');
   assert.equal(typeof agent.asks.at(-1).team.open, 'boolean', 'team уходит с вопросом клиента');
+});
+
+test('несколько сообщений подряд: консультант отвечает один раз на все, каждое — в журнале', async () => {
+  const chat = createChat();
+  await chat.say('Добрый день');
+  agent.asks = [];
+  const before = telegram.calls.length;
+  const from = { id: chat.id, is_bot: false, first_name: 'Тест', language_code: 'ru' };
+  const message = (id, text) => ({ update_id: 900000 + id, message: { message_id: 50000 + id, date: Math.floor(Date.now() / 1000), from, chat: { id: chat.id, type: 'private' }, text } });
+  process.env.AI_BURST_QUIET_MS = '150';
+  try {
+    await bot.processUpdates([message(1, 'Ищу виллу'), message(2, 'у моря'), message(3, 'до 600 000 €')], TOKEN);
+    await settle();
+  } finally {
+    process.env.AI_BURST_QUIET_MS = '0';
+  }
+  assert.equal(agent.asks.length, 1, 'один вопрос консультанту');
+  assert.equal(agent.asks[0].text, 'до 600 000 €');
+  assert.deepEqual(agent.asks[0].earlier.map((item) => item.text), ['Ищу виллу', 'у моря']);
+  assert.ok(agent.asks[0].earlier.every((item) => /^in:/.test(item.messageId)) && /^in:/.test(agent.asks[0].messageId));
+  const replies = telegram.calls.slice(before).filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id));
+  assert.equal(replies.filter((call) => call.body.text.includes('Ответ консультанта')).length, 1, 'клиент получил один ответ');
 });

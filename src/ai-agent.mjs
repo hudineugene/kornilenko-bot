@@ -68,7 +68,7 @@ function clientProfile(user) {
 }
 
 // { reply, handoff } или null, если агент ничего не ответил.
-async function askAiAgent(user, text, { context = '', chatId = null, token = '', language = '', messageId = '', image = null } = {}) {
+async function askAiAgent(user, text, { context = '', chatId = null, token = '', language = '', messageId = '', image = null, earlier = [] } = {}) {
   const settings = aiAgentSettings();
   const question = cleanText(text, 4000);
   // Фото без подписи — тоже вопрос: GenAgent опишет, что на нём
@@ -95,6 +95,8 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
         ...(image ? { image } : {}),
         // работает ли офис сейчас — консультант назовёт честный срок, когда передаёт клиента менеджеру
         team: await teamNow(LANGUAGES.includes(language) ? language : clientLanguage(user)),
+        // клиент написал несколько сообщений подряд: предыдущие (каждое со своим номером в журнале), ответ — один на все
+        ...(earlier.length ? { earlier: earlier.slice(-10).map((item) => ({ text: cleanText(item.text, 4000), ...(item.messageId ? { messageId: item.messageId } : {}) })) } : {}),
       }),
       signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
     });

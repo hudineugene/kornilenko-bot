@@ -140,6 +140,8 @@ async function handleUpdate(update, token) {
   else if (update.callback_query) recordCallback(update.callback_query);
   else if (update.message_reaction) recordReaction(update.message_reaction);
   else if (update.edited_message) recordEdit(update.edited_message);
+  // Сообщение уже вошло в пачку предыдущего (консультант ответил на все сразу) — только журнал.
+  if (update.message && absorbedUpdates.delete(updateId(update))) return;
   // Менеджер поправил отправленный ответ.
   if (update.edited_message) {
     await handleAdministratorEdit(update.edited_message, token);
@@ -727,7 +729,12 @@ async function handleUpdate(update, token) {
           : '';
         // Номер в журнале — тот же, что у записанного сообщения (у расшифровки голосового — свой)
         const messageId = message.journalId || incomingId(message) + (voiceText ? ':text' : '');
-        const ai = managerInConversation(user) ? null : await askAiAgent(user, text, { context: aiContext, chatId: message.chat.id, token, messageId });
+        // Клиент дописывает следующими сообщениями — ждём и отвечаем на всё сразу (заявка менеджеру — тоже целиком)
+        const burst = managerInConversation(user) || voiceText || !message.message_id ? [] : await collectBurst(message, token);
+        const lastPart = burst.length ? burst[burst.length - 1] : null;
+        const earlier = burst.length ? [{ text, messageId }, ...burst.slice(0, -1)] : [];
+        const ai = managerInConversation(user) ? null : await askAiAgent(user, lastPart ? lastPart.text : text, { context: aiContext, chatId: message.chat.id, token, messageId: lastPart ? lastPart.messageId : messageId, earlier });
+        if (burst.length) text = [text, ...burst.map((item) => item.text)].join('\n');
         if (found) recordPropertyEvent(found.record.id, 'questions');
         if (ai) {
           answer = ai.reply;
@@ -913,11 +920,57 @@ function queuedUpdates() {
   return chatQueues.size;
 }
 
+// Несколько сообщений подряд («Здравствуйте» / «ищу виллу» / «у моря»): первое ждёт, пока клиент допишет,
+// и забирает из очереди своего чата следующие тексты — консультант отвечает один раз на все.
+const waitingInChat = new Map(); // чат → сообщения в очереди, которые ещё не начали обрабатывать
+const absorbedUpdates = new Set(); // сообщения, вошедшие в пачку предыдущего
+
+function burstQuietMs() {
+  const value = Number(process.env.AI_BURST_QUIET_MS);
+  return Number.isFinite(value) && value >= 0 ? value : 2500;
+}
+
+// Следующие тексты того же клиента, уже стоящие в очереди чата (подряд, без команд и ответов на сообщения).
+function takeFollowingTexts(message) {
+  const list = waitingInChat.get('chat:' + message.chat.id) || [];
+  const taken = [];
+  for (const update of list) {
+    const next = update.message;
+    const text = next && typeof next.text === 'string' ? next.text.trim() : '';
+    if (!next || !text || text.startsWith('/') || next.reply_to_message || !next.from || !message.from || next.from.id !== message.from.id) break;
+    if (absorbedUpdates.has(updateId(update))) continue;
+    absorbedUpdates.add(updateId(update));
+    taken.push({ text, messageId: incomingId(next) });
+  }
+  return taken;
+}
+
+// Ждём тишины (по умолчанию 2,5 с, всего не дольше 8 с) и собираем то, что клиент дописал.
+async function collectBurst(message, token) {
+  const quiet = burstQuietMs();
+  const deadline = Date.now() + Math.min(8000, quiet * 3.2);
+  const burst = [];
+  void telegramRequest(token, 'sendChatAction', { chat_id: message.chat.id, action: 'typing' }).catch(() => {});
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(quiet, deadline - Date.now()))));
+    const more = takeFollowingTexts(message);
+    burst.push(...more);
+    if (!more.length || Date.now() >= deadline) break;
+  }
+  return burst;
+}
+
 function enqueueUpdate(update, token, handler) {
   const key = updateChatKey(update);
   const previous = chatQueues.get(key) || Promise.resolve();
   holdUpdate(update);
+  const waiting = waitingInChat.get(key) || [];
+  waiting.push(update);
+  waitingInChat.set(key, waiting);
   const work = previous.then(async () => {
+    const left = (waitingInChat.get(key) || []).filter((item) => item !== update);
+    if (left.length) waitingInChat.set(key, left);
+    else waitingInChat.delete(key);
     try {
       // Токен могли сменить, пока сообщение стояло в очереди: отвечаем
       // текущим. Раньше такое сообщение просто выбрасывалось — клиент писал,

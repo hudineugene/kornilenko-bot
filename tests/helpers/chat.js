@@ -14,6 +14,8 @@ process.env.BOT_NO_START = '1';
 process.env.BOT_DATA_FILE = dataFile;
 process.env.BOT_MEDIA_DIRECTORY = path.join(workDirectory, 'bot-media');
 process.env.NO_AUTO_OPEN = '1';
+// Склейка сообщений подряд: в тестах не ждём, пока клиент допишет (свой тест включает паузу сам)
+if (process.env.AI_BURST_QUIET_MS === undefined) process.env.AI_BURST_QUIET_MS = '0';
 
 const bot = require('../../bot.js');
 
