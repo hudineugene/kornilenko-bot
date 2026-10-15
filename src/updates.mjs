@@ -41,7 +41,7 @@ import { handleSavedSearchCallback } from './saved-search.mjs';
 import { handleTrustCallback } from './trust.mjs';
 import { askGoal, handleGoalCallback } from './goal.mjs';
 import { faqHint } from './faq-hints.mjs';
-import { aiAgentSettings, aiReplyMarkup, askAiAgent, downloadTelegramFile, handleAiBookingCallback, handoffText, sendAgentEvent, sendAiCards, transcribeVoice } from './ai-agent.mjs';
+import { aiAgentSettings, aiReplyMarkup, askAboutPhoto, askAiAgent, handleAiBookingCallback, handoffText, sendAgentEvent, sendAiCards, transcribeVoice } from './ai-agent.mjs';
 import { handleDigestCallback } from './digest.mjs';
 import { handlePlanCallback } from './plan.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
@@ -131,20 +131,6 @@ function collectAlbumMessage(message, handle, update) {
 function waitForAlbum(message) {
   const album = pendingAlbums.get(albumKey(message));
   return album ? album.done : Promise.resolve();
-}
-
-// Фото клиента → консультант: самое крупное до 1280 px, с подписью; номер — тот же, что в журнале переписки.
-async function askAboutPhoto(user, message, token) {
-  const size = [...message.photo].reverse().find((p) => (p.width || 0) <= 1280 && (p.file_size || 0) <= 4 * 1024 * 1024) || message.photo[0];
-  const buffer = await downloadTelegramFile(size.file_id, token);
-  if (!buffer) return null;
-  return askAiAgent(user, typeof message.caption === 'string' ? message.caption.trim() : '', {
-    context: 'Клиент прислал фото (например, участок, дом, документ или пример того, что ищет).',
-    chatId: message.chat.id,
-    token,
-    messageId: incomingId(message),
-    image: { data: buffer.toString('base64'), mediaType: 'image/jpeg' },
-  });
 }
 
 async function handleUpdate(update, token) {

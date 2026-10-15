@@ -132,3 +132,17 @@ test('фото клиента: консультант смотрит на фот
   assert.equal(photo.thumbType, 'image/jpeg');
   assert.ok(photo.thumb && !('thumbFile' in photo));
 });
+
+test('режим «только приложение»: фото тоже уходит консультанту', async () => {
+  bot.getData().config.miniApp = { enabled: true, url: 'https://app.example.com', appOnly: true };
+  try {
+    const chat = createChat();
+    const id = await send(chat, { photo: [{ file_id: 'p-mid', width: 320, height: 320 }, { file_id: 'p-big', width: 1280, height: 1280 }] });
+    const ask = agent.asks.find((a) => a.image && a.messageId === 'in:' + id);
+    assert.ok(ask, 'фото ушло консультанту');
+    assert.match(ask.context, /присылать сюда в чат свои фото/);
+    assert.ok(telegram.calls.some((c) => c.method === 'sendMessage' && String(c.body.text).includes('участок у моря')), 'клиент получил ответ по фото');
+  } finally {
+    bot.getData().config.miniApp = { enabled: false };
+  }
+});

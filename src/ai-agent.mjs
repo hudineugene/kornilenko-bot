@@ -394,6 +394,21 @@ async function downloadTelegramFile(fileId, token, maxBytes = 4 * 1024 * 1024) {
   }
 }
 
+// Фото клиента → консультант: самое крупное до 1280 px, с подписью; номер — тот же, что в журнале переписки.
+// null — фото не скачалось или консультант не ответил (тогда, как раньше, заявка менеджеру).
+async function askAboutPhoto(user, message, token, context = 'Клиент прислал фото (например, участок, дом, документ или пример того, что ищет).') {
+  const size = [...message.photo].reverse().find((p) => (p.width || 0) <= 1280 && (p.file_size || 0) <= 4 * 1024 * 1024) || message.photo[0];
+  const buffer = await downloadTelegramFile(size.file_id, token);
+  if (!buffer) return null;
+  return askAiAgent(user, typeof message.caption === 'string' ? message.caption.trim() : '', {
+    context,
+    chatId: message.chat.id,
+    token,
+    messageId: 'in:' + message.message_id,
+    image: { data: buffer.toString('base64'), mediaType: 'image/jpeg' },
+  });
+}
+
 // Голосовое клиента → текст. Расшифровывает GenAgent на своём сервере (без оплаты за минуты).
 // { text, reason } или null, если консультант выключен, файл не скачался или GenAgent не ответил.
 const VOICE_MAX_SECONDS = 120;
@@ -425,4 +440,4 @@ async function transcribeVoice(voice, user, token) {
   }
 }
 
-export { aiReplyMarkup, askAiAgent, clientProfile, downloadTelegramFile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };
+export { aiReplyMarkup, askAboutPhoto, askAiAgent, clientProfile, downloadTelegramFile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };

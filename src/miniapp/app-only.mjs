@@ -8,7 +8,7 @@ import { scheduleSave } from '../store.mjs';
 import { sendMessage } from '../telegram.mjs';
 import { telegramInterfaceLanguage } from '../users.mjs';
 import { createInquiry, managerInConversation, openInquiryOf, recordBotAnswer } from '../inquiries.mjs';
-import { aiReplyMarkup, askAiAgent, handoffText, sendAiCards } from '../ai-agent.mjs';
+import { aiReplyMarkup, askAboutPhoto, askAiAgent, handoffText, sendAiCards } from '../ai-agent.mjs';
 import { propertyIdFromStartPayload } from '../catalog.mjs';
 import { withOffHoursNote } from '../hours.mjs';
 import { miniAppSettings } from './settings.mjs';
@@ -56,7 +56,7 @@ function nudgeLanguage(user) {
 }
 
 // В режиме «только приложение» у чата нет кнопок каталога — ИИ-консультанту так и говорим.
-const AI_CONTEXT = 'Бот работает в режиме «только приложение»: каталог проектов, фото, расчёт стоимости и запись на просмотр — в приложении (кнопка «🏡 Открыть каталог» внизу экрана). Других кнопок в чате нет — советуй приложение или менеджера.';
+const AI_CONTEXT = 'Бот работает в режиме «только приложение»: каталог проектов, фото проектов, расчёт стоимости и запись на просмотр — в приложении (кнопка «🏡 Открыть каталог» внизу экрана). Других кнопок в чате нет — советуй приложение или менеджера. Клиент может присылать сюда в чат свои фото (участок, дом, документ, пример) и голосовые — ты их получишь и ответишь.';
 
 function appKeyboard(settings, language, propertyId = '') {
   const url = settings.url + (propertyId ? '?p=' + encodeURIComponent(propertyId) : '');
@@ -86,9 +86,13 @@ async function handleAppOnlyMessage({ user, message, text, command, commandArgum
     // Вопрос текстом — сначала ИИ-консультанту (если менеджер ещё не ведёт разговор). Заявка менеджеру —
     // когда консультант передаёт клиента или обращение уже открыто; иначе — только ответ консультанта.
     const messageId = message.journalId || incomingId(message);
-    const ai = text && !managerInConversation(user) ? await askAiAgent(user, text, { context: AI_CONTEXT, chatId: message.chat.id, token, messageId }) : null;
+    // Фото клиента — тоже консультанту: он видит описание фото и отвечает по сути
+    const photo = !text && Array.isArray(message.photo) && message.photo.length && !message.albumMessageIds;
+    const ai = managerInConversation(user) ? null
+      : photo ? await askAboutPhoto(user, message, token, AI_CONTEXT + ' Клиент прислал фото.')
+        : text ? await askAiAgent(user, text, { context: AI_CONTEXT, chatId: message.chat.id, token, messageId }) : null;
     if (ai) {
-      if (ai.handoff || openInquiryOf(user)) createInquiry(user, ai.handoff ? handoffText(ai, text) : text, { type: 'general', sourceMessage: message });
+      if (ai.handoff || openInquiryOf(user)) createInquiry(user, ai.handoff ? handoffText(ai, text || summary) : text || summary, { type: 'general', sourceMessage: message });
       // Кнопка приложения у клиента уже стоит внизу экрана (постоянная клавиатура) — тогда под ответом оценка 👍/👎;
       // если ещё нет — сначала даём кнопку приложения.
       const markup = user.appNudgeAt ? await aiReplyMarkup(ai, user) : appKeyboard(miniAppSettings(), nudgeLanguage(user));
