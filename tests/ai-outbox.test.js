@@ -296,3 +296,18 @@ test('агент сопровождает заявку: изменения ст�
   assert.match(agent.orders[2].order.facts, /12:30/);
   assert.equal(agent.orders[2].write, undefined, 'живой текст не просим — карточку просмотра шлёт бот');
 });
+
+test('честный срок ответа: консультант знает, открыт ли офис и когда ответит менеджер', async () => {
+  const { teamNow } = await import('../src/ai-agent.mjs');
+  bot.getData().config.workingHours = { enabled: true, days: [1, 2, 3, 4, 5], from: '09:00', to: '18:00', replyMinutes: 15 };
+  const evening = await teamNow('ru', new Date(2026, 9, 15, 20, 0));
+  assert.equal(evening.open, false);
+  assert.equal(evening.next, 'завтра с 9:00');
+  const friday = await teamNow('uk', new Date(2026, 9, 16, 19, 0));
+  assert.equal(friday.next, 'у понеділок з 9:00');
+  const day = await teamNow('ru', new Date(2026, 9, 15, 12, 0));
+  assert.deepEqual(day, { open: true, minutes: 15 });
+  const chat = createChat();
+  await chat.say('Есть ли рассрочка на виллу?');
+  assert.equal(typeof agent.asks.at(-1).team.open, 'boolean', 'team уходит с вопросом клиента');
+});

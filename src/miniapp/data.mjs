@@ -18,6 +18,7 @@ import { imageExists } from '../media.mjs';
 import { LANGUAGES, isCyrillic } from '../languages.mjs';
 import { telegramInterfaceLanguage } from '../users.mjs';
 import { aiAgentSettings } from '../ai-agent.mjs';
+import { servicesOf } from './services.mjs';
 
 const RESIDENTIAL = new Set(['apartment', 'house', 'villa', 'townhouse', 'newbuild']);
 
@@ -303,6 +304,7 @@ function bootstrapOf(language, user = null) {
     cards,
     facets: facetsOf(cards),
     company: companyOf(language, user),
+    services: servicesOf(language),
     favorites: user && Array.isArray(user.favorites) ? user.favorites.filter((id) => cards.some((card) => card.id === id)) : [],
     compare: user && Array.isArray(user.comparisonIds) ? user.comparisonIds.filter((id) => cards.some((card) => card.id === id)) : [],
   };

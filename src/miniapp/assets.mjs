@@ -391,6 +391,72 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 .viewer .close{position:absolute;right:14px;top:calc(var(--top) + 12px);z-index:2}
 .viewer .counter{position:absolute;left:0;right:0;bottom:calc(var(--bottom) + 18px);text-align:center;color:#fff;font-weight:700;font-size:14px}
 .skel{height:260px;border-radius:var(--r);background:linear-gradient(110deg,var(--card) 30%,var(--line) 50%,var(--card) 70%);background-size:200% 100%;animation:shimmer 1.3s linear infinite;margin-top:16px}
+/* раздел «Услуги»: баннер, список направлений, страница услуги */
+.tabs .tab{font-size:11px}
+.tab span{white-space:nowrap}
+.tone-red{--tone:var(--red);--tone-soft:var(--red-soft);--tone-text:var(--red-dark)}
+.tone-yellow{--tone:var(--yellow-dark);--tone-soft:var(--yellow-soft);--tone-text:#8a6a00}
+.tone-cyan{--tone:var(--cyan);--tone-soft:var(--cyan-soft);--tone-text:var(--cyan-dark)}
+[data-theme=dark] .tone-yellow{--tone-text:var(--yellow)}
+.svc-hero,.svc-head{position:relative;overflow:hidden;margin-top:14px;border-radius:var(--r);background:var(--card) url(/grid.svg) center/420px auto;border:1px solid var(--line);box-shadow:var(--shadow)}
+.svc-hero::before,.svc-head::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,var(--red) 0 33.3%,var(--yellow) 33.3% 66.6%,var(--cyan) 66.6%)}
+[data-theme=dark] .svc-hero,[data-theme=dark] .svc-head{background:var(--card)}
+.svc-hero{padding:20px 16px 18px}
+.svc-hero h2{font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:14px}
+.svc-hero p{margin:8px 0 0;font-size:13.5px;line-height:1.5;color:var(--muted)}
+.svc-hero-art{display:flex;gap:8px}
+.svc-hero-art span{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--tone-soft);color:var(--tone);box-shadow:var(--shadow)}
+.svc-hero-art span:nth-child(even){transform:translateY(5px)}
+.svc-hero-art svg{width:21px;height:21px}
+.svc-list{display:grid;gap:10px;margin-top:16px}
+.svc{display:flex;align-items:center;gap:14px;width:100%;padding:14px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);transition:transform .15s,box-shadow .2s;animation:rise .35s ease both}
+.svc:active{transform:scale(.98)}
+.svc-ico{width:50px;height:50px;border-radius:14px;display:grid;place-items:center;flex:none;background:var(--tone-soft);color:var(--tone)}
+.svc-ico svg{width:26px;height:26px}
+.svc-text{flex:1;min-width:0}
+.svc-text b{display:block;font-size:15.5px;font-weight:700;line-height:1.25}
+.svc-text small{display:block;margin-top:3px;color:var(--muted);font-size:12.5px;line-height:1.4}
+.svc>svg:last-child{width:18px;height:18px;color:var(--muted);flex:none}
+.svc-cta{margin-top:22px;padding:18px 16px;border-radius:var(--r);background:var(--ink);color:var(--bg);display:grid;gap:10px}
+.svc-cta h3{font-size:17px;font-weight:800}
+.svc-cta p{margin:0;font-size:13px;line-height:1.45;opacity:.78}
+.svc-cta .row{display:grid;gap:8px;margin-top:4px}
+.svc-cta .btn{white-space:normal;text-align:center}
+.svc-cta .btn.soft{background:transparent;color:var(--bg);border-color:rgba(255,255,255,.3)}
+[data-theme=dark] .svc-cta .btn.soft{border-color:rgba(15,20,26,.25)}
+.svc-head{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:22px 16px 18px}
+.svc-head .svc-ico{width:62px;height:62px;border-radius:18px}
+.svc-head .svc-ico svg{width:32px;height:32px}
+.svc-head h1{font-size:24px;font-weight:800;letter-spacing:-.025em}
+.svc-head .svc-subtitle{margin:0;font-size:15px;font-weight:600;color:var(--tone-text);line-height:1.35}
+.svc-intro{margin-top:16px}
+.svc-intro p{margin:0 0 10px;font-size:14.5px;line-height:1.55}
+.svc-block{margin-top:24px}
+.svc-block>h3{font-size:17px;font-weight:800;margin-bottom:12px}
+.svc-inc{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.svc-inc li{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;background:var(--card);border:1px solid var(--line);border-radius:var(--rb)}
+.svc-inc li>svg{width:20px;height:20px;flex:none;margin-top:1px;color:var(--tone)}
+.svc-inc b{display:block;font-size:14.5px;line-height:1.3}
+.svc-inc small{display:block;margin-top:3px;color:var(--muted);font-size:13px;line-height:1.45}
+.svc-steps{margin:0;padding:0;list-style:none;display:grid}
+.svc-steps li{position:relative;display:flex;gap:14px;align-items:flex-start;padding-bottom:14px;font-size:14px;line-height:1.45}
+.svc-steps li:last-child{padding-bottom:0}
+.svc-steps li::before{content:"";position:absolute;left:15px;top:32px;bottom:0;width:2px;background:var(--line)}
+.svc-steps li:last-child::before{display:none}
+.svc-steps .num{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--tone-soft);color:var(--tone);font-weight:800;font-size:14px}
+.svc-steps span:last-child{padding-top:5px}
+.svc-why{display:flex;gap:12px;align-items:flex-start;padding:16px 14px;border-radius:var(--r);background:var(--tone-soft);font-size:14px;line-height:1.5}
+.svc-why svg{width:24px;height:24px;flex:none;color:var(--tone)}
+.svc-faq{display:grid;gap:8px}
+.svc-faq .hint{color:var(--muted);font-size:12.5px;margin:-6px 0 2px}
+.svc-q{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:var(--rb);font-size:14px;font-weight:600;line-height:1.35;transition:transform .15s}
+.svc-q:active{transform:scale(.98)}
+.svc-q span{flex:1;min-width:0}
+.svc-q svg{width:20px;height:20px;flex:none;color:var(--tone)}
+.svc-faq .acc{margin-top:0}
+.svc-faq .acc button{font-weight:600;font-size:14px;line-height:1.35}
+.svc-faq .acc button svg{color:var(--tone)}
+.svc-faq .acc .acc-body{color:var(--muted);font-size:13.5px}
 button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid rgba(6,182,200,.4);outline-offset:2px}
 @media (max-width:359px){.adv{grid-template-columns:1fr}.list{grid-template-columns:1fr}.actions{grid-template-columns:repeat(2,minmax(0,1fr))}.hero-copy{max-width:92%}.logo{height:64px}.card.row .photo{width:38%}.cmp-link{max-width:100%}.fav-head{flex-wrap:wrap}}
 @media (min-width:700px){#app{max-width:560px;margin:0 auto;border-left:1px solid var(--line);border-right:1px solid var(--line);background:var(--bg);box-shadow:0 0 60px rgba(20,34,43,.08)}.tabs,.cta{left:50%;right:auto;width:560px;transform:translateX(-50%)}.sheet{left:50%;right:auto;width:560px;transform:translateX(-50%);animation:none}}
@@ -437,7 +503,19 @@ const APP_JS = String.raw`
     ['es', { aiPhoto: 'Enviar una foto', aiVoice: 'Grabar un audio', aiStop: 'Detener y enviar', aiMicDenied: 'No hay acceso al micrófono. Permítelo para Telegram o envía el audio en el chat con el bot.', aiPhotoBad: 'No se pudo abrir la foto: prueba con otra.', aiVoiceShort: 'El audio es demasiado corto.' }],
   ].forEach(function (pair) { T[pair[0]] = Object.assign(T[pair[0]] || {}, pair[1]); });
 
+  // Раздел «Услуги»
+  [
+    ['ru', { navServices: 'Услуги', svcTitle: 'Услуги', svcHeroTitle: 'Комплексное сопровождение в Испании', svcHeroText: 'Покупка недвижимости — это не только выбор объекта. Мы помогаем организовать оформление документов, банковские процедуры, ипотечное финансирование и дальнейшее обслуживание в Испании. Выберите интересующее направление, чтобы узнать больше.', svcAsk: 'Задать вопрос', svcAskAbout: 'Интересует услуга «{x}». ', svcCtaTitle: 'Не нашли нужную услугу?', svcCtaText: 'Расскажите о задаче — подскажем решение или найдём проверенного специалиста.', svcIncluded: 'Что входит в услугу', svcSteps: 'Как проходит сопровождение', svcWhy: 'Почему это удобно', svcFaq: 'Частые вопросы', svcFaqHint: 'Нажмите на вопрос — менеджер ответит вам лично', svcFaqAsk: 'Вопрос по услуге «{x}»: ', svcFinalTitle: 'Обсудим вашу ситуацию', svcFinalText: 'Менеджер сразу увидит, что вас интересует «{x}», и подскажет следующий шаг.' }],
+    ['uk', { navServices: 'Послуги', svcTitle: 'Послуги', svcHeroTitle: 'Комплексний супровід в Іспанії', svcHeroText: 'Купівля нерухомості — це не лише вибір об’єкта. Ми допомагаємо організувати оформлення документів, банківські процедури, іпотечне фінансування та подальше обслуговування в Іспанії. Оберіть напрям, щоб дізнатися більше.', svcAsk: 'Поставити запитання', svcAskAbout: 'Цікавить послуга «{x}». ', svcCtaTitle: 'Не знайшли потрібну послугу?', svcCtaText: 'Розкажіть про задачу — підкажемо рішення або знайдемо перевіреного фахівця.', svcIncluded: 'Що входить у послугу', svcSteps: 'Як проходить супровід', svcWhy: 'Чому це зручно', svcFaq: 'Часті запитання', svcFaqHint: 'Натисніть на запитання — менеджер відповість вам особисто', svcFaqAsk: 'Запитання щодо послуги «{x}»: ', svcFinalTitle: 'Обговоримо вашу ситуацію', svcFinalText: 'Менеджер одразу побачить, що вас цікавить «{x}», і підкаже наступний крок.' }],
+    ['en', { navServices: 'Services', svcTitle: 'Services', svcHeroTitle: 'Full support in Spain', svcHeroText: 'Buying a property is about more than choosing it. We help you organise paperwork, banking procedures, mortgage financing and ongoing services in Spain. Choose an area to learn more.', svcAsk: 'Ask a question', svcAskAbout: 'I am interested in the “{x}” service. ', svcCtaTitle: 'Didn’t find what you need?', svcCtaText: 'Tell us about your task — we will suggest a solution or find a trusted specialist.', svcIncluded: 'What’s included', svcSteps: 'How it works', svcWhy: 'Why it’s convenient', svcFaq: 'Frequently asked questions', svcFaqHint: 'Tap a question and a manager will answer you personally', svcFaqAsk: 'Question about “{x}”: ', svcFinalTitle: 'Let’s discuss your situation', svcFinalText: 'The manager will see straight away that you are interested in “{x}” and suggest the next step.' }],
+    ['es', { navServices: 'Servicios', svcTitle: 'Servicios', svcHeroTitle: 'Acompañamiento integral en España', svcHeroText: 'Comprar una vivienda no es solo elegirla. Te ayudamos a organizar los trámites, las gestiones bancarias, la financiación hipotecaria y los servicios posteriores en España. Elige un área para saber más.', svcAsk: 'Hacer una pregunta', svcAskAbout: 'Me interesa el servicio «{x}». ', svcCtaTitle: '¿No encuentras lo que buscas?', svcCtaText: 'Cuéntanos tu caso: te propondremos una solución o un especialista de confianza.', svcIncluded: 'Qué incluye', svcSteps: 'Cómo trabajamos', svcWhy: 'Por qué es cómodo', svcFaq: 'Preguntas frecuentes', svcFaqHint: 'Pulsa una pregunta y un asesor te responderá personalmente', svcFaqAsk: 'Pregunta sobre «{x}»: ', svcFinalTitle: 'Hablemos de tu caso', svcFinalText: 'El asesor verá enseguida que te interesa «{x}» y te indicará el siguiente paso.' }],
+  ].forEach(function (pair) { T[pair[0]] = Object.assign(T[pair[0]] || {}, pair[1]); });
+
   var ICON = {
+    briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 12.5h18M10.5 12.5v2h3v-2"/>',
+    idcard: '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M10 2.5v2h4v-2"/><circle cx="12" cy="10.5" r="2.4"/><path d="M8.3 17.5a3.7 3.7 0 0 1 7.4 0"/>',
+    bank: '<path d="M3 9.5 12 4l9 5.5M4 9.5h16M5.5 10.5v7m4.3-7v7m4.4-7v7m4.3-7v7M3 20h18"/>',
+    mortgage: '<path d="M3 10.5 12 3l9 7.5V21H3z"/><path d="m9.5 16.5 5-5"/><circle cx="9.7" cy="11.7" r=".9"/><circle cx="14.3" cy="16.3" r=".9"/>',
     home: '<path d="M3 10.5 12 3l9 7.5V21h-6.5v-7h-5v7H3z"/>',
     building: '<rect x="4" y="7" width="10" height="14" rx="1"/><path d="M14 11h6v10H4M7 10h3m-3 4h3m-3 4h3m10-4h-3m3 3h-3"/>',
     hardhat: '<path d="M3 15h18v3H3zM6 15V11a6 6 0 0 1 4-5m8 9V11a6 6 0 0 0-4-5M10 5v8m4-8v8M2 18q10 7 20 0"/>',
@@ -558,7 +636,7 @@ const APP_JS = String.raw`
     input.style.setProperty('--p', (max > min ? (value - min) / (max - min) * 100 : 0) + '%');
   }
   function nbsp(text) { return String(text == null ? '' : text); }
-  var S = { lang: 'ru', scrolls: { home: 0, objects: 0, fav: 0 }, loadSeq: 0, renderSeq: 0, boot: null, route: { name: 'home' }, filters: { query: '', type: '', city: '', deal: '', maxPrice: 0, beds: 0, building: false }, detail: {}, sheets: [], scroll: 0 };
+  var S = { lang: 'ru', scrolls: { home: 0, objects: 0, services: 0, fav: 0 }, loadSeq: 0, renderSeq: 0, boot: null, route: { name: 'home' }, filters: { query: '', type: '', city: '', deal: '', maxPrice: 0, beds: 0, building: false }, detail: {}, sheets: [], scroll: 0 };
   function t(key) { return (T[S.lang] || T.ru)[key] || T.ru[key] || key; }
   function store(key, value) { try { if (value === undefined) return window.localStorage.getItem(key); window.localStorage.setItem(key, value); } catch (e) { return null; } return null; }
   function haptic(kind) { try { if (tg && tg.HapticFeedback) { if (kind === 'ok') tg.HapticFeedback.notificationOccurred('success'); else if (kind === 'err') tg.HapticFeedback.notificationOccurred('error'); else tg.HapticFeedback.impactOccurred('light'); } } catch (e) { return; } }
@@ -652,7 +730,7 @@ const APP_JS = String.raw`
   }
   function syncBack() {
     if (!tg || !tg.BackButton) return;
-    var tabRoute = ['home', 'objects', 'fav', 'profile'].indexOf(S.route.name) >= 0;
+    var tabRoute = ['home', 'objects', 'services', 'fav', 'profile'].indexOf(S.route.name) >= 0;
     if (S.sheets.length || !tabRoute) tg.BackButton.show();
     else tg.BackButton.hide();
   }
@@ -670,6 +748,8 @@ const APP_JS = String.raw`
     if (parts[0] === 'objects') return { name: 'objects' };
     if (parts[0] === 'fav') return { name: 'fav' };
     if (parts[0] === 'cmp') return { name: 'cmp' };
+    if (parts[0] === 'services' && parts[1]) return { name: 'service', id: decodeURIComponent(parts[1]) };
+    if (parts[0] === 'services') return { name: 'services' };
     if (parts[0] === 'profile') return { name: 'profile' };
     if (parts[0] === 'about') return { name: 'about' };
     if (parts[0] === 'contacts') return { name: 'contacts' };
@@ -677,7 +757,7 @@ const APP_JS = String.raw`
   }
   function go(name, id) {
     if (S.route && S.scrolls[S.route.name] !== undefined) S.scrolls[S.route.name] = window.scrollY;
-    var hash = name === 'property' ? '#/p/' + encodeURIComponent(id) : name === 'home' ? '#/' : '#/' + name;
+    var hash = name === 'property' ? '#/p/' + encodeURIComponent(id) : name === 'service' ? '#/services/' + encodeURIComponent(id) : name === 'home' ? '#/' : '#/' + name;
     if (location.hash === hash) render(); else location.hash = hash;
   }
   window.addEventListener('hashchange', function () {
@@ -1307,8 +1387,8 @@ const APP_JS = String.raw`
       sheet.appendChild(h('div', { class: 'section' }, [submit]));
     });
   }
-  function openQuestion(detail, preset) {
-    if (S.boot && S.boot.assistant && !isGuest()) return openAssistant(detail, preset);
+  function openQuestion(detail, preset, toManager) {
+    if (!toManager && S.boot && S.boot.assistant && !isGuest()) return openAssistant(detail, preset);
     openSheet(function (sheet, close) {
       var text = h('textarea', { maxlength: '1000' });
       if (preset) text.value = preset;
@@ -1752,9 +1832,92 @@ const APP_JS = String.raw`
     view.appendChild(page);
   }
 
+  /* ---------- услуги ---------- */
+  // Вопросы из раздела «Услуги» уходят менеджеру, а не ИИ-консультанту: ответы по документам, банкам и налогам даёт
+  // специалист (тексты раздела просят публиковать ответы только после проверки).
+  function serviceList() { return (S.boot && S.boot.services) || []; }
+  function askManager(text) { openQuestion(null, text, true); }
+  function serviceRow(item, index) {
+    var node = h('button', { class: 'svc tone-' + item.tone, onclick: function () { go('service', item.id); } }, [
+      h('span', { class: 'svc-ico' }, [icon(item.icon)]),
+      h('span', { class: 'svc-text' }, [h('b', { text: item.title }), item.lead ? h('small', { text: item.lead }) : null]),
+      icon('chevron'),
+    ]);
+    node.style.animationDelay = (index * 45) + 'ms';
+    return node;
+  }
+  function renderServices(view) {
+    var list = serviceList();
+    var page = h('div', { class: 'page' }, [h('h1', { text: t('svcTitle') })]);
+    page.appendChild(h('div', { class: 'svc-hero' }, [
+      h('div', { class: 'svc-hero-art', 'aria-hidden': 'true' }, list.map(function (item) { return h('span', { class: 'tone-' + item.tone }, [icon(item.icon)]); })),
+      h('h2', { text: t('svcHeroTitle') }),
+      h('p', { text: t('svcHeroText') }),
+    ]));
+    var rows = h('div', { class: 'svc-list' });
+    list.forEach(function (item, index) { rows.appendChild(serviceRow(item, index)); });
+    page.appendChild(rows);
+    page.appendChild(h('div', { class: 'svc-cta' }, [
+      h('h3', { text: t('svcCtaTitle') }),
+      h('p', { text: t('svcCtaText') }),
+      h('div', { class: 'row' }, [
+        h('button', { class: 'btn primary wide', onclick: function () { askManager(''); } }, [icon('chat'), t('svcAsk')]),
+        h('button', { class: 'btn soft wide', onclick: function () { openCallForm(null); } }, [icon('phone'), t('callMe')]),
+      ]),
+    ]));
+    view.appendChild(page);
+  }
+  function renderService(view) {
+    var item = serviceList().filter(function (entry) { return entry.id === S.route.id; })[0];
+    if (!item) return renderServices(view);
+    var about = t('svcAskAbout').replace('{x}', item.title);
+    var page = h('div', { class: 'page tone-' + item.tone }, [backRow()]);
+    page.appendChild(h('div', { class: 'svc-head' }, [
+      h('span', { class: 'svc-ico' }, [icon(item.icon)]),
+      h('h1', { text: item.title }),
+      item.subtitle ? h('p', { class: 'svc-subtitle', text: item.subtitle }) : null,
+    ]));
+    if (item.intro && item.intro.length) page.appendChild(h('div', { class: 'svc-intro' }, item.intro.map(function (text) { return h('p', { text: text }); })));
+    if (item.included && item.included.length) {
+      page.appendChild(h('section', { class: 'svc-block' }, [
+        h('h3', { text: t('svcIncluded') }),
+        h('ul', { class: 'svc-inc' }, item.included.map(function (entry) {
+          return h('li', null, [icon('check'), h('span', null, [h('b', { text: entry.title }), entry.text ? h('small', { text: entry.text }) : null])]);
+        })),
+      ]));
+    }
+    if (item.steps && item.steps.length) {
+      page.appendChild(h('section', { class: 'svc-block' }, [
+        h('h3', { text: t('svcSteps') }),
+        h('ol', { class: 'svc-steps' }, item.steps.map(function (step, index) {
+          return h('li', null, [h('span', { class: 'num', text: String(index + 1) }), h('span', { text: step })]);
+        })),
+      ]));
+    }
+    if (item.why) page.appendChild(h('section', { class: 'svc-block' }, [h('h3', { text: t('svcWhy') }), h('div', { class: 'svc-why' }, [icon('shield'), h('span', { text: item.why })])]));
+    if (item.faq && item.faq.length) {
+      var faq = h('div', { class: 'svc-faq' }, [h('h3', { text: t('svcFaq') })]);
+      if (item.faq.some(function (entry) { return !entry.a; })) faq.appendChild(h('div', { class: 'hint', text: t('svcFaqHint') }));
+      item.faq.forEach(function (entry) {
+        if (entry.a) faq.appendChild(accordion(entry.q, entry.a));
+        else faq.appendChild(h('button', { class: 'svc-q', onclick: function () { askManager(t('svcFaqAsk').replace('{x}', item.title) + entry.q); } }, [h('span', { text: entry.q }), icon('chat')]));
+      });
+      page.appendChild(h('section', { class: 'svc-block' }, [faq]));
+    }
+    page.appendChild(h('div', { class: 'svc-cta' }, [
+      h('h3', { text: t('svcFinalTitle') }),
+      h('p', { text: t('svcFinalText').replace('{x}', item.title) }),
+      h('div', { class: 'row' }, [
+        h('button', { class: 'btn primary wide', onclick: function () { askManager(about); } }, [icon('chat'), item.cta || t('svcAsk')]),
+        h('button', { class: 'btn soft wide', onclick: function () { openCallForm(null); } }, [icon('phone'), t('callMe')]),
+      ]),
+    ]));
+    view.appendChild(page);
+  }
+
   /* ---------- каркас ---------- */
   var tabsEl = null;
-  var TAB_OF = { home: 'home', objects: 'objects', fav: 'fav', cmp: 'fav', profile: 'profile', about: 'profile', contacts: 'profile' };
+  var TAB_OF = { home: 'home', objects: 'objects', services: 'services', service: 'services', fav: 'fav', cmp: 'fav', profile: 'profile', about: 'profile', contacts: 'profile' };
   function tabButton(name, label, iconName, route) {
     return h('button', { class: 'tab' + (TAB_OF[S.route.name] === name ? ' on' : ''), 'data-tab': name, 'aria-current': TAB_OF[S.route.name] === name ? 'page' : false, onclick: function () { go(route); } }, [icon(iconName), h('span', { text: label })]);
   }
@@ -1782,12 +1945,15 @@ const APP_JS = String.raw`
     else if (main === 'profile') renderProfile(view);
     else if (main === 'about') renderAbout(view);
     else if (main === 'contacts') renderContacts(view);
+    else if (main === 'services') renderServices(view);
+    else if (main === 'service') renderService(view);
     root.appendChild(view);
     if (main === 'property') renderProperty(view);
     if (main !== 'property') {
       tabsEl = h('nav', { class: 'tabs' }, [
         tabButton('home', t('navHome'), 'home', 'home'),
         tabButton('objects', t('navObjects'), 'building', 'objects'),
+        tabButton('services', t('navServices'), 'briefcase', 'services'),
         tabButton('fav', t('navFav'), 'heart', 'fav'),
         tabButton('profile', t('navProfile'), 'profile', 'profile'),
       ]);

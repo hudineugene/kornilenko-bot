@@ -93,6 +93,8 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
         ...(messageId ? { messageId } : {}),
         // фото клиента: GenAgent опишет его, консультант ответит с учётом того, что на нём
         ...(image ? { image } : {}),
+        // работает ли офис сейчас — консультант назовёт честный срок, когда передаёт клиента менеджеру
+        team: await teamNow(LANGUAGES.includes(language) ? language : clientLanguage(user)),
       }),
       signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
     });
@@ -217,6 +219,18 @@ async function aiReplyMarkup(ai, user) {
   if (user) user.aiSuggest = suggest;
   suggest.forEach((text, index) => rows.push([{ text: '💬 ' + text, callback_data: 'sq:' + index }]));
   return { inline_keyboard: [...rows, ...ratingMarkup().inline_keyboard] };
+}
+
+// Офис сейчас: открыт ли, когда откроется («завтра с 9:00») и за сколько обычно отвечаем (настройка «Часы работы»).
+async function teamNow(language, now = new Date()) {
+  const { isWorkingTime, nextOpening, openingPhrase, workingHours } = await import('./hours.mjs');
+  const hours = workingHours();
+  if (hours.enabled && !isWorkingTime(now, hours)) {
+    const opening = nextOpening(now, hours);
+    return { open: false, ...(opening ? { next: openingPhrase(opening, language, now) } : {}) };
+  }
+  const minutes = Math.round(Number(hours.replyMinutes) || 0);
+  return { open: true, ...(minutes >= 1 && minutes <= 10080 ? { minutes } : {}) };
 }
 
 // Событие воронки в GenAgent (заявка, просмотр, сделка) или оценка ответа (rating_up / rating_down). Тихо, без ожидания.
@@ -460,4 +474,4 @@ async function transcribeVoice(voice, user, token) {
   }
 }
 
-export { aiReplyMarkup, askAboutPhoto, askAiAgent, transcribeWav, clientProfile, downloadTelegramFile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };
+export { aiReplyMarkup, askAboutPhoto, askAiAgent, transcribeWav, clientProfile, downloadTelegramFile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent, teamNow };
