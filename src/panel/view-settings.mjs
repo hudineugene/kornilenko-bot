@@ -258,6 +258,7 @@ function renderTelegramConnection(host) {
 
 function renderWork(host) {
   var hours = state.config.workingHours || {}, slots = state.config.viewingSlots || {}, calculator = state.config.calculator || {};
+  var aiAgent = state.config.aiAgent || {};
   var engagement = state.engagement || {};
   host.innerHTML = '<div class="grid cols-2">' +
     '<h2 class="group-title">Когда мы работаем</h2>' +
@@ -320,6 +321,19 @@ function renderWork(host) {
       hintMore("Ставки перед включением калькулятора сверьте с гестором.", "Какую ставку бот применяет: квартира, дом или вилла со статусом «новостройка» либо «строится» — IVA и гербовый сбор; те же объекты в остальных состояниях (включая «новое») — ITP; участок и коммерция — IVA как при продаже от компании, о чём клиент видит приписку.") +
       '</div></details>' +
     "</div></div>" +
+    '<h2 class="group-title">ИИ-консультант</h2>' +
+    '<div class="card"><header><h3>Ответы на вопросы клиентов</h3></header><div class="card-body stack">' +
+      '<label class="check"><input type="checkbox" id="aiOn"' + (aiAgent.enabled ? " checked" : "") + "> Отвечать на вопросы, написанные текстом, через ИИ-консультанта</label>" +
+      '<div class="field"><label for="aiUrl">Адрес</label><input id="aiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://agents.yabotua.com/api/agent/…" value="' + esc(aiAgent.url || "") + '"></div>' +
+      '<div class="field"><label for="aiKey">Ключ доступа</label><input id="aiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="' + (aiAgent.keySet ? "ключ сохранён — оставьте пустым, чтобы не менять" : "ga_…") + '"></div>' +
+      '<div class="field"><label for="aiReturn">Вернуть клиента ИИ, если менеджер молчит</label><select id="aiReturn">' +
+        [[0, "не возвращать — только кнопкой «🤖 Вернуть ИИ»"], [1, "через 1 час"], [2, "через 2 часа"], [4, "через 4 часа"], [8, "через 8 часов"], [24, "через сутки"]]
+          .map(function (o) { return '<option value="' + o[0] + '"' + (Number(aiAgent.autoReturnHours === undefined ? 2 : aiAgent.autoReturnHours) === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") +
+      "</select></div>" +
+      (aiAgent.enabled && aiAgent.lastSyncAt ? '<div class="small muted">База знаний отправлена консультанту: ' + dateTime(aiAgent.lastSyncAt) + " — объекты, контакты, гиды и расходы обновляются у него сами.</div>" : "") +
+      (aiAgent.enabled && aiAgent.lastError ? '<div class="banner bad">База знаний не отправилась: ' + esc(aiAgent.lastError) + "</div>" : "") +
+      hintMore("Адрес и ключ — в GenAgent: агент → «Каналы» → «Свой бот (API)».", "Консультант отвечает на языке, на котором клиент пользуется ботом, по базе знаний из GenAgent. Менеджер получает заявку, только когда консультант передаёт клиента (просмотр, бронь, торг, просьба позвать человека). Когда менеджер уже ведёт разговор (заявка «в работе»), консультант молчит; пока на заявку никто не ответил — отвечает сам, а сообщения дописываются в заявку. Вернуть клиента консультанту — кнопка «🤖 Вернуть ИИ» под заявкой в Telegram, «Вернуть агенту» в GenAgent или автоматически, если менеджер долго молчит. Отвечать клиенту можно и из «Диалогов» GenAgent — бот отправит ответ своим именем. Если консультант недоступен, бот отвечает как раньше.") +
+    "</div></div>" +
     "</div>";
 
   bindLanguageTabs(host);
@@ -350,6 +364,14 @@ function renderWork(host) {
     host.querySelectorAll("[data-calc]").forEach(function (input) { payload[input.dataset.calc] = input.value; });
     await send("/api/calculator", "PUT", payload);
   }
+  async function saveAiAgent() {
+    await send("/api/ai-agent", "PUT", {
+      enabled: host.querySelector("#aiOn").checked,
+      url: host.querySelector("#aiUrl").value.trim(),
+      key: host.querySelector("#aiKey").value.trim(),
+      autoReturnHours: Number(host.querySelector("#aiReturn").value),
+    });
+  }
   async function saveReminders() {
     await send("/api/settings", "PUT", Object.assign(settingsPayload(), {
       reminderHours: Number(host.querySelector("#remindHours").value),
@@ -363,6 +385,7 @@ function renderWork(host) {
     await saveHours();
     await saveSlots();
     await saveCalc();
+    await saveAiAgent();
     await saveReminders();
     await saveEngagement();
   }, "Настройки компании изменены");

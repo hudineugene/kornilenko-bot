@@ -6,7 +6,8 @@ import { cleanText } from '../util.mjs';
 import { scheduleSave } from '../store.mjs';
 import { sendMessage } from '../telegram.mjs';
 import { telegramInterfaceLanguage } from '../users.mjs';
-import { createInquiry } from '../inquiries.mjs';
+import { createInquiry, managerInConversation, openInquiryOf, recordBotAnswer } from '../inquiries.mjs';
+import { aiReplyMarkup, askAiAgent, handoffText } from '../ai-agent.mjs';
 import { propertyIdFromStartPayload } from '../catalog.mjs';
 import { withOffHoursNote } from '../hours.mjs';
 import { miniAppSettings } from './settings.mjs';
@@ -53,6 +54,14 @@ function nudgeLanguage(user) {
   return LANGUAGES.includes(user.preferredLanguage) ? user.preferredLanguage : telegramInterfaceLanguage(user);
 }
 
+// В режиме «только приложение» у чата нет кнопок каталога — ИИ-консультанту так и говорим.
+const AI_CONTEXT = 'Бот работает в режиме «только приложение»: каталог проектов, фото, расчёт стоимости и запись на просмотр — в приложении (кнопка «🏡 Открыть каталог» внизу экрана). Других кнопок в чате нет — советуй приложение или менеджера.';
+
+function appKeyboard(settings, language, propertyId = '') {
+  const url = settings.url + (propertyId ? '?p=' + encodeURIComponent(propertyId) : '');
+  return { keyboard: [[{ text: BUTTON[language], web_app: { url } }]], resize_keyboard: true, is_persistent: true };
+}
+
 async function sendAppNudge(chatId, user, token, { kind = 'hello', propertyId = '' } = {}) {
   const settings = miniAppSettings();
   if (!settings.enabled) return;
@@ -61,10 +70,7 @@ async function sendAppNudge(chatId, user, token, { kind = 'hello', propertyId = 
   const name = cleanText(user.firstName, 40);
   let text = copy[kind].replace('{button}', BUTTON[language]).replace('{name}', kind === 'hello' && name ? ', ' + name : '');
   if (kind === 'received') text = withOffHoursNote(text, language, { user });
-  const url = settings.url + (propertyId ? '?p=' + encodeURIComponent(propertyId) : '');
-  await sendMessage(chatId, text, token, {
-    reply_markup: { keyboard: [[{ text: BUTTON[language], web_app: { url } }]], resize_keyboard: true, is_persistent: true },
-  });
+  await sendMessage(chatId, text, token, { reply_markup: appKeyboard(settings, language, propertyId) });
   user.appNudgeAt = new Date().toISOString();
   scheduleSave();
 }
@@ -76,6 +82,19 @@ async function handleAppOnlyMessage({ user, message, text, command, commandArgum
   user.pendingStartPayload = '';
   const isCommand = command.startsWith('/');
   if (!isCommand) {
+    // Вопрос текстом — сначала ИИ-консультанту (если менеджер ещё не ведёт разговор). Заявка менеджеру —
+    // когда консультант передаёт клиента или обращение уже открыто; иначе — только ответ консультанта.
+    const ai = text && !managerInConversation(user) ? await askAiAgent(user, text, { context: AI_CONTEXT, chatId: message.chat.id, token }) : null;
+    if (ai) {
+      if (ai.handoff || openInquiryOf(user)) createInquiry(user, ai.handoff ? handoffText(ai, text) : text, { type: 'general', sourceMessage: message });
+      // Кнопка приложения у клиента уже стоит внизу экрана (постоянная клавиатура) — тогда под ответом оценка 👍/👎;
+      // если ещё нет — сначала даём кнопку приложения.
+      const markup = user.appNudgeAt ? await aiReplyMarkup(ai, user) : appKeyboard(miniAppSettings(), nudgeLanguage(user));
+      const sent = await sendMessage(message.chat.id, ai.reply, token, { reply_markup: markup });
+      recordBotAnswer(user, ai.reply, { messageId: sent && sent.message_id });
+      scheduleSave();
+      return;
+    }
     createInquiry(user, text || summary, { type: 'general', sourceMessage: message });
     const last = Date.parse(user.appNudgeAt || '') || 0;
     if (Date.now() - last < NUDGE_PAUSE_MS) return;

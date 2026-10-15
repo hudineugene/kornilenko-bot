@@ -482,6 +482,8 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex:none;accent-c
 .conversation-thread{display:flex;flex-direction:column;gap:var(--sp-2);min-height:300px;max-height:min(54vh,620px);overflow:auto;padding:var(--sp-3);border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--surface-soft);overscroll-behavior:contain}
 .conversation-line{display:flex;justify-content:flex-start}
 .conversation-line.out{justify-content:flex-end}
+.conversation-line.system{justify-content:center}
+.msg-system{font-size:var(--fs-sm);color:var(--muted);background:var(--surface-soft);border-radius:var(--radius-pill);padding:var(--sp-1) var(--sp-3);max-width:92%;text-align:center}
 .conversation-line .msg{max-width:88%;min-width:120px;background:var(--surface)}
 .conversation-line .msg.out{background:var(--brand-soft)}
 .conversation-photo,.conversation-video{display:block;width:100%;max-height:310px;object-fit:contain;border-radius:var(--radius-sm);margin-bottom:var(--sp-2);background:var(--text)}

@@ -17,6 +17,7 @@ import { replyPromise } from '../hours.mjs';
 import { imageExists } from '../media.mjs';
 import { LANGUAGES, isCyrillic } from '../languages.mjs';
 import { telegramInterfaceLanguage } from '../users.mjs';
+import { aiAgentSettings } from '../ai-agent.mjs';
 
 const RESIDENTIAL = new Set(['apartment', 'house', 'villa', 'townhouse', 'newbuild']);
 
@@ -298,6 +299,7 @@ function bootstrapOf(language, user = null) {
   return {
     language,
     calculatorOn: Boolean(calculatorSettings().enabled),
+    assistant: Boolean(aiAgentSettings()),
     cards,
     facets: facetsOf(cards),
     company: companyOf(language, user),

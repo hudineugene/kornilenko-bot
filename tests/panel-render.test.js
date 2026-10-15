@@ -2860,11 +2860,11 @@ test('«Настройки → Работа с клиентами»: одна п
   assert.ok(!/rates-details" open/.test(html), 'спойлер закрыт');
   assert.ok(html.indexOf('id="calcOn"') < html.indexOf('rates-details'), 'выключатель калькулятора — над спойлером');
 
-  // Одна кнопка полосы сохраняет всё: часы, окна для просмотров, калькулятор, напоминания.
+  // Одна кнопка полосы сохраняет всё: часы, окна для просмотров, калькулятор, ИИ-консультанта, напоминания.
   requests.length = 0;
   await captured.save();
   const paths = requests.filter((request) => request.method === 'PUT').map((request) => new URL(request.url, 'http://x').pathname);
-  assert.deepEqual(paths, ['/api/working-hours', '/api/viewing-slots', '/api/calculator', '/api/settings', '/api/engagement']);
+  assert.deepEqual(paths, ['/api/working-hours', '/api/viewing-slots', '/api/calculator', '/api/ai-agent', '/api/settings', '/api/engagement']);
 });
 
 test('«Настройки → Работа с клиентами»: «Сообщения клиентам сами» — дайджест и возврат выключены, видно, кто получит; сохраняются той же полосой', async () => {

@@ -11,7 +11,7 @@ import { LANGUAGES, addUk } from './languages.mjs';
 // бот отказывается запускаться на файле, созданном более новой версией, и делает
 // копию перед обновлением формата. Отпечаток формата сверяет тест
 // data-version.test.js — он не даст изменить набор полей и забыть про версию.
-const DATA_VERSION = 54;
+const DATA_VERSION = 56;
 // Миграции чинят тексты прежних версий, а их было только на трёх языках; украинского в них нет.
 const LEGACY_LANGUAGES = ['ru', 'en', 'es'];
 const PIPELINE_STAGES = ['new', 'contact', 'selection', 'viewing', 'negotiation', 'won', 'lost'];
@@ -1004,6 +1004,24 @@ function normalizeViewingSlots(value) {
 // A weekly encrypted copy of the data sent to the admin chat. The key is
 // derived from a password only the administrator knows; the password itself
 // is not stored.
+// ИИ-консультант (GenAgent): адрес канала «Свой бот» и ключ доступа к нему.
+const AI_AGENT_URL_PATTERN = /^https:\/\/[^\s/]+(?:\/[^\s]*)?\/api\/agent\/[0-9a-f-]{36}$/i;
+
+function normalizeAiAgent(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const url = cleanText(source.url, 300);
+  const key = cleanText(source.key, 200);
+  const valid = AI_AGENT_URL_PATTERN.test(url);
+  // Через сколько часов молчания менеджера консультант снова отвечает клиенту сам (0 — только кнопкой «Вернуть ИИ»).
+  const hours = Number(source.autoReturnHours);
+  return {
+    enabled: source.enabled === true && valid && Boolean(key),
+    url: valid ? url : '',
+    key,
+    autoReturnHours: Number.isFinite(hours) ? Math.max(0, Math.min(72, Math.round(hours))) : 2,
+  };
+}
+
 function normalizeTelegramBackup(value) {
   const source = value && typeof value === 'object' ? value : {};
   const salt = /^[0-9a-f]{32}$/.test(String(source.salt || '')) ? String(source.salt) : '';
@@ -1598,6 +1616,7 @@ function normalizeLoadedData(parsed) {
     normalized.config.engagement = normalizeEngagement(normalized.config.engagement);
     normalized.config.viewingSlots = normalizeViewingSlots(normalized.config.viewingSlots);
     normalized.config.telegramBackup = normalizeTelegramBackup(normalized.config.telegramBackup);
+    normalized.config.aiAgent = normalizeAiAgent(normalized.config.aiAgent);
     normalized.config.adminName = cleanText(normalized.config.adminName, 60);
     // Messages about the bot itself (started, stopped, connection): on unless switched off.
     // Доступ из интернета — только настоящее «да». Любое другое значение
@@ -1612,6 +1631,8 @@ function normalizeLoadedData(parsed) {
 }
 
 export {
+  AI_AGENT_URL_PATTERN,
+  normalizeAiAgent,
   CLIENT_NOTE_LIMIT,
   CLOCK_TIME_PATTERN,
   DEFAULT_BUY_PLAN,

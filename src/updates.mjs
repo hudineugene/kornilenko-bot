@@ -4,7 +4,7 @@ import { cleanText, delay, fillTemplate } from './util.mjs';
 import { COMMAND_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, MANAGER_CONTACT_TEXT, MENU_LABELS, PROPERTY_ACTION_TEXT, SEARCH_UNCLEAR_TEXT } from './texts.mjs';
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError, recordPropertyEvent, recordSourceOpen } from './analytics.mjs';
-import { languageWasGuessed, leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage } from './users.mjs';
+import { languageWasGuessed, leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage, userById } from './users.mjs';
 import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
 import { configureBotCommands, isLanguageChangeText, languageFromText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleLeadMethodCallback, handleViewingFormCallback, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, saveViewingPhone, showPendingActionStep, startLeadForm, unfinishedActionKeyboard } from './forms.mjs';
@@ -20,6 +20,8 @@ import {
   notifyAdministratorAction,
   recordBotAnswer,
   serviceMessage,
+  managerInConversation,
+  openInquiryOf,
 } from './inquiries.mjs';
 import { sharedListCodeFromStartPayload, catalogFilterSummary, catalogPageFromContext, catalogRecords, clearCatalogMessages, normalizedCatalogFilter, clearGalleryMessages, clearUiMessages, handleCatalogFilterCallback, handleCatalogPriceInputMessage, localizedExact, handleCatalogListCallback, handleSelectionWizardCallback, openPendingStartPayload, propertyIdFromStartPayload, sendSelectionWizard, sendCatalog, sendCatalogPage, sendPropertyCard, sourceFromStartPayload } from './catalog.mjs';
 import { catalogRequest, searchSignalCount } from './search.mjs';
@@ -38,6 +40,7 @@ import { handleSavedSearchCallback } from './saved-search.mjs';
 import { handleTrustCallback } from './trust.mjs';
 import { askGoal, handleGoalCallback } from './goal.mjs';
 import { faqHint } from './faq-hints.mjs';
+import { aiAgentSettings, aiReplyMarkup, askAiAgent, handoffText, sendAgentEvent, transcribeVoice } from './ai-agent.mjs';
 import { handleDigestCallback } from './digest.mjs';
 import { handlePlanCallback } from './plan.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
@@ -184,6 +187,26 @@ async function handleUpdate(update, token) {
     await handleInboxShowCallback(update.callback_query, token);
     return;
   }
+  // Подсказка следующего вопроса от консультанта: обрабатываем, как будто клиент написал этот текст.
+  if (update.callback_query && /^sq:[0-2]$/.test(String(update.callback_query.data || ''))) {
+    const query = update.callback_query;
+    const asker = query.from && userById(String(query.from.id));
+    const text = asker && asker.aiSuggest && asker.aiSuggest[Number(query.data.slice(3))];
+    await acknowledgeCallback(query, token, text ? '' : 'Подсказка устарела — напишите вопрос сами');
+    if (!text || !query.message) return;
+    await telegramRequest(token, 'editMessageReplyMarkup', { chat_id: query.message.chat.id, message_id: query.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => {});
+    asker.aiSuggest = [];
+    await handleUpdate({ update_id: update.update_id, message: { message_id: 0, date: Math.floor(Date.now() / 1000), from: query.from, chat: query.message.chat, text } }, token);
+    return;
+  }
+  // Оценка ответа ИИ-консультанта — в воронку агента (GenAgent); кнопки убираем.
+  if (update.callback_query && ['air:up', 'air:down'].includes(String(update.callback_query.data || ''))) {
+    const query = update.callback_query;
+    sendAgentEvent(query.from && query.from.id, query.data === 'air:up' ? 'rating_up' : 'rating_down');
+    await acknowledgeCallback(query, token, query.data === 'air:up' ? 'Спасибо!' : 'Спасибо — учтём, чтобы консультант отвечал лучше.');
+    if (query.message) await telegramRequest(token, 'editMessageReplyMarkup', { chat_id: query.message.chat.id, message_id: query.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => {});
+    return;
+  }
   if (update.callback_query && String(update.callback_query.data || '').startsWith('inq:')) {
     await handleInquiryStatusCallback(update.callback_query, token);
     return;
@@ -284,8 +307,19 @@ async function handleUpdate(update, token) {
     user.pendingAction = null;
     scheduleSave();
   }
-  const text = typeof message.text === 'string' ? message.text.trim() : '';
+  let text = typeof message.text === 'string' ? message.text.trim() : '';
   const summary = messageSummary(message);
+  // Голосовое клиенту консультанта (менеджер ещё не ведёт разговор): расшифровываем и дальше — как текст.
+  // Клиент видит, что бот услышал; менеджеру в заявку уходит и само голосовое, и расшифровка.
+  // Не расшифровалось — как раньше: голосовое уходит менеджеру.
+  if (!text && message.voice && !adminOwnChat && !user.pendingAction && aiAgentSettings() && !managerInConversation(user)) {
+    void telegramRequest(token, 'sendChatAction', { chat_id: message.chat.id, action: 'typing' }).catch(() => {});
+    const heard = await transcribeVoice(message.voice, user, token);
+    if (heard && heard.text) {
+      text = heard.text;
+      await sendMessage(message.chat.id, '🎙 ' + heard.text, token);
+    }
+  }
   data.stats.messagesReceived += 1;
   recordDaily('received');
   recordActivity(user, 'in', summary, text ? 'message' : 'media', { messageId: message.message_id });
@@ -295,6 +329,7 @@ async function handleUpdate(update, token) {
   let answer = '';
   // Answers to what became an inquiry say when the manager will reply.
   let inquiryAnswer = false;
+  let aiAnswered = null; // кнопки под ответом консультанта (запись на просмотр, оценка)
   // Сообщение дописано к открытому обращению, и клиенту ничего не отвечали:
   // молчание похоже на потерянное сообщение, поэтому ставим на него реакцию 👀.
   let mergedIntoOpen = false;
@@ -670,10 +705,27 @@ async function handleUpdate(update, token) {
           await sendMessage(message.chat.id, ADMIN_CHAT_HINT, token);
           return;
         }
-        if (found) {
+        // ИИ-консультант отвечает сам, если клиент не в разговоре с менеджером. Передаёт менеджеру — заявка, как раньше.
+        const aiContext = found
+          ? 'Клиент спрашивает про объект: ' + (localizedExact(found.record.title, 'ru') || '') + ' (' + (found.record.reference || found.record.id) + ')'
+          : '';
+        const ai = managerInConversation(user) ? null : await askAiAgent(user, text, { context: aiContext, chatId: message.chat.id, token });
+        if (found) recordPropertyEvent(found.record.id, 'questions');
+        if (ai) {
+          answer = ai.reply;
+          aiAnswered = await aiReplyMarkup(ai, user);
+          // Заявка менеджеру — когда консультант передаёт клиента; а если обращение уже открыто
+          // и ждёт менеджера — сообщение дописывается в него, чтобы менеджер видел всю переписку.
+          if (ai.handoff || openInquiryOf(user)) {
+            createInquiry(user, (found ? propertyRequestText(found.record, 'ru', 'question') + '\n\n' : '') + (ai.handoff ? handoffText(ai, text) : text), {
+              type: found ? 'question' : 'general',
+              ...(found ? { propertyId: found.record.id } : {}),
+              sourceMessage: message,
+            });
+          }
+        } else if (found) {
           // A question that names a property: the manager sees which one.
           const inquiry = createInquiry(user, propertyRequestText(found.record, 'ru', 'question') + '\n\n' + text, { type: 'question', propertyId: found.record.id, sourceMessage: message });
-          recordPropertyEvent(found.record.id, 'questions');
           const title = localizedExact(found.record.title, user.preferredLanguage) || found.record.reference || '';
           answer = mergedAnswer(inquiry) ? '' : [(PROPERTY_ACTION_TEXT[user.preferredLanguage] || PROPERTY_ACTION_TEXT.ru).received, title ? '🔖 ' + title : ''].filter(Boolean).join('\n\n');
           inquiryAnswer = true;
@@ -719,7 +771,8 @@ async function handleUpdate(update, token) {
     if (inquiryAnswer) answer = withOffHoursNote(answer, user.preferredLanguage, { user });
     try {
       const sent = await sendMessage(message.chat.id, answer, token, {
-        reply_markup: searchHint || menuKeyboard(user.preferredLanguage),
+        // Под ответом консультанта — оценка 👍/👎 (меню-клавиатура у клиента остаётся).
+        reply_markup: searchHint || aiAnswered || menuKeyboard(user.preferredLanguage),
       });
       recordBotAnswer(user, answer, { messageId: sent && sent.message_id });
     } catch (error) {

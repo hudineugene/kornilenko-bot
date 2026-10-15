@@ -235,6 +235,23 @@ h3{font-size:16px;font-weight:600}
 @keyframes sheet{from{transform:translateY(100%)}}
 .sheet .grip{width:42px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
 .sheet h2{margin-bottom:4px}
+.chat-sheet{display:flex;flex-direction:column;height:86vh;overflow:hidden}
+.chat-log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:12px 2px}
+.bubble{max-width:86%;padding:10px 13px;border-radius:16px;font-size:15px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}
+.bubble.bot{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:6px}
+.bubble.me{align-self:flex-end;background:var(--red);color:#fff;border-bottom-right-radius:6px}
+.bubble.typing{color:var(--muted);font-style:italic}
+.chat-viewing{align-self:flex-start;margin:0 0 6px}
+.chat-suggest{align-self:flex-start;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
+.chat-rate{align-self:flex-start;display:flex;gap:6px;margin:-4px 0 4px;color:var(--muted);font-size:13px}
+.chat-rate-btn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:3px 10px;font-size:15px;line-height:1.2}
+.chat-note{align-self:center;max-width:92%;text-align:center;font-size:12.5px;color:var(--muted);background:var(--soft);border-radius:10px;padding:6px 10px}
+.chat-input{display:flex;gap:8px;align-items:flex-end;padding-top:8px;border-top:1px solid var(--line)}
+.chat-input textarea{flex:1;min-height:44px;max-height:120px;resize:none;border-radius:14px}
+.chat-send{width:48px;height:44px;padding:0;flex:none;display:grid;place-items:center}
+.chat-send svg{width:20px;height:20px}
+.ai-fab{position:fixed;right:16px;bottom:calc(var(--tab) + var(--bottom) + 16px);z-index:31;width:56px;height:56px;border-radius:50%;border:0;background:var(--red);color:#fff;display:grid;place-items:center;box-shadow:0 8px 22px rgba(239,54,85,.35)}
+.ai-fab svg{width:26px;height:26px}
 .sheet-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}
 .sheet-close{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);color:var(--muted);flex:none}
 .sheet-close svg{width:20px;height:20px}
@@ -399,6 +416,13 @@ const APP_JS = String.raw`
   Object.assign(T.en, { authEmpty: 'Open the app with the button in the Telegram chat so we know who you are and can take your request.', authExpired: 'Your session has expired. Close the app and open it again with the button in the chat.', authOther: 'We could not verify your sign-in. Close the app and open it again with the button in the chat.', navHome: 'Home', navObjects: 'Properties', navFav: 'Saved', navProfile: 'Profile', back: 'Back', menu: 'Menu', language: 'Language', heroTitle: 'We build modern living in Spain', heroText: 'Modern villas, quality construction and well-thought-out solutions for comfortable living on the Spanish coast.', learnMore: 'Learn more', tileObjects: 'Our properties', tileBuild: 'Build to order', tileCalc: 'Calculate the cost', tileProgress: 'Under construction', buildPreset: 'I would like to discuss building a house to order.', calcPick: 'Which project should we calculate?', popular: 'Popular properties', allObjects: 'All properties', advantages: 'Why choose us', adv1: 'Quality, reliable construction', adv2: 'Proven materials and energy efficiency', adv3: 'Projects on the Costa Blanca', adv4: 'A personal approach to every client', ourObjects: 'Our properties', searchObjects: 'Search properties', inSale: 'For sale', building: 'Under construction', details: 'Details', compareAction: 'Compare', compareN: 'Compare properties · {n}', favSub: 'Saved properties to compare and choose from', contactManager: 'Contact a manager', contactUs: 'Contact us', contactManagerHint: 'Ask a question or get advice', guestName: 'Guest', guestTag: 'Open from Telegram', clientTag: 'Client', guestProfile: 'Open the app from Telegram to see your requests and favourites.', requestStatus: 'Request status', stepAccepted: 'Request received', stepWork: 'Agent in touch', stepViewing: 'Viewing', stepDone: 'Completed', myRequests: 'My requests', myRequestsHint: 'Status and history', noRequests: 'No requests yet', savedObjects: 'Saved properties', savedHint: 'Your favourite villas and apartments', history: 'Viewing history', historyHint: 'Recently viewed properties', noHistory: 'You have not viewed anything yet', settings: 'Language', settingsHint: 'Русский, Українська, English, Español', compareHint: 'Up to three projects side by side', aboutHint: 'Team and how to buy', typeViewing: 'Viewing', typeLead: 'Call', typeQuestion: 'Question', typeSelection: 'Selection', typeInterest: 'Interest', typeGeneral: 'Request' });
   Object.assign(T.es, { authEmpty: 'Abre la aplicación con el botón del chat de Telegram para que sepamos quién eres y podamos recibir tu solicitud.', authExpired: 'La sesión ha caducado. Cierra la aplicación y ábrela de nuevo con el botón del chat.', authOther: 'No hemos podido verificar tu acceso. Cierra la aplicación y ábrela de nuevo con el botón del chat.', navHome: 'Inicio', navObjects: 'Inmuebles', navFav: 'Favoritos', navProfile: 'Perfil', back: 'Atrás', menu: 'Menú', language: 'Idioma', heroTitle: 'Construimos vida moderna en España', heroText: 'Villas modernas, construcción de calidad y soluciones pensadas para vivir con comodidad en la costa española.', learnMore: 'Saber más', tileObjects: 'Nuestros inmuebles', tileBuild: 'Construcción a medida', tileCalc: 'Calcular el coste', tileProgress: 'En construcción', buildPreset: 'Me gustaría hablar de construir una casa a medida.', calcPick: '¿Para qué proyecto calculamos?', popular: 'Inmuebles destacados', allObjects: 'Todos los inmuebles', advantages: 'Nuestras ventajas', adv1: 'Construcción de calidad y fiable', adv2: 'Materiales probados y eficiencia energética', adv3: 'Proyectos en la Costa Blanca', adv4: 'Trato personal a cada cliente', ourObjects: 'Nuestros inmuebles', searchObjects: 'Buscar inmuebles', inSale: 'En venta', building: 'En construcción', details: 'Detalles', compareAction: 'Comparar', compareN: 'Comparar inmuebles · {n}', favSub: 'Inmuebles guardados para comparar y elegir', contactManager: 'Contactar con un asesor', contactUs: 'Contáctanos', contactManagerHint: 'Haz una pregunta o pide consejo', guestName: 'Invitado', guestTag: 'Abre desde Telegram', clientTag: 'Cliente', guestProfile: 'Abre la aplicación desde Telegram para ver tus solicitudes y favoritos.', requestStatus: 'Estado de la solicitud', stepAccepted: 'Solicitud recibida', stepWork: 'Asesor en contacto', stepViewing: 'Visita', stepDone: 'Completada', myRequests: 'Mis solicitudes', myRequestsHint: 'Estado e historial', noRequests: 'Aún no hay solicitudes', savedObjects: 'Inmuebles guardados', savedHint: 'Tus villas y apartamentos favoritos', history: 'Historial de visitas', historyHint: 'Inmuebles vistos recientemente', noHistory: 'Aún no has visto nada', settings: 'Idioma', settingsHint: 'Русский, Українська, English, Español', compareHint: 'Hasta tres proyectos lado a lado', aboutHint: 'Equipo y cómo comprar', typeViewing: 'Visita', typeLead: 'Llamada', typeQuestion: 'Pregunta', typeSelection: 'Selección', typeInterest: 'Interés', typeGeneral: 'Solicitud' });
   Object.assign(T, { uk: { authEmpty: 'Відкрийте застосунок кнопкою в чаті Telegram: так ми дізнаємося вас і зможемо прийняти заявку.', authExpired: 'Вхід у застосунок застарів. Закрийте його й відкрийте знову кнопкою в чаті.', authOther: 'Не вдалося перевірити вхід. Закрийте застосунок і відкрийте знову кнопкою в чаті.', retry: 'Повторити', pickDay: 'Оберіть день', pickTime: 'Оберіть час', questionShort: 'Напишіть запитання', unavailable: 'Цей проєкт зараз недоступний', tooMany: 'Забагато дій поспіль. Спробуйте за кілька хвилин.', allCities: 'Усі міста', catalog: 'Об’єкти', favorites: 'Обране', compare: 'Порівняння', about: 'Про компанію', all: 'Усі', sale: 'Продаж', rent: 'Оренда', from: 'від', filters: 'Фільтри', price: 'Ціна', priceTo: 'Ціна до', anyPrice: 'Будь-яка', bedrooms: 'Спальні', anyBeds: 'Будь-яка', apply: 'Показати', reset: 'Скинути', found: 'Знайдено', none: 'Нічого не знайдено', noneHint: 'Змініть фільтри або напишіть менеджеру: підберемо варіант.', remove: 'Прибрати', book: 'Записатися на перегляд', bookShort: 'Записатися', contact: 'Зв’язатися', calc: 'Розрахунок купівлі та іпотеки', similar: 'Схожі проєкти', description: 'Про об’єкт', facts: 'Характеристики', location: 'Розташування', map: 'На мапі', video: 'Відео', site: 'Сайт проєкту', readMore: 'Читати повністю', collapse: 'Згорнути', photos: 'Фото', day: 'День', time: 'Час', morning: 'Зранку', afternoon: 'Удень', evening: 'Увечері', online: 'Онлайн-перегляд за відеозв’язком', name: 'Ваше ім’я', phone: 'Телефон', note: 'Коментар (за бажанням)', send: 'Надіслати заявку', bookTitle: 'Запис на перегляд', thanks: 'Заявку надіслано', thanksText: 'Менеджер зв’яжеться з вами та підтвердить час у чаті з ботом.', confirmed: 'Перегляд підтверджено', confirmedText: 'Час закріплено за вами. Подробиці — у чаті з ботом.', close: 'Закрити', call: 'Зателефонувати', whatsapp: 'WhatsApp', telegram: 'Написати в Telegram', email: 'Написати на e-mail', website: 'Сайт компанії', office: 'Офіс на мапі', callMe: 'Замовити дзвінок', callMeHint: 'Залиште номер: передзвонимо у зручний час', ask: 'Поставити запитання', askHint: 'Відповімо в чаті з ботом', question: 'Ваше запитання', preferred: 'Зручний час для дзвінка', compareEmpty: 'Додайте проєкти до порівняння', compareEmptyHint: 'Натисніть значок терезів на картці проєкту. Можна порівняти до трьох.', favEmpty: 'Тут поки порожньо', favEmptyHint: 'Натискайте серце на проєктах, які сподобались, щоб повернутися до них пізніше.', limit: 'Порівняти можна не більше трьох проєктів', guestHint: 'Відкрийте застосунок із Telegram, щоб зберігати та записуватися', saved: 'Збережено', removed: 'Прибрано', reservedNote: 'Об’єкт заброньовано: напишіть менеджеру', slotTaken: 'Цей час щойно зайняли: оберіть інший', phoneNeeded: 'Вкажіть телефон: менеджер підтвердить час', noTimes: 'Вільних вікон поки немає — залиште заявку, підберемо час', years: 'років', down: 'Перший внесок', term: 'Строк', rate: 'Ставка', hello: 'Вітаємо', tagline: 'Проєкти біля моря', yearsOnMarket: 'років на ринку', dealsDone: 'угод', guide: 'Як купити в Іспанії', reviews: 'Відгуки клієнтів', allReviews: 'Усі відгуки', manager: 'Ваш менеджер', share: 'Поділитися', sea: 'до пляжу', best: 'найкраще', addCompare: 'До порівняння', inCompare: 'У порівнянні', error: 'Не вдалося. Спробуйте ще раз.', loading: 'Завантаження…', reg: 'Реєстрація', addr: 'Офіс', search: 'Місто, район або об’єкт', showResults: 'Показати', backProperty: 'Повернутися до об’єкта', writeManager: 'Написати менеджеру', navHome: 'Головна', navObjects: 'Об’єкти', navFav: 'Обране', navProfile: 'Профіль', back: 'Назад', menu: 'Меню', language: 'Мова', heroTitle: 'Будуємо сучасне життя в Іспанії', heroText: 'Сучасні вілли, якісне будівництво та продумані рішення для комфортного життя на узбережжі Іспанії.', learnMore: 'Дізнатися більше', tileObjects: 'Наші об’єкти', tileBuild: 'Будівництво на замовлення', tileCalc: 'Розрахувати вартість', tileProgress: 'Об’єкти, що будуються', buildPreset: 'Хочу обговорити будівництво будинку на замовлення.', calcPick: 'Для якого проєкту рахуємо?', popular: 'Популярні об’єкти', allObjects: 'Усі об’єкти', advantages: 'Наші переваги', adv1: 'Якісне та надійне будівництво', adv2: 'Перевірені матеріали та енергоефективність', adv3: 'Проєкти на узбережжі Коста-Бланка', adv4: 'Індивідуальний підхід до кожного клієнта', ourObjects: 'Наші об’єкти', searchObjects: 'Пошук об’єктів', inSale: 'У продажу', building: 'Будується', details: 'Детальніше', compareAction: 'Порівняти', compareN: 'Порівняти об’єкти · {n}', favSub: 'Збережені об’єкти для порівняння та вибору', contactManager: 'Зв’язатися з менеджером', contactUs: 'Зв’язатися з нами', contactManagerHint: 'Поставити запитання або отримати консультацію', guestName: 'Гість', guestTag: 'Відкрийте з Telegram', clientTag: 'Клієнт компанії', guestProfile: 'Відкрийте застосунок із Telegram, щоб бачити свої заявки та обране.', requestStatus: 'Статус заявки', stepAccepted: 'Заявку прийнято', stepWork: 'Менеджер на зв’язку', stepViewing: 'Перегляд', stepDone: 'Завершено', myRequests: 'Мої заявки', myRequestsHint: 'Статус та історія звернень', noRequests: 'Заявок поки немає', savedObjects: 'Збережені об’єкти', savedHint: 'Ваші обрані вілли та апартаменти', history: 'Історія переглядів', historyHint: 'Нещодавно переглянуті об’єкти', noHistory: 'Ви поки нічого не переглядали', settings: 'Мова', settingsHint: 'Русский, Українська, English, Español', compareHint: 'До трьох проєктів поруч', aboutHint: 'Команда й як купити', typeViewing: 'Перегляд', typeLead: 'Дзвінок', typeQuestion: 'Запитання', typeSelection: 'Підбір', typeInterest: 'Інтерес', typeGeneral: 'Звернення' } });
+  // ИИ-консультант: окно чата в приложении.
+  [
+    ['ru', { aiTitle: 'Консультант', aiHint: 'Ответит на вопросы о проектах, ценах и покупке в Испании', aiAbout: 'Вопрос про «{x}»', aiHello: 'Здравствуйте! Я консультант компании. Спросите о проектах, ценах, рассрочке или покупке в Испании.', aiPlaceholder: 'Ваш вопрос…', aiTyping: 'печатает…', aiHandoff: 'Передали ваш вопрос менеджеру — он напишет в чат с ботом.', aiForwarded: 'Вопрос передан менеджеру — ответ придёт в чат с ботом.', aiViewing: '📅 Записаться на просмотр' }],
+    ['uk', { aiTitle: 'Консультант', aiHint: 'Відповість на запитання про проєкти, ціни та купівлю в Іспанії', aiAbout: 'Запитання про «{x}»', aiHello: 'Вітаємо! Я консультант компанії. Запитайте про проєкти, ціни, розстрочку чи купівлю в Іспанії.', aiPlaceholder: 'Ваше запитання…', aiTyping: 'друкує…', aiHandoff: 'Передали ваше запитання менеджеру — він напише в чат із ботом.', aiForwarded: 'Запитання передано менеджеру — відповідь прийде в чат із ботом.', aiViewing: '📅 Записатися на перегляд' }],
+    ['en', { aiTitle: 'Consultant', aiHint: 'Answers questions about our projects, prices and buying in Spain', aiAbout: 'Question about “{x}”', aiHello: 'Hello! I am the company consultant. Ask about our projects, prices, payment plans or buying in Spain.', aiPlaceholder: 'Your question…', aiTyping: 'typing…', aiHandoff: 'Your question has been passed to an agent — they will message you in the bot chat.', aiForwarded: 'Your question has been passed to an agent — the reply will come in the bot chat.', aiViewing: '📅 Book a viewing' }],
+    ['es', { aiTitle: 'Asesor', aiHint: 'Responde sobre nuestros proyectos, precios y la compra en España', aiAbout: 'Pregunta sobre «{x}»', aiHello: '¡Hola! Soy el asesor de la empresa. Pregunta por los proyectos, precios, pagos a plazos o la compra en España.', aiPlaceholder: 'Tu pregunta…', aiTyping: 'escribiendo…', aiHandoff: 'Hemos pasado tu pregunta a un asesor: te escribirá en el chat con el bot.', aiForwarded: 'Tu pregunta se ha pasado a un asesor: la respuesta llegará al chat con el bot.', aiViewing: '📅 Reservar una visita' }],
+  ].forEach(function (pair) { T[pair[0]] = Object.assign(T[pair[0]] || {}, pair[1]); });
 
   var ICON = {
     home: '<path d="M3 10.5 12 3l9 7.5V21h-6.5v-7h-5v7H3z"/>',
@@ -1268,6 +1292,7 @@ const APP_JS = String.raw`
     });
   }
   function openQuestion(detail, preset) {
+    if (S.boot && S.boot.assistant && !isGuest()) return openAssistant(detail, preset);
     openSheet(function (sheet, close) {
       var text = h('textarea', { maxlength: '1000' });
       if (preset) text.value = preset;
@@ -1283,6 +1308,90 @@ const APP_JS = String.raw`
       sheet.appendChild(h('div', { class: 'sub', text: t('askHint') }));
       sheet.appendChild(field(t('question'), text));
       sheet.appendChild(h('div', { class: 'section' }, [submit]));
+    });
+  }
+
+  /* ---------- ИИ-консультант ---------- */
+  // Разговор общий с чатом бота: агент помнит, о чём клиент спрашивал там. Здесь храним только ленту этого открытия приложения.
+  function openAssistant(detail, preset) {
+    S.chat = S.chat || [];
+    openSheet(function (sheet, close) {
+      sheet.classList.add('chat-sheet');
+      sheet.appendChild(h('div', { class: 'sheet-title' }, [
+        h('h2', { text: t('aiTitle') }),
+        h('button', { class: 'sheet-close', 'aria-label': t('close'), onclick: close }, [icon('x')]),
+      ]));
+      sheet.appendChild(h('div', { class: 'sub', text: detail ? t('aiAbout').replace('{x}', detail.title || '') : t('aiHint') }));
+      var log = h('div', { class: 'chat-log', 'aria-live': 'polite' });
+      sheet.appendChild(log);
+      function add(kind, text) {
+        var node = h('div', { class: kind === 'note' ? 'chat-note' : 'bubble ' + kind, text: text });
+        log.appendChild(node);
+        log.scrollTop = log.scrollHeight;
+        return node;
+      }
+      if (!S.chat.length) S.chat.push({ kind: 'bot', text: t('aiHello') });
+      S.chat.forEach(function (item) { add(item.kind, item.text); });
+      var input = h('textarea', { rows: '1', maxlength: '1000', placeholder: t('aiPlaceholder') });
+      if (preset) input.value = preset;
+      var sendButton = h('button', { class: 'btn primary chat-send', 'aria-label': t('send'), onclick: submit }, [icon('arrow')]);
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submit(); }
+      });
+      function submit() {
+        var text = input.value.trim();
+        if (text.length < 2 || sendButton.disabled) return;
+        input.value = '';
+        S.chat.push({ kind: 'me', text: text });
+        add('me', text);
+        var typing = add('bot typing', t('aiTyping'));
+        sendButton.disabled = true;
+        api('/assistant', 'POST', { text: text, propertyId: detail ? detail.id : '' }).then(function (result) {
+          typing.remove();
+          if (result.reply) {
+            S.chat.push({ kind: 'bot', text: result.reply });
+            add('bot', result.reply);
+            // Консультант зовёт на просмотр объекта — кнопка открывает его карточку с записью.
+            if (result.viewingId) {
+              log.appendChild(h('button', { class: 'btn primary chat-viewing', type: 'button', text: t('aiViewing'), onclick: function () { close(); go('property', result.viewingId); } }));
+            }
+            // Оценка ответа 👍/👎 — одна на ответ, после нажатия кнопки исчезают.
+            var rate = h('div', { class: 'chat-rate' });
+            [['👍', true], ['👎', false]].forEach(function (pair) {
+              rate.appendChild(h('button', { class: 'chat-rate-btn', type: 'button', text: pair[0], onclick: function () {
+                api('/assistant/rate', 'POST', { up: pair[1] }).catch(function () {});
+                rate.textContent = '✓';
+                haptic('ok');
+              } }));
+            });
+            log.appendChild(rate);
+            // Подсказки следующего вопроса — нажатие отправляет его консультанту.
+            if (result.suggest && result.suggest.length) {
+              var chips = h('div', { class: 'chat-suggest' });
+              result.suggest.forEach(function (question) {
+                chips.appendChild(h('button', { class: 'chat-rate-btn', type: 'button', text: question, onclick: function () { chips.remove(); input.value = question; submit(); } }));
+              });
+              log.appendChild(chips);
+            }
+            log.scrollTop = log.scrollHeight;
+          }
+          if (result.handoff || result.forwarded) {
+            var note = result.forwarded ? t('aiForwarded') : t('aiHandoff');
+            S.chat.push({ kind: 'note', text: note });
+            add('note', note);
+          }
+          haptic('ok');
+        }).catch(function (error) {
+          typing.remove();
+          add('note', error.message);
+          haptic('err');
+        }).then(function () {
+          sendButton.disabled = false;
+          input.focus();
+        });
+      }
+      sheet.appendChild(h('div', { class: 'chat-input' }, [input, sendButton]));
+      setTimeout(function () { input.focus(); }, 300);
     });
   }
 
@@ -1538,6 +1647,7 @@ const APP_JS = String.raw`
       ]);
       root.appendChild(tabsEl);
       updateTabs();
+      if (S.boot.assistant && !isGuest()) root.appendChild(h('button', { class: 'ai-fab', 'aria-label': t('aiTitle'), onclick: function () { openAssistant(null); } }, [icon('chat')]));
     } else tabsEl = null;
     var again = S.scrolls[main];
     if (again) {

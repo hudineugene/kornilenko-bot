@@ -9,7 +9,8 @@ import net from 'node:net';
 import zlib from 'node:zlib';
 import { ADMIN_ALLOWED_HOSTS, DATA_FILE, MAX_BACKUP_BODY_BYTES, MAX_BACKUP_OUTPUT_BYTES, MAX_BODY_BYTES, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, SESSION_TTL_MS } from './config.mjs';
 import { cleanText } from './util.mjs';
-import { normalizeNotifyPrefs, normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
+import { knowledgeSyncState } from './ai-knowledge.mjs';
+import { normalizeAiAgent, normalizeNotifyPrefs, normalizeCalculator, normalizePublishing, normalizeTelegramBackup, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { decryptBackup, isEncryptedBackup } from './offsite.mjs';
 import { imageBytes, imageExists, storedImageFile, writeMediaFile } from './media.mjs';
 import { data, runtime, verifyPassword, verifyPasswordAsync } from './store.mjs';
@@ -878,6 +879,8 @@ function safeState(session) {
       workingHours: normalizeWorkingHours(data.config.workingHours),
       statusNotices: data.config.statusNotices !== false,
       calculator: normalizeCalculator(data.config.calculator),
+      // Ключ ИИ-консультанта — секрет: панель знает только, задан ли он.
+      aiAgent: (({ enabled, url, key, autoReturnHours }) => ({ enabled, url, keySet: Boolean(key), autoReturnHours, ...knowledgeSyncState() }))(normalizeAiAgent(data.config.aiAgent)),
       miniApp: miniAppSettings(),
       viewingSlots: normalizeViewingSlots(data.config.viewingSlots),
       adminName: data.config.adminName || '',

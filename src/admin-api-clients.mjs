@@ -740,7 +740,12 @@ async function handleClientsApi(req, res, url) {
     // текущую неделю отчёта. Принимаем её только как дату в прошлом, не позже «сейчас».
     const restoredWonAt = Date.parse(String(body.wonAt || ''));
     const keptWonAt = Number.isFinite(restoredWonAt) && restoredWonAt <= Date.now() ? new Date(restoredWonAt).toISOString() : '';
-    if (inquiry.pipelineStage === 'won' && !wasWon) inquiry.wonAt = keptWonAt || inquiry.updatedAt;
+    if (inquiry.pipelineStage === 'won' && !wasWon) {
+      inquiry.wonAt = keptWonAt || inquiry.updatedAt;
+      // Сделка — в воронку агента (GenAgent): была ли она после разговора с консультантом, посчитает GenAgent.
+      const dealSum = dealAmount != null && dealAmount > 0 ? Math.round(dealAmount) : inquiry.dealAmount;
+      void import('./ai-agent.mjs').then((module) => module.sendAgentEvent(inquiry.userId, 'deal', 'Сделка', dealSum)).catch(() => {});
+    }
     else if (inquiry.pipelineStage !== 'won') inquiry.wonAt = '';
     // Сумма живёт только у сделки: вернули в работу — сумма снимается; её вернёт «Вернуть» (присылает прежнюю).
     if (inquiry.pipelineStage !== 'won') delete inquiry.dealAmount;

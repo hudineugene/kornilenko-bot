@@ -19,6 +19,7 @@ import {
 } from './actions.mjs';
 import { userById } from '../users.mjs';
 import { APP_CSS, APP_HTML, APP_JS } from './assets.mjs';
+import { askAssistant } from './assistant.mjs';
 import { miniAppSettings } from './settings.mjs';
 import { privateAddress } from './network.mjs';
 import { LANGUAGES } from '../languages.mjs';
@@ -27,6 +28,8 @@ const MAX_BODY = 16 * 1024;
 // Заявки (запись, звонок, вопрос) — строго; сердечки, сравнение и счётчики — свободнее: листая каталог, их ставят десятками.
 const REQUEST_LIMIT = { count: 12, windowMs: 10 * 60 * 1000 };
 const TOGGLE_LIMIT = { count: 150, windowMs: 10 * 60 * 1000 };
+// Переписка с консультантом — живой диалог: сообщений больше, чем заявок, но меньше, чем нажатий.
+const CHAT_LIMIT = { count: 40, windowMs: 10 * 60 * 1000 };
 const READ_LIMIT = { count: 240, windowMs: 60 * 1000 };
 const FILE_LIMIT = { count: 600, windowMs: 60 * 1000 };
 const TRACK_EVENTS = ['galleries', 'calculator'];
@@ -56,6 +59,50 @@ function clientAddress(req) {
   const chain = String(req.headers['x-forwarded-for'] || '').split(',').map((item) => item.trim()).filter(Boolean);
   const forwarded = cloudflare || chain[chain.length - 1] || '';
   return forwarded ? forwarded.slice(0, 64) : remote;
+}
+
+// Журнал входов в приложение (в bot.log): когда, кто (Telegram ID), с какого устройства и чем закончилось. Имён, телефонов и
+// адресов не пишем. Одну и ту же запись от одного человека повторяем не чаще раза в 10 минут, чтобы журнал не забивался.
+const ENTRY_LOG_PAUSE_MS = 10 * 60 * 1000;
+const entryLogged = new Map();
+const GUEST_REASONS = {
+  empty: 'открыто не из Telegram (нет данных входа)',
+  'no-token': 'у бота не задан токен',
+  malformed: 'данные входа повреждены',
+  'no-hash': 'нет подписи Telegram',
+  'bad-signature': 'подпись Telegram не сошлась (приложение открыто из другого бота или токен сменился)',
+  'no-date': 'нет даты входа',
+  expired: 'данные входа устарели (приложение было открыто больше 3 дней — закрыть и открыть заново)',
+  'from-future': 'часы на устройстве спешат',
+  'no-user': 'Telegram не передал пользователя',
+};
+
+function deviceOf(req) {
+  const agent = String(req.headers['user-agent'] || '');
+  if (/iPhone|iPad|iPod/i.test(agent)) return 'iPhone/iPad';
+  if (/Android/i.test(agent)) return 'Android';
+  if (/Windows|Macintosh|Mac OS|X11|Linux/i.test(agent)) return 'компьютер';
+  return 'неизвестное устройство';
+}
+
+function logEntry(req, who, outcome) {
+  const key = (who.guest ? 'g:' + clientAddress(req) : 'u:' + who.tgUser.id) + ':' + outcome;
+  const now = Date.now();
+  if (now - (entryLogged.get(key) || 0) < ENTRY_LOG_PAUSE_MS) return;
+  entryLogged.set(key, now);
+  if (entryLogged.size > 5000) entryLogged.delete(entryLogged.keys().next().value);
+  let time;
+  try {
+    time = new Date(now).toLocaleString('ru-RU', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    time = new Date(now).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  }
+  const person = who.guest ? 'гость' : 'клиент ' + who.tgUser.id;
+  console.log('Mini App вход ' + time + ': ' + person + ', ' + deviceOf(req) + ' — ' + outcome);
+}
+
+function guestOutcome(who) {
+  return 'гостевой режим: ' + (GUEST_REASONS[who.reason] || who.reason || 'без данных входа');
 }
 
 // Страницы приложения встраиваются в Telegram, поэтому frame-ancestors не ограничиваем; скрипты — только свои и telegram.org.
@@ -154,7 +201,10 @@ function identify(req) {
 
 async function handleApi(req, res, url) {
   const address = clientAddress(req);
-  if (rateLimited('read:' + address, READ_LIMIT)) return sendJson(res, 429, { error: 'Слишком часто' });
+  if (rateLimited('read:' + address, READ_LIMIT)) {
+    logEntry(req, identify(req), 'слишком много запросов, временно ограничен');
+    return sendJson(res, 429, { error: 'Слишком часто' });
+  }
   const who = identify(req);
   const route = url.pathname.replace(/^\/api\/app/, '');
   const token = data.config.botToken;
@@ -164,6 +214,7 @@ async function handleApi(req, res, url) {
     const existing = who.guest ? null : userById(String(who.tgUser.id));
     const language = appLanguage(url.searchParams.get('lang'), existing, who.guest ? '' : who.tgUser.language_code);
     if (route === '/bootstrap') {
+      logEntry(req, who, who.guest ? guestOutcome(who) : existing ? 'вошёл' : 'вошёл впервые');
       const body = bootstrapOf(language, existing);
       body.guest = who.guest;
       body.user = who.guest ? null : { name: [who.tgUser.first_name, who.tgUser.last_name].filter(Boolean).join(' '), phone: existing ? existing.phone || '' : '', contactName: existing ? existing.contactName || '' : '' };
@@ -191,10 +242,12 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST') {
+    if (who.guest) logEntry(req, who, 'действие ' + route + ' отклонено, ' + guestOutcome(who));
     if (who.guest) return sendJson(res, 401, { error: 'Откройте приложение из Telegram, чтобы записаться или сохранить', reason: who.reason, code: 'auth-' + (who.reason || 'empty') });
-    const lightRoute = ['/favorite', '/compare', '/track'].includes(route);
-    const bucket = lightRoute ? TOGGLE_LIMIT : REQUEST_LIMIT;
-    if (rateLimited((lightRoute ? 'light:' : 'write:') + who.tgUser.id, bucket)) return sendJson(res, 429, { error: 'Слишком много действий подряд. Попробуйте через несколько минут.', code: 'too-many' });
+    const lightRoute = ['/favorite', '/compare', '/track', '/assistant/rate'].includes(route);
+    const chatRoute = route === '/assistant';
+    const bucket = lightRoute ? TOGGLE_LIMIT : chatRoute ? CHAT_LIMIT : REQUEST_LIMIT;
+    if (rateLimited((lightRoute ? 'light:' : chatRoute ? 'chat:' : 'write:') + who.tgUser.id, bucket)) return sendJson(res, 429, { error: 'Слишком много действий подряд. Попробуйте через несколько минут.', code: 'too-many' });
     const body = await readJson(req);
     const user = userFor(who.tgUser);
     const language = LANGUAGES.includes(body.lang) ? body.lang : appLanguage('', user, who.tgUser.language_code);
@@ -204,6 +257,12 @@ async function handleApi(req, res, url) {
       if (route === '/viewing') return sendJson(res, 200, await requestViewing(user, body, token, language));
       if (route === '/call') return sendJson(res, 200, await requestCall(user, body, token, language));
       if (route === '/question') return sendJson(res, 200, await askQuestion(user, body, token, language));
+      if (route === '/assistant') return sendJson(res, 200, await askAssistant(user, body, token, language));
+      if (route === '/assistant/rate') {
+        const { sendAgentEvent } = await import('../ai-agent.mjs');
+        sendAgentEvent(user.id, body.up === true ? 'rating_up' : 'rating_down');
+        return sendJson(res, 200, { ok: true });
+      }
       if (route === '/track') {
         const id = cleanText(body.id, 100);
         if (TRACK_EVENTS.includes(body.event) && findRecord(id, language)) recordPropertyEvent(id, body.event);
@@ -268,6 +327,7 @@ async function handleMiniAppRequest(req, res) {
     if (!res.headersSent) {
       if (error && error.status && error.status < 500) return sendJson(res, error.status, { error: error.message, code: error.code || '' });
       console.error('Ошибка Mini App:', error && error.message);
+      try { logEntry(req, identify(req), 'ошибка сервера: ' + String(error && error.message).slice(0, 120)); } catch { /* только журнал */ }
       // Попадает в журнал ошибок панели: клиент увидел «Не получилось», владельцу нужна причина.
       try { recordError('Приложение в Telegram', error); } catch { /* журнал недоступен */ }
       sendJson(res, 500, { error: 'Внутренняя ошибка' });

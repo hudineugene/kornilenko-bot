@@ -3,7 +3,8 @@
 
 import crypto from 'node:crypto';
 import { cleanText, delay, hashPassword } from './util.mjs';
-import { CLOCK_TIME_PATTERN, REMINDER_HOUR_OPTIONS, REPLY_MINUTES_CHOICES, RETENTION_MONTH_OPTIONS, MAX_MANAGERS, TIME_ZONES, normalizeCalculator, normalizeManagers, normalizeNotifyPrefs, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
+import { syncKnowledge } from './ai-knowledge.mjs';
+import { AI_AGENT_URL_PATTERN, normalizeAiAgent, CLOCK_TIME_PATTERN, REMINDER_HOUR_OPTIONS, REPLY_MINUTES_CHOICES, RETENTION_MONTH_OPTIONS, MAX_MANAGERS, TIME_ZONES, normalizeCalculator, normalizeManagers, normalizeNotifyPrefs, normalizeTimeZone, normalizeViewingSlots, normalizeWorkingHours } from './data-format.mjs';
 import { applyConfiguredTimeZone, data, saveDataNow, verifyPassword } from './store.mjs';
 import { recordError } from './analytics.mjs';
 import { forgetTelegramFileIds, sendMessage, telegramRequest } from './telegram.mjs';
@@ -448,6 +449,25 @@ function refreshStaffCommands(previousChatIds = []) {
     } catch (error) {
       return json(res, 200, { ok: false, error: 'Адрес не открывается: проверьте запись домена и что сервер запущен' });
     }
+  }
+
+  if (url.pathname === '/api/ai-agent' && req.method === 'PUT') {
+    const session = requireAuth(req, res, true);
+    if (!session) return;
+    const body = await readJson(req);
+    const current = normalizeAiAgent(data.config.aiAgent);
+    const address = String(body.url || '').trim();
+    // Пустой ключ — оставить прежний: панель его не знает и не показывает.
+    const key = String(body.key || '').trim() || current.key;
+    if (address && !AI_AGENT_URL_PATTERN.test(address)) return json(res, 400, { error: 'Адрес — из GenAgent, вида https://…/api/agent/<номер канала>' });
+    if (body.enabled === true && (!address || !key)) return json(res, 400, { error: 'Для включения нужны адрес и ключ из GenAgent' });
+    if (key.length > 200) return json(res, 400, { error: 'Ключ слишком длинный' });
+    const autoReturnHours = body.autoReturnHours === undefined ? current.autoReturnHours : Number(body.autoReturnHours);
+    data.config.aiAgent = normalizeAiAgent({ enabled: body.enabled === true, url: address, key, autoReturnHours });
+    saveDataNow();
+    // Сразу отправить базу знаний консультанту — не ждать плановой проверки.
+    if (data.config.aiAgent.enabled) void syncKnowledge({ force: true });
+    return json(res, 200, { ok: true });
   }
 
   if (url.pathname === '/api/calculator' && req.method === 'PUT') {

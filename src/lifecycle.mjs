@@ -19,6 +19,8 @@ import { adminSendPlan } from './notify-plan.mjs';
 import { miniAppSettings } from './miniapp/settings.mjs';
 import { stopMiniApp, syncMiniApp } from './miniapp/server.mjs';
 import { configureMiniAppButton } from './miniapp/menu-button.mjs';
+import { startKnowledgeSync } from './ai-knowledge.mjs';
+import { startAgentOutbox } from './ai-outbox.mjs';
 
 const RUN_MARKER_FILE = path.join(path.dirname(DATA_FILE), 'bot-running.json');
 const RUN_HEARTBEAT_MS = 60 * 1000;
@@ -259,6 +261,10 @@ function start() {
     // не сохранятся, а не после.
     watchDiskSpace();
     setInterval(watchDiskSpace, 60 * 60 * 1000).unref();
+    // База знаний ИИ-консультанта: отправляется сама, когда меняются объекты и тексты.
+    startKnowledgeSync();
+    // Ответы менеджера и «Вернуть агенту» из «Диалогов» GenAgent — бот выполняет их своим именем.
+    startAgentOutbox();
 
     // Первая проверка — вскоре после запуска, а не через 15 минут: пост,
     // время которого пришло, пока бот был выключен, не должен ждать четверть

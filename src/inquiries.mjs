@@ -3,7 +3,7 @@
 import { goalLabelRu } from './goal.mjs';
 import crypto from 'node:crypto';
 import { cleanText, localDayKey } from './util.mjs';
-import { normalizePipelineStage, normalizeSelectionMatching, normalizeViewing } from './data-format.mjs';
+import { normalizeAiAgent, normalizePipelineStage, normalizeSelectionMatching, normalizeViewing } from './data-format.mjs';
 import { nextOpening } from './hours.mjs';
 import { adminSendPlan } from './notify-plan.mjs';
 import { INTERACTION_TEXT, MANAGER_CONTACT_TEXT } from './texts.mjs';
@@ -89,10 +89,25 @@ function inquiryTimelineMessage(message, direction = 'in', options = {}) {
 
 function appendInquiryMessage(inquiry, message) {
   if (!inquiry || !message) return null;
+  mirrorToAgent(inquiry, message);
   inquiry.messages = Array.isArray(inquiry.messages) ? inquiry.messages : [];
   inquiry.messages.push(message);
   inquiry.messages = inquiry.messages.slice(-MAX_INQUIRY_MESSAGES);
   return message;
+}
+
+// Переписка с менеджером — и в «Диалоги» GenAgent (там видна вся история): ответ менеджера из бота
+// и сообщение клиента, которое ушло менеджеру, а не консультанту. Ответы бота/консультанта и ответы
+// из самого GenAgent там уже есть.
+function mirrorToAgent(inquiry, message) {
+  if (!normalizeAiAgent(data.config && data.config.aiAgent).enabled || !message.text) return;
+  const user = userById(inquiry.userId);
+  if (!user) return;
+  let role = '';
+  if (message.direction === 'out' && !['bot', 'genagent'].includes(message.source)) role = 'operator';
+  else if (message.direction === 'in' && managerInConversation(user)) role = 'user';
+  if (!role) return;
+  void import('./ai-outbox.mjs').then((module) => module.logToAgent(user, role, message.text)).catch(() => {});
 }
 
 // Ответ бота попадает в ту же ленту, что и ответы менеджера: иначе в панели
@@ -114,6 +129,33 @@ function recordBotAnswer(user, text, options = {}) {
   inquiry.updatedAt = new Date().toISOString();
   scheduleSave();
   return message;
+}
+
+// Последнее обращение клиента, если оно открыто и свежее (то же окно, что при склейке сообщений).
+function openInquiryOf(user, now = Date.now()) {
+  const latest = data.inquiries.find((item) => item.userId === String(user && user.id));
+  return latest && ['new', 'in_progress'].includes(latest.status) && now - Date.parse(latest.updatedAt) < INQUIRY_MERGE_WINDOW_MS ? latest : null;
+}
+
+// Когда менеджер последний раз писал клиенту (ответы бота и консультанта не в счёт).
+function lastManagerReplyAt(inquiry) {
+  const replies = (inquiry.messages || []).filter((item) => item.direction === 'out' && item.source !== 'bot');
+  return Date.parse((replies[replies.length - 1] || {}).createdAt || '') || Date.parse(inquiry.takenAt || '') || Date.parse(inquiry.updatedAt || '') || 0;
+}
+
+// Менеджер уже ведёт разговор: обращение «в работе» (менеджер ответил или взял его).
+// Тогда ИИ-консультант не вмешивается — сообщение уходит менеджеру, как раньше.
+// Обращение, на которое ещё никто не ответил («новое»), консультанта не выключает.
+// Менеджер вернул клиента ИИ (кнопка «🤖 Вернуть ИИ» здесь или «Вернуть агенту» в GenAgent) после своего
+// последнего ответа — консультант снова отвечает. И сам — если менеджер молчит дольше autoReturnHours.
+function managerInConversation(user, now = Date.now()) {
+  const open = openInquiryOf(user, now);
+  if (!open || open.status !== 'in_progress') return false;
+  const managerAt = lastManagerReplyAt(open);
+  if (open.aiResumedAt && Date.parse(open.aiResumedAt) >= managerAt) return false;
+  const hours = normalizeAiAgent(data.config && data.config.aiAgent).autoReturnHours;
+  if (hours > 0 && managerAt && now - managerAt > hours * 60 * 60 * 1000) return false;
+  return true;
 }
 
 // Sliding-window counter per key; returns false once the limit is reached.
@@ -288,15 +330,21 @@ function createInquiry(user, text, context = {}) {
     pipelineStage: normalizePipelineStage('', { type, status: context.status === 'in_progress' ? 'in_progress' : 'new' }),
     note: '',
     replies: [],
-    messages: [inquiryTimelineMessage(context.sourceMessage, 'in', { text: cleanText(text, 4000), source: 'telegram', createdAt: now })],
+    // Служебная запись (context.system) — не сообщение клиента: в панели и в Telegram помечена как служебная.
+    messages: [inquiryTimelineMessage(context.sourceMessage, 'in', { text: cleanText(text, 4000), source: context.system ? 'system' : 'telegram', createdAt: now })],
     readAt: '',
     acknowledgedAt: acknowledgesMessage(type, context) ? now : '',
     searchLead: context.searchLead === true,
     createdAt: now,
     updatedAt: now,
-    clientMessageAt: now,
+    clientMessageAt: context.system ? '' : now,
+    ...(context.system ? { system: true } : {}),
   };
   refreshTopics(inquiry);
+  // Воронка агента в GenAgent: клиент дошёл до заявки (служебные записи — не в счёт).
+  if (!context.system) {
+    void import('./ai-agent.mjs').then((module) => module.sendAgentEvent(user.id, inquiry.type === 'viewing' ? 'viewing' : 'inquiry', inquiry.type === 'viewing' ? 'Запись на просмотр' : 'Заявка менеджеру')).catch(() => {});
+  }
   data.inquiries.unshift(inquiry);
   trimInquiries();
   recordDaily('inquiry');
@@ -427,6 +475,11 @@ function inquiryStatusMarkup(inquiry) {
   rows.push(row);
   const planned = inquiry.followUpDate && !inquiry.followUpNotifiedAt ? ' (' + inquiry.followUpDate.split('-').reverse().slice(0, 2).join('.') + ')' : '';
   rows.push([{ text: planned ? '📌 Напомню' + planned : '📌 Напомнить завтра', callback_data: 'inq:follow:' + inquiry.id }]);
+  // Разговор у менеджера, а ИИ-консультант включён — вернуть клиента консультанту.
+  const client0 = userById(inquiry.userId);
+  if (inquiry.status === 'in_progress' && normalizeAiAgent(data.config && data.config.aiAgent).enabled && client0 && managerInConversation(client0)) {
+    rows.push([{ text: '🤖 Вернуть ИИ', callback_data: 'inq:ai:' + inquiry.id }]);
+  }
   // Быстрые действия: ответить готовым шаблоном и написать клиенту в WhatsApp (телефон из карточки Telegram и так набирается касанием).
   const quick = [];
   if (Array.isArray(data.replyTemplates) && data.replyTemplates.length) quick.push({ text: '📝 Шаблон', callback_data: 'inq:tpl:' + inquiry.id });
@@ -482,8 +535,18 @@ async function handleInquiryStatusCallback(query, token) {
   const pressedBy = adminChatFor(chatId);
   const [, status, ...rest] = String(query.data || '').split(':');
   const inquiry = data.inquiries.find((item) => item.id === rest.join(':'));
-  if (!inquiry || (!Object.hasOwn(INQUIRY_STATUS_LABELS, status) && !['follow', 'take', 'keep'].includes(status))) {
+  if (!inquiry || (!Object.hasOwn(INQUIRY_STATUS_LABELS, status) && !['follow', 'take', 'keep', 'ai'].includes(status))) {
     await acknowledgeCallback(query, token, 'Заявка не найдена — возможно, она удалена.');
+    return;
+  }
+  // «🤖 Вернуть ИИ»: менеджер закончил — дальше клиенту снова отвечает консультант.
+  if (status === 'ai') {
+    inquiry.aiResumedAt = new Date().toISOString();
+    scheduleSave();
+    const client = userById(inquiry.userId);
+    if (client) void import('./ai-outbox.mjs').then((module) => module.logToAgent(client, 'returned')).catch(() => {});
+    await acknowledgeCallback(query, token, '🤖 Клиенту снова отвечает ИИ-консультант');
+    await telegramRequest(token, 'editMessageReplyMarkup', { chat_id: chatId, message_id: query.message.message_id, reply_markup: inquiryStatusMarkup(inquiry) || { inline_keyboard: [] } }).catch(() => {});
     return;
   }
   // «Оставить»: менеджер передумал забирать заявку — вопрос убираем.
@@ -1213,6 +1276,8 @@ export {
   handleAdministratorReply,
   handleInquiryStatusCallback,
   handleMessageReaction,
+  managerInConversation,
+  openInquiryOf,
   buildInquiryCard,
   inquiryBody,
   inquiryPropertyLine,
