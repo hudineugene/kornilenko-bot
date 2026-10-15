@@ -14,10 +14,15 @@ const agent = { asks: [], synced: [], failSync: 0, outbox: [] };
 const telegramStub = global.fetch;
 global.fetch = async (url, init = {}) => {
   const u = String(url);
+  // Файлы из Telegram (фото клиента, превью): путь к файлу и сам файл
+  if (u.endsWith('/getFile')) return new Response(JSON.stringify({ ok: true, result: { file_id: 'f', file_path: 'photos/p.jpg' } }), { status: 200 });
+  if (u.includes('/file/bot')) return new Response(Buffer.from('ffd8ffe000104a464946', 'hex'), { status: 200 });
   if (!u.startsWith(AGENT_URL)) return telegramStub(url, init);
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   if (u === AGENT_URL) {
-    agent.asks.push(JSON.parse(init.body));
+    const body = JSON.parse(init.body);
+    agent.asks.push(body);
+    if (body.image) return json({ reply: 'На фото участок у моря — у нас есть похожие в Финестрате.', handoff: false, actions: [] });
     return json({ reply: 'Виллы у моря есть в Финестрате от 550 000 €.', handoff: false, actions: [] });
   }
   if (u === AGENT_URL + '/sync') {
@@ -110,4 +115,20 @@ test('без подключения к GenAgent журнал не копится
   await send(chat, { text: 'Привет' });
   assert.equal((bot.getData().agentJournal || []).length, 0);
   assert.ok(telegram.calls.length > 0);
+});
+
+test('фото клиента: консультант смотрит на фото и отвечает, в журнале — превью', async () => {
+  const chat = createChat();
+  const id = await send(chat, { caption: 'Такой участок есть?', photo: [{ file_id: 'p-small', width: 90, height: 90 }, { file_id: 'p-mid', width: 320, height: 320 }, { file_id: 'p-big', width: 1280, height: 1280 }] });
+  await flushAll();
+  const ask = agent.asks.find((a) => a.image);
+  assert.ok(ask, 'фото ушло консультанту');
+  assert.equal(ask.text, 'Такой участок есть?');
+  assert.equal(ask.messageId, 'in:' + id);
+  const items = agent.synced.flatMap((b) => b.items);
+  assert.ok(items.find((i) => i.by === 'agent' && i.text.includes('участок у моря')), 'ответ консультанта на фото');
+  const photo = items.find((i) => i.id === 'in:' + id);
+  assert.equal(photo.kind, 'photo');
+  assert.equal(photo.thumbType, 'image/jpeg');
+  assert.ok(photo.thumb && !('thumbFile' in photo));
 });

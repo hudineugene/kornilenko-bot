@@ -8,7 +8,7 @@ import { data, scheduleSave } from './store.mjs';
 import { setSentHook } from './telegram.mjs';
 import { adminChatFor } from './inquiries.mjs';
 import { userByChatId, userById } from './users.mjs';
-import { aiAgentSettings } from './ai-agent.mjs';
+import { aiAgentSettings, downloadTelegramFile } from './ai-agent.mjs';
 
 const FLUSH_EVERY_MS = 4000;
 const BATCH = 100;
@@ -48,6 +48,15 @@ function push(chatId, item, from) {
   scheduleSave();
 }
 
+// Превью для «Диалогов»: фото ~320 px или миниатюра стикера/видео — скачиваем при отправке в GenAgent
+function thumbOf(message) {
+  if (!message) return null;
+  if (Array.isArray(message.photo) && message.photo.length) return (message.photo.find((p) => p.width >= 320) || message.photo[message.photo.length - 1]).file_id;
+  const t = (message.sticker && message.sticker.thumbnail) || (message.video && message.video.thumbnail)
+    || (message.animation && message.animation.thumbnail) || (message.video_note && message.video_note.thumbnail) || (message.document && message.document.thumbnail);
+  return (t && t.file_id) || null;
+}
+
 const plain = (html) => String(html || '')
   .replace(/<[^>]+>/g, '')
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
@@ -81,7 +90,8 @@ function recordIncoming(message) {
   if (!message || !message.chat || message.chat.type !== 'private' || !message.from || message.from.is_bot) return;
   if (!isClientChat(message.chat.id) || message.service || message.new_chat_members || message.pinned_message) return;
   const { kind, text } = describe(message);
-  push(message.chat.id, { id: incomingId(message), dir: 'in', kind, text, at: (message.date || Date.now() / 1000) * 1000 }, message.from);
+  const thumbFile = thumbOf(message);
+  push(message.chat.id, { id: incomingId(message), dir: 'in', kind, text, at: (message.date || Date.now() / 1000) * 1000, ...(thumbFile ? { thumbFile } : {}) }, message.from);
 }
 
 /** Нажатие кнопки: подпись кнопки, которую клиент видел. */
@@ -144,7 +154,8 @@ setSentHook((method, payload, result) => {
     if (typeof media === 'string') { try { media = JSON.parse(media); } catch { media = []; } }
     (Array.isArray(result) ? result : []).forEach((r, i) => {
       const part = (Array.isArray(media) && media[i]) || {};
-      push(chatId, { ...base, id: `out:${r.message_id}`, kind: part.type || 'photo', text: plain(part.caption || '') });
+      const thumbFile = thumbOf(r);
+      push(chatId, { ...base, id: `out:${r.message_id}`, kind: part.type || 'photo', text: plain(part.caption || ''), ...(thumbFile ? { thumbFile } : {}) });
     });
     return;
   }
@@ -154,12 +165,43 @@ setSentHook((method, payload, result) => {
   if (method === 'sendDocument' && payload.document && payload.document.fileName) text = [payload.document.fileName, text].filter(Boolean).join('\n');
   if (method === 'sendContact') text = [payload.first_name, payload.phone_number].filter(Boolean).join(' ');
   if (method === 'sendLocation') text = `${payload.latitude}, ${payload.longitude}`;
-  push(chatId, { ...base, id: `out:${id}`, kind, text: (text + buttonsOf(payload.reply_markup)).trim() });
+  const thumbFile = thumbOf(result);
+  push(chatId, { ...base, id: `out:${id}`, kind, text: (text + buttonsOf(payload.reply_markup)).trim(), ...(thumbFile ? { thumbFile } : {}) });
 });
 
 // --- Отправка в GenAgent ---
 
 const state = { busy: false, backoffUntil: 0, failures: 0, timer: null, lastError: '' };
+
+const MAX_THUMB = 300 * 1024;
+const MAX_THUMBS_PER_BATCH = 3 * 1024 * 1024;
+
+function imageType(buffer) {
+  if (buffer[0] === 0x89 && buffer[1] === 0x50) return 'image/png';
+  if (buffer.subarray(8, 12).toString() === 'WEBP') return 'image/webp';
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) return 'image/jpeg';
+  return null;
+}
+
+// Превью: thumbFile → thumb (base64). Не вышло — сообщение уйдёт без превью.
+async function withThumbs(items) {
+  const token = data.config && data.config.botToken;
+  let total = 0;
+  const out = [];
+  for (const { thumbFile, ...item } of items) {
+    if (thumbFile && token && total < MAX_THUMBS_PER_BATCH) {
+      const buffer = await downloadTelegramFile(thumbFile, token, MAX_THUMB);
+      const type = buffer && imageType(buffer);
+      if (type) {
+        item.thumb = buffer.toString('base64');
+        item.thumbType = type;
+        total += item.thumb.length;
+      }
+    }
+    out.push(item);
+  }
+  return out;
+}
 
 async function flushOne() {
   const settings = aiAgentSettings();
@@ -178,7 +220,7 @@ async function flushOne() {
     const response = await fetch(settings.url + '/sync', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + settings.key },
-      body: JSON.stringify({ user: batch[batch.length - 1].user, items: batch.map((entry) => entry.item) }),
+      body: JSON.stringify({ user: batch[batch.length - 1].user, items: await withThumbs(batch.map((entry) => entry.item)) }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     // 400 — пачку не приняли из-за содержимого: не держим из-за неё всю очередь

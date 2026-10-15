@@ -41,7 +41,7 @@ import { handleSavedSearchCallback } from './saved-search.mjs';
 import { handleTrustCallback } from './trust.mjs';
 import { askGoal, handleGoalCallback } from './goal.mjs';
 import { faqHint } from './faq-hints.mjs';
-import { aiAgentSettings, aiReplyMarkup, askAiAgent, handleAiBookingCallback, handoffText, sendAgentEvent, sendAiCards, transcribeVoice } from './ai-agent.mjs';
+import { aiAgentSettings, aiReplyMarkup, askAiAgent, downloadTelegramFile, handleAiBookingCallback, handoffText, sendAgentEvent, sendAiCards, transcribeVoice } from './ai-agent.mjs';
 import { handleDigestCallback } from './digest.mjs';
 import { handlePlanCallback } from './plan.mjs';
 import { telegramContactLost, telegramContactRestored } from './status.mjs';
@@ -131,6 +131,20 @@ function collectAlbumMessage(message, handle, update) {
 function waitForAlbum(message) {
   const album = pendingAlbums.get(albumKey(message));
   return album ? album.done : Promise.resolve();
+}
+
+// Фото клиента → консультант: самое крупное до 1280 px, с подписью; номер — тот же, что в журнале переписки.
+async function askAboutPhoto(user, message, token) {
+  const size = [...message.photo].reverse().find((p) => (p.width || 0) <= 1280 && (p.file_size || 0) <= 4 * 1024 * 1024) || message.photo[0];
+  const buffer = await downloadTelegramFile(size.file_id, token);
+  if (!buffer) return null;
+  return askAiAgent(user, typeof message.caption === 'string' ? message.caption.trim() : '', {
+    context: 'Клиент прислал фото (например, участок, дом, документ или пример того, что ищет).',
+    chatId: message.chat.id,
+    token,
+    messageId: incomingId(message),
+    image: { data: buffer.toString('base64'), mediaType: 'image/jpeg' },
+  });
 }
 
 async function handleUpdate(update, token) {
@@ -765,6 +779,19 @@ async function handleUpdate(update, token) {
     await sendMessage(message.chat.id, ADMIN_CHAT_HINT, token);
     return;
   } else {
+    // Фото клиента, пока его ведёт консультант: консультант смотрит на фото (GenAgent описывает его) и отвечает.
+    // Не ответил — как раньше: заявка менеджеру.
+    const photoAi = message.photo && message.photo.length && !message.albumMessageIds && aiAgentSettings() && !managerInConversation(user) && !user.pendingAction
+      ? await askAboutPhoto(user, message, token)
+      : null;
+    if (photoAi) {
+      answer = photoAi.reply;
+      aiAnswered = await aiReplyMarkup(photoAi, user);
+      aiResult = photoAi;
+      if (photoAi.handoff || openInquiryOf(user)) {
+        createInquiry(user, photoAi.handoff ? handoffText(photoAi, summary) : summary, { type: 'general', sourceMessage: message });
+      }
+    } else {
     const inquiry = createInquiry(user, summary, { type: 'general', sourceMessage: message });
     answer = mergedAnswer(inquiry) ? '' : fillTemplate(messages.fallback, user);
     inquiryAnswer = true;
@@ -774,6 +801,7 @@ async function handleUpdate(update, token) {
       const kind = messageSummary({ ...message, caption: undefined });
       const label = message.caption && !message.albumMessageIds ? kind + ': ' + summary : summary;
       void import('./ai-outbox.mjs').then((module) => module.logToAgent(user, 'media', label, incomingId(message))).catch(() => {});
+    }
     }
   }
 

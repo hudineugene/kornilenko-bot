@@ -68,10 +68,11 @@ function clientProfile(user) {
 }
 
 // { reply, handoff } или null, если агент ничего не ответил.
-async function askAiAgent(user, text, { context = '', chatId = null, token = '', language = '', messageId = '' } = {}) {
+async function askAiAgent(user, text, { context = '', chatId = null, token = '', language = '', messageId = '', image = null } = {}) {
   const settings = aiAgentSettings();
   const question = cleanText(text, 4000);
-  if (!settings || !user || !question) return null;
+  // Фото без подписи — тоже вопрос: GenAgent опишет, что на нём
+  if (!settings || !user || (!question && !image)) return null;
 
   // «Печатает…», пока агент думает: Telegram гасит статус через 5 секунд.
   const typing = () => (chatId && token ? telegramRequest(token, 'sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => {}) : null);
@@ -90,6 +91,8 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
         ...(fullContext ? { context: cleanText(fullContext, 2000) } : {}),
         // номер в журнале переписки (agent-journal.mjs) — чтобы GenAgent не записал это сообщение дважды
         ...(messageId ? { messageId } : {}),
+        // фото клиента: GenAgent опишет его, консультант ответит с учётом того, что на нём
+        ...(image ? { image } : {}),
       }),
       signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
     });
@@ -376,6 +379,21 @@ async function handleAiBookingCallback(query, token) {
   return undefined;
 }
 
+// Файл из Telegram в память (фото клиента для консультанта, превью для журнала). null — не вышло или больше maxBytes.
+async function downloadTelegramFile(fileId, token, maxBytes = 4 * 1024 * 1024) {
+  try {
+    const file = await telegramRequest(token, 'getFile', { file_id: fileId });
+    const filePath = cleanText(file && file.file_path, 512);
+    if (!filePath || filePath.includes('..') || !/^[A-Za-z0-9_./-]+$/.test(filePath)) return null;
+    const download = await fetch('https://api.telegram.org/file/bot' + token + '/' + filePath, { signal: AbortSignal.timeout(30000) });
+    if (!download.ok) return null;
+    const buffer = Buffer.from(await download.arrayBuffer());
+    return buffer.length && buffer.length <= maxBytes ? buffer : null;
+  } catch {
+    return null;
+  }
+}
+
 // Голосовое клиента → текст. Расшифровывает GenAgent на своём сервере (без оплаты за минуты).
 // { text, reason } или null, если консультант выключен, файл не скачался или GenAgent не ответил.
 const VOICE_MAX_SECONDS = 120;
@@ -407,4 +425,4 @@ async function transcribeVoice(voice, user, token) {
   }
 }
 
-export { aiReplyMarkup, askAiAgent, clientProfile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };
+export { aiReplyMarkup, askAiAgent, clientProfile, downloadTelegramFile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent };
