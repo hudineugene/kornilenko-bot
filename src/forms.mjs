@@ -211,7 +211,8 @@ async function showPendingActionStep(user, token) {
 }
 
 function duplicateInboundMessage(user, messageId) {
-  if (!user || !Number.isFinite(Number(messageId))) return false;
+  // 0 — сообщение, собранное ботом из кнопки-подсказки: у него нет номера, это не повтор
+  if (!user || !Number(messageId)) return false;
   const normalizedId = Number(messageId);
   if (Number(user.lastInboundMessageId) === normalizedId) return true;
   user.lastInboundMessageId = normalizedId;
@@ -1082,7 +1083,8 @@ async function saveViewingPhone(message, user, token) {
   if (!phone) return false;
   user.phone = phone;
   scheduleSave();
-  const viewing = data.inquiries.filter((item) => item.type === 'viewing' && item.userId === user.id).pop();
+  // data.inquiries — от новых к старым: последняя запись на просмотр
+  const viewing = data.inquiries.find((item) => item.type === 'viewing' && item.userId === user.id);
   const phoneText = 'Телефон для связи в день показа: ' + phone;
   if (viewing) {
     // Номер — продолжение записи на просмотр, а не новый «вопрос по объекту», который попадал в «ждут ответа».

@@ -170,12 +170,13 @@ async function handleQuickReplyCallback(query, token) {
     await acknowledgeCallback(query, token);
     const lastReplyId = () => { const replies = inquiry.replies || []; return replies.length ? replies[replies.length - 1].id : ''; };
     const before = lastReplyId();
-    await handleAdministratorReply({
+    const { asAuthor } = await import('./agent-journal.mjs');
+    await asAuthor('manager', () => handleAdministratorReply({
       chat: query.message.chat,
       message_id: pick.cardMessageId,
       text: found.text,
       reply_to_message: { message_id: pick.cardMessageId, from: data.bot && data.bot.id ? { id: data.bot.id } : undefined },
-    }, token);
+    }, token));
     // Ответ записан в заявку только после того, как Telegram принял сообщение клиенту.
     const delivered = lastReplyId() !== before;
     await editPick(query, token, delivered ? '✅ Отправлено: ' + cleanText(template.title, 80) : '⚠️ Не получилось отправить — ответьте на карточку вручную.');

@@ -1,6 +1,7 @@
 // Обработка входящих обновлений Telegram и цикл опроса.
 
 import { cleanText, delay, fillTemplate } from './util.mjs';
+import { asAuthor, incomingId, recordCallback, recordEdit, recordIncoming, recordReaction } from './agent-journal.mjs';
 import { COMMAND_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, MANAGER_CONTACT_TEXT, MENU_LABELS, PROPERTY_ACTION_TEXT, SEARCH_UNCLEAR_TEXT } from './texts.mjs';
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError, recordPropertyEvent, recordSourceOpen } from './analytics.mjs';
@@ -133,6 +134,12 @@ function waitForAlbum(message) {
 }
 
 async function handleUpdate(update, token) {
+  // Журнал переписки для «Диалогов» GenAgent — всё, что клиент прислал, ещё до любых сценариев бота.
+  // Сообщение без номера (собранное из кнопки-подсказки) не пишем: сама кнопка уже записана.
+  if (update.message && update.message.message_id) recordIncoming(update.message);
+  else if (update.callback_query) recordCallback(update.callback_query);
+  else if (update.message_reaction) recordReaction(update.message_reaction);
+  else if (update.edited_message) recordEdit(update.edited_message);
   // Менеджер поправил отправленный ответ.
   if (update.edited_message) {
     await handleAdministratorEdit(update.edited_message, token);
@@ -201,7 +208,7 @@ async function handleUpdate(update, token) {
     if (!text || !query.message) return;
     await telegramRequest(token, 'editMessageReplyMarkup', { chat_id: query.message.chat.id, message_id: query.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => {});
     asker.aiSuggest = [];
-    await handleUpdate({ update_id: update.update_id, message: { message_id: 0, date: Math.floor(Date.now() / 1000), from: query.from, chat: query.message.chat, text } }, token);
+    await handleUpdate({ update_id: update.update_id, message: { message_id: 0, journalId: 'cb:' + query.id, date: Math.floor(Date.now() / 1000), from: query.from, chat: query.message.chat, text } }, token);
     return;
   }
   // Оценка ответа ИИ-консультанта — в воронку агента (GenAgent); кнопки убираем.
@@ -297,7 +304,8 @@ async function handleUpdate(update, token) {
   // «Нетекстовое сообщение» — менеджер получал уведомление о том, чего клиент
   // не писал.
   if (serviceMessage(message)) return;
-  if (await handleAdministratorReply(message, token)) return;
+  // Ответ менеджера клиенту из Telegram — в журнале переписки как от менеджера
+  if (await asAuthor('manager', () => handleAdministratorReply(message, token))) return;
   if (await handleAdminChatMessage(message, token)) return;
   // The admin's own chat with the bot: menu, forms and auto-replies still work
   // for trying the bot out, but free text is not an inquiry from the admin.
@@ -313,6 +321,7 @@ async function handleUpdate(update, token) {
     scheduleSave();
   }
   let text = typeof message.text === 'string' ? message.text.trim() : '';
+  let voiceText = false; // текст — расшифровка голосового (в журнале у неё свой номер)
   const summary = messageSummary(message);
   // Голосовое клиенту консультанта (менеджер ещё не ведёт разговор): расшифровываем и дальше — как текст.
   // Клиент видит, что бот услышал; менеджеру в заявку уходит и само голосовое, и расшифровка.
@@ -322,6 +331,7 @@ async function handleUpdate(update, token) {
     const heard = await transcribeVoice(message.voice, user, token);
     if (heard && heard.text) {
       text = heard.text;
+      voiceText = true;
       await sendMessage(message.chat.id, '🎙 ' + heard.text, token);
     }
   }
@@ -715,7 +725,9 @@ async function handleUpdate(update, token) {
         const aiContext = found
           ? 'Клиент спрашивает про объект: ' + (localizedExact(found.record.title, 'ru') || '') + ' (' + (found.record.reference || found.record.id) + ')'
           : '';
-        const ai = managerInConversation(user) ? null : await askAiAgent(user, text, { context: aiContext, chatId: message.chat.id, token });
+        // Номер в журнале — тот же, что у записанного сообщения (у расшифровки голосового — свой)
+        const messageId = message.journalId || incomingId(message) + (voiceText ? ':text' : '');
+        const ai = managerInConversation(user) ? null : await askAiAgent(user, text, { context: aiContext, chatId: message.chat.id, token, messageId });
         if (found) recordPropertyEvent(found.record.id, 'questions');
         if (ai) {
           answer = ai.reply;
@@ -761,7 +773,7 @@ async function handleUpdate(update, token) {
     if (aiAgentSettings() && !managerInConversation(user)) {
       const kind = messageSummary({ ...message, caption: undefined });
       const label = message.caption && !message.albumMessageIds ? kind + ': ' + summary : summary;
-      void import('./ai-outbox.mjs').then((module) => module.logToAgent(user, 'media', label)).catch(() => {});
+      void import('./ai-outbox.mjs').then((module) => module.logToAgent(user, 'media', label, incomingId(message))).catch(() => {});
     }
   }
 
@@ -784,10 +796,12 @@ async function handleUpdate(update, token) {
   if (answer) {
     if (inquiryAnswer) answer = withOffHoursNote(answer, user.preferredLanguage, { user });
     try {
-      const sent = await sendMessage(message.chat.id, answer, token, {
+      const send = () => sendMessage(message.chat.id, answer, token, {
         // Под ответом консультанта — оценка 👍/👎 (меню-клавиатура у клиента остаётся).
         reply_markup: searchHint || aiAnswered || menuKeyboard(user.preferredLanguage),
       });
+      // Ответ консультанта — в журнале переписки как от агента
+      const sent = aiResult ? await asAuthor('agent', send) : await send();
       recordBotAnswer(user, answer, { messageId: sent && sent.message_id });
       if (aiResult) await sendAiCards(message.chat.id, user, token, aiResult);
     } catch (error) {

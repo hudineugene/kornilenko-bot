@@ -107,7 +107,8 @@ function mirrorToAgent(inquiry, message) {
   if (message.direction === 'out' && !['bot', 'genagent'].includes(message.source)) role = 'operator';
   else if (message.direction === 'in' && managerInConversation(user)) role = 'user';
   if (!role) return;
-  void import('./ai-outbox.mjs').then((module) => module.logToAgent(user, role, message.kind && message.kind !== 'text' ? '[' + message.text + ']' : message.text)).catch(() => {});
+  const messageId = message.telegramMessageId ? (message.direction === 'in' ? 'in:' : 'out:') + message.telegramMessageId : '';
+  void import('./ai-outbox.mjs').then((module) => module.logToAgent(user, role, message.kind && message.kind !== 'text' ? '[' + message.text + ']' : message.text, messageId)).catch(() => {});
 }
 
 // Ответ бота попадает в ту же ленту, что и ответы менеджера: иначе в панели
@@ -116,7 +117,8 @@ function mirrorToAgent(inquiry, message) {
 function recordBotAnswer(user, text, options = {}) {
   const answer = cleanText(text, 4000);
   if (!user || !answer) return null;
-  const inquiry = data.inquiries.filter((item) => String(item.userId) === String(user.id) && item.status !== 'closed').pop();
+  // data.inquiries — от новых к старым: нужна последняя открытая заявка (раньше .pop() брал самую старую)
+  const inquiry = data.inquiries.find((item) => String(item.userId) === String(user.id) && item.status !== 'closed');
   if (!inquiry) return null;
   const message = appendInquiryMessage(inquiry, inquiryTimelineMessage(null, 'out', {
     text: answer,
@@ -946,7 +948,7 @@ function messageSummary(message) {
   if (message.document) return 'Документ' + (message.document.file_name ? ': ' + cleanText(message.document.file_name, 160) : '');
   if (message.location) return 'Геолокация';
   if (message.contact) return 'Контакт';
-  if (message.sticker) return 'Стикер';
+  if (message.sticker) return 'Стикер' + (message.sticker.emoji ? ' ' + message.sticker.emoji : '');
   return 'Нетекстовое сообщение';
 }
 

@@ -174,14 +174,26 @@ async function telegramRequest(token, method, payload, signal) {
   }
   // Long polling holds the request open for payload.timeout seconds.
   const timeoutMs = TELEGRAM_REQUEST_TIMEOUT_MS + (Number(payload && payload.timeout) || 0) * 1000;
-  return telegramCall(token, method, () => ({
+  const result = await telegramCall(token, method, () => ({
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload || {}),
   }), { signal, timeoutMs });
+  notifySent(method, payload, result);
+  return result;
+}
+
+// Журнал переписки (agent-journal.mjs): что бот отправил клиенту. Хук ставит сам журнал — здесь без импорта.
+let sentHook = null;
+function setSentHook(hook) {
+  sentHook = hook;
+}
+function notifySent(method, payload, result) {
+  if (!sentHook) return;
+  try { sentHook(method, payload, result); } catch { /* журнал не мешает отправке */ }
 }
 
 async function telegramMultipartRequest(token, method, fields) {
-  return telegramCall(token, method, () => {
+  const result = await telegramCall(token, method, () => {
     const form = new FormData();
     for (const [key, value] of Object.entries(fields)) {
       if (value == null || value === '' || (key === 'reply_markup' && !value)) continue;
@@ -190,6 +202,8 @@ async function telegramMultipartRequest(token, method, fields) {
     }
     return { body: form };
   }, { timeoutMs: TELEGRAM_UPLOAD_TIMEOUT_MS });
+  notifySent(method, fields, result);
+  return result;
 }
 
 // Telegram file_id values are bound to the bot token. Images that share a
@@ -406,6 +420,7 @@ function markTelegramFailure(error, status = 'reconnecting') {
 
 export {
   labelledLinks,
+  setSentHook,
   screenTitleEntities,
   staleFileIdError,
   TELEGRAM_MAX_RETRY_AFTER_SECONDS,

@@ -17,7 +17,7 @@ const state = { timer: null, busy: false, lastError: '' };
 const headers = (settings) => ({ 'Content-Type': 'application/json', Authorization: 'Bearer ' + settings.key });
 
 // Событие в GenAgent: role — user (клиент написал менеджеру), operator (менеджер ответил в боте), returned (вернули ИИ).
-async function logToAgent(user, role, text = '') {
+async function logToAgent(user, role, text = '', messageId = '') {
   const settings = aiAgentSettings();
   if (!settings || !user || !user.id) return false;
   const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
@@ -29,6 +29,7 @@ async function logToAgent(user, role, text = '') {
         user: { id: String(user.id), ...(name ? { name } : {}), ...(user.username ? { username: user.username } : {}) },
         role,
         text: cleanText(text, 4000),
+        ...(messageId ? { messageId } : {}),
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
@@ -57,7 +58,8 @@ async function sendFollowUp(user, text) {
   if (managerInConversation(user) || openInquiryOf(user)) return { error: 'уже есть открытое обращение' };
   try {
     const { ratingMarkup } = await import('./ai-agent.mjs');
-    const sent = await sendMessage(user.id, cleanText(text, 1000), undefined, { reply_markup: ratingMarkup() });
+    const { asAuthor } = await import('./agent-journal.mjs');
+    const sent = await asAuthor('agent', () => sendMessage(user.id, cleanText(text, 1000), undefined, { reply_markup: ratingMarkup() }));
     return { messageId: sent && sent.message_id ? sent.message_id : undefined, done: true };
   } catch (error) {
     return { error: cleanText(error.description || error.message || 'не отправлено', 300) };
@@ -97,7 +99,8 @@ async function pollAgentOutbox() {
       }
       let sent = null;
       try {
-        sent = await sendMessage(user.id, cleanText(item.text, 4000));
+        const { asAuthor } = await import('./agent-journal.mjs');
+        sent = await asAuthor('manager', () => sendMessage(user.id, cleanText(item.text, 4000)));
       } catch (error) {
         await ack(settings, { id: item.id, error: cleanText(error.description || error.message || 'не отправлено', 300) });
         continue;

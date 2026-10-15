@@ -1,6 +1,7 @@
 // Панель: API и резервные копии.
 
 import { miniAppSettings } from './miniapp/settings.mjs';
+import { asAuthor } from './agent-journal.mjs';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { cleanText, clone, delay, hashPassword, localDayKey } from './util.mjs';
@@ -669,7 +670,8 @@ async function handleApi(req, res, url) {
 
   // Разделы панели живут своими модулями; каждый сам отвечает клиенту.
   if (await handleContentApi(req, res, url) !== false) return;
-  if (await handleClientsApi(req, res, url) !== false) return;
+  // Сообщения клиентам из панели — в журнале переписки как от менеджера
+  if (await asAuthor('manager', () => handleClientsApi(req, res, url)) !== false) return;
   if (await handleSettingsApi(req, res, url) !== false) return;
 
   if (url.pathname === '/api/contacts' && req.method === 'PUT') {

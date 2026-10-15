@@ -3,6 +3,7 @@
 // Администратор и менеджеры работают с ботом как прежде.
 
 import { cleanText } from '../util.mjs';
+import { asAuthor, incomingId } from '../agent-journal.mjs';
 import { scheduleSave } from '../store.mjs';
 import { sendMessage } from '../telegram.mjs';
 import { telegramInterfaceLanguage } from '../users.mjs';
@@ -84,13 +85,14 @@ async function handleAppOnlyMessage({ user, message, text, command, commandArgum
   if (!isCommand) {
     // Вопрос текстом — сначала ИИ-консультанту (если менеджер ещё не ведёт разговор). Заявка менеджеру —
     // когда консультант передаёт клиента или обращение уже открыто; иначе — только ответ консультанта.
-    const ai = text && !managerInConversation(user) ? await askAiAgent(user, text, { context: AI_CONTEXT, chatId: message.chat.id, token }) : null;
+    const messageId = message.journalId || incomingId(message);
+    const ai = text && !managerInConversation(user) ? await askAiAgent(user, text, { context: AI_CONTEXT, chatId: message.chat.id, token, messageId }) : null;
     if (ai) {
       if (ai.handoff || openInquiryOf(user)) createInquiry(user, ai.handoff ? handoffText(ai, text) : text, { type: 'general', sourceMessage: message });
       // Кнопка приложения у клиента уже стоит внизу экрана (постоянная клавиатура) — тогда под ответом оценка 👍/👎;
       // если ещё нет — сначала даём кнопку приложения.
       const markup = user.appNudgeAt ? await aiReplyMarkup(ai, user) : appKeyboard(miniAppSettings(), nudgeLanguage(user));
-      const sent = await sendMessage(message.chat.id, ai.reply, token, { reply_markup: markup });
+      const sent = await asAuthor('agent', () => sendMessage(message.chat.id, ai.reply, token, { reply_markup: markup }));
       recordBotAnswer(user, ai.reply, { messageId: sent && sent.message_id });
       await sendAiCards(message.chat.id, user, token, ai);
       scheduleSave();

@@ -100,7 +100,7 @@ test('стикер при консультанте — в «Диалоги» Gen
   const chat = createChat();
   await sendSticker(chat);
   assert.equal(agent.asks.length, 0);
-  assert.deepEqual(agent.logs.map((l) => [l.role, l.text]), [['media', 'Стикер']]);
+  assert.deepEqual(agent.logs.map((l) => [l.role, l.text]), [['media', 'Стикер 👍']]);
 });
 
 test('голосовое: расшифрованное пометкой не дублируется, нерасшифрованное — помечается', async () => {

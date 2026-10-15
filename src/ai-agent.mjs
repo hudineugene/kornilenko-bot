@@ -68,7 +68,7 @@ function clientProfile(user) {
 }
 
 // { reply, handoff } или null, если агент ничего не ответил.
-async function askAiAgent(user, text, { context = '', chatId = null, token = '', language = '' } = {}) {
+async function askAiAgent(user, text, { context = '', chatId = null, token = '', language = '', messageId = '' } = {}) {
   const settings = aiAgentSettings();
   const question = cleanText(text, 4000);
   if (!settings || !user || !question) return null;
@@ -88,6 +88,8 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
         text: question,
         language: LANGUAGES.includes(language) ? language : clientLanguage(user),
         ...(fullContext ? { context: cleanText(fullContext, 2000) } : {}),
+        // номер в журнале переписки (agent-journal.mjs) — чтобы GenAgent не записал это сообщение дважды
+        ...(messageId ? { messageId } : {}),
       }),
       signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
     });

@@ -3,6 +3,7 @@
 // уже открыто — сообщение попадает в заявку; консультант недоступен — обычный вопрос менеджеру, как раньше.
 
 import { cleanText } from '../util.mjs';
+import { recordApp } from '../agent-journal.mjs';
 import { saveDataNow } from '../store.mjs';
 import { createInquiry, managerInConversation, openInquiryOf, recordBotAnswer } from '../inquiries.mjs';
 import { recordPropertyEvent } from '../analytics.mjs';
@@ -22,13 +23,17 @@ async function askAssistant(user, body, token, language) {
   const inquiryContext = record ? { type: 'question', propertyId: record.id } : { type: 'general' };
 
   if (managerInConversation(user)) {
+    recordApp(user, 'in', text);
     // Менеджер уже на связи — вопрос ему, ответ придёт в чат с ботом.
     await askQuestion(user, { propertyId: record ? record.id : '', text }, token, language);
     return { reply: null, forwarded: true };
   }
 
   const context = APP_CONTEXT + (record ? ' Сейчас клиент открыл карточку объекта: ' + (localized(record.title, 'ru') || '') + ' (' + (record.reference || record.id) + ').' : '');
-  const ai = await askAiAgent(user, text, { context, language });
+  // Журнал переписки: вопрос из приложения — с тем же номером, что получит консультант; ответ консультанта тоже
+  const messageId = recordApp(user, 'in', text);
+  const ai = await askAiAgent(user, text, { context, language, messageId });
+  if (ai && ai.reply) recordApp(user, 'out', ai.reply, { by: 'agent' });
   if (!ai) {
     await askQuestion(user, { propertyId: record ? record.id : '', text }, token, language);
     return { reply: null, forwarded: true };
