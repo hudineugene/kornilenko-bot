@@ -68,7 +68,7 @@ function clientProfile(user) {
 }
 
 // { reply, handoff } или null, если агент ничего не ответил.
-async function askAiAgent(user, text, { context = '', chatId = null, token = '', language = '', messageId = '', image = null, earlier = [] } = {}) {
+async function askAiAgent(user, text, { context = '', chatId = null, token = '', language = '', messageId = '', image = null, earlier = [], voiceReply = false } = {}) {
   const settings = aiAgentSettings();
   const question = cleanText(text, 4000);
   // Фото без подписи — тоже вопрос: GenAgent опишет, что на нём
@@ -97,6 +97,8 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
         team: await teamNow(LANGUAGES.includes(language) ? language : clientLanguage(user)),
         // клиент написал несколько сообщений подряд: предыдущие (каждое со своим номером в журнале), ответ — один на все
         ...(earlier.length ? { earlier: earlier.slice(-10).map((item) => ({ text: cleanText(item.text, 4000), ...(item.messageId ? { messageId: item.messageId } : {}) })) } : {}),
+        // клиент спросил голосовым — консультант ответит и голосовым (если включено в GenAgent)
+        ...(voiceReply ? { voiceReply: true } : {}),
       }),
       signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
     });
@@ -110,8 +112,10 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
     const summary = typeof body.summary === 'string' ? cleanText(body.summary, 1000) : '';
     if (!reply) return null;
     const actions = Array.isArray(body.actions) ? body.actions.filter((item) => item && typeof item.type === 'string') : [];
+    // голосовой ответ (OGG/Opus, base64) — бот отправит его голосовым, текст — подписью
+    const voice = body.voice && typeof body.voice.data === 'string' ? Buffer.from(body.voice.data, 'base64') : null;
     // upset — консультант передал недовольного клиента: заявка с пометкой «срочно»
-    const result = { reply, handoff: body.handoff === true, upset: body.upset === true, summary, actions, lead: '', viewingId: '', shownIds: [] };
+    const result = { reply, handoff: body.handoff === true, upset: body.upset === true, summary, actions, lead: '', viewingId: '', shownIds: [], ...(voice && voice.length ? { voice } : {}) };
     // Объекты, которые консультант предлагает посмотреть ([[ACTION show: код или название]]) — бот покажет карточки.
     const shown = actions.filter((item) => item.type === 'show' && item.value).slice(0, 5);
     for (const item of shown) {

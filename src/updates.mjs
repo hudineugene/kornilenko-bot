@@ -6,7 +6,7 @@ import { COMMAND_TEXT, INTERACTION_TEXT, LANGUAGE_NAMES, MANAGER_CONTACT_TEXT, M
 import { configured, data, runtime, saveDataNow, scheduleSave } from './store.mjs';
 import { recordActivity, recordDaily, recordError, recordPropertyEvent, recordSourceOpen } from './analytics.mjs';
 import { languageWasGuessed, leadSourceFromPayload, normalizeUser, telegramInterfaceLanguage, userById } from './users.mjs';
-import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest } from './telegram.mjs';
+import { markTelegramFailure, markTelegramSuccess, sendMessage, telegramErrorMessage, telegramRequest, sendVoiceMessage } from './telegram.mjs';
 import { configureBotCommands, isLanguageChangeText, languageFromText, languageMessages, menuItemForText, menuKeyboard, sendLanguagePicker, sendMainMenu, sendMoreMenu, sendWelcome } from './menus.mjs';
 import { duplicateCallback, duplicateInboundMessage, expiredActionKeyboard, handleLeadFormMessage, handleLeadMethodCallback, handleViewingFormCallback, handleViewingFormMessage, isStaleFormControl, pendingActionExpired, rememberExpiredAction, restartExpiredAction, saveViewingPhone, showPendingActionStep, startLeadForm, unfinishedActionKeyboard } from './forms.mjs';
 import {
@@ -733,7 +733,8 @@ async function handleUpdate(update, token) {
         const burst = managerInConversation(user) || voiceText || !message.message_id ? [] : await collectBurst(message, token);
         const lastPart = burst.length ? burst[burst.length - 1] : null;
         const earlier = burst.length ? [{ text, messageId }, ...burst.slice(0, -1)] : [];
-        const ai = managerInConversation(user) ? null : await askAiAgent(user, lastPart ? lastPart.text : text, { context: aiContext, chatId: message.chat.id, token, messageId: lastPart ? lastPart.messageId : messageId, earlier });
+        if (voiceText) void telegramRequest(token, 'sendChatAction', { chat_id: message.chat.id, action: 'record_voice' }).catch(() => {});
+        const ai = managerInConversation(user) ? null : await askAiAgent(user, lastPart ? lastPart.text : text, { context: aiContext, chatId: message.chat.id, token, messageId: lastPart ? lastPart.messageId : messageId, earlier, voiceReply: voiceText });
         if (burst.length) text = [text, ...burst.map((item) => item.text)].join('\n');
         if (found) recordPropertyEvent(found.record.id, 'questions');
         if (ai) {
@@ -817,10 +818,24 @@ async function handleUpdate(update, token) {
   if (answer) {
     if (inquiryAnswer) answer = withOffHoursNote(answer, user.preferredLanguage, { user });
     try {
-      const send = () => sendMessage(message.chat.id, answer, token, {
+      const markup = searchHint || aiAnswered || menuKeyboard(user.preferredLanguage);
+      // На голосовое — голосовым: текст подписью (длинный — отдельным сообщением с кнопками). Не вышло — текстом.
+      const sendVoice = async () => {
+        const short = answer.length <= 1024;
+        const voiceSent = await sendVoiceMessage(message.chat.id, aiResult.voice, token, short ? { caption: answer, reply_markup: markup } : {});
+        return short ? voiceSent : sendMessage(message.chat.id, answer, token, { reply_markup: markup });
+      };
+      const send = async () => {
+        if (aiResult && aiResult.voice && !inquiryAnswer) {
+          try {
+            return await sendVoice();
+          } catch (error) {
+            recordError('Голосовой ответ консультанта', error);
+          }
+        }
         // Под ответом консультанта — оценка 👍/👎 (меню-клавиатура у клиента остаётся).
-        reply_markup: searchHint || aiAnswered || menuKeyboard(user.preferredLanguage),
-      });
+        return sendMessage(message.chat.id, answer, token, { reply_markup: markup });
+      };
       // Ответ консультанта — в журнале переписки как от агента
       const sent = aiResult ? await asAuthor('agent', send) : await send();
       recordBotAnswer(user, answer, { messageId: sent && sent.message_id });

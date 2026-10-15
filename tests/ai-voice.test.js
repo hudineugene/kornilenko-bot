@@ -28,7 +28,7 @@ global.fetch = async (url, init = {}) => {
   }
   if (u === AGENT_URL) {
     agent.asks.push(JSON.parse(init.body));
-    return json({ reply: 'Да, у моря есть виллы в Бенидорме.', handoff: false, actions: [] });
+    return json({ reply: 'Да, у моря есть виллы в Бенидорме.', handoff: false, actions: [], ...(agent.speak ? { voice: { data: Buffer.from('OggS agent voice').toString('base64'), mimeType: 'audio/ogg' } } : {}) });
   }
   return json({ ok: true });
 };
@@ -50,6 +50,7 @@ test.beforeEach(() => {
   agent.transcribes = [];
   agent.logs = [];
   agent.heard = 'Есть ли виллы у моря?';
+  agent.speak = false;
 });
 test.after(cleanup);
 
@@ -110,4 +111,26 @@ test('голосовое: расшифрованное пометкой не д�
   agent.heard = '';
   await sendVoice(chat);
   assert.deepEqual(agent.logs.filter((l) => l.role === 'media').map((l) => l.text), ['Голосовое сообщение']);
+});
+
+test('на голосовое — голосовой ответ консультанта: текст подписью, кнопки под ним', async () => {
+  agent.speak = true;
+  const chat = createChat();
+  const before = telegram.calls.length;
+  const replies = await sendVoice(chat);
+  assert.equal(agent.asks[0].voiceReply, true);
+  const voice = telegram.calls.slice(before).find((call) => call.method === 'sendVoice');
+  assert.ok(voice, 'голосовое отправлено');
+  const field = (name) => (voice.body instanceof FormData ? voice.body.get(name) : voice.body[name]);
+  assert.equal(field('caption'), 'Да, у моря есть виллы в Бенидорме.');
+  const markup = field('reply_markup');
+  assert.ok(JSON.stringify(typeof markup === 'string' ? JSON.parse(markup) : markup).includes('air:up'), 'оценка под голосовым');
+  assert.ok(!replies.some((text) => text.includes('у моря есть виллы')), 'текстом второй раз не дублируем');
+});
+
+test('на текст — текстом (голос не просим)', async () => {
+  agent.speak = true;
+  const chat = createChat();
+  await chat.say('Есть ли виллы у моря?');
+  assert.equal(agent.asks.at(-1).voiceReply, undefined);
 });

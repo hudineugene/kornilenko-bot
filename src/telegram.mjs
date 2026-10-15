@@ -333,6 +333,19 @@ async function sendPhotoAlbum(chatId, images, caption, token, options = {}) {
 }
 
 // PNG с прозрачностью Telegram сохраняет только как файл (документ).
+// Голосовое (OGG/Opus) — ответ консультанта на голосовое клиента; подпись — тот же текст.
+async function sendVoiceMessage(chatId, audio, token = data.config.botToken, options = {}) {
+  const result = await telegramMultipartRequest(token, 'sendVoice', {
+    chat_id: String(chatId),
+    voice: { upload: new Blob([audio], { type: 'audio/ogg' }), fileName: 'reply.ogg' },
+    caption: options.caption || undefined,
+    reply_markup: options.reply_markup,
+  });
+  data.stats.messagesSent += 1;
+  recordDaily('sent');
+  return result;
+}
+
 async function sendDocumentMessage(chatId, image, caption, token, replyMarkup, options = {}) {
   const bytes = imageBytes(image);
   const name = String(image.name || 'document').replace(/[^\p{L}\p{N}._ -]/gu, '_').slice(0, 120) || 'document';
@@ -435,6 +448,7 @@ export {
   rememberFileId,
   sendMessage,
   sendDocumentMessage,
+  sendVoiceMessage,
   sendPhotoAlbum,
   sendPhotoMessage,
   splitTelegramText,

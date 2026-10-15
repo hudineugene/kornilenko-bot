@@ -72,7 +72,7 @@ function describe(m) {
   if (m.video_note) return { kind: 'video_note', text: duration(m.video_note.duration) };
   if (m.video) return { kind: 'video', text: caption };
   if (m.animation) return { kind: 'animation', text: caption };
-  if (m.voice) return { kind: 'voice', text: duration(m.voice.duration) };
+  if (m.voice) return { kind: 'voice', text: caption || duration(m.voice.duration) }; // голосовой ответ консультанта — с текстом в подписи
   if (m.audio) return { kind: 'audio', text: [m.audio.performer, m.audio.title].filter(Boolean).join(' — ') || caption };
   if (m.document) return { kind: 'document', text: [m.document.file_name, caption].filter(Boolean).join('\n') };
   if (m.venue) return { kind: 'location', text: [m.venue.title, m.venue.address].filter(Boolean).join(', ') };
