@@ -76,6 +76,8 @@ const MINIAPP_ASSETS = {
   artCoastal: loadBundledAsset(MINIAPP_ASSET_DIRECTORY, 'miniapp-art-coastal', 'art-coastal.jpg', 'image/jpeg'),
   artPool: loadBundledAsset(MINIAPP_ASSET_DIRECTORY, 'miniapp-art-pool', 'art-pool.jpg', 'image/jpeg'),
   grid: loadBundledAsset(MINIAPP_ASSET_DIRECTORY, 'miniapp-grid', 'grid.svg', 'image/svg+xml'),
+  // Пиктограммы пунктов «Что входит в услугу» одной полосой 112×112 на пункт (раздел «Услуги»).
+  servicesIcons: loadBundledAsset(MINIAPP_ASSET_DIRECTORY, 'miniapp-services-icons', 'services-icons.png', 'image/png'),
 };
 
 const FONT_ASSETS = {

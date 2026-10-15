@@ -5,13 +5,15 @@
 // (a: '') показывается кнопкой, которая отправляет его менеджеру с пометкой услуги.
 // Цены и сроки сюда не пишем, пока компания их не утвердила.
 
+// pics — сколько пиктограмм у услуги в полосе miniapp-assets/services-icons.png (по порядку пунктов «Что входит»).
 const META = [
-  { id: 'documents', icon: 'idcard', tone: 'red' },
-  { id: 'banking', icon: 'bank', tone: 'cyan' },
-  { id: 'mortgage', icon: 'mortgage', tone: 'yellow' },
-  { id: 'accounting', icon: 'calc', tone: 'red' },
-  { id: 'support', icon: 'headset', tone: 'cyan' },
+  { id: 'documents', icon: 'idcard', tone: 'red', pics: 5 },
+  { id: 'banking', icon: 'bank', tone: 'cyan', pics: 5 },
+  { id: 'mortgage', icon: 'mortgage', tone: 'yellow', pics: 6 },
+  { id: 'accounting', icon: 'calc', tone: 'red', pics: 6 },
+  { id: 'support', icon: 'headset', tone: 'cyan', pics: 6 },
 ];
+const PIC_TOTAL = META.reduce((sum, meta) => sum + meta.pics, 0);
 
 const qa = (...list) => list.map(([question, answer]) => ({ q: question, a: answer }));
 const items = (...list) => list.map(([title, text]) => ({ title, text }));
@@ -461,15 +463,19 @@ const CONTENT = {
 
 function servicesOf(language) {
   const pack = CONTENT[language] || CONTENT.ru;
-  return META.map((meta) => {
+  let first = 0;
+  return META.map(({ pics, ...meta }) => {
     const text = pack[meta.id] || CONTENT.ru[meta.id];
+    const start = first;
+    first += pics;
     return {
       ...meta,
       title: text.title,
       lead: text.lead,
       subtitle: text.subtitle || '',
       intro: text.intro || [],
-      included: text.included || [],
+      included: (text.included || []).map((entry, index) => ({ ...entry, pic: index < pics ? start + index : null })),
+      picTotal: PIC_TOTAL,
       steps: text.steps || [],
       why: text.why || '',
       cta: text.cta || '',
@@ -480,4 +486,4 @@ function servicesOf(language) {
 
 const SERVICES = META;
 
-export { CONTENT, SERVICES, servicesOf };
+export { CONTENT, PIC_TOTAL, SERVICES, servicesOf };

@@ -307,6 +307,7 @@ async function handleMiniAppRequest(req, res) {
     if (url.pathname === '/art/coastal.jpg') return sendAsset(req, res, MINIAPP_ASSETS.artCoastal);
     if (url.pathname === '/art/pool.jpg') return sendAsset(req, res, MINIAPP_ASSETS.artPool);
     if (url.pathname === '/grid.svg') return sendAsset(req, res, MINIAPP_ASSETS.grid);
+    if (url.pathname === '/services-icons.png') return sendAsset(req, res, MINIAPP_ASSETS.servicesIcons);
     if (url.pathname === '/icon.png') return sendAsset(req, res, ADMIN_ASSETS.appIcon192);
     const photo = url.pathname.match(/^\/m\/([^/]+)\/([^/]+)$/);
     if (photo) {

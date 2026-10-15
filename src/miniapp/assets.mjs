@@ -434,10 +434,12 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 .svc-block{margin-top:24px}
 .svc-block>h3{font-size:17px;font-weight:800;margin-bottom:12px}
 .svc-inc{display:grid;gap:8px;margin:0;padding:0;list-style:none}
-.svc-inc li{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;background:var(--card);border:1px solid var(--line);border-radius:var(--rb)}
+.svc-inc{gap:10px}
+.svc-inc li{display:flex;gap:14px;align-items:flex-start;padding:16px 14px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
 .svc-inc li>svg{width:20px;height:20px;flex:none;margin-top:1px;color:var(--tone)}
-.svc-inc b{display:block;font-size:14.5px;line-height:1.3}
-.svc-inc small{display:block;margin-top:3px;color:var(--muted);font-size:13px;line-height:1.45}
+.svc-pic{width:52px;height:52px;flex:none;background:url(/services-icons.png) 0 0 no-repeat;margin-top:-2px}
+.svc-inc b{display:block;font-size:15.5px;font-weight:700;line-height:1.3}
+.svc-inc small{display:block;margin-top:4px;color:var(--muted);font-size:13.5px;line-height:1.45}
 .svc-steps{margin:0;padding:0;list-style:none;display:grid}
 .svc-steps li{position:relative;display:flex;gap:14px;align-items:flex-start;padding-bottom:14px;font-size:14px;line-height:1.45}
 .svc-steps li:last-child{padding-bottom:0}
@@ -1837,6 +1839,14 @@ const APP_JS = String.raw`
   // специалист (тексты раздела просят публиковать ответы только после проверки).
   function serviceList() { return (S.boot && S.boot.services) || []; }
   function askManager(text) { openQuestion(null, text, true); }
+  // Пиктограмма пункта «Что входит» — кадр из общей полосы /services-icons.png; без неё — галочка.
+  function servicePic(entry, item) {
+    if (entry.pic == null || !item.picTotal) return icon('check');
+    var node = h('span', { class: 'svc-pic', 'aria-hidden': 'true' });
+    node.style.backgroundSize = (item.picTotal * 100) + '% 100%';
+    node.style.backgroundPosition = (item.picTotal > 1 ? entry.pic / (item.picTotal - 1) * 100 : 0) + '% 0';
+    return node;
+  }
   function serviceRow(item, index) {
     var node = h('button', { class: 'svc tone-' + item.tone, onclick: function () { go('service', item.id); } }, [
       h('span', { class: 'svc-ico' }, [icon(item.icon)]),
@@ -1882,7 +1892,7 @@ const APP_JS = String.raw`
       page.appendChild(h('section', { class: 'svc-block' }, [
         h('h3', { text: t('svcIncluded') }),
         h('ul', { class: 'svc-inc' }, item.included.map(function (entry) {
-          return h('li', null, [icon('check'), h('span', null, [h('b', { text: entry.title }), entry.text ? h('small', { text: entry.text }) : null])]);
+          return h('li', null, [servicePic(entry, item), h('span', null, [h('b', { text: entry.title }), entry.text ? h('small', { text: entry.text }) : null])]);
         })),
       ]));
     }

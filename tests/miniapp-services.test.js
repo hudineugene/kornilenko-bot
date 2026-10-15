@@ -52,6 +52,25 @@ test('услуги: без цен и обещаний, на каждый час�
   assert.match(servicesOf('es')[3].faq[1].a, /Modelo 210/);
 });
 
+test('услуги: у каждого пункта «Что входит» своя пиктограмма из общей полосы', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { PIC_TOTAL } = require('../src/miniapp/services.mjs');
+  const { MINIAPP_ASSETS } = require('../src/config.mjs');
+  for (const language of LANGUAGES) {
+    const pics = servicesOf(language).flatMap((item) => item.included.map((entry) => entry.pic));
+    assert.deepEqual(pics, Array.from({ length: PIC_TOTAL }, (_, index) => index), language + ': по порядку, без пропусков');
+  }
+  assert.equal(PIC_TOTAL, 28);
+  const file = path.join(__dirname, '..', 'miniapp-assets', 'services-icons.png');
+  const bytes = fs.readFileSync(file);
+  assert.equal(bytes.readUInt32BE(16), 112 * PIC_TOTAL, 'ширина полосы: 112 px на пиктограмму');
+  assert.equal(bytes.readUInt32BE(20), 112);
+  assert.ok(MINIAPP_ASSETS.servicesIcons && MINIAPP_ASSETS.servicesIcons.mimeType === 'image/png');
+  assert.match(APP_CSS, /\.svc-pic\{[^}]*url\(\/services-icons\.png\)/);
+  assert.match(APP_JS, /function servicePic\(entry, item\)/);
+});
+
 test('услуги приходят в приложение вместе с каталогом', () => {
   const boot = bootstrapOf('en');
   assert.equal(boot.services.length, 5);

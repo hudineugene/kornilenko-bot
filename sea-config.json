@@ -14,6 +14,7 @@
     "miniapp-hero": "miniapp-assets/hero.jpg",
     "miniapp-art-coastal": "miniapp-assets/art-coastal.jpg",
     "miniapp-art-pool": "miniapp-assets/art-pool.jpg",
-    "miniapp-grid": "miniapp-assets/grid.svg"
+    "miniapp-grid": "miniapp-assets/grid.svg",
+    "miniapp-services-icons": "miniapp-assets/services-icons.png"
   }
 }
