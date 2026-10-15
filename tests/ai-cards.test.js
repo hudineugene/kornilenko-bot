@@ -10,16 +10,17 @@ const { bot, createChat, resetData, cleanup, telegram, property } = require('./h
 const AGENT_URL = 'https://agents.example.com/api/agent/21f9043a-23cd-4ae6-a75e-ba46b34f5ed2';
 const KEY = 'ga_test-key';
 
-const agent = { actions: [] };
+const agent = { actions: [], extra: {} };
 const telegramStub = global.fetch;
 global.fetch = async (url, init) => {
   if (!String(url).startsWith(AGENT_URL)) return telegramStub(url, init);
-  const body = { reply: 'Подойдут два проекта у моря.', handoff: false, actions: agent.actions };
+  const body = { reply: 'Подойдут два проекта у моря.', handoff: false, actions: agent.actions, ...agent.extra };
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 };
 
 test.beforeEach(() => {
   agent.actions = [];
+  agent.extra = {};
   resetData((data) => {
     data.config.aiAgent = { enabled: true, url: AGENT_URL, key: KEY };
     data.objects = [
@@ -69,4 +70,13 @@ test('без меток show карточек нет', async () => {
   const before = telegram.calls.length;
   await chat.say('Как с вами работать?');
   assert.equal(cardsTo(chat, before).length, 0);
+});
+
+test('консультант передал недовольного клиента — заявка менеджеру с пометкой «срочно»', async () => {
+  agent.extra = { handoff: true, upset: true, summary: 'Третий раз спрашивает про сроки' };
+  const chat = createChat();
+  await chat.say('Вы мне уже третий раз не отвечаете!');
+  assert.equal(chat.inquiries.length, 1);
+  const first = chat.inquiries[0].text || (chat.inquiries[0].messages && chat.inquiries[0].messages[0] && chat.inquiries[0].messages[0].text) || '';
+  assert.match(first, /^🔴 Клиент недоволен/);
 });

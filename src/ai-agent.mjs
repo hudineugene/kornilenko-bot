@@ -101,7 +101,8 @@ async function askAiAgent(user, text, { context = '', chatId = null, token = '',
     const summary = typeof body.summary === 'string' ? cleanText(body.summary, 1000) : '';
     if (!reply) return null;
     const actions = Array.isArray(body.actions) ? body.actions.filter((item) => item && typeof item.type === 'string') : [];
-    const result = { reply, handoff: body.handoff === true, summary, actions, lead: '', viewingId: '', shownIds: [] };
+    // upset — консультант передал недовольного клиента: заявка с пометкой «срочно»
+    const result = { reply, handoff: body.handoff === true, upset: body.upset === true, summary, actions, lead: '', viewingId: '', shownIds: [] };
     // Объекты, которые консультант предлагает посмотреть ([[ACTION show: код или название]]) — бот покажет карточки.
     const shown = actions.filter((item) => item.type === 'show' && item.value).slice(0, 5);
     for (const item of shown) {
@@ -222,8 +223,10 @@ function ratingMarkup() {
 }
 
 // Текст заявки менеджеру при передаче: сначала выжимка консультанта (что клиент ищет и чего ждёт), потом сообщение клиента.
+// Недовольный клиент (консультант поставил пометку) — первой строкой, чтобы менеджер ответил в первую очередь.
 function handoffText(ai, text) {
-  const base = ai && ai.summary ? '🤖 Консультант: ' + ai.summary + '\n\n💬 Клиент: ' + text : text;
+  const urgent = ai && ai.upset ? '🔴 Клиент недоволен — ответить в первую очередь\n\n' : '';
+  const base = urgent + (ai && ai.summary ? '🤖 Консультант: ' + ai.summary + '\n\n💬 Клиент: ' + text : text);
   return ai && ai.lead ? base + '\n\n🎯 Что известно о клиенте:\n' + ai.lead : base;
 }
 
