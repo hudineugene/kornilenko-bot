@@ -359,6 +359,22 @@ async function handleUpdate(update, token) {
   };
   const command = text.split(/\s+/)[0].split('@')[0].toLowerCase();
   const commandArgument = cleanText(text.split(/\s+/).slice(1).join(' '), 100);
+  // Переход из чата на сайте: переписка с сайта переносится сюда, консультант продолжает с того же места
+  if (command === '/start' && /^w_[A-Za-z0-9]{8,40}$/.test(commandArgument)) {
+    if (!user.preferredLanguage && telegramInterfaceLanguage(user)) user.preferredLanguage = telegramInterfaceLanguage(user);
+    const { linkFromSite, SITE_CONTINUED_TEXT } = await import('./ai-agent.mjs');
+    if (await linkFromSite(commandArgument.slice(2), user)) {
+      if (!user.source) {
+        user.source = 'site';
+        user.sourceAt = new Date().toISOString();
+      }
+      scheduleSave();
+      void notifyAdministratorAction(user, 'Перешёл из чата на сайте', 'Переписка с сайта перенесена в бот');
+      const language = user.preferredLanguage || 'ru';
+      await sendMessage(message.chat.id, SITE_CONTINUED_TEXT[language] || SITE_CONTINUED_TEXT.ru, token, appOnlyActive() ? {} : { reply_markup: menuKeyboard(language) });
+      return;
+    }
+  }
   const sourceLabel = command === '/start'
     ? leadSourceFromPayload(commandArgument) || sourceFromStartPayload(commandArgument)
     : '';

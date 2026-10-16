@@ -31,6 +31,11 @@ global.fetch = async (url, init = {}) => {
     agent.events.push(JSON.parse(init.body));
     return json({ ok: true });
   }
+  if (u === AGENT_URL + '/link') {
+    const body = JSON.parse(init.body);
+    (agent.links ||= []).push(body);
+    return json({ linked: body.token === 'SiteToken12345' });
+  }
   if (u === AGENT_URL + '/order') {
     (agent.orders ||= []).push(JSON.parse(init.body));
     return json({ text: null });
@@ -332,4 +337,18 @@ test('несколько сообщений подряд: консультант
   assert.ok(agent.asks[0].earlier.every((item) => /^in:/.test(item.messageId)) && /^in:/.test(agent.asks[0].messageId));
   const replies = telegram.calls.slice(before).filter((call) => call.method === 'sendMessage' && String(call.body.chat_id) === String(chat.id));
   assert.equal(replies.filter((call) => call.body.text.includes('Ответ консультанта')).length, 1, 'клиент получил один ответ');
+});
+
+test('переход из чата на сайте: переписка переносится, бот говорит «продолжаем»', async () => {
+  agent.links = [];
+  const chat = createChat();
+  const step = await chat.say('/start w_SiteToken12345');
+  assert.equal(agent.links.length, 1);
+  assert.equal(agent.links[0].token, 'SiteToken12345');
+  assert.equal(agent.links[0].user.id, String(chat.id));
+  assert.match(step.text, /Продолжаем разговор с сайта/);
+  assert.equal(chat.user.source, 'site');
+  // неизвестный код — обычный старт
+  const other = await createChat().say('/start w_WrongToken999');
+  assert.doesNotMatch(other.text, /Продолжаем разговор с сайта/);
 });

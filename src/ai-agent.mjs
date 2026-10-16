@@ -239,6 +239,33 @@ async function teamNow(language, now = new Date()) {
   return { open: true, ...(minutes >= 1 && minutes <= 10080 ? { minutes } : {}) };
 }
 
+// Переход из чата на сайте («Продолжить в Telegram», /start w_<код>): GenAgent переносит переписку с сайта
+// в разговор этого клиента в боте — консультант продолжает с того же места. true — перенесено.
+async function linkFromSite(token, user) {
+  const settings = aiAgentSettings();
+  if (!settings || !token) return false;
+  try {
+    const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+    const response = await fetch(settings.url + '/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + settings.key },
+      body: JSON.stringify({ token, user: { id: String(user.id), ...(name ? { name: cleanText(name, 200) } : {}), ...(user.username ? { username: user.username } : {}) } }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!response.ok) return false;
+    return Boolean((await response.json().catch(() => ({}))).linked);
+  } catch {
+    return false;
+  }
+}
+
+const SITE_CONTINUED_TEXT = {
+  ru: 'Продолжаем разговор с сайта 👋 Консультант видит всю переписку — пишите сюда.',
+  uk: 'Продовжуємо розмову із сайту 👋 Консультант бачить усе листування — пишіть сюди.',
+  en: 'Let’s continue the chat from the website 👋 The consultant sees the whole conversation — just write here.',
+  es: 'Seguimos la conversación de la web 👋 El asesor ve todo el chat — escríbenos aquí.',
+};
+
 // Событие воронки в GenAgent (заявка, просмотр, сделка) или оценка ответа (rating_up / rating_down). Тихо, без ожидания.
 function sendAgentEvent(userId, type, label = '', value = undefined) {
   const settings = aiAgentSettings();
@@ -480,4 +507,4 @@ async function transcribeVoice(voice, user, token) {
   }
 }
 
-export { aiReplyMarkup, askAboutPhoto, askAiAgent, transcribeWav, clientProfile, downloadTelegramFile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent, teamNow };
+export { aiReplyMarkup, askAboutPhoto, askAiAgent, transcribeWav, clientProfile, downloadTelegramFile, handleAiBookingCallback, sendAiCards, transcribeVoice, aiAgentSettings, clientLanguage, handoffText, normalizeAiAgent, ratingMarkup, sendAgentEvent, teamNow, linkFromSite, SITE_CONTINUED_TEXT };
