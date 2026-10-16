@@ -38,6 +38,24 @@ function recordLine(record) {
 }
 
 // Что бот знает о клиенте — консультант советует по интересам, а не с нуля. Без телефона и личных данных.
+const WEEKDAY_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const dayRu = (key) => {
+  const [y, m, d] = key.split('-').map(Number);
+  return WEEKDAY_RU[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] + ', ' + String(d).padStart(2, '0') + '.' + String(m).padStart(2, '0') + '.' + y;
+};
+
+// Когда сам просмотр: подтверждённые менеджером дата и время, иначе — что выбрал клиент
+function viewingWhen(item) {
+  const v = item.type === 'viewing' && item.viewing;
+  if (!v) return '';
+  if (v.cancelledAt) return ' — просмотр отменён';
+  const online = v.online ? ' (по видеосвязи)' : '';
+  if (v.confirmedDate) return ' — просмотр подтверждён на ' + dayRu(v.confirmedDate) + (v.confirmedTime ? ' ' + v.confirmedTime : '') + online;
+  const when = v.date ? dayRu(v.date) : v.dateText;
+  if (!when && !v.timeText) return '';
+  return ' — клиент выбрал ' + [when, v.timeText].filter(Boolean).join(', ') + online + ', менеджер ещё не подтвердил';
+}
+
 function clientProfile(user) {
   if (!user) return '';
   const byId = new Map((data.objects || []).map((record) => [String(record.id), record]));
@@ -60,7 +78,8 @@ function clientProfile(user) {
   if (inquiries.length) {
     lines.push('Обращения: ' + inquiries.map((item) => {
       const record = item.propertyId && byId.get(String(item.propertyId));
-      return (INQUIRY_RU[item.type] || 'обращение') + (record ? ' по «' + recordLine(record).split(',')[0] + '»' : '') + ' ' + String(item.createdAt || '').slice(0, 10) + ' (' + (STATUS_RU[item.status] || item.status) + ')';
+      // Дата обращения — когда клиент его оставил; у просмотра своя дата — её и называем клиенту
+      return (INQUIRY_RU[item.type] || 'обращение') + (record ? ' по «' + recordLine(record).split(',')[0] + '»' : '') + viewingWhen(item) + ', оставлено ' + String(item.createdAt || '').slice(0, 10) + ' (' + (STATUS_RU[item.status] || item.status) + ')';
     }).join('; '));
   }
   if (user.phone || user.preferredContactTime) lines.push('Контакт: ' + [user.phone ? 'телефон уже оставлял' : '', user.preferredContactTime ? 'удобно связываться: ' + cleanText(user.preferredContactTime, 80) : ''].filter(Boolean).join(', '));

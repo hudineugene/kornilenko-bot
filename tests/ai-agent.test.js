@@ -162,3 +162,16 @@ test('режим «только приложение»: агент переда�
   assert.equal(other.inquiries.length, 1);
   assert.doesNotMatch(step.text, /Передаю менеджеру/);
 });
+
+test('профиль для агента: у записи на просмотр — дата просмотра, а не дата заявки', async () => {
+  const chat = createChat();
+  const data = bot.getData();
+  data.inquiries.unshift(
+    { id: 'v1', userId: chat.id, type: 'viewing', status: 'new', createdAt: '2026-10-15T08:29:00.000Z', viewing: { date: '2026-10-17', timeText: 'Днём' } },
+    { id: 'v2', userId: chat.id, type: 'viewing', status: 'in_progress', createdAt: '2026-10-14T10:00:00.000Z', viewing: { date: '2026-10-20', confirmedDate: '2026-10-21', confirmedTime: '11:30', online: true } },
+  );
+  await chat.say(QUESTION);
+  const context = agent.calls[0].body.context;
+  assert.match(context, /клиент выбрал сб, 17\.10\.2026, Днём, менеджер ещё не подтвердил, оставлено 2026-10-15/);
+  assert.match(context, /просмотр подтверждён на ср, 21\.10\.2026 11:30 \(по видеосвязи\)/);
+});
